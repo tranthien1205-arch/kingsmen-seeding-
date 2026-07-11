@@ -1,6 +1,15 @@
-# Cloudflare Workers — phục vụ web tĩnh từ thư mục dist/ (Static Assets)
+# Cloudflare Worker: phục vụ web tĩnh (dist/) + API server + database D1 dùng chung
 name = "kingsmen-app-seeding"
+main = "worker/index.js"
 compatibility_date = "2025-06-01"
 
+# Web tĩnh
 [assets]
 directory = "./dist"
+binding = "ASSETS"
+
+# Database dùng chung (SQLite serverless)
+[[d1_databases]]
+binding = "DB"
+database_name = "appseedingkingsmen-db"
+database_id = "184ebc6a-ebf2-451d-89ea-369501c25f02"
