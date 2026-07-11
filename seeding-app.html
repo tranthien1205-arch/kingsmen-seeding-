@@ -1,0 +1,1514 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
+<title>Kingsmen Seeding — Quản lý & Nghiệm thu</title>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        colors: {
+          ink:   { DEFAULT: '#0f172a', soft: '#1e293b' },
+          gold:  { DEFAULT: '#c8a24a', dark: '#a5842f' },
+        },
+        fontFamily: { sans: ['Inter','system-ui','Segoe UI','Roboto','sans-serif'] }
+      }
+    }
+  }
+</script>
+<style>
+  html,body{ -webkit-tap-highlight-color:transparent; }
+  ::-webkit-scrollbar{ width:8px; height:8px } ::-webkit-scrollbar-thumb{ background:#cbd5e1; border-radius:8px }
+  .no-spin::-webkit-outer-spin-button,.no-spin::-webkit-inner-spin-button{ -webkit-appearance:none; margin:0 }
+</style>
+</head>
+<body class="bg-slate-100 text-slate-800 font-sans">
+<div id="root"></div>
+
+<script type="text/plain" id="app-src">
+const { useState, useEffect, useMemo, useRef, createContext, useContext } = React;
+
+/* ============================================================
+   0. HẰNG SỐ & ENUM
+============================================================ */
+const DB_KEY = 'kingsmen_seeding_db_v1';
+const SCHEMA_VERSION = 1;
+// DEMO_MODE=true: lần đầu mở app sẽ seed sẵn vài post/cmt để xem ngay toàn bộ luồng.
+// Khi dùng thật (không phải demo) → đổi thành false.
+const DEMO_MODE = true;
+
+const ROLES = { MARKETING:'MARKETING', SALES:'SALES', ADMIN:'ADMIN' };
+const ROLE_LABEL = { MARKETING:'Marketing', SALES:'Sales', ADMIN:'Admin / Kế toán' };
+
+const ST = { NHAP:'NHAP', CHO_DUYET:'CHO_DUYET', DAT:'DAT', KHONG_DAT:'KHONG_DAT', DA_CHI:'DA_CHI' };
+const ST_LABEL = { NHAP:'Nháp', CHO_DUYET:'Chờ duyệt', DAT:'Đạt', KHONG_DAT:'Không đạt', DA_CHI:'Đã chi' };
+const ST_STYLE = {
+  NHAP:'bg-slate-100 text-slate-600',
+  CHO_DUYET:'bg-amber-100 text-amber-700',
+  DAT:'bg-emerald-100 text-emerald-700',
+  KHONG_DAT:'bg-rose-100 text-rose-700',
+  DA_CHI:'bg-indigo-100 text-indigo-700',
+};
+
+const LOAI_BAI = ['Nhắc thương hiệu','Chuyên dụng khu vực','Chống ố vàng/Bảo hành','ColorMatch','Pain – Nỗi đau','Review','Hỏi đáp','Thảo luận'];
+const MUC_TIEU = ['BIẾT','TIN','CÂN NHẮC','HÀNH ĐỘNG'];
+const GROUP_LOAI = ['Nhà ở','Thầu thợ','Nội thất','Vật liệu XD','Khác'];
+const CMT_LOAI = { MINH_DANG:'MINH_DANG', DAO:'DAO' };
+const CMT_LOAI_LABEL = { MINH_DANG:'CMT mình đăng', DAO:'CMT dạo' };
+
+/* ============================================================
+   1. TIỆN ÍCH
+============================================================ */
+const uid = (p='id') => p + '_' + Math.random().toString(36).slice(2,9) + Date.now().toString(36).slice(-4);
+const nowISO = () => new Date().toISOString();
+const fmtVND = n => (Number(n)||0).toLocaleString('vi-VN') + '₫';
+const fmtDate = iso => { if(!iso) return '—'; const d=new Date(iso); return d.toLocaleDateString('vi-VN')+' '+d.toLocaleTimeString('vi-VN',{hour:'2-digit',minute:'2-digit'}); };
+const fmtDay = iso => { if(!iso) return '—'; return new Date(iso).toLocaleDateString('vi-VN'); };
+const isFbUrl = u => /^https?:\/\/([\w-]+\.)*(facebook\.com|fb\.com|fb\.watch|m\.facebook\.com)\/.+/i.test((u||'').trim());
+const isUrl = u => /^https?:\/\/.+/i.test((u||'').trim());
+const kyOf = iso => { const d=new Date(iso||nowISO()); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); }; // kỳ = tháng
+
+function download(filename, text, mime='text/csv;charset=utf-8'){
+  const blob = new Blob(['﻿'+text], {type:mime}); // BOM để Excel đọc UTF-8
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=filename; a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+}
+function toCSV(rows){
+  return rows.map(r=>r.map(c=>{
+    let s = c==null? '' : String(c);
+    if(/[",\n]/.test(s)) s='"'+s.replace(/"/g,'""')+'"';
+    return s;
+  }).join(',')).join('\n');
+}
+// Nén ảnh phía client trước khi lưu (resize max cạnh 1100px, jpeg 0.7)
+function compressImage(file, maxSide=1100, quality=0.7){
+  return new Promise((resolve,reject)=>{
+    const r=new FileReader();
+    r.onload=e=>{
+      const img=new Image();
+      img.onload=()=>{
+        let {width:w, height:h}=img;
+        if(Math.max(w,h)>maxSide){ const k=maxSide/Math.max(w,h); w=Math.round(w*k); h=Math.round(h*k); }
+        const cv=document.createElement('canvas'); cv.width=w; cv.height=h;
+        cv.getContext('2d').drawImage(img,0,0,w,h);
+        resolve(cv.toDataURL('image/jpeg', quality));
+      };
+      img.onerror=reject; img.src=e.target.result;
+    };
+    r.onerror=reject; r.readAsDataURL(file);
+  });
+}
+
+/* ============================================================
+   2. DỮ LIỆU MẶC ĐỊNH (thư viện + users + đơn giá là cấu hình,
+      KHÔNG bịa giao dịch — user tự tạo hoặc bấm "Nạp demo")
+============================================================ */
+function seedDB(){
+  const uMkt   = { id:uid('u'), ho_ten:'Ngọc (Marketing)', email:'mkt@kingsmen.vn', vai_tro:ROLES.MARKETING, active:true, password:'123456' };
+  const uS1    = { id:uid('u'), ho_ten:'Hùng (Sales)',     email:'sale1@kingsmen.vn', vai_tro:ROLES.SALES, active:true, password:'123456' };
+  const uS2    = { id:uid('u'), ho_ten:'Lan (Sales)',      email:'sale2@kingsmen.vn', vai_tro:ROLES.SALES, active:true, password:'123456' };
+  const uAdmin = { id:uid('u'), ho_ten:'Kế toán (Admin)',  email:'admin@kingsmen.vn', vai_tro:ROLES.ADMIN, active:true, password:'123456' };
+
+  const groups = [
+    { id:uid('g'), ten_group:'Cộng đồng Xây nhà trọn gói', link:'https://facebook.com/groups/xaynha', loai:'Nhà ở', so_member:128000, active:true, uu_tien:true, updated_at:nowISO() },
+    { id:uid('g'), ten_group:'Thầu thợ hoàn thiện nội thất', link:'https://facebook.com/groups/thautho', loai:'Thầu thợ', so_member:56000, active:true, uu_tien:true, updated_at:nowISO() },
+    { id:uid('g'), ten_group:'Vật liệu hoàn thiện & thi công', link:'https://facebook.com/groups/vatlieu', loai:'Vật liệu XD', so_member:41000, active:true, uu_tien:false, updated_at:nowISO() },
+    { id:uid('g'), ten_group:'Nghiện nhà - Décor nội thất', link:'https://facebook.com/groups/nghiennha', loai:'Nội thất', so_member:220000, active:false, uu_tien:false, updated_at:nowISO() },
+  ];
+  const topics = [
+    { id:uid('t'), chu_de:'Keo chít mạch chống ố vàng', noi_dung:'Bạn đang đau đầu vì mạch gạch ố vàng, đen mốc sau vài tháng? Keo chít mạch Kingsmen kháng khuẩn, chống thấm, giữ màu bền 10 năm...', loai_bai:'Chống ố vàng/Bảo hành', muc_tieu:'CÂN NHẮC', tags:['keo chít mạch','ố vàng'], active:true, uu_tien:true, updated_at:nowISO() },
+    { id:uid('t'), chu_de:'ColorMatch - chọn màu mạch chuẩn', noi_dung:'Đừng để mạch gạch phá hỏng cả không gian. Với bảng màu ColorMatch của Kingsmen bạn chọn được tông mạch ăn khớp gạch...', loai_bai:'ColorMatch', muc_tieu:'BIẾT', tags:['colormatch','màu mạch'], active:true, uu_tien:true, updated_at:nowISO() },
+    { id:uid('t'), chu_de:'Review thi công thực tế', noi_dung:'Chia sẻ công trình vừa hoàn thiện dùng keo Kingsmen. Mạch đều, không bong, không ố. Hình thực tế bên dưới...', loai_bai:'Review', muc_tieu:'TIN', tags:['review','công trình'], active:true, uu_tien:false, updated_at:nowISO() },
+    { id:uid('t'), chu_de:'Hỏi đáp: nên dùng keo epoxy hay xi măng?', noi_dung:'Nhiều bác thợ hỏi mình nên chít mạch bằng gì cho bền. Cùng bàn nhé...', loai_bai:'Hỏi đáp', muc_tieu:'CÂN NHẮC', tags:['epoxy','so sánh'], active:true, uu_tien:false, updated_at:nowISO() },
+  ];
+  const cmts = [
+    { id:uid('c'), noi_dung_goi_y:'Nhà mình dùng Kingsmen 6 tháng rồi mạch vẫn sáng, không ố tí nào 👍', tuyen:'Trải nghiệm', loai_bai:'Review', tags:['review'], thu_tu:1, active:true, updated_at:nowISO() },
+    { id:uid('c'), noi_dung_goi_y:'Cho hỏi keo này chống thấm nhà tắm ổn không ạ?', tuyen:'Đặt câu hỏi', loai_bai:'Hỏi đáp', tags:['hỏi'], thu_tu:2, active:true, updated_at:nowISO() },
+    { id:uid('c'), noi_dung_goi_y:'Mình là thợ, chít Kingsmen nhanh hơn keo thường, khách ưng màu ColorMatch.', tuyen:'Chuyên gia', loai_bai:'ColorMatch', tags:['thợ'], thu_tu:3, active:true, updated_at:nowISO() },
+    { id:uid('c'), noi_dung_goi_y:'Có bảo hành không shop ơi, dùng cho công trình lớn.', tuyen:'Đặt câu hỏi', loai_bai:null, tags:['bảo hành'], thu_tu:4, active:true, updated_at:nowISO() },
+  ];
+  const P = { don_gia_post: 15000, don_gia_cmt: 3000 };
+  let demoPosts = [], demoCmts = [];
+  if(DEMO_MODE){
+    const now = nowISO();
+    demoPosts = [
+      { id:uid('p'), topic_id:topics[0].id, sales_id:uS1.id, group_id:groups[0].id, link_bai:'https://facebook.com/post/demo1', react:12, so_cmt_seeding:3, so_cmt_tu_nhien:1, trang_thai:ST.DAT, reviewed_by:uMkt.ho_ten, reviewed_at:now, ly_do_loai:'', thanh_tien:P.don_gia_post, ky_thanh_toan:kyOf(now), created_at:now },
+      { id:uid('p'), topic_id:topics[1].id, sales_id:uS1.id, group_id:groups[1].id, link_bai:'https://facebook.com/post/demo2', react:8, so_cmt_seeding:2, so_cmt_tu_nhien:0, trang_thai:ST.CHO_DUYET, reviewed_by:null, reviewed_at:null, ly_do_loai:'', thanh_tien:0, ky_thanh_toan:null, created_at:now },
+      { id:uid('p'), topic_id:topics[2].id, sales_id:uS2.id, group_id:groups[0].id, link_bai:'https://facebook.com/post/demo3', react:20, so_cmt_seeding:5, so_cmt_tu_nhien:2, trang_thai:ST.DAT, reviewed_by:uMkt.ho_ten, reviewed_at:now, ly_do_loai:'', thanh_tien:P.don_gia_post, ky_thanh_toan:kyOf(now), created_at:now },
+      { id:uid('p'), topic_id:topics[3].id, sales_id:uS2.id, group_id:groups[2].id, link_bai:'https://facebook.com/post/demo4', react:3, so_cmt_seeding:1, so_cmt_tu_nhien:0, trang_thai:ST.KHONG_DAT, reviewed_by:uMkt.ho_ten, reviewed_at:now, ly_do_loai:'Ảnh chưa rõ nội dung, chụp lại giúp mình', thanh_tien:0, ky_thanh_toan:null, created_at:now },
+    ];
+    demoCmts = [
+      { id:uid('c'), loai:CMT_LOAI.MINH_DANG, post_seeding_id:demoPosts[0].id, post_link:demoPosts[0].link_bai, suggestion_id:cmts[0].id, sales_id:uS1.id, so_cmt_seeding:4, react:2, so_cmt_tu_nhien:0, trang_thai:ST.DAT, reviewed_by:uMkt.ho_ten, reviewed_at:now, ly_do_loai:'', thanh_tien:4*P.don_gia_cmt, ky_thanh_toan:kyOf(now), created_at:now, proofs:[] },
+      { id:uid('c'), loai:CMT_LOAI.DAO, post_seeding_id:null, post_link:'https://facebook.com/groups/xaynha/posts/demo9', suggestion_id:cmts[1].id, sales_id:uS2.id, so_cmt_seeding:2, react:1, so_cmt_tu_nhien:0, trang_thai:ST.CHO_DUYET, reviewed_by:null, reviewed_at:null, ly_do_loai:'', thanh_tien:0, ky_thanh_toan:null, created_at:now, proofs:[] },
+    ];
+  }
+  return {
+    version: SCHEMA_VERSION,
+    users: [uMkt,uS1,uS2,uAdmin],
+    groups, content_topics:topics, cmt_suggestions:cmts,
+    post_seedings: demoPosts, cmt_seedings: demoCmts,
+    pricing: { don_gia_post: P.don_gia_post, don_gia_cmt: P.don_gia_cmt, min_nhac_kingsmen: 6, min_usp: 2 },
+    payouts: [],
+    audit: [],
+  };
+}
+
+/* ============================================================
+   3. LƯU BỀN + MIGRATE
+============================================================ */
+function loadDB(){
+  try{
+    const raw = localStorage.getItem(DB_KEY);
+    if(!raw) return seedDB();
+    let db = JSON.parse(raw);
+    db = migrate(db);
+    return db;
+  }catch(e){ console.error('loadDB lỗi, khởi tạo mới', e); return seedDB(); }
+}
+function migrate(db){
+  if(!db.version){ db.version = SCHEMA_VERSION; }
+  // đảm bảo đủ mảng (dữ liệu cũ thiếu field không crash)
+  db.users ||= []; db.groups ||= []; db.content_topics ||= []; db.cmt_suggestions ||= [];
+  db.post_seedings ||= []; db.cmt_seedings ||= []; db.payouts ||= []; db.audit ||= [];
+  db.pricing ||= { don_gia_post:15000, don_gia_cmt:3000, min_nhac_kingsmen:6, min_usp:2 };
+  db.post_seedings.forEach(p=>{ p.react ??= 0; p.so_cmt_seeding ??= 0; p.so_cmt_tu_nhien ??= 0; p.thanh_tien ??= 0; });
+  db.cmt_seedings.forEach(c=>{ c.proofs ||= []; c.so_cmt_seeding ??= 0; c.react ??= 0; c.so_cmt_tu_nhien ??= 0; c.thanh_tien ??= 0; });
+  db.groups.forEach(g=>{ g.uu_tien ??= false; });
+  db.content_topics.forEach(t=>{ t.uu_tien ??= false; });
+  db.users.forEach(u=>{ u.password ??= '123456'; u.active ??= true; });
+  return db;
+}
+function saveDB(db){
+  try{ localStorage.setItem(DB_KEY, JSON.stringify(db)); return true; }
+  catch(e){
+    console.error(e);
+    alert('Không lưu được (bộ nhớ trình duyệt đầy — thường do quá nhiều ảnh). Hãy xoá bớt bản ghi cũ hoặc xuất Excel rồi reset.');
+    return false;
+  }
+}
+
+/* ============================================================
+   4. LOGIC TÍNH TIỀN & NGHIỆM THU
+============================================================ */
+function tienPost(pricing){ return Number(pricing.don_gia_post)||0; }
+function tienCmt(pricing, soCmt){ return (Number(soCmt)||0) * (Number(pricing.don_gia_cmt)||0); }
+
+/* ============================================================
+   5. CONTEXT ỨNG DỤNG
+============================================================ */
+const AppCtx = createContext(null);
+const useApp = () => useContext(AppCtx);
+
+const SESSION_KEY = 'kingsmen_session';
+function AppProvider({children}){
+  const [db, setDb] = useState(loadDB);
+  const [meId, setMeId] = useState(()=> localStorage.getItem(SESSION_KEY) || null);
+  const [toast, setToast] = useState(null);
+
+  useEffect(()=>{ saveDB(db); }, [db]);
+  useEffect(()=>{ if(meId) localStorage.setItem(SESSION_KEY, meId); else localStorage.removeItem(SESSION_KEY); }, [meId]);
+  const notify = (msg, type='ok') => { setToast({msg,type}); setTimeout(()=>setToast(null), 2600); };
+
+  const me = db.users.find(u=>u.id===meId && u.active) || null;
+
+  // ---- đăng nhập / đăng ký ----
+  const login = (email, password) => {
+    const key = (email||'').trim().toLowerCase();
+    const u = db.users.find(x => (x.email||'').trim().toLowerCase() === key);
+    if(!u) return { ok:false, msg:'Email chưa đăng ký' };
+    if((u.password||'') !== password) return { ok:false, msg:'Sai mật khẩu' };
+    if(!u.active) return { ok:false, msg:'Tài khoản đang chờ Marketing duyệt' };
+    setMeId(u.id); return { ok:true };
+  };
+  const logout = () => setMeId(null);
+
+  // ---- cập nhật state bất biến ----
+  const setColl = (key, fn) => setDb(d => ({ ...d, [key]: fn(d[key]) }));
+  const audit = (action, entity, entity_id, detail='') =>
+    setDb(d => ({ ...d, audit:[{ id:uid('a'), at:nowISO(), by: me?.ho_ten||'—', by_id:meId, action, entity, entity_id, detail }, ...d.audit] }));
+
+  const api = {
+    db, setDb, me, meId, setMeId, notify, setColl, audit,
+    login, logout,
+    // ---- thư viện ----
+    upsertGroup: g => setColl('groups', xs => g.id && xs.some(x=>x.id===g.id) ? xs.map(x=>x.id===g.id?{...g,updated_at:nowISO()}:x) : [{...g,id:g.id||uid('g'),updated_at:nowISO()},...xs]),
+    upsertTopic: t => setColl('content_topics', xs => t.id && xs.some(x=>x.id===t.id) ? xs.map(x=>x.id===t.id?{...t,updated_at:nowISO()}:x) : [{...t,id:t.id||uid('t'),updated_at:nowISO()},...xs]),
+    upsertCmt: c => setColl('cmt_suggestions', xs => c.id && xs.some(x=>x.id===c.id) ? xs.map(x=>x.id===c.id?{...c,updated_at:nowISO()}:x) : [{...c,id:c.id||uid('c'),updated_at:nowISO()},...xs]),
+    upsertUser: u => setColl('users', xs => u.id && xs.some(x=>x.id===u.id) ? xs.map(x=>x.id===u.id?u:x) : [{...u,id:u.id||uid('u')},...xs]),
+    setPricing: p => setDb(d=>({...d, pricing:{...d.pricing,...p}})),
+  };
+  return <AppCtx.Provider value={api}>
+    {children}
+    {toast && <Toast toast={toast}/>}
+  </AppCtx.Provider>;
+}
+
+/* ============================================================
+   6. UI CƠ BẢN
+============================================================ */
+function Toast({toast}){
+  const c = toast.type==='err' ? 'bg-rose-600' : toast.type==='warn' ? 'bg-amber-500' : 'bg-emerald-600';
+  return <div className={"fixed bottom-5 left-1/2 -translate-x-1/2 z-50 text-white px-4 py-2.5 rounded-xl shadow-lg text-sm max-w-[90%] "+c}>{toast.msg}</div>;
+}
+function Badge({st}){ return <span className={"inline-block px-2 py-0.5 rounded-full text-xs font-medium "+(ST_STYLE[st]||'bg-slate-100')}>{ST_LABEL[st]||st}</span>; }
+function PriBadge({small}){ return <span className={"inline-flex items-center gap-0.5 rounded-full font-semibold bg-gold/15 text-gold-dark "+(small?'text-[9px] px-1.5 py-0.5':'text-[10px] px-2 py-0.5')}>⭐ Ưu tiên</span>; }
+const sortPri = (arr) => [...arr].sort((a,b)=> (b.uu_tien?1:0)-(a.uu_tien?1:0));
+function PriSwitch({value, onChange, hint}){
+  return <div className="mb-3 flex items-center justify-between p-3 rounded-xl border border-slate-200 bg-slate-50">
+    <div><div className="text-xs font-semibold text-slate-700">⭐ Ưu tiên seeding</div>
+      <div className="text-[11px] text-slate-400">{hint||'Yêu cầu Sales seeding mục này trước'}</div></div>
+    <button type="button" onClick={()=>onChange(!value)}
+      className={"w-12 h-7 rounded-full transition relative "+(value?'bg-gold':'bg-slate-300')}>
+      <span className={"absolute top-0.5 w-6 h-6 bg-white rounded-full shadow transition-all "+(value?'left-[22px]':'left-0.5')}></span>
+    </button>
+  </div>;
+}
+function Btn({children, onClick, variant='primary', className='', type='button', disabled}){
+  const v = {
+    primary:'bg-ink text-white hover:bg-ink-soft',
+    gold:'bg-gold text-white hover:bg-gold-dark',
+    ghost:'bg-white border border-slate-300 text-slate-700 hover:bg-slate-50',
+    danger:'bg-rose-600 text-white hover:bg-rose-700',
+    ok:'bg-emerald-600 text-white hover:bg-emerald-700',
+    soft:'bg-slate-100 text-slate-700 hover:bg-slate-200',
+  }[variant];
+  return <button type={type} disabled={disabled} onClick={onClick}
+    className={"px-3.5 py-2 rounded-xl text-sm font-medium transition disabled:opacity-40 disabled:cursor-not-allowed "+v+" "+className}>{children}</button>;
+}
+function Field({label, children, hint, required}){
+  return <label className="block mb-3">
+    <div className="text-xs font-semibold text-slate-600 mb-1">{label}{required && <span className="text-rose-500"> *</span>}</div>
+    {children}
+    {hint && <div className="text-[11px] text-slate-400 mt-1">{hint}</div>}
+  </label>;
+}
+const inputCls = "w-full px-3 py-2 rounded-xl border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-gold/40 focus:border-gold bg-white";
+function Input(p){ return <input {...p} className={inputCls+" "+(p.className||'')}/>; }
+function Textarea(p){ return <textarea {...p} className={inputCls+" "+(p.className||'')}/>; }
+function Select({children, ...p}){ return <select {...p} className={inputCls+" "+(p.className||'')}>{children}</select>; }
+
+function Modal({open, onClose, title, children, wide}){
+  if(!open) return null;
+  return <div className="fixed inset-0 z-40 bg-black/40 flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={onClose}>
+    <div onClick={e=>e.stopPropagation()} className={"bg-white w-full rounded-t-2xl sm:rounded-2xl shadow-xl max-h-[92vh] overflow-auto "+(wide?'sm:max-w-3xl':'sm:max-w-lg')}>
+      <div className="sticky top-0 bg-white border-b px-4 py-3 flex items-center justify-between z-10">
+        <h3 className="font-semibold text-ink">{title}</h3>
+        <button onClick={onClose} className="text-slate-400 hover:text-slate-700 text-xl leading-none">×</button>
+      </div>
+      <div className="p-4">{children}</div>
+    </div>
+  </div>;
+}
+function Empty({children}){ return <div className="text-center text-slate-400 text-sm py-10">{children}</div>; }
+function Stat({label, value, sub, color='text-ink'}){
+  return <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100">
+    <div className="text-xs text-slate-500">{label}</div>
+    <div className={"text-xl font-bold mt-1 "+color}>{value}</div>
+    {sub && <div className="text-[11px] text-slate-400 mt-0.5">{sub}</div>}
+  </div>;
+}
+function Tabs({tabs, active, onChange}){
+  return <div className="flex gap-1 bg-slate-100 p-1 rounded-xl overflow-x-auto">
+    {tabs.map(t=><button key={t.key} onClick={()=>onChange(t.key)}
+      className={"px-3 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap transition "+(active===t.key?'bg-white shadow text-ink':'text-slate-500')}>
+      {t.label}{t.count!=null && <span className={"ml-1.5 text-xs px-1.5 rounded-full "+(active===t.key?'bg-gold text-white':'bg-slate-200 text-slate-500')}>{t.count}</span>}
+    </button>)}
+  </div>;
+}
+function Toggle({on, onClick, labels=['Hiện','Ẩn']}){
+  return <button onClick={onClick} className={"px-2.5 py-1 rounded-lg text-xs font-medium "+(on?'bg-emerald-100 text-emerald-700':'bg-slate-200 text-slate-500')}>
+    {on?labels[0]:labels[1]}
+  </button>;
+}
+
+/* ============================================================
+   7. ĐĂNG NHẬP (Marketing cấp tài khoản — không tự đăng ký)
+============================================================ */
+function Login(){
+  const { db, login, setDb } = useApp();
+  const [email, setEmail] = useState('');
+  const [pw, setPw] = useState('');
+  const [err, setErr] = useState('');
+
+  const doLogin = () => { setErr(''); const r = login(email, pw); if(!r.ok) setErr(r.msg); };
+
+  return <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-ink to-ink-soft">
+    <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
+      <div className="text-center mb-5">
+        <div className="inline-flex w-14 h-14 rounded-2xl bg-gold text-white items-center justify-center text-2xl font-black mb-2">K</div>
+        <h1 className="text-xl font-bold text-ink">Kingsmen Seeding</h1>
+        <p className="text-sm text-slate-500">Đăng nhập để tiếp tục</p>
+      </div>
+
+      {err && <div className="mb-3 text-sm text-rose-600 bg-rose-50 border border-rose-200 rounded-xl px-3 py-2">{err}</div>}
+
+      <Field label="Email"><Input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="email@congty.com"
+        onKeyDown={e=>e.key==='Enter'&&doLogin()}/></Field>
+      <Field label="Mật khẩu"><Input type="password" value={pw} onChange={e=>setPw(e.target.value)} placeholder="••••••"
+        onKeyDown={e=>e.key==='Enter'&&doLogin()}/></Field>
+      <Btn variant="gold" className="w-full mt-1" onClick={doLogin}>Đăng nhập →</Btn>
+
+      <p className="text-[11px] text-slate-400 text-center mt-3">Chưa có tài khoản? Liên hệ <b className="text-gold-dark">Marketing</b> để được cấp email & mật khẩu.</p>
+
+      {DEMO_MODE && <div className="mt-4 pt-3 border-t">
+        <div className="text-[11px] font-semibold text-slate-500 mb-1">Tài khoản demo (mật khẩu: <b>123456</b>):</div>
+        <div className="grid grid-cols-1 gap-1">
+          {db.users.filter(u=>u.active).map(u=>
+            <button key={u.id} onClick={()=>{setEmail(u.email); setPw('123456'); setErr('');}}
+              className="text-left text-[11px] px-2 py-1 rounded-lg bg-slate-50 hover:bg-gold/10 flex justify-between">
+              <span className="text-slate-600">{u.email}</span>
+              <span className="text-slate-400">{ROLE_LABEL[u.vai_tro]}</span>
+            </button>)}
+        </div>
+      </div>}
+
+      <div className="mt-4 pt-3 border-t flex items-center justify-between">
+        <span className="text-[11px] text-slate-400">Dữ liệu lưu trên máy bạn</span>
+        <button onClick={()=>{ if(confirm('Xoá toàn bộ dữ liệu và tạo lại mẫu?')){ localStorage.removeItem(SESSION_KEY); const d=seedDB(); saveDB(d); setDb(d); } }}
+          className="text-[11px] text-rose-500 hover:underline">Reset dữ liệu</button>
+      </div>
+    </div>
+  </div>;
+}
+
+/* ============================================================
+   8. KHUNG APP + ĐIỀU HƯỚNG
+============================================================ */
+const NAV = {
+  [ROLES.SALES]: [
+    {key:'home', label:'Trang chủ', icon:'🏠'},
+    {key:'new_post', label:'Tạo POST', icon:'📝'},
+    {key:'new_cmt', label:'Tạo CMT', icon:'💬'},
+    {key:'income', label:'Thu nhập', icon:'💰'},
+  ],
+  [ROLES.MARKETING]: [
+    {key:'dash', label:'Dashboard', icon:'📊'},
+    {key:'library', label:'Thư viện', icon:'📚'},
+    {key:'queue', label:'Nghiệm thu', icon:'✅'},
+    {key:'users', label:'Tài khoản', icon:'👥'},
+    {key:'pay_report', label:'Thanh toán', icon:'📄'},
+  ],
+  [ROLES.ADMIN]: [
+    {key:'users', label:'Người dùng', icon:'👥'},
+    {key:'library', label:'Thư viện', icon:'📚'},
+    {key:'pricing', label:'Đơn giá', icon:'⚙️'},
+    {key:'payroll', label:'Bảng lương', icon:'🧾'},
+    {key:'audit', label:'Nhật ký', icon:'🕑'},
+  ],
+};
+
+function Shell(){
+  const { me, logout, db } = useApp();
+  const nav = NAV[me.vai_tro];
+  const [page, setPage] = useState(nav[0].key);
+
+  // badge số việc chờ duyệt cho Marketing
+  const pendingCount = db.post_seedings.filter(p=>p.trang_thai===ST.CHO_DUYET).length
+                     + db.cmt_seedings.filter(c=>c.trang_thai===ST.CHO_DUYET).length;
+  const badgeFor = (k) => k==='queue' ? pendingCount : 0;
+
+  const render = () => {
+    switch(page){
+      case 'home': return <SalesHome go={setPage}/>;
+      case 'new_post': return <SalesNewPost go={setPage}/>;
+      case 'new_cmt': return <SalesNewCmt go={setPage}/>;
+      case 'income': return <SalesIncome/>;
+      case 'dash': return <MktDashboard/>;
+      case 'library': return <Library/>;
+      case 'queue': return <MktQueue/>;
+      case 'pay_report': return <MktPayReport/>;
+      case 'users': return <UserManagement/>;
+      case 'pricing': return <AdminPricing/>;
+      case 'payroll': return <AdminPayroll/>;
+      case 'audit': return <AdminAudit/>;
+      default: return null;
+    }
+  };
+
+  return <div className="min-h-screen pb-20 sm:pb-0 sm:flex">
+    {/* Sidebar desktop */}
+    <aside className="hidden sm:flex sm:flex-col w-60 bg-ink text-white min-h-screen sticky top-0">
+      <div className="p-4 flex items-center gap-2 border-b border-white/10">
+        <div className="w-9 h-9 rounded-xl bg-gold flex items-center justify-center font-black">K</div>
+        <div><div className="font-bold leading-tight">Kingsmen</div><div className="text-[11px] text-white/50">Seeding</div></div>
+      </div>
+      <nav className="flex-1 p-2 space-y-1">
+        {nav.map(n=><button key={n.key} onClick={()=>setPage(n.key)}
+          className={"w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition "+(page===n.key?'bg-gold text-white':'text-white/70 hover:bg-white/10')}>
+          <span>{n.icon}</span><span>{n.label}</span>
+          {badgeFor(n.key)>0 && <span className="ml-auto bg-white text-ink text-xs px-1.5 rounded-full">{badgeFor(n.key)}</span>}
+        </button>)}
+      </nav>
+      <div className="p-3 border-t border-white/10">
+        <div className="text-sm font-medium">{me.ho_ten}</div>
+        <div className="text-[11px] text-white/50 mb-2">{ROLE_LABEL[me.vai_tro]}</div>
+        <button onClick={logout} className="text-xs text-white/60 hover:text-white">↩ Đăng xuất</button>
+      </div>
+    </aside>
+
+    <div className="flex-1 min-w-0">
+      {/* Topbar mobile */}
+      <header className="sm:hidden sticky top-0 z-20 bg-ink text-white px-4 py-3 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 rounded-lg bg-gold flex items-center justify-center font-black text-sm">K</div>
+          <span className="font-semibold text-sm">{nav.find(n=>n.key===page)?.label}</span>
+        </div>
+        <button onClick={logout} className="text-xs text-white/70">{me.ho_ten} ↩</button>
+      </header>
+
+      <main className="p-3 sm:p-6 max-w-5xl mx-auto">{render()}</main>
+    </div>
+
+    {/* Bottom nav mobile */}
+    <nav className="sm:hidden fixed bottom-0 inset-x-0 z-20 bg-white border-t flex">
+      {nav.map(n=><button key={n.key} onClick={()=>setPage(n.key)}
+        className={"flex-1 flex flex-col items-center py-2 text-[11px] "+(page===n.key?'text-gold':'text-slate-400')}>
+        <span className="text-lg leading-none relative">{n.icon}
+          {badgeFor(n.key)>0 && <span className="absolute -top-1 -right-2 bg-rose-500 text-white text-[9px] px-1 rounded-full">{badgeFor(n.key)}</span>}
+        </span>
+        <span className="mt-0.5">{n.label}</span>
+      </button>)}
+    </nav>
+  </div>;
+}
+
+/* ============================================================
+   9. SALES — TRANG CHỦ
+============================================================ */
+function useMyItems(){
+  const { db, meId } = useApp();
+  const posts = db.post_seedings.filter(p=>p.sales_id===meId);
+  const cmts  = db.cmt_seedings.filter(c=>c.sales_id===meId);
+  return { posts, cmts };
+}
+function SalesHome({go}){
+  const { posts, cmts } = useMyItems();
+  const all = [...posts, ...cmts];
+  const cho = all.filter(x=>x.trang_thai===ST.CHO_DUYET).length;
+  const loai = all.filter(x=>x.trang_thai===ST.KHONG_DAT).length;
+  const tienDat = all.filter(x=>x.trang_thai===ST.DAT).reduce((s,x)=>s+(x.thanh_tien||0),0);
+  const tienCho = all.filter(x=>x.trang_thai===ST.CHO_DUYET).length; // chỉ đếm — chưa có tiền tới khi Đạt
+  const tienChi = all.filter(x=>x.trang_thai===ST.DA_CHI).reduce((s,x)=>s+(x.thanh_tien||0),0);
+
+  return <div className="space-y-4">
+    <div className="grid grid-cols-2 gap-3">
+      <Stat label="Đang chờ duyệt" value={cho} color="text-amber-600"/>
+      <Stat label="Bị loại (sửa lại)" value={loai} color="text-rose-600"/>
+      <Stat label="Thu nhập đã Đạt" value={fmtVND(tienDat)} color="text-emerald-600" sub="chưa chi"/>
+      <Stat label="Đã được chi" value={fmtVND(tienChi)} color="text-indigo-600"/>
+    </div>
+    <div className="grid grid-cols-2 gap-3">
+      <button onClick={()=>go('new_post')} className="bg-ink text-white rounded-2xl p-4 text-left hover:bg-ink-soft transition">
+        <div className="text-2xl">📝</div><div className="font-semibold mt-1">Tạo POST seeding</div>
+        <div className="text-xs text-white/60">Chọn nội dung → đăng → báo link</div>
+      </button>
+      <button onClick={()=>go('new_cmt')} className="bg-gold text-white rounded-2xl p-4 text-left hover:bg-gold-dark transition">
+        <div className="text-2xl">💬</div><div className="font-semibold mt-1">Tạo CMT seeding</div>
+        <div className="text-xs text-white/70">Mình đăng / Dạo → up hình</div>
+      </button>
+    </div>
+
+    {loai>0 && <div className="bg-rose-50 border border-rose-200 rounded-2xl p-3">
+      <div className="text-sm font-semibold text-rose-700 mb-2">⚠️ {loai} việc bị loại — cần sửa & gửi lại</div>
+      <div className="space-y-1.5">
+        {all.filter(x=>x.trang_thai===ST.KHONG_DAT).map(x=>
+          <div key={x.id} className="text-xs bg-white rounded-lg p-2 flex justify-between">
+            <span className="text-slate-600 truncate">{x.link_bai||x.post_link||CMT_LOAI_LABEL[x.loai]}</span>
+            <span className="text-rose-500 ml-2 shrink-0">{x.ly_do_loai}</span>
+          </div>)}
+      </div>
+    </div>}
+
+    <RecentList posts={posts} cmts={cmts}/>
+  </div>;
+}
+function RecentList({posts, cmts}){
+  const { db } = useApp();
+  const rows = [
+    ...posts.map(p=>({ ...p, kind:'POST', when:p.created_at, label:'POST · '+(db.content_topics.find(t=>t.id===p.topic_id)?.chu_de||'—') })),
+    ...cmts.map(c=>({ ...c, kind:'CMT', when:c.created_at, label:CMT_LOAI_LABEL[c.loai] })),
+  ].sort((a,b)=> (b.when||'').localeCompare(a.when||'')).slice(0,15);
+  if(!rows.length) return <Empty>Chưa có việc nào. Bấm "Tạo POST" hoặc "Tạo CMT" để bắt đầu.</Empty>;
+  return <div className="bg-white rounded-2xl border border-slate-100 divide-y">
+    {rows.map(r=><div key={r.id} className="p-3 flex items-center justify-between gap-2">
+      <div className="min-w-0">
+        <div className="text-sm text-ink truncate">{r.label}</div>
+        <div className="text-[11px] text-slate-400">{fmtDate(r.when)}</div>
+      </div>
+      <div className="flex items-center gap-2 shrink-0">
+        {r.trang_thai===ST.DAT || r.trang_thai===ST.DA_CHI ? <span className="text-xs font-semibold text-emerald-600">{fmtVND(r.thanh_tien)}</span> : null}
+        <Badge st={r.trang_thai}/>
+      </div>
+    </div>)}
+  </div>;
+}
+
+/* ============================================================
+   10. SALES — TẠO POST
+============================================================ */
+function CopyBtn({text, className='', label='📋 Copy'}){
+  const { notify } = useApp();
+  const [done, setDone] = useState(false);
+  const copy = () => {
+    const ok = navigator.clipboard?.writeText(text);
+    // fallback cho file:// / trình duyệt cũ
+    if(!navigator.clipboard){ const ta=document.createElement('textarea'); ta.value=text; document.body.appendChild(ta); ta.select(); try{document.execCommand('copy');}catch(e){} ta.remove(); }
+    setDone(true); notify('Đã copy nội dung'); setTimeout(()=>setDone(false), 2000);
+  };
+  return <Btn variant={done?'ok':'soft'} className={className} onClick={copy}>{done?'✓ Đã copy':label}</Btn>;
+}
+function SalesNewPost({go}){
+  const { db, meId, setColl, notify, audit } = useApp();
+  const [q, setQ] = useState('');
+  const [fLoai, setFLoai] = useState('');
+  const [topicId, setTopicId] = useState('');
+  const [groupId, setGroupId] = useState('');
+  const [link, setLink] = useState('');
+  const [react, setReact] = useState('');
+  const [cmtS, setCmtS] = useState('');
+  const [cmtT, setCmtT] = useState('');
+
+  const [onlyPri, setOnlyPri] = useState(false);
+  const topics = sortPri(db.content_topics.filter(t=>t.active
+    && (!onlyPri || t.uu_tien)
+    && (!fLoai || t.loai_bai===fLoai)
+    && (!q || (t.chu_de+' '+t.noi_dung+' '+(t.tags||[]).join(' ')).toLowerCase().includes(q.toLowerCase()))));
+  const groups = sortPri(db.groups.filter(g=>g.active));
+  const topic = db.content_topics.find(t=>t.id===topicId);
+  const chosenGroup = groups.find(g=>g.id===groupId);
+  const priTopics = db.content_topics.filter(t=>t.active && t.uu_tien).length;
+  const priGroups = groups.filter(g=>g.uu_tien).length;
+
+  const dupLink = link && db.post_seedings.some(p=>p.link_bai && p.link_bai.trim()===link.trim());
+
+  const submit = (asDraft) => {
+    if(!topicId) return notify('Chọn chủ đề/nội dung','warn');
+    if(!groupId) return notify('Chọn group mục tiêu','warn');
+    if(!asDraft){
+      if(!isFbUrl(link)) return notify('Cần link Facebook hợp lệ để gửi nghiệm thu','warn');
+    }
+    const rec = {
+      id: uid('p'), topic_id:topicId, sales_id:meId, group_id:groupId,
+      link_bai:link.trim(), react:Number(react)||0, so_cmt_seeding:Number(cmtS)||0, so_cmt_tu_nhien:Number(cmtT)||0,
+      trang_thai: asDraft?ST.NHAP:ST.CHO_DUYET, reviewed_by:null, reviewed_at:null, ly_do_loai:'',
+      thanh_tien:0, ky_thanh_toan:null, created_at:nowISO(),
+    };
+    setColl('post_seedings', xs=>[rec,...xs]);
+    audit(asDraft?'tạo nháp':'gửi nghiệm thu','post_seeding',rec.id);
+    notify(asDraft?'Đã lưu nháp':'Đã gửi nghiệm thu POST');
+    go('home');
+  };
+
+  return <div className="space-y-4 max-w-2xl">
+    <h2 className="text-lg font-bold text-ink">📝 Tạo POST seeding</h2>
+
+    {(priTopics>0 || priGroups>0) && <div className="bg-gold/10 border border-gold/30 rounded-2xl p-3 text-xs text-gold-dark">
+      ⭐ Marketing đang ưu tiên {priTopics>0 && <b>{priTopics} tuyến nội dung</b>}{priTopics>0&&priGroups>0 && ' và '}{priGroups>0 && <b>{priGroups} group</b>} — hãy seeding các mục ⭐ trước.
+    </div>}
+
+    {/* B1: chọn nội dung */}
+    <div className="bg-white rounded-2xl p-4 border border-slate-100">
+      <div className="flex items-center justify-between mb-2">
+        <div className="text-sm font-semibold text-ink">1. Chọn chủ đề / nội dung</div>
+        {priTopics>0 && <button onClick={()=>setOnlyPri(v=>!v)}
+          className={"px-2.5 py-1 rounded-lg text-xs font-medium "+(onlyPri?'bg-gold text-white':'bg-slate-100 text-slate-500')}>⭐ Chỉ ưu tiên</button>}
+      </div>
+      <div className="flex gap-2 mb-2">
+        <Input placeholder="Tìm theo từ khoá…" value={q} onChange={e=>setQ(e.target.value)}/>
+        <Select value={fLoai} onChange={e=>setFLoai(e.target.value)} className="max-w-[45%]">
+          <option value="">Mọi loại bài</option>
+          {LOAI_BAI.map(l=><option key={l}>{l}</option>)}
+        </Select>
+      </div>
+      <div className="space-y-2 max-h-64 overflow-auto">
+        {topics.length===0 && <Empty>Không có nội dung phù hợp.</Empty>}
+        {topics.map(t=>
+          <div key={t.id} onClick={()=>setTopicId(t.id)}
+            className={"p-3 rounded-xl border cursor-pointer transition "+(topicId===t.id?'border-gold bg-gold/5':t.uu_tien?'border-gold/40 bg-gold/[0.03]':'border-slate-200 hover:border-slate-300')}>
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-1.5 min-w-0">
+                {t.uu_tien && <PriBadge small/>}
+                <div className="font-medium text-sm text-ink truncate">{t.chu_de}</div>
+              </div>
+              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500 shrink-0">{t.loai_bai}</span>
+            </div>
+            <div className={"text-xs text-slate-500 mt-1 "+(topicId===t.id?'':'line-clamp-2')}>{t.noi_dung}</div>
+            {topicId===t.id && <div className="mt-3 space-y-2">
+              {t.muc_tieu && <span className="text-[11px] text-slate-400">Mục tiêu: {t.muc_tieu}</span>}
+              <CopyBtn text={t.noi_dung} className="w-full" label="📋 Copy nội dung để đăng"/>
+            </div>}
+          </div>)}
+      </div>
+    </div>
+
+    {/* B2: group + mở group để đăng */}
+    <div className="bg-white rounded-2xl p-4 border border-slate-100">
+      <div className="text-sm font-semibold text-ink mb-2">2. Chọn group & lên bài</div>
+      <Select value={groupId} onChange={e=>setGroupId(e.target.value)}>
+        <option value="">— Chọn group mục tiêu —</option>
+        {groups.map(g=><option key={g.id} value={g.id}>{g.uu_tien?'⭐ ':''}{g.ten_group} ({g.loai} · {(g.so_member||0).toLocaleString('vi-VN')} tv)</option>)}
+      </Select>
+      {chosenGroup && chosenGroup.uu_tien && <div className="mt-2"><PriBadge small/> <span className="text-[11px] text-gold-dark">Group Marketing đang ưu tiên</span></div>}
+      {chosenGroup && <div className="mt-3">
+        {chosenGroup.link ? <>
+          <a href={chosenGroup.link} target="_blank" rel="noopener"
+            className="flex items-center justify-center gap-2 w-full px-3.5 py-3 rounded-xl text-sm font-semibold bg-[#1877F2] text-white hover:brightness-95 transition">
+            📘 Mở group để đăng bài →
+          </a>
+          <p className="text-[11px] text-slate-400 mt-2 text-center">Dán nội dung đã copy vào group → đăng bài → copy link bài vừa đăng → quay lại dán ở bước 3.</p>
+        </> : <p className="text-[11px] text-amber-600">Group này chưa có link. Báo Marketing bổ sung link group.</p>}
+      </div>}
+    </div>
+
+    {/* B3: báo cáo */}
+    <div className="bg-white rounded-2xl p-4 border border-slate-100">
+      <div className="text-sm font-semibold text-ink mb-2">3. Sau khi đăng — dán link báo cáo</div>
+      <Field label="Link bài vừa đăng" required hint={dupLink?'⚠️ Link này đã tồn tại trong hệ thống!':'Dán URL bài Facebook bạn vừa đăng'}>
+        <Input value={link} onChange={e=>setLink(e.target.value)} placeholder="https://facebook.com/…" className={dupLink?'border-rose-400':''}/>
+      </Field>
+      <div className="grid grid-cols-3 gap-2">
+        <Field label="React"><Input type="number" className="no-spin" value={react} onChange={e=>setReact(e.target.value)}/></Field>
+        <Field label="Cmt seeding"><Input type="number" className="no-spin" value={cmtS} onChange={e=>setCmtS(e.target.value)}/></Field>
+        <Field label="Cmt tự nhiên"><Input type="number" className="no-spin" value={cmtT} onChange={e=>setCmtT(e.target.value)}/></Field>
+      </div>
+    </div>
+
+    <div className="flex gap-2">
+      <Btn variant="ghost" onClick={()=>submit(true)}>Lưu nháp</Btn>
+      <Btn variant="gold" className="flex-1" onClick={()=>submit(false)}>Gửi nghiệm thu →</Btn>
+    </div>
+  </div>;
+}
+
+/* ============================================================
+   11. SALES — TẠO CMT (Mình đăng / Dạo)
+============================================================ */
+function ImageUploader({images, setImages}){
+  const { notify } = useApp();
+  const ref = useRef();
+  const onPick = async (e) => {
+    const files = Array.from(e.target.files||[]);
+    for(const f of files){
+      try{ const b64 = await compressImage(f); setImages(prev=>[...prev, {id:uid('img'), image_url:b64, uploaded_at:nowISO()}]); }
+      catch(err){ notify('Lỗi đọc ảnh','err'); }
+    }
+    e.target.value='';
+  };
+  return <div>
+    <div className="flex flex-wrap gap-2 mb-2">
+      {images.map(im=><div key={im.id} className="relative w-20 h-20 rounded-lg overflow-hidden border">
+        <img src={im.image_url} className="w-full h-full object-cover"/>
+        <button onClick={()=>setImages(prev=>prev.filter(x=>x.id!==im.id))} className="absolute top-0.5 right-0.5 bg-black/60 text-white w-5 h-5 rounded-full text-xs leading-none">×</button>
+      </div>)}
+      <button onClick={()=>ref.current.click()} className="w-20 h-20 rounded-lg border-2 border-dashed border-slate-300 text-slate-400 flex flex-col items-center justify-center text-xs hover:border-gold">
+        <span className="text-xl">＋</span>Chụp/Up
+      </button>
+    </div>
+    <input ref={ref} type="file" accept="image/*" capture="environment" multiple hidden onChange={onPick}/>
+  </div>;
+}
+function SalesNewCmt({go}){
+  const { db, meId, setColl, notify, audit } = useApp();
+  const [tab, setTab] = useState(CMT_LOAI.MINH_DANG);
+  const [postId, setPostId] = useState('');
+  const [postLink, setPostLink] = useState('');
+  const [sugId, setSugId] = useState('');
+  const [soCmt, setSoCmt] = useState('1');
+  const [react, setReact] = useState('');
+  const [cmtT, setCmtT] = useState('');
+  const [images, setImages] = useState([]);
+
+  const myPosts = db.post_seedings.filter(p=>p.sales_id===meId && (p.trang_thai===ST.DAT||p.trang_thai===ST.CHO_DUYET||p.trang_thai===ST.DA_CHI) && p.link_bai);
+  const sugs = db.cmt_suggestions.filter(s=>s.active);
+  const sug = db.cmt_suggestions.find(s=>s.id===sugId);
+  const chosenPost = db.post_seedings.find(p=>p.id===postId);
+  const effLink = tab===CMT_LOAI.MINH_DANG ? (chosenPost?.link_bai||'') : postLink.trim();
+  const dup = effLink && db.cmt_seedings.some(c=>c.post_link && c.post_link.trim()===effLink) ;
+
+  const reset = () => { setPostId(''); setPostLink(''); setSugId(''); setSoCmt('1'); setReact(''); setCmtT(''); setImages([]); };
+
+  const submit = (asDraft) => {
+    if(tab===CMT_LOAI.MINH_DANG && !postId) return notify('Chọn 1 post seeding của bạn','warn');
+    if(tab===CMT_LOAI.DAO && !isUrl(postLink)) return notify('Dán link post hợp lệ','warn');
+    if(!asDraft && images.length===0) return notify('Cần ít nhất 1 ảnh đã seeding','warn');
+    if((Number(soCmt)||0)<1) return notify('Số cmt phải ≥ 1','warn');
+    const rec = {
+      id: uid('c'), loai:tab,
+      post_seeding_id: tab===CMT_LOAI.MINH_DANG? postId : null,
+      post_link: tab===CMT_LOAI.MINH_DANG? (chosenPost?.link_bai||'') : postLink.trim(),
+      suggestion_id: sugId||null, sales_id:meId,
+      so_cmt_seeding:Number(soCmt)||0, react:Number(react)||0, so_cmt_tu_nhien:Number(cmtT)||0,
+      trang_thai: asDraft?ST.NHAP:ST.CHO_DUYET, reviewed_by:null, reviewed_at:null, ly_do_loai:'',
+      thanh_tien:0, ky_thanh_toan:null, created_at:nowISO(), proofs:images,
+    };
+    setColl('cmt_seedings', xs=>[rec,...xs]);
+    audit(asDraft?'tạo nháp':'gửi nghiệm thu','cmt_seeding',rec.id);
+    notify(asDraft?'Đã lưu nháp':'Đã gửi nghiệm thu CMT'); reset(); go('home');
+  };
+
+  return <div className="space-y-4 max-w-2xl">
+    <h2 className="text-lg font-bold text-ink">💬 Tạo CMT seeding</h2>
+    <Tabs active={tab} onChange={t=>{setTab(t); reset();}} tabs={[
+      {key:CMT_LOAI.MINH_DANG, label:'Mình đăng'}, {key:CMT_LOAI.DAO, label:'Dạo'} ]}/>
+
+    <div className="bg-white rounded-2xl p-4 border border-slate-100">
+      {tab===CMT_LOAI.MINH_DANG ? (
+        <Field label="1. Chọn post seeding của bạn (app tự lấy link)" required>
+          <Select value={postId} onChange={e=>setPostId(e.target.value)}>
+            <option value="">— Chọn post —</option>
+            {myPosts.map(p=>{ const t=db.content_topics.find(x=>x.id===p.topic_id);
+              return <option key={p.id} value={p.id}>{(t?.chu_de||'POST')} · {fmtDay(p.created_at)}</option>; })}
+          </Select>
+          {chosenPost && <div className="text-[11px] text-slate-400 mt-1 truncate">🔗 {chosenPost.link_bai}</div>}
+          {myPosts.length===0 && <div className="text-[11px] text-amber-600 mt-1">Bạn chưa có post seeding nào — hãy tạo POST trước.</div>}
+        </Field>
+      ) : (
+        <Field label="1. Dán link 1 post bất kỳ trên group" required hint={dup?'⚠️ Link này đã seeding trước đó':''}>
+          <Input value={postLink} onChange={e=>setPostLink(e.target.value)} placeholder="https://facebook.com/…" className={dup?'border-rose-400':''}/>
+        </Field>
+      )}
+    </div>
+
+    <div className="bg-white rounded-2xl p-4 border border-slate-100">
+      <div className="text-sm font-semibold text-ink mb-2">2. Gợi ý nội dung cmt</div>
+      <Select value={sugId} onChange={e=>setSugId(e.target.value)}>
+        <option value="">— Chọn gợi ý (tuỳ chọn) —</option>
+        {sugs.map(s=><option key={s.id} value={s.id}>{s.tuyen? '['+s.tuyen+'] ':''}{s.noi_dung_goi_y.slice(0,50)}</option>)}
+      </Select>
+      {sug && <div className="mt-2 p-3 bg-slate-50 rounded-xl text-sm text-slate-700">
+        {sug.noi_dung_goi_y}
+        <div className="mt-2"><CopyBtn text={sug.noi_dung_goi_y}/></div>
+      </div>}
+    </div>
+
+    <div className="bg-white rounded-2xl p-4 border border-slate-100">
+      <div className="text-sm font-semibold text-ink mb-2">3. Up hình đã seeding</div>
+      <ImageUploader images={images} setImages={setImages}/>
+      <div className="grid grid-cols-3 gap-2 mt-2">
+        <Field label="Số cmt seeding" required><Input type="number" className="no-spin" value={soCmt} onChange={e=>setSoCmt(e.target.value)}/></Field>
+        <Field label="React"><Input type="number" className="no-spin" value={react} onChange={e=>setReact(e.target.value)}/></Field>
+        <Field label="Cmt tự nhiên"><Input type="number" className="no-spin" value={cmtT} onChange={e=>setCmtT(e.target.value)}/></Field>
+      </div>
+    </div>
+
+    <div className="flex gap-2">
+      <Btn variant="ghost" onClick={()=>submit(true)}>Lưu nháp</Btn>
+      <Btn variant="gold" className="flex-1" onClick={()=>submit(false)}>Gửi nghiệm thu →</Btn>
+    </div>
+  </div>;
+}
+
+/* ============================================================
+   12. SALES — THU NHẬP CỦA TÔI
+============================================================ */
+function SalesIncome(){
+  const { db } = useApp();
+  const { posts, cmts } = useMyItems();
+  const [ky, setKy] = useState('');
+  const kyList = [...new Set([...posts,...cmts].map(x=>kyOf(x.created_at)))].sort().reverse();
+
+  const rows = [
+    ...posts.map(p=>({ ...p, kind:'POST', label:db.content_topics.find(t=>t.id===p.topic_id)?.chu_de||'POST', link:p.link_bai })),
+    ...cmts.map(c=>({ ...c, kind:CMT_LOAI_LABEL[c.loai], label:CMT_LOAI_LABEL[c.loai], link:c.post_link })),
+  ].filter(r=>!ky || kyOf(r.created_at)===ky).sort((a,b)=>(b.created_at||'').localeCompare(a.created_at||''));
+
+  const dat = rows.filter(r=>r.trang_thai===ST.DAT).reduce((s,r)=>s+r.thanh_tien,0);
+  const chi = rows.filter(r=>r.trang_thai===ST.DA_CHI).reduce((s,r)=>s+r.thanh_tien,0);
+
+  return <div className="space-y-4">
+    <div className="flex items-center justify-between">
+      <h2 className="text-lg font-bold text-ink">💰 Thu nhập của tôi</h2>
+      <Select value={ky} onChange={e=>setKy(e.target.value)} className="max-w-[45%]">
+        <option value="">Tất cả kỳ</option>{kyList.map(k=><option key={k}>{k}</option>)}
+      </Select>
+    </div>
+    <div className="grid grid-cols-2 gap-3">
+      <Stat label="Đạt (chưa chi)" value={fmtVND(dat)} color="text-emerald-600"/>
+      <Stat label="Đã được chi" value={fmtVND(chi)} color="text-indigo-600"/>
+    </div>
+    <div className="bg-white rounded-2xl border border-slate-100 divide-y">
+      {rows.length===0 && <Empty>Chưa có dữ liệu.</Empty>}
+      {rows.map(r=><div key={r.id} className="p-3">
+        <div className="flex items-center justify-between gap-2">
+          <div className="min-w-0">
+            <div className="text-sm text-ink truncate">{r.kind} · {r.label}</div>
+            <div className="text-[11px] text-slate-400">{fmtDate(r.created_at)}</div>
+          </div>
+          <div className="text-right shrink-0">
+            <Badge st={r.trang_thai}/>
+            <div className="text-xs font-semibold mt-1 text-slate-600">{r.thanh_tien?fmtVND(r.thanh_tien):'—'}</div>
+          </div>
+        </div>
+        {r.trang_thai===ST.KHONG_DAT && r.ly_do_loai && <div className="text-[11px] text-rose-500 mt-1">Lý do: {r.ly_do_loai}</div>}
+      </div>)}
+    </div>
+  </div>;
+}
+
+/* ============================================================
+   13. MARKETING — DASHBOARD
+============================================================ */
+function DateRange({from, to, setFrom, setTo}){
+  return <div className="flex items-center gap-2 text-sm">
+    <Input type="date" value={from} onChange={e=>setFrom(e.target.value)} className="max-w-[46%]"/>
+    <span className="text-slate-400">→</span>
+    <Input type="date" value={to} onChange={e=>setTo(e.target.value)} className="max-w-[46%]"/>
+  </div>;
+}
+function inRange(iso, from, to){
+  if(!iso) return false; const d=iso.slice(0,10);
+  if(from && d<from) return false; if(to && d>to) return false; return true;
+}
+function MktDashboard(){
+  const { db } = useApp();
+  const [from, setFrom] = useState(''); const [to, setTo] = useState('');
+  const posts = db.post_seedings.filter(p=>inRange(p.created_at,from,to));
+  const cmts  = db.cmt_seedings.filter(c=>inRange(c.created_at,from,to));
+  const all = [...posts.map(p=>({...p,_k:'POST'})), ...cmts.map(c=>({...c,_k:'CMT'}))];
+
+  const pending = all.filter(x=>x.trang_thai===ST.CHO_DUYET).length;
+  const tamTinh = all.filter(x=>x.trang_thai===ST.CHO_DUYET).reduce((s,x)=> s + (x._k==='POST'?tienPost(db.pricing):tienCmt(db.pricing,x.so_cmt_seeding)),0);
+  const datCount = all.filter(x=>x.trang_thai===ST.DAT||x.trang_thai===ST.DA_CHI).length;
+  const tongChi = all.filter(x=>x.trang_thai===ST.DAT||x.trang_thai===ST.DA_CHI).reduce((s,x)=>s+x.thanh_tien,0);
+
+  // theo loại bài (POST) + theo người
+  const byLoai = {};
+  posts.filter(p=>p.trang_thai===ST.DAT||p.trang_thai===ST.DA_CHI).forEach(p=>{
+    const t=db.content_topics.find(x=>x.id===p.topic_id); const k=t?.loai_bai||'—'; byLoai[k]=(byLoai[k]||0)+1; });
+  const byMucTieu = {};
+  posts.filter(p=>p.trang_thai===ST.DAT||p.trang_thai===ST.DA_CHI).forEach(p=>{
+    const t=db.content_topics.find(x=>x.id===p.topic_id); const k=t?.muc_tieu||'—'; byMucTieu[k]=(byMucTieu[k]||0)+1; });
+  const byNguoi = {};
+  all.filter(x=>x.trang_thai===ST.DAT||x.trang_thai===ST.DA_CHI).forEach(x=>{
+    const u=db.users.find(u=>u.id===x.sales_id); const k=u?.ho_ten||'—';
+    byNguoi[k] ||= {dat:0, tien:0}; byNguoi[k].dat++; byNguoi[k].tien+=x.thanh_tien; });
+
+  return <div className="space-y-4">
+    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+      <h2 className="text-lg font-bold text-ink">📊 Dashboard</h2>
+      <DateRange from={from} to={to} setFrom={setFrom} setTo={setTo}/>
+    </div>
+    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <Stat label="Chờ duyệt" value={pending} color="text-amber-600"/>
+      <Stat label="Tổng chi tạm tính" value={fmtVND(tamTinh)} color="text-amber-600" sub="nếu duyệt hết"/>
+      <Stat label="Item đã Đạt" value={datCount} color="text-emerald-600"/>
+      <Stat label="Tổng đã ghi công" value={fmtVND(tongChi)} color="text-emerald-600"/>
+    </div>
+
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      <BreakdownCard title="Sản lượng đạt theo loại bài" data={byLoai}/>
+      <BreakdownCard title="Theo mục tiêu (BIẾT→HÀNH ĐỘNG)" data={byMucTieu}/>
+    </div>
+
+    <div className="bg-white rounded-2xl border border-slate-100 p-4">
+      <div className="text-sm font-semibold text-ink mb-3">Theo người</div>
+      {Object.keys(byNguoi).length===0 ? <Empty>Chưa có item đạt.</Empty> :
+        <table className="w-full text-sm">
+          <thead><tr className="text-left text-xs text-slate-400"><th className="pb-2">Sales</th><th className="pb-2 text-right">Item đạt</th><th className="pb-2 text-right">Thành tiền</th></tr></thead>
+          <tbody className="divide-y">
+            {Object.entries(byNguoi).sort((a,b)=>b[1].tien-a[1].tien).map(([k,v])=>
+              <tr key={k}><td className="py-2">{k}</td><td className="py-2 text-right">{v.dat}</td><td className="py-2 text-right font-semibold">{fmtVND(v.tien)}</td></tr>)}
+          </tbody>
+        </table>}
+    </div>
+  </div>;
+}
+function BreakdownCard({title, data}){
+  const entries = Object.entries(data).sort((a,b)=>b[1]-a[1]);
+  const max = Math.max(1, ...entries.map(e=>e[1]));
+  return <div className="bg-white rounded-2xl border border-slate-100 p-4">
+    <div className="text-sm font-semibold text-ink mb-3">{title}</div>
+    {entries.length===0 ? <Empty>Chưa có dữ liệu.</Empty> :
+      <div className="space-y-2">{entries.map(([k,v])=>
+        <div key={k}>
+          <div className="flex justify-between text-xs mb-0.5"><span className="text-slate-600">{k}</span><span className="font-semibold">{v}</span></div>
+          <div className="h-2 bg-slate-100 rounded-full overflow-hidden"><div className="h-full bg-gold rounded-full" style={{width:(v/max*100)+'%'}}/></div>
+        </div>)}
+      </div>}
+  </div>;
+}
+
+/* ============================================================
+   14. THƯ VIỆN CHUNG (Marketing/Admin)
+============================================================ */
+function Library(){
+  const { db, upsertGroup, upsertTopic, upsertCmt, setColl, notify, audit } = useApp();
+  const [tab, setTab] = useState('groups');
+  const [edit, setEdit] = useState(null); // {type, item}
+
+  const openNew = (type) => setEdit({type, item:blankOf(type)});
+  const blankOf = (type) => type==='groups' ? {ten_group:'',link:'',loai:GROUP_LOAI[0],so_member:0,active:true,uu_tien:false}
+    : type==='topics' ? {chu_de:'',noi_dung:'',loai_bai:LOAI_BAI[0],muc_tieu:'',tags:[],active:true,uu_tien:false}
+    : {noi_dung_goi_y:'',tuyen:'',loai_bai:'',tags:[],thu_tu:0,active:true};
+
+  const toggle = (type, item) => {
+    if(type==='groups') upsertGroup({...item, active:!item.active});
+    if(type==='topics') upsertTopic({...item, active:!item.active});
+    if(type==='cmts')   upsertCmt({...item, active:!item.active});
+    audit('đổi hiện/ẩn', type, item.id);
+  };
+  const togglePri = (type, item) => {
+    if(type==='groups') upsertGroup({...item, uu_tien:!item.uu_tien});
+    if(type==='topics') upsertTopic({...item, uu_tien:!item.uu_tien});
+    audit(item.uu_tien?'bỏ ưu tiên':'đặt ưu tiên', type, item.id);
+  };
+  const remove = (type, item) => {
+    if(!confirm('Xoá mục này khỏi thư viện?')) return;
+    const key = type==='groups'?'groups':type==='topics'?'content_topics':'cmt_suggestions';
+    setColl(key, xs=>xs.filter(x=>x.id!==item.id)); audit('xoá', type, item.id); notify('Đã xoá');
+  };
+
+  const tabs = [
+    {key:'groups', label:'Group mục tiêu', count:db.groups.length},
+    {key:'topics', label:'Chủ đề/Nội dung POST', count:db.content_topics.length},
+    {key:'cmts', label:'Gợi ý CMT', count:db.cmt_suggestions.length},
+  ];
+
+  return <div className="space-y-4">
+    <div className="flex items-center justify-between flex-wrap gap-2">
+      <h2 className="text-lg font-bold text-ink">📚 Thư viện chung</h2>
+      <div className="flex gap-2">
+        <ImportBtn tab={tab}/>
+        <Btn variant="gold" onClick={()=>openNew(tab)}>＋ Thêm</Btn>
+      </div>
+    </div>
+    <Tabs active={tab} onChange={setTab} tabs={tabs}/>
+
+    {tab==='groups' && <LibList items={sortPri(db.groups)} render={g=>(<>
+      <div className="flex items-center gap-2">
+        {g.uu_tien && <PriBadge/>}
+        <span className="font-medium text-sm text-ink">{g.ten_group}</span>
+      </div>
+      <div className="text-xs text-slate-500">{g.loai} · {(g.so_member||0).toLocaleString('vi-VN')} tv · <a href={g.link} target="_blank" className="text-blue-500 underline">link</a></div>
+    </>)} onEdit={g=>setEdit({type:'groups',item:g})} onToggle={g=>toggle('groups',g)} onDel={g=>remove('groups',g)} onPri={g=>togglePri('groups',g)}/>}
+
+    {tab==='topics' && <LibList items={sortPri(db.content_topics)} render={t=>(<>
+      <div className="flex items-center gap-2 flex-wrap">
+        {t.uu_tien && <PriBadge/>}
+        <span className="font-medium text-sm text-ink">{t.chu_de}</span>
+        <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500">{t.loai_bai}</span>
+        {t.muc_tieu && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-gold/10 text-gold-dark">{t.muc_tieu}</span>}</div>
+      <div className="text-xs text-slate-500 line-clamp-2 mt-0.5">{t.noi_dung}</div>
+    </>)} onEdit={t=>setEdit({type:'topics',item:t})} onToggle={t=>toggle('topics',t)} onDel={t=>remove('topics',t)} onPri={t=>togglePri('topics',t)}/>}
+
+    {tab==='cmts' && <LibList items={db.cmt_suggestions} render={c=>(<>
+      <div className="text-sm text-ink">{c.noi_dung_goi_y}</div>
+      <div className="text-xs text-slate-500">{c.tuyen}{c.loai_bai?' · '+c.loai_bai:''}</div>
+    </>)} onEdit={c=>setEdit({type:'cmts',item:c})} onToggle={c=>toggle('cmts',c)} onDel={c=>remove('cmts',c)}/>}
+
+    <LibEditModal edit={edit} onClose={()=>setEdit(null)}/>
+  </div>;
+}
+function LibList({items, render, onEdit, onToggle, onDel, onPri}){
+  if(!items.length) return <Empty>Chưa có mục nào. Bấm "Thêm" hoặc "Import Excel".</Empty>;
+  return <div className="bg-white rounded-2xl border border-slate-100 divide-y">
+    {items.map(it=><div key={it.id} className={"p-3 flex items-start gap-2 "+(it.active?'':'opacity-50')}>
+      <div className="flex-1 min-w-0">{render(it)}</div>
+      <div className="flex flex-col items-end gap-1 shrink-0">
+        <div className="flex gap-1">
+          {onPri && <button onClick={()=>onPri(it)} title={it.uu_tien?'Bỏ ưu tiên':'Đặt ưu tiên'}
+            className={"px-2 py-1 rounded-lg text-xs font-medium "+(it.uu_tien?'bg-gold/15 text-gold-dark':'bg-slate-100 text-slate-400 hover:text-gold-dark')}>{it.uu_tien?'⭐':'☆'}</button>}
+          <Toggle on={it.active} onClick={()=>onToggle(it)}/>
+        </div>
+        <div className="flex gap-1">
+          <button onClick={()=>onEdit(it)} className="text-xs text-blue-500 hover:underline">Sửa</button>
+          <button onClick={()=>onDel(it)} className="text-xs text-rose-500 hover:underline">Xoá</button>
+        </div>
+      </div>
+    </div>)}
+  </div>;
+}
+function LibEditModal({edit, onClose}){
+  const { upsertGroup, upsertTopic, upsertCmt, notify, audit } = useApp();
+  const [f, setF] = useState(null);
+  useEffect(()=>{ setF(edit?edit.item:null); }, [edit]);
+  if(!edit || !f) return null;
+  const set = (k,v) => setF(prev=>({...prev,[k]:v}));
+  const save = () => {
+    if(edit.type==='groups'){ if(!f.ten_group) return notify('Nhập tên group','warn'); upsertGroup(f); }
+    if(edit.type==='topics'){ if(!f.chu_de) return notify('Nhập chủ đề','warn'); upsertTopic(f); }
+    if(edit.type==='cmts'){ if(!f.noi_dung_goi_y) return notify('Nhập nội dung gợi ý','warn'); upsertCmt(f); }
+    audit(f.id?'sửa':'thêm', edit.type, f.id||'new'); notify('Đã lưu'); onClose();
+  };
+  return <Modal open={!!edit} onClose={onClose} title={(f.id?'Sửa ':'Thêm ')+({groups:'group',topics:'chủ đề/nội dung',cmts:'gợi ý cmt'}[edit.type])}>
+    {edit.type==='groups' && <>
+      <Field label="Tên group" required><Input value={f.ten_group} onChange={e=>set('ten_group',e.target.value)}/></Field>
+      <Field label="Link"><Input value={f.link} onChange={e=>set('link',e.target.value)}/></Field>
+      <div className="grid grid-cols-2 gap-2">
+        <Field label="Loại"><Select value={f.loai} onChange={e=>set('loai',e.target.value)}>{GROUP_LOAI.map(x=><option key={x}>{x}</option>)}</Select></Field>
+        <Field label="Số member"><Input type="number" className="no-spin" value={f.so_member} onChange={e=>set('so_member',Number(e.target.value))}/></Field>
+      </div>
+      <PriSwitch value={!!f.uu_tien} onChange={v=>set('uu_tien',v)} hint="Yêu cầu Sales ưu tiên seeding group mục tiêu này"/>
+    </>}
+    {edit.type==='topics' && <>
+      <Field label="Chủ đề" required><Input value={f.chu_de} onChange={e=>set('chu_de',e.target.value)}/></Field>
+      <Field label="Nội dung / brief"><Textarea rows="5" value={f.noi_dung} onChange={e=>set('noi_dung',e.target.value)}/></Field>
+      <div className="grid grid-cols-2 gap-2">
+        <Field label="Loại bài"><Select value={f.loai_bai} onChange={e=>set('loai_bai',e.target.value)}>{LOAI_BAI.map(x=><option key={x}>{x}</option>)}</Select></Field>
+        <Field label="Mục tiêu (nhãn lọc)"><Select value={f.muc_tieu} onChange={e=>set('muc_tieu',e.target.value)}><option value="">—</option>{MUC_TIEU.map(x=><option key={x}>{x}</option>)}</Select></Field>
+      </div>
+      <Field label="Tags (phẩy)"><Input value={(f.tags||[]).join(', ')} onChange={e=>set('tags',e.target.value.split(',').map(s=>s.trim()).filter(Boolean))}/></Field>
+      <PriSwitch value={!!f.uu_tien} onChange={v=>set('uu_tien',v)} hint="Yêu cầu Sales ưu tiên seeding tuyến nội dung này trong giai đoạn"/>
+    </>}
+    {edit.type==='cmts' && <>
+      <Field label="Nội dung gợi ý" required><Textarea rows="3" value={f.noi_dung_goi_y} onChange={e=>set('noi_dung_goi_y',e.target.value)}/></Field>
+      <div className="grid grid-cols-2 gap-2">
+        <Field label="Tuyến"><Input value={f.tuyen} onChange={e=>set('tuyen',e.target.value)} placeholder="Trải nghiệm / Đặt câu hỏi…"/></Field>
+        <Field label="Loại bài liên quan"><Select value={f.loai_bai||''} onChange={e=>set('loai_bai',e.target.value||null)}><option value="">—</option>{LOAI_BAI.map(x=><option key={x}>{x}</option>)}</Select></Field>
+      </div>
+      <Field label="Thứ tự"><Input type="number" className="no-spin" value={f.thu_tu||0} onChange={e=>set('thu_tu',Number(e.target.value))}/></Field>
+    </>}
+    <div className="flex gap-2 mt-2"><Btn variant="ghost" onClick={onClose}>Huỷ</Btn><Btn variant="gold" className="flex-1" onClick={save}>Lưu</Btn></div>
+  </Modal>;
+}
+// Import từ Excel: dán TSV (copy trực tiếp từ Excel) hoặc CSV
+function ImportBtn({tab}){
+  const { upsertGroup, upsertTopic, upsertCmt, notify } = useApp();
+  const [open, setOpen] = useState(false);
+  const [txt, setTxt] = useState('');
+  const cols = {
+    groups:'ten_group | link | loai | so_member',
+    topics:'chu_de | noi_dung | loai_bai | muc_tieu | tags(phẩy)',
+    cmts:'noi_dung_goi_y | tuyen | loai_bai | thu_tu',
+  }[tab];
+  const doImport = () => {
+    const lines = txt.split('\n').map(l=>l.trim()).filter(Boolean);
+    let n=0;
+    lines.forEach(line=>{
+      const c = line.split('\t').length>1 ? line.split('\t') : line.split(',');
+      const g = i => (c[i]||'').trim();
+      if(tab==='groups'){ if(!g(0))return; upsertGroup({ten_group:g(0),link:g(1),loai:g(2)||GROUP_LOAI[0],so_member:Number(g(3))||0,active:true}); n++; }
+      if(tab==='topics'){ if(!g(0))return; upsertTopic({chu_de:g(0),noi_dung:g(1),loai_bai:g(2)||LOAI_BAI[0],muc_tieu:g(3)||'',tags:g(4)?g(4).split(/[;,]/).map(s=>s.trim()):[],active:true}); n++; }
+      if(tab==='cmts'){ if(!g(0))return; upsertCmt({noi_dung_goi_y:g(0),tuyen:g(1)||'',loai_bai:g(2)||null,thu_tu:Number(g(3))||0,active:true}); n++; }
+    });
+    notify('Đã import '+n+' dòng'); setTxt(''); setOpen(false);
+  };
+  return <>
+    <Btn variant="ghost" onClick={()=>setOpen(true)}>⬇ Import Excel</Btn>
+    <Modal open={open} onClose={()=>setOpen(false)} title="Import từ Excel" wide>
+      <p className="text-sm text-slate-500 mb-2">Copy các cột từ Excel rồi dán vào ô dưới (mỗi dòng 1 mục). Thứ tự cột:</p>
+      <div className="text-xs font-mono bg-slate-100 rounded-lg p-2 mb-2">{cols}</div>
+      <Textarea rows="8" value={txt} onChange={e=>setTxt(e.target.value)} placeholder="Dán dữ liệu tại đây…"/>
+      <div className="flex gap-2 mt-3"><Btn variant="ghost" onClick={()=>setOpen(false)}>Huỷ</Btn><Btn variant="gold" className="flex-1" onClick={doImport}>Import</Btn></div>
+    </Modal>
+  </>;
+}
+
+/* ============================================================
+   15. MARKETING — HÀNG CHỜ NGHIỆM THU
+============================================================ */
+function MktQueue(){
+  const { db, setDb, me, notify, audit } = useApp();
+  const [tab, setTab] = useState('post');
+  const [sel, setSel] = useState({}); // id->true để duyệt hàng loạt
+  const [rejFor, setRejFor] = useState(null);
+  const [rejTxt, setRejTxt] = useState('');
+
+  const postItems = db.post_seedings.filter(p=>p.trang_thai===ST.CHO_DUYET);
+  const cmtMine   = db.cmt_seedings.filter(c=>c.trang_thai===ST.CHO_DUYET && c.loai===CMT_LOAI.MINH_DANG);
+  const cmtDao    = db.cmt_seedings.filter(c=>c.trang_thai===ST.CHO_DUYET && c.loai===CMT_LOAI.DAO);
+
+  const approvePost = (id) => setDb(d=>({...d, post_seedings:d.post_seedings.map(p=>p.id===id?{...p, trang_thai:ST.DAT, thanh_tien:tienPost(d.pricing), reviewed_by:me.ho_ten, reviewed_at:nowISO(), ky_thanh_toan:kyOf(), ly_do_loai:''}:p)}));
+  const approveCmt = (id) => setDb(d=>({...d, cmt_seedings:d.cmt_seedings.map(c=>c.id===id?{...c, trang_thai:ST.DAT, thanh_tien:tienCmt(d.pricing,c.so_cmt_seeding), reviewed_by:me.ho_ten, reviewed_at:nowISO(), ky_thanh_toan:kyOf(), ly_do_loai:''}:c)}));
+
+  const approve = (item) => {
+    if(item._t==='post') approvePost(item.id); else approveCmt(item.id);
+    audit('nghiệm thu ĐẠT', item._t==='post'?'post_seeding':'cmt_seeding', item.id);
+    notify('✅ Đã duyệt Đạt — tự tính tiền');
+  };
+  const reject = () => {
+    if(!rejTxt.trim()) return notify('Nhập lý do','warn');
+    const item = rejFor;
+    if(item._t==='post') setDb(d=>({...d, post_seedings:d.post_seedings.map(p=>p.id===item.id?{...p, trang_thai:ST.KHONG_DAT, thanh_tien:0, reviewed_by:me.ho_ten, reviewed_at:nowISO(), ly_do_loai:rejTxt.trim()}:p)}));
+    else setDb(d=>({...d, cmt_seedings:d.cmt_seedings.map(c=>c.id===item.id?{...c, trang_thai:ST.KHONG_DAT, thanh_tien:0, reviewed_by:me.ho_ten, reviewed_at:nowISO(), ly_do_loai:rejTxt.trim()}:c)}));
+    audit('nghiệm thu KHÔNG ĐẠT', item._t==='post'?'post_seeding':'cmt_seeding', item.id, rejTxt.trim());
+    notify('Đã trả về Sales sửa'); setRejFor(null); setRejTxt('');
+  };
+
+  const curItems = (tab==='post'?postItems.map(x=>({...x,_t:'post'})):tab==='mine'?cmtMine.map(x=>({...x,_t:'cmt'})):cmtDao.map(x=>({...x,_t:'cmt'})));
+  const selIds = Object.keys(sel).filter(k=>sel[k]);
+  const bulkApprove = () => {
+    curItems.filter(i=>sel[i.id]).forEach(approve); setSel({});
+  };
+
+  return <div className="space-y-4">
+    <div className="flex items-center justify-between flex-wrap gap-2">
+      <h2 className="text-lg font-bold text-ink">✅ Hàng chờ nghiệm thu</h2>
+      {selIds.length>0 && <Btn variant="ok" onClick={bulkApprove}>Duyệt {selIds.length} mục đã chọn</Btn>}
+    </div>
+    <Tabs active={tab} onChange={t=>{setTab(t);setSel({});}} tabs={[
+      {key:'post', label:'POST', count:postItems.length},
+      {key:'mine', label:'CMT mình đăng', count:cmtMine.length},
+      {key:'dao', label:'CMT dạo', count:cmtDao.length},
+    ]}/>
+
+    {curItems.length===0 ? <Empty>Không có mục nào chờ duyệt 🎉</Empty> :
+      <div className="space-y-3">
+        {curItems.map(item=><QueueCard key={item.id} item={item} checked={!!sel[item.id]}
+          onCheck={()=>setSel(s=>({...s,[item.id]:!s[item.id]}))}
+          onApprove={()=>approve(item)} onReject={()=>{setRejFor(item);setRejTxt('');}}/>)}
+      </div>}
+
+    <Modal open={!!rejFor} onClose={()=>setRejFor(null)} title="Lý do không đạt">
+      <Field label="Nhập lý do (bắt buộc)" required><Textarea rows="3" value={rejTxt} onChange={e=>setRejTxt(e.target.value)} placeholder="VD: thiếu ảnh, sai group, link hỏng…"/></Field>
+      <div className="flex gap-2"><Btn variant="ghost" onClick={()=>setRejFor(null)}>Huỷ</Btn><Btn variant="danger" className="flex-1" onClick={reject}>Trả về Sales</Btn></div>
+    </Modal>
+  </div>;
+}
+function QueueCard({item, checked, onCheck, onApprove, onReject}){
+  const { db } = useApp();
+  const sales = db.users.find(u=>u.id===item.sales_id);
+  const topic = item._t==='post' ? db.content_topics.find(t=>t.id===item.topic_id) : null;
+  const group = item._t==='post' ? db.groups.find(g=>g.id===item.group_id) : null;
+  const sug = item.suggestion_id ? db.cmt_suggestions.find(s=>s.id===item.suggestion_id) : null;
+  const tien = item._t==='post' ? tienPost(db.pricing) : tienCmt(db.pricing, item.so_cmt_seeding);
+  const link = item._t==='post' ? item.link_bai : item.post_link;
+
+  return <div className="bg-white rounded-2xl border border-slate-100 p-4">
+    <div className="flex items-start gap-3">
+      <input type="checkbox" checked={checked} onChange={onCheck} className="mt-1 w-4 h-4 accent-emerald-600"/>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center justify-between gap-2">
+          <div className="text-sm font-semibold text-ink">{sales?.ho_ten||'—'}</div>
+          <div className="text-xs text-slate-400">{fmtDate(item.created_at)}</div>
+        </div>
+        {topic && <div className="text-sm text-slate-700 mt-1">{topic.chu_de} <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500">{topic.loai_bai}</span></div>}
+        {group && <div className="text-xs text-slate-500">Group: {group.ten_group}</div>}
+        {sug && <div className="text-xs text-slate-500 mt-0.5">Gợi ý: "{sug.noi_dung_goi_y.slice(0,60)}…"</div>}
+        {link && <div className="text-xs mt-1 truncate"><a href={link} target="_blank" className="text-blue-500 underline">🔗 {link}</a></div>}
+        <div className="flex gap-3 text-xs text-slate-500 mt-1">
+          {item._t==='post' && <span>👍 {item.react} · 💬 {item.so_cmt_seeding} seed · {item.so_cmt_tu_nhien} tự nhiên</span>}
+          {item._t==='cmt' && <span>💬 {item.so_cmt_seeding} cmt · 👍 {item.react}</span>}
+        </div>
+        {item.proofs && item.proofs.length>0 && <div className="flex gap-2 mt-2 flex-wrap">
+          {item.proofs.map(p=><a key={p.id} href={p.image_url} target="_blank"><img src={p.image_url} className="w-16 h-16 object-cover rounded-lg border"/></a>)}
+        </div>}
+        <div className="flex items-center justify-between mt-3">
+          <span className="text-xs text-slate-400">Nếu Đạt: <b className="text-emerald-600">{fmtVND(tien)}</b></span>
+          <div className="flex gap-2">
+            <Btn variant="danger" onClick={onReject}>Không đạt</Btn>
+            <Btn variant="ok" onClick={onApprove}>Đạt ✓</Btn>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>;
+}
+
+/* ============================================================
+   16. MARKETING — BÁO CÁO THANH TOÁN (3 bảng tổng hợp)
+============================================================ */
+function allRows(db){
+  const posts = db.post_seedings.map(p=>({
+    ...p, _t:'POST',
+    sales: db.users.find(u=>u.id===p.sales_id)?.ho_ten||'—',
+    chu_de: db.content_topics.find(t=>t.id===p.topic_id)?.chu_de||'—',
+    loai_bai: db.content_topics.find(t=>t.id===p.topic_id)?.loai_bai||'—',
+    group: db.groups.find(g=>g.id===p.group_id)?.ten_group||'—',
+    link: p.link_bai,
+  }));
+  const cmts = db.cmt_seedings.map(c=>({
+    ...c, _t: c.loai===CMT_LOAI.MINH_DANG?'CMT_MINE':'CMT_DAO',
+    sales: db.users.find(u=>u.id===c.sales_id)?.ho_ten||'—',
+    sug: db.cmt_suggestions.find(s=>s.id===c.suggestion_id)?.noi_dung_goi_y||'—',
+    link: c.post_link,
+  }));
+  return { posts, cmts };
+}
+function MktPayReport(){
+  const { db } = useApp();
+  const [tab, setTab] = useState('post');
+  const [from, setFrom] = useState(''); const [to, setTo] = useState('');
+  const [fSales, setFSales] = useState(''); const [fSt, setFSt] = useState('');
+  const { posts, cmts } = allRows(db);
+  const flt = r => inRangeOrAll(r.created_at,from,to) && (!fSales||r.sales_id===fSales) && (!fSt||r.trang_thai===fSt);
+  function inRangeOrAll(iso,f,t){ if(!f&&!t) return true; return inRange(iso,f,t); }
+
+  const exportCSV = () => {
+    let rows, name;
+    if(tab==='post'){ name='POST_SEEDING';
+      rows=[['Ngày','Sales','Chủ đề','Loại bài','Group','Link','React','Cmt seeding','Cmt tự nhiên','Trạng thái','Thành tiền']];
+      posts.filter(flt).forEach(r=>rows.push([fmtDay(r.created_at),r.sales,r.chu_de,r.loai_bai,r.group,r.link,r.react,r.so_cmt_seeding,r.so_cmt_tu_nhien,ST_LABEL[r.trang_thai],r.thanh_tien]));
+    } else { const isMine=tab==='mine'; name=isMine?'CMT_MINH_DANG':'CMT_DAO';
+      rows=[['Ngày','Sales','Link post','Gợi ý cmt','Số cmt','Số ảnh','Trạng thái','Thành tiền']];
+      cmts.filter(c=> (isMine? c.loai===CMT_LOAI.MINH_DANG : c.loai===CMT_LOAI.DAO)).filter(flt).forEach(r=>rows.push([fmtDay(r.created_at),r.sales,r.link,r.sug,r.so_cmt_seeding,(r.proofs||[]).length,ST_LABEL[r.trang_thai],r.thanh_tien]));
+    }
+    download(name+'.csv', toCSV(rows));
+  };
+
+  return <div className="space-y-4">
+    <div className="flex items-center justify-between flex-wrap gap-2">
+      <h2 className="text-lg font-bold text-ink">📄 Báo cáo thanh toán</h2>
+      <Btn variant="gold" onClick={exportCSV}>⬆ Xuất Excel</Btn>
+    </div>
+    <div className="bg-white rounded-2xl border border-slate-100 p-3 flex flex-wrap gap-2 items-center">
+      <DateRange from={from} to={to} setFrom={setFrom} setTo={setTo}/>
+      <Select value={fSales} onChange={e=>setFSales(e.target.value)} className="max-w-[180px]"><option value="">Mọi Sales</option>{db.users.filter(u=>u.vai_tro===ROLES.SALES).map(u=><option key={u.id} value={u.id}>{u.ho_ten}</option>)}</Select>
+      <Select value={fSt} onChange={e=>setFSt(e.target.value)} className="max-w-[160px]"><option value="">Mọi trạng thái</option>{Object.keys(ST_LABEL).map(s=><option key={s} value={s}>{ST_LABEL[s]}</option>)}</Select>
+    </div>
+    <Tabs active={tab} onChange={setTab} tabs={[{key:'post',label:'POST'},{key:'mine',label:'CMT mình đăng'},{key:'dao',label:'CMT dạo'}]}/>
+
+    <div className="bg-white rounded-2xl border border-slate-100 overflow-auto">
+      <table className="w-full text-sm min-w-[720px]">
+        <thead className="bg-slate-50 text-xs text-slate-500 text-left">
+          {tab==='post' ? <tr><Th>Ngày</Th><Th>Sales</Th><Th>Chủ đề</Th><Th>Loại bài</Th><Th>Group</Th><Th>Link</Th><Th r>React</Th><Th r>Cmt</Th><Th>Trạng thái</Th><Th r>Thành tiền</Th></tr>
+            : <tr><Th>Ngày</Th><Th>Sales</Th><Th>Link post</Th><Th>Gợi ý cmt</Th><Th r>Số cmt</Th><Th>Ảnh</Th><Th>Trạng thái</Th><Th r>Thành tiền</Th></tr>}
+        </thead>
+        <tbody className="divide-y">
+          {tab==='post' ? posts.filter(flt).sort(byDateDesc).map(r=><tr key={r.id} className="hover:bg-slate-50">
+            <Td>{fmtDay(r.created_at)}</Td><Td>{r.sales}</Td><Td>{r.chu_de}</Td><Td>{r.loai_bai}</Td><Td>{r.group}</Td>
+            <Td>{r.link?<a href={r.link} target="_blank" className="text-blue-500 underline">link</a>:'—'}</Td>
+            <Td r>{r.react}</Td><Td r>{r.so_cmt_seeding}</Td><Td><Badge st={r.trang_thai}/></Td><Td r><b>{r.thanh_tien?fmtVND(r.thanh_tien):'—'}</b></Td>
+          </tr>) : cmts.filter(c=>tab==='mine'?c.loai===CMT_LOAI.MINH_DANG:c.loai===CMT_LOAI.DAO).filter(flt).sort(byDateDesc).map(r=><tr key={r.id} className="hover:bg-slate-50">
+            <Td>{fmtDay(r.created_at)}</Td><Td>{r.sales}</Td>
+            <Td>{r.link?<a href={r.link} target="_blank" className="text-blue-500 underline">link</a>:'—'}</Td>
+            <Td className="max-w-[220px] truncate">{r.sug}</Td><Td r>{r.so_cmt_seeding}</Td>
+            <Td>{(r.proofs||[]).length? <span className="flex gap-1">{r.proofs.slice(0,3).map(p=><a key={p.id} href={p.image_url} target="_blank"><img src={p.image_url} className="w-8 h-8 object-cover rounded"/></a>)}</span> : '—'}</Td>
+            <Td><Badge st={r.trang_thai}/></Td><Td r><b>{r.thanh_tien?fmtVND(r.thanh_tien):'—'}</b></Td>
+          </tr>)}
+        </tbody>
+      </table>
+      {((tab==='post'?posts.filter(flt):cmts.filter(c=>tab==='mine'?c.loai===CMT_LOAI.MINH_DANG:c.loai===CMT_LOAI.DAO).filter(flt)).length===0) && <Empty>Không có dữ liệu.</Empty>}
+    </div>
+  </div>;
+}
+const byDateDesc = (a,b)=>(b.created_at||'').localeCompare(a.created_at||'');
+function Th({children, r}){ return <th className={"px-3 py-2 font-medium "+(r?'text-right':'')}>{children}</th>; }
+function Td({children, r, className=''}){ return <td className={"px-3 py-2 "+(r?'text-right':'')+' '+className}>{children}</td>; }
+
+/* ============================================================
+   17. QUẢN LÝ TÀI KHOẢN (Marketing quyền cao nhất — duyệt tài khoản)
+============================================================ */
+function UserManagement(){
+  const { db, me, upsertUser, setColl, notify, audit } = useApp();
+  const [edit, setEdit] = useState(null);
+  const blank = {ho_ten:'',email:'',password:'123456',vai_tro:ROLES.SALES,active:true};
+
+  const activeMkt = db.users.filter(u=>u.active && u.vai_tro===ROLES.MARKETING).length;
+
+  const setActive = (u, on) => {
+    if(!on && u.id===me.id) return notify('Không thể tự tắt tài khoản của mình','warn');
+    if(!on && u.vai_tro===ROLES.MARKETING && activeMkt<=1) return notify('Phải còn ít nhất 1 Marketing đang hoạt động','warn');
+    upsertUser({...u, active:on}); audit(on?'bật tài khoản':'tắt tài khoản','user',u.id);
+  };
+  const setRole = (u, role) => {
+    if(u.id===me.id && role!==ROLES.MARKETING && u.vai_tro===ROLES.MARKETING && activeMkt<=1) return notify('Phải còn ít nhất 1 Marketing','warn');
+    upsertUser({...u, vai_tro:role}); audit('đổi vai trò','user',u.id, ROLE_LABEL[role]);
+  };
+  const remove = (u) => {
+    if(u.id===me.id) return notify('Không thể xoá tài khoản của mình','warn');
+    if(u.vai_tro===ROLES.MARKETING && activeMkt<=1) return notify('Phải còn ít nhất 1 Marketing','warn');
+    if(!confirm('Xoá tài khoản '+u.ho_ten+'?')) return;
+    setColl('users', xs=>xs.filter(x=>x.id!==u.id)); audit('xoá tài khoản','user',u.id); notify('Đã xoá');
+  };
+  const save = () => {
+    if(!edit.ho_ten) return notify('Nhập họ tên','warn');
+    const key=(edit.email||'').trim().toLowerCase();
+    if(!key) return notify('Nhập email','warn');
+    if(!edit.password) return notify('Nhập mật khẩu','warn');
+    if(db.users.some(x=>x.id!==edit.id && (x.email||'').trim().toLowerCase()===key)) return notify('Email đã tồn tại','warn');
+    upsertUser({...edit, email:key}); audit(edit.id?'sửa user':'tạo tài khoản','user',edit.id||'new'); notify(edit.id?'Đã lưu':'Đã tạo tài khoản'); setEdit(null);
+  };
+
+  return <div className="space-y-4">
+    <div className="flex items-center justify-between">
+      <h2 className="text-lg font-bold text-ink">👥 Quản lý tài khoản</h2>
+      <Btn variant="gold" onClick={()=>setEdit({...blank})}>＋ Tạo tài khoản</Btn>
+    </div>
+    <div className="bg-gold/10 border border-gold/30 rounded-2xl p-3 text-xs text-gold-dark">
+      Marketing tạo & cấp tài khoản cho Sales và Kế toán — gửi <b>email + mật khẩu</b> để họ đăng nhập. Họ không tự đăng ký.
+    </div>
+
+    <div className="bg-white rounded-2xl border border-slate-100 divide-y">
+      {db.users.map(u=><div key={u.id} className={"p-3 flex items-center gap-3 "+(u.active?'':'opacity-50')}>
+        <div className="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center font-bold text-slate-600">{u.ho_ten[0]}</div>
+        <div className="flex-1 min-w-0">
+          <div className="text-sm font-medium text-ink truncate">{u.ho_ten}{u.id===me.id && <span className="text-[10px] text-slate-400"> (bạn)</span>}</div>
+          <div className="text-xs text-slate-400 truncate">{u.email}</div>
+        </div>
+        <Select value={u.vai_tro} onChange={e=>setRole(u,e.target.value)} className="max-w-[130px] py-1 text-xs">
+          {Object.values(ROLES).map(r=><option key={r} value={r}>{ROLE_LABEL[r]}</option>)}
+        </Select>
+        <Toggle on={u.active} onClick={()=>setActive(u,!u.active)} labels={['Bật','Tắt']}/>
+        <button onClick={()=>setEdit(u)} className="text-xs text-blue-500 hover:underline">Sửa</button>
+        <button onClick={()=>remove(u)} className="text-xs text-rose-500 hover:underline">Xoá</button>
+      </div>)}
+    </div>
+
+    <Modal open={!!edit} onClose={()=>setEdit(null)} title={edit&&edit.id?'Sửa tài khoản':'Tạo tài khoản'}>
+      {edit && <>
+        <Field label="Họ tên" required><Input value={edit.ho_ten} onChange={e=>setEdit({...edit,ho_ten:e.target.value})}/></Field>
+        <Field label="Email" required><Input type="email" value={edit.email} onChange={e=>setEdit({...edit,email:e.target.value})}/></Field>
+        <Field label="Mật khẩu" required hint="Người dùng đăng nhập bằng email + mật khẩu này"><Input value={edit.password||''} onChange={e=>setEdit({...edit,password:e.target.value})}/></Field>
+        <Field label="Vai trò"><Select value={edit.vai_tro} onChange={e=>setEdit({...edit,vai_tro:e.target.value})}>{Object.values(ROLES).map(r=><option key={r} value={r}>{ROLE_LABEL[r]}</option>)}</Select></Field>
+        <div className="flex gap-2 mt-2"><Btn variant="ghost" onClick={()=>setEdit(null)}>Huỷ</Btn><Btn variant="gold" className="flex-1" onClick={save}>{edit.id?'Lưu':'Tạo & cấp'}</Btn></div>
+      </>}
+    </Modal>
+  </div>;
+}
+
+/* ============================================================
+   18. ADMIN — ĐƠN GIÁ
+============================================================ */
+function AdminPricing(){
+  const { db, setPricing, notify, audit } = useApp();
+  const [f, setF] = useState(db.pricing);
+  useEffect(()=>setF(db.pricing),[db.pricing]);
+  const save = () => { setPricing({don_gia_post:Number(f.don_gia_post)||0,don_gia_cmt:Number(f.don_gia_cmt)||0,min_nhac_kingsmen:Number(f.min_nhac_kingsmen)||0,min_usp:Number(f.min_usp)||0}); audit('sửa đơn giá','pricing','-'); notify('Đã lưu đơn giá'); };
+  return <div className="space-y-4 max-w-lg">
+    <h2 className="text-lg font-bold text-ink">⚙️ Đơn giá & cấu hình</h2>
+    <div className="bg-white rounded-2xl border border-slate-100 p-4">
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Đơn giá / POST đạt" hint="VNĐ mỗi post"><Input type="number" className="no-spin" value={f.don_gia_post} onChange={e=>setF({...f,don_gia_post:e.target.value})}/></Field>
+        <Field label="Đơn giá / CMT" hint="VNĐ mỗi cmt seeding"><Input type="number" className="no-spin" value={f.don_gia_cmt} onChange={e=>setF({...f,don_gia_cmt:e.target.value})}/></Field>
+        <Field label="Min nhắc Kingsmen" hint="chuẩn chất lượng cụm"><Input type="number" className="no-spin" value={f.min_nhac_kingsmen} onChange={e=>setF({...f,min_nhac_kingsmen:e.target.value})}/></Field>
+        <Field label="Min USP" hint="số USP tối thiểu"><Input type="number" className="no-spin" value={f.min_usp} onChange={e=>setF({...f,min_usp:e.target.value})}/></Field>
+      </div>
+      <div className="bg-slate-50 rounded-xl p-3 text-xs text-slate-500 mb-3">
+        Công thức nghiệm thu: <b>POST</b> = đơn giá post · <b>CMT</b> = số cmt × đơn giá cmt. Áp dụng tự động khi Marketing bấm "Đạt".
+      </div>
+      <Btn variant="gold" onClick={save}>Lưu đơn giá</Btn>
+    </div>
+  </div>;
+}
+
+/* ============================================================
+   19. ADMIN — BẢNG LƯƠNG + KỲ THANH TOÁN
+============================================================ */
+function AdminPayroll(){
+  const { db, setDb, notify, audit } = useApp();
+  const [ky, setKy] = useState('');
+  const { posts, cmts } = allRows(db);
+  const all = [...posts, ...cmts];
+  const kyList = [...new Set(all.filter(x=>x.trang_thai===ST.DAT||x.trang_thai===ST.DA_CHI).map(x=>x.ky_thanh_toan||kyOf(x.created_at)))].sort().reverse();
+
+  const flt = x => (x.trang_thai===ST.DAT||x.trang_thai===ST.DA_CHI) && (!ky || (x.ky_thanh_toan||kyOf(x.created_at))===ky);
+
+  // gom theo sales
+  const bySales = {};
+  db.users.filter(u=>u.vai_tro===ROLES.SALES).forEach(u=>{ bySales[u.id]={u, postDat:0,tienPost:0,cmtDat:0,tienCmt:0,daChi:0,conLai:0}; });
+  posts.filter(flt).forEach(p=>{ const r=bySales[p.sales_id]; if(!r)return; r.postDat++; r.tienPost+=p.thanh_tien; if(p.trang_thai===ST.DA_CHI)r.daChi+=p.thanh_tien; else r.conLai+=p.thanh_tien; });
+  cmts.filter(flt).forEach(c=>{ const r=bySales[c.sales_id]; if(!r)return; r.cmtDat++; r.tienCmt+=c.thanh_tien; if(c.trang_thai===ST.DA_CHI)r.daChi+=c.thanh_tien; else r.conLai+=c.thanh_tien; });
+  const rows = Object.values(bySales).filter(r=>r.postDat||r.cmtDat);
+
+  const markPaid = (salesId) => {
+    if(!confirm('Đánh dấu ĐÃ CHI tất cả item Đạt của Sales này trong kỳ '+(ky||'tất cả')+'?')) return;
+    setDb(d=>{
+      const inKy = x => (!ky || (x.ky_thanh_toan||kyOf(x.created_at))===ky);
+      return { ...d,
+        post_seedings:d.post_seedings.map(p=>p.sales_id===salesId&&p.trang_thai===ST.DAT&&inKy(p)?{...p,trang_thai:ST.DA_CHI}:p),
+        cmt_seedings:d.cmt_seedings.map(c=>c.sales_id===salesId&&c.trang_thai===ST.DAT&&inKy(c)?{...c,trang_thai:ST.DA_CHI}:c),
+      };
+    });
+    audit('đánh dấu ĐÃ CHI','payroll',salesId,'kỳ '+(ky||'all')); notify('Đã đánh dấu Đã chi');
+  };
+  const exportPayroll = () => {
+    const r=[['Sales','Post đạt','Tiền post','Cmt đạt','Tiền cmt','Tổng phải trả','Đã chi','Còn lại']];
+    rows.forEach(x=>r.push([x.u.ho_ten,x.postDat,x.tienPost,x.cmtDat,x.tienCmt,x.tienPost+x.tienCmt,x.daChi,x.conLai]));
+    download('BANG_LUONG_'+(ky||'ALL')+'.csv', toCSV(r));
+  };
+
+  const tong = rows.reduce((a,x)=>({tt:a.tt+x.tienPost+x.tienCmt, chi:a.chi+x.daChi, con:a.con+x.conLai}),{tt:0,chi:0,con:0});
+
+  return <div className="space-y-4">
+    <div className="flex items-center justify-between flex-wrap gap-2">
+      <h2 className="text-lg font-bold text-ink">🧾 Bảng lương</h2>
+      <div className="flex gap-2 items-center">
+        <Select value={ky} onChange={e=>setKy(e.target.value)}><option value="">Tất cả kỳ</option>{kyList.map(k=><option key={k}>{k}</option>)}</Select>
+        <Btn variant="gold" onClick={exportPayroll}>⬆ Xuất Excel</Btn>
+      </div>
+    </div>
+    <div className="grid grid-cols-3 gap-3">
+      <Stat label="Tổng phải trả" value={fmtVND(tong.tt)}/>
+      <Stat label="Đã chi" value={fmtVND(tong.chi)} color="text-indigo-600"/>
+      <Stat label="Còn lại" value={fmtVND(tong.con)} color="text-rose-600"/>
+    </div>
+    <div className="bg-white rounded-2xl border border-slate-100 overflow-auto">
+      <table className="w-full text-sm min-w-[720px]">
+        <thead className="bg-slate-50 text-xs text-slate-500 text-left"><tr>
+          <Th>Sales</Th><Th r>Post đạt</Th><Th r>Tiền post</Th><Th r>Cmt đạt</Th><Th r>Tiền cmt</Th><Th r>Tổng phải trả</Th><Th r>Đã chi</Th><Th r>Còn lại</Th><Th></Th>
+        </tr></thead>
+        <tbody className="divide-y">
+          {rows.length===0 ? <tr><td colSpan="9"><Empty>Chưa có item đạt trong kỳ.</Empty></td></tr> :
+            rows.map(x=><tr key={x.u.id} className="hover:bg-slate-50">
+              <Td>{x.u.ho_ten}</Td><Td r>{x.postDat}</Td><Td r>{fmtVND(x.tienPost)}</Td><Td r>{x.cmtDat}</Td><Td r>{fmtVND(x.tienCmt)}</Td>
+              <Td r><b>{fmtVND(x.tienPost+x.tienCmt)}</b></Td><Td r className="text-indigo-600">{fmtVND(x.daChi)}</Td><Td r className="text-rose-600">{fmtVND(x.conLai)}</Td>
+              <Td>{x.conLai>0 && <Btn variant="soft" onClick={()=>markPaid(x.u.id)}>Đã chi</Btn>}</Td>
+            </tr>)}
+        </tbody>
+      </table>
+    </div>
+    <DemoData/>
+  </div>;
+}
+
+/* Nạp dữ liệu demo (opt-in) để xem nhanh luồng — không tự bịa khi khởi động */
+function DemoData(){
+  const { db, setDb, notify } = useApp();
+  const load = () => {
+    const sales = db.users.filter(u=>u.vai_tro===ROLES.SALES);
+    if(sales.length===0 || db.content_topics.length===0){ notify('Cần có Sales và thư viện trước','warn'); return; }
+    const t=db.content_topics; const g=db.groups.filter(x=>x.active); const s=db.cmt_suggestions;
+    const mkPost=(si,ti,gi,st,link)=>({id:uid('p'),topic_id:t[ti].id,sales_id:sales[si].id,group_id:(g[gi]||g[0]).id,link_bai:link,react:12,so_cmt_seeding:3,so_cmt_tu_nhien:1,trang_thai:st,reviewed_by:st!==ST.CHO_DUYET?'Ngọc (Marketing)':null,reviewed_at:st!==ST.CHO_DUYET?nowISO():null,ly_do_loai:'',thanh_tien:st===ST.DAT||st===ST.DA_CHI?tienPost(db.pricing):0,ky_thanh_toan:st===ST.DAT||st===ST.DA_CHI?kyOf():null,created_at:nowISO()});
+    const mkCmt=(si,loai,st,link,soc)=>({id:uid('c'),loai,post_seeding_id:null,post_link:link,suggestion_id:s[0]?.id||null,sales_id:sales[si].id,so_cmt_seeding:soc,react:2,so_cmt_tu_nhien:0,trang_thai:st,reviewed_by:st!==ST.CHO_DUYET?'Ngọc (Marketing)':null,reviewed_at:st!==ST.CHO_DUYET?nowISO():null,ly_do_loai:'',thanh_tien:st===ST.DAT||st===ST.DA_CHI?tienCmt(db.pricing,soc):0,ky_thanh_toan:st===ST.DAT||st===ST.DA_CHI?kyOf():null,created_at:nowISO(),proofs:[]});
+    const newPosts=[ mkPost(0,0,0,ST.DAT,'https://facebook.com/post/demo1'), mkPost(0,2,1,ST.CHO_DUYET,'https://facebook.com/post/demo2'), mkPost(1,1,0,ST.DAT,'https://facebook.com/post/demo3') ];
+    const newCmts=[ mkCmt(0,CMT_LOAI.MINH_DANG,ST.DAT,'https://facebook.com/post/demo1',4), mkCmt(1,CMT_LOAI.DAO,ST.CHO_DUYET,'https://facebook.com/groups/x/post/demo9',2) ];
+    setDb(d=>({...d, post_seedings:[...newPosts,...d.post_seedings], cmt_seedings:[...newCmts,...d.cmt_seedings]}));
+    notify('Đã nạp dữ liệu demo (3 post + 2 cmt)');
+  };
+  return <div className="bg-amber-50 border border-amber-200 rounded-2xl p-3 flex items-center justify-between">
+    <div className="text-xs text-amber-700">Muốn xem nhanh luồng nghiệm thu & bảng lương? Nạp vài bản ghi mẫu (không ảnh hưởng dữ liệu thật).</div>
+    <Btn variant="ghost" onClick={load}>Nạp demo</Btn>
+  </div>;
+}
+
+/* ============================================================
+   20. ADMIN — NHẬT KÝ
+============================================================ */
+function AdminAudit(){
+  const { db } = useApp();
+  return <div className="space-y-4">
+    <h2 className="text-lg font-bold text-ink">🕑 Nhật ký hoạt động</h2>
+    <div className="bg-white rounded-2xl border border-slate-100 divide-y max-h-[70vh] overflow-auto">
+      {db.audit.length===0 ? <Empty>Chưa có nhật ký.</Empty> :
+        db.audit.map(a=><div key={a.id} className="p-3 text-sm flex items-center justify-between gap-2">
+          <div><span className="font-medium text-ink">{a.by}</span> <span className="text-slate-500">{a.action}</span> <span className="text-xs text-slate-400">· {a.entity}{a.detail?' · '+a.detail:''}</span></div>
+          <div className="text-[11px] text-slate-400 shrink-0">{fmtDate(a.at)}</div>
+        </div>)}
+    </div>
+  </div>;
+}
+
+/* ============================================================
+   21. ROOT
+============================================================ */
+function Root(){
+  const { me } = useApp();
+  return me ? <Shell/> : <Login/>;
+}
+ReactDOM.createRoot(document.getElementById('root')).render(
+  <AppProvider><Root/></AppProvider>
+);
+</script>
+<script>
+  // Tự biên dịch JSX với classic runtime (React.createElement) — tránh lỗi import "react/jsx-runtime"
+  window.addEventListener('DOMContentLoaded', function(){
+    try {
+      var src = document.getElementById('app-src').textContent;
+      var out = Babel.transform(src, { presets: [['react', { runtime: 'classic' }]] }).code;
+      new Function(out)();
+    } catch (e) {
+      document.getElementById('root').innerHTML =
+        '<pre style="padding:16px;color:#b91c1c;white-space:pre-wrap;font:13px/1.5 monospace">Lỗi khởi tạo app:\n' +
+        String(e && e.stack ? e.stack : e).replace(/</g,'&lt;') + '</pre>';
+      console.error(e);
+    }
+  });
+</script>
+</body>
+</html>

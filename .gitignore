@@ -1,0 +1,9 @@
+# Local tooling / OS
+.claude/
+*.log
+Thumbs.db
+.DS_Store
+
+# Scratch
+scratchpad/
+*.tmp
