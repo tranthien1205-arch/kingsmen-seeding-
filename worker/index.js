@@ -7,7 +7,8 @@
 
 const ROLES = { MARKETING:'MARKETING', SALES:'SALES', ADMIN:'ADMIN' };
 const ST = { NHAP:'NHAP', CHO_DUYET:'CHO_DUYET', DAT:'DAT', KHONG_DAT:'KHONG_DAT', DA_CHI:'DA_CHI' };
-const json = (data, status=200) => new Response(JSON.stringify(data), { status, headers:{'Content-Type':'application/json; charset=utf-8'} });
+const CORS = { 'Access-Control-Allow-Origin':'*', 'Access-Control-Allow-Methods':'GET,POST,PATCH,DELETE,OPTIONS', 'Access-Control-Allow-Headers':'Content-Type,Authorization' };
+const json = (data, status=200) => new Response(JSON.stringify(data), { status, headers:{'Content-Type':'application/json; charset=utf-8', ...CORS} });
 const uid = (p='id') => p+'_'+crypto.randomUUID().slice(0,8)+Date.now().toString(36).slice(-4);
 const nowISO = () => new Date().toISOString();
 const kyOf = (iso) => { const d=new Date(iso||nowISO()); return d.getUTCFullYear()+'-'+String(d.getUTCMonth()+1).padStart(2,'0'); };
@@ -320,6 +321,7 @@ export default {
   async fetch(request, env, ctx){
     const url = new URL(request.url);
     if(url.pathname.startsWith('/api/')){
+      if(request.method==='OPTIONS') return new Response(null, { status:204, headers:CORS });
       try { return await handleApi(request, env); }
       catch(e){ return json({error:'Lỗi server: '+(e.message||e)}, 500); }
     }
