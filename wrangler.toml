@@ -1,5 +1,5 @@
 # Cloudflare Workers — phục vụ web tĩnh từ thư mục dist/ (Static Assets)
-name = "kingsmen-seeding"
+name = "kingsmen-app-seeding"
 compatibility_date = "2025-06-01"
 
 [assets]
