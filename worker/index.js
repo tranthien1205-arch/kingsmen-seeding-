@@ -191,7 +191,7 @@ async function bootstrap(env, u){
   const pfRows = (await (staff ? env.DB.prepare(pfSql) : env.DB.prepare(pfSql).bind(u.id)).all()).results;
   const fups = (await env.DB.prepare(`SELECT * FROM filming_uploads`).all()).results;
   const project_filmings = pfRows.map(p=>({
-    ...p, uploads: fups.filter(x=>x.project_filming_id===p.id).map(x=>({ id:x.id, shot_id:x.shot_id, media_type:x.media_type, media_url:x.media_url, dat_item:x.dat_item==null?null:uBool(x.dat_item) })),
+    ...p, uploads: fups.filter(x=>x.project_filming_id===p.id).map(x=>({ id:x.id, shot_id:x.shot_id, media_type:x.media_type, media_url:x.media_url, uploaded_at:x.uploaded_at, dat_item:x.dat_item==null?null:uBool(x.dat_item) })),
   }));
 
   return {
@@ -218,11 +218,13 @@ async function handleApi(request, env){
     if(!sess) return json({error:'Chưa đăng nhập'}, 401);
     if(!env.MEDIA) return json({error:'Chưa cấu hình kho lưu file (R2 MEDIA) — dùng tạm tab Dán link Drive'}, 503);
     const ct = url.searchParams.get('type') || request.headers.get('content-type') || 'application/octet-stream';
-    const buf = await request.arrayBuffer();
-    if(!buf || buf.byteLength===0) return json({error:'File rỗng'}, 400);
+    const len = Number(request.headers.get('content-length')||0);
+    if(!request.body || len<=0) return json({error:'File rỗng'}, 400);
+    if(len > 100*1024*1024) return json({error:'File quá lớn (>100MB) — dùng tab Dán link Drive cho video lớn'}, 413);
     const ext = ((ct.split('/')[1]||'bin').split(';')[0]).replace(/[^a-z0-9]/gi,'') || 'bin';
     const key = 'filming/'+uid('m')+'.'+ext;
-    await env.MEDIA.put(key, buf, { httpMetadata:{ contentType: ct } });
+    // stream thẳng vào R2 (không nạp cả file vào bộ nhớ)
+    await env.MEDIA.put(key, request.body, { httpMetadata:{ contentType: ct } });
     return json({ media_url: '/media/'+key, media_type: ct.startsWith('image/') ? 'IMAGE' : 'VIDEO' });
   }
 
@@ -525,11 +527,56 @@ async function handleApi(request, env){
     }
     return json({ db: await bootstrap(env, me) });
   }
+  // xoá 1 media (staff) — xoá luôn file trên R2 nếu là file app
+  if((m=path.match(/^\/filming\/uploads\/(.+)$/)) && method==='DELETE'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    const up = await env.DB.prepare(`SELECT * FROM filming_uploads WHERE id=?`).bind(m[1]).first();
+    if(up){
+      await deleteMediaObject(env, up.media_url);
+      await env.DB.prepare(`DELETE FROM filming_uploads WHERE id=?`).bind(m[1]).run();
+      await logAudit(env,me,'xoá media','filming_upload',m[1]);
+    }
+    return json({ db: await bootstrap(env, me) });
+  }
+  // dọn media hết hạn ngay (staff)
+  if(path==='/filming/cleanup' && method==='POST'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    const r = await cleanupOldMedia(env);
+    return json({ db: await bootstrap(env, me), cleaned:r });
+  }
 
   return json({error:'Route không tồn tại: '+method+' '+path}, 404);
 }
 
+// xoá object trên R2 nếu media_url là file do app lưu ('/media/<key>')
+async function deleteMediaObject(env, media_url){
+  if(env.MEDIA && typeof media_url==='string' && media_url.startsWith('/media/')){
+    try { await env.MEDIA.delete(decodeURIComponent(media_url.slice('/media/'.length))); } catch(e){}
+  }
+}
+
+// Dọn media của công trình CHƯA ĐƯỢC DUYỆT quá 30 ngày (chạy theo cron)
+async function cleanupOldMedia(env){
+  await ensureSchema(env);
+  const cutoff = new Date(Date.now() - 30*24*60*60*1000).toISOString();
+  const stale = (await env.DB.prepare(
+    `SELECT id FROM project_filmings WHERE trang_thai NOT IN ('DAT','DA_CHI') AND created_at < ?`
+  ).bind(cutoff).all()).results;
+  let removed = 0;
+  for(const p of stale){
+    const ups = (await env.DB.prepare(`SELECT * FROM filming_uploads WHERE project_filming_id=?`).bind(p.id).all()).results;
+    for(const up of ups){ await deleteMediaObject(env, up.media_url); removed++; }
+    await env.DB.prepare(`DELETE FROM filming_uploads WHERE project_filming_id=?`).bind(p.id).run();
+  }
+  if(stale.length) await logAudit(env, null, 'dọn media hết hạn 30 ngày', 'filming', '-', stale.length+' công trình · '+removed+' media');
+  return { projects: stale.length, media: removed };
+}
+
 export default {
+  // Cron: dọn media công trình chưa duyệt quá 30 ngày
+  async scheduled(controller, env, ctx){
+    ctx.waitUntil(cleanupOldMedia(env));
+  },
   async fetch(request, env, ctx){
     const url = new URL(request.url);
     if(url.pathname.startsWith('/api/')){

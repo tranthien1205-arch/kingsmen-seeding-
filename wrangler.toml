@@ -18,3 +18,7 @@ database_id = "184ebc6a-ebf2-451d-89ea-369501c25f02"
 [[r2_buckets]]
 binding = "MEDIA"
 bucket_name = "kingsmen-media"
+
+# Cron: mỗi ngày dọn media của công trình chưa duyệt quá 30 ngày
+[triggers]
+crons = ["0 18 * * *"]
