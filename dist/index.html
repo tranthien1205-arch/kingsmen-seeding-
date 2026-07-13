@@ -1062,7 +1062,7 @@ function Library(){
   </div>;
 }
 function LibList({items, render, onEdit, onToggle, onDel, onPri}){
-  if(!items.length) return <Empty>Chưa có mục nào. Bấm "Thêm" hoặc "Import Excel".</Empty>;
+  if(!items.length) return <Empty>Chưa có mục nào. Bấm "Thêm" hoặc "Import file".</Empty>;
   return <div className="bg-white rounded-2xl border border-slate-100 divide-y">
     {items.map(it=><div key={it.id} className={"p-3 flex items-start gap-2 "+(it.active?'':'opacity-50')}>
       <div className="flex-1 min-w-0">{render(it)}</div>
@@ -1124,34 +1124,104 @@ function LibEditModal({edit, onClose}){
     <div className="flex gap-2 mt-2"><Btn variant="ghost" onClick={onClose}>Huỷ</Btn><Btn variant="gold" className="flex-1" onClick={save}>Lưu</Btn></div>
   </Modal>;
 }
-// Import từ Excel: dán TSV (copy trực tiếp từ Excel) hoặc CSV
+// Cấu hình template import cho từng tab thư viện: tiêu đề cột + dòng ví dụ mẫu + hàm dựng bản ghi
+const IMPORT_TPL = {
+  groups: {
+    label:'Group mục tiêu',
+    headers:['Tên group','Link','Loại','Số member'],
+    sample:['Cộng đồng Nhà đẹp Sài Gòn','https://facebook.com/groups/nhadepsg','Nhà ở','12500'],
+    note:'Loại: '+GROUP_LOAI.join(' / '),
+    make: c => ({ten_group:c[0], link:c[1]||'', loai:GROUP_LOAI.includes(c[2])?c[2]:GROUP_LOAI[0], so_member:Number(String(c[3]||'').replace(/[^\d]/g,''))||0, active:true, uu_tien:false}),
+  },
+  topics: {
+    label:'Chủ đề / Nội dung POST',
+    headers:['Chủ đề','Nội dung / Brief','Loại bài','Mục tiêu','Tags (phẩy)'],
+    sample:['Chống ố vàng mối nối gạch','Brief mẫu: nhấn mạnh khả năng chống ố vàng, bảo hành 5 năm…','Chống ố vàng/Bảo hành','TIN','ố vàng, bảo hành'],
+    note:'Loại bài: '+LOAI_BAI.join(' / ')+' — Mục tiêu: '+MUC_TIEU.join(' / '),
+    make: c => ({chu_de:c[0], noi_dung:c[1]||'', loai_bai:LOAI_BAI.includes(c[2])?c[2]:LOAI_BAI[0], muc_tieu:MUC_TIEU.includes(c[3])?c[3]:'', tags:c[4]?String(c[4]).split(/[;,]/).map(s=>s.trim()).filter(Boolean):[], active:true, uu_tien:false}),
+  },
+  cmts: {
+    label:'Gợi ý CMT',
+    headers:['Nội dung gợi ý','Tuyến','Loại bài','Thứ tự'],
+    sample:['Nhà mình dùng loại này 2 năm rồi vẫn chưa thấy ố, đáng tiền!','Trải nghiệm','Review','1'],
+    note:'Loại bài (tuỳ chọn): '+LOAI_BAI.join(' / '),
+    make: c => ({noi_dung_goi_y:c[0], tuyen:c[1]||'', loai_bai:LOAI_BAI.includes(c[2])?c[2]:null, thu_tu:Number(c[3])||0, active:true}),
+  },
+};
+// Bóc tách bảng CSV/TSV: tự nhận dấu phân tách (tab khi dán từ Excel, phẩy khi mở file .csv),
+// hỗ trợ ô có dấu ngoặc kép chứa phẩy/xuống dòng theo chuẩn CSV.
+function parseTable(text){
+  text = (text||'').replace(/^﻿/,'').replace(/\r\n?/g,'\n');
+  const firstLine = text.split('\n').find(l=>l.trim()) || '';
+  const delim = firstLine.includes('\t') ? '\t' : ',';
+  const rows=[]; let row=[], cur='', q=false;
+  for(let i=0;i<text.length;i++){
+    const ch=text[i];
+    if(q){
+      if(ch==='"'){ if(text[i+1]==='"'){ cur+='"'; i++; } else q=false; }
+      else cur+=ch;
+    } else if(ch==='"'){ q=true; }
+    else if(ch===delim){ row.push(cur); cur=''; }
+    else if(ch==='\n'){ row.push(cur); rows.push(row); row=[]; cur=''; }
+    else cur+=ch;
+  }
+  if(cur!=='' || row.length){ row.push(cur); rows.push(row); }
+  return rows.map(r=>r.map(c=>c.trim())).filter(r=>r.some(c=>c!==''));
+}
+// Import từ file mẫu (.csv) hoặc dán trực tiếp từ Excel
 function ImportBtn({tab}){
   const { upsertGroup, upsertTopic, upsertCmt, notify } = useApp();
   const [open, setOpen] = useState(false);
   const [txt, setTxt] = useState('');
-  const cols = {
-    groups:'ten_group | link | loai | so_member',
-    topics:'chu_de | noi_dung | loai_bai | muc_tieu | tags(phẩy)',
-    cmts:'noi_dung_goi_y | tuyen | loai_bai | thu_tu',
-  }[tab];
-  const doImport = async () => {
-    const lines = txt.split('\n').map(l=>l.trim()).filter(Boolean);
-    let n=0;
-    for(const line of lines){
-      const c = line.split('\t').length>1 ? line.split('\t') : line.split(',');
-      const g = i => (c[i]||'').trim();
-      if(tab==='groups'){ if(!g(0))continue; await upsertGroup({ten_group:g(0),link:g(1),loai:g(2)||GROUP_LOAI[0],so_member:Number(g(3))||0,active:true,uu_tien:false}); n++; }
-      if(tab==='topics'){ if(!g(0))continue; await upsertTopic({chu_de:g(0),noi_dung:g(1),loai_bai:g(2)||LOAI_BAI[0],muc_tieu:g(3)||'',tags:g(4)?g(4).split(/[;,]/).map(s=>s.trim()):[],active:true,uu_tien:false}); n++; }
-      if(tab==='cmts'){ if(!g(0))continue; await upsertCmt({noi_dung_goi_y:g(0),tuyen:g(1)||'',loai_bai:g(2)||null,thu_tu:Number(g(3))||0,active:true}); n++; }
-    }
-    notify('Đã import '+n+' dòng'); setTxt(''); setOpen(false);
+  const fileRef = useRef(null);
+  const tpl = IMPORT_TPL[tab];
+  const upsert = { groups:upsertGroup, topics:upsertTopic, cmts:upsertCmt }[tab];
+
+  const downloadTpl = () => download('mau_'+tab+'.csv', toCSV([tpl.headers, tpl.sample]));
+
+  const onFile = (e) => {
+    const file = e.target.files && e.target.files[0];
+    if(!file){ return; }
+    const r = new FileReader();
+    r.onload = ev => setTxt(String(ev.target.result||''));
+    r.onerror = () => notify('Không đọc được file','warn');
+    r.readAsText(file, 'utf-8');
+    e.target.value = '';
   };
+
+  const doImport = async () => {
+    const rows = parseTable(txt);
+    if(!rows.length) return notify('Chưa có dữ liệu để import','warn');
+    // Bỏ dòng tiêu đề nếu ô đầu trùng với tên cột mẫu
+    const firstCell = (rows[0][0]||'').toLowerCase();
+    if(firstCell === tpl.headers[0].toLowerCase()) rows.shift();
+    let n=0, skip=0;
+    for(const c of rows){
+      if(!(c[0]||'').trim()){ skip++; continue; }
+      await upsert(tpl.make(c));
+      n++;
+    }
+    notify('Đã import '+n+' dòng'+(skip?' (bỏ qua '+skip+' dòng thiếu cột đầu)':''));
+    setTxt(''); setOpen(false);
+  };
+
   return <>
-    <Btn variant="ghost" onClick={()=>setOpen(true)}>⬇ Import Excel</Btn>
-    <Modal open={open} onClose={()=>setOpen(false)} title="Import từ Excel" wide>
-      <p className="text-sm text-slate-500 mb-2">Copy các cột từ Excel rồi dán vào ô dưới (mỗi dòng 1 mục). Thứ tự cột:</p>
-      <div className="text-xs font-mono bg-slate-100 rounded-lg p-2 mb-2">{cols}</div>
-      <Textarea rows="8" value={txt} onChange={e=>setTxt(e.target.value)} placeholder="Dán dữ liệu tại đây…"/>
+    <Btn variant="ghost" onClick={()=>setOpen(true)}>⬇ Import file</Btn>
+    <Modal open={open} onClose={()=>setOpen(false)} title={'Import '+tpl.label} wide>
+      <ol className="text-sm text-slate-600 list-decimal ml-4 space-y-1 mb-3">
+        <li>Bấm <b>Tải file mẫu</b> → mở bằng Excel/Google Sheets.</li>
+        <li>Điền thông tin theo các cột (giữ nguyên dòng tiêu đề), lưu lại dạng <b>.csv</b>.</li>
+        <li>Bấm <b>Chọn file</b> để tải lên, xem trước rồi bấm <b>Import</b> để cập nhật danh sách.</li>
+      </ol>
+      <div className="flex flex-wrap gap-2 mb-3">
+        <Btn variant="ghost" onClick={downloadTpl}>⬇ Tải file mẫu</Btn>
+        <Btn variant="ghost" onClick={()=>fileRef.current && fileRef.current.click()}>📄 Chọn file (.csv)</Btn>
+        <input ref={fileRef} type="file" accept=".csv,.tsv,.txt,text/csv" className="hidden" onChange={onFile}/>
+      </div>
+      <div className="text-xs font-mono bg-slate-100 rounded-lg p-2 mb-1 overflow-x-auto whitespace-nowrap">{tpl.headers.join(' | ')}</div>
+      <p className="text-[11px] text-slate-400 mb-2">{tpl.note}</p>
+      <p className="text-xs text-slate-500 mb-1">Hoặc copy các cột từ Excel rồi dán trực tiếp vào ô dưới (mỗi dòng 1 mục):</p>
+      <Textarea rows="7" value={txt} onChange={e=>setTxt(e.target.value)} placeholder="Nội dung file sẽ hiện ở đây sau khi chọn file, hoặc dán dữ liệu từ Excel…"/>
       <div className="flex gap-2 mt-3"><Btn variant="ghost" onClick={()=>setOpen(false)}>Huỷ</Btn><Btn variant="gold" className="flex-1" onClick={doImport}>Import</Btn></div>
     </Modal>
   </>;
