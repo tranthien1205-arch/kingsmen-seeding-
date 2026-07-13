@@ -329,7 +329,9 @@ function AppProvider({children}){
       deleteFilmShot: async (templateId, phaseId, shotId) => patchTpl(templateId, t=>({...t, phases:t.phases.map(ph=>ph.id!==phaseId?ph:{...ph, shots:ph.shots.filter(s=>s.id!==shotId)})})),
       createFilming: async proj => { S.project_filmings.unshift({ id:uid('pf'), sales_id:meRef.current.id, template_id:proj.template_id, ten_cong_trinh:proj.ten_cong_trinh, khu_vuc:proj.khu_vuc||'', ngay_quay:proj.ngay_quay||now(), trang_thai:ST.CHO_DUYET, reviewed_by:null, reviewed_at:null, ly_do_loai:'', thanh_tien:0, ky_thanh_toan:null, created_at:now(), uploads:proj.uploads||[] }); commit(); return true; },
       reviewFilming: async (id, result, reason) => { const f=S.project_filmings.find(x=>x.id===id); if(!f) return false; if(result===ST.DAT){ f.trang_thai=ST.DAT; f.thanh_tien=Number(S.pricing.don_gia_cong_trinh)||0; f.reviewed_by=meRef.current.ho_ten; f.reviewed_at=now(); f.ky_thanh_toan=kyOf(); f.ly_do_loai=''; } else { f.trang_thai=ST.KHONG_DAT; f.thanh_tien=0; f.reviewed_by=meRef.current.ho_ten; f.reviewed_at=now(); f.ly_do_loai=reason||''; } commit(); return true; },
-      uploadMedia: (file) => new Promise((resolve,reject)=>{ const r=new FileReader(); r.onload=e=>resolve({ media_url:e.target.result, media_type: (file.type||'').startsWith('image/')?MEDIA_TYPE.IMAGE:MEDIA_TYPE.VIDEO }); r.onerror=()=>reject(new Error('Đọc file lỗi')); r.readAsDataURL(file); }),
+      uploadMedia: (file, onProgress) => new Promise((resolve,reject)=>{ if(onProgress){ onProgress(40,4,10); setTimeout(()=>onProgress(100,10,10),150); } const r=new FileReader(); r.onload=e=>resolve({ media_url:e.target.result, media_type: (file.type||'').startsWith('image/')?MEDIA_TYPE.IMAGE:MEDIA_TYPE.VIDEO }); r.onerror=()=>reject(new Error('Đọc file lỗi')); r.readAsDataURL(file); }),
+      deleteUpload: async (id) => { S.project_filmings.forEach(p=>{ p.uploads=(p.uploads||[]).filter(u=>u.id!==id); }); commit(); return true; },
+      cleanupMedia: async () => { const cut=new Date(Date.now()-30*864e5).toISOString(); let n=0; S.project_filmings.forEach(p=>{ if(!['DAT','DA_CHI'].includes(p.trang_thai) && (p.created_at||'')<cut){ n+=(p.uploads||[]).length; p.uploads=[]; } }); commit(); notify('Đã dọn media của '+n+' nguồn hết hạn'); return true; },
     };
     return <AppCtx.Provider value={demoApi}>{children}{toast && <Toast toast={toast}/>}</AppCtx.Provider>;
   }
@@ -405,13 +407,20 @@ function AppProvider({children}){
     deleteFilmShot: (templateId, phaseId, shotId) => mut(`/filming/shots/${shotId}`, {method:'DELETE'}),
     createFilming: proj => mut('/filming/projects', {method:'POST', body:proj}),
     reviewFilming: (id, result, reason) => mut(`/filming/projects/${id}/review`, {method:'POST', body:{result, reason}}),
-    uploadMedia: async (file) => {
-      const res = await fetch(API_BASE+'/api/filming/upload?type='+encodeURIComponent(file.type||''), {
-        method:'POST', headers:{ ...(token?{'Authorization':'Bearer '+token}:{}), 'Content-Type': file.type||'application/octet-stream' }, body:file });
-      const data = await res.json().catch(()=>({}));
-      if(!res.ok) throw new Error(data.error || ('Lỗi '+res.status));
-      return data;
-    },
+    deleteUpload: id => mut(`/filming/uploads/${id}`, {method:'DELETE'}),
+    cleanupMedia: () => mut('/filming/cleanup', {method:'POST'}),
+    uploadMedia: (file, onProgress) => new Promise((resolve,reject)=>{
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', API_BASE+'/api/filming/upload?type='+encodeURIComponent(file.type||''));
+      if(token) xhr.setRequestHeader('Authorization','Bearer '+token);
+      xhr.setRequestHeader('Content-Type', file.type||'application/octet-stream');
+      xhr.timeout = 15*60*1000;
+      xhr.upload.onprogress = (e)=>{ if(onProgress && e.lengthComputable) onProgress(Math.round(e.loaded/e.total*100), e.loaded, e.total); };
+      xhr.onload = ()=>{ let d={}; try{ d=JSON.parse(xhr.responseText); }catch(_){} if(xhr.status>=200&&xhr.status<300) resolve(d); else reject(new Error(d.error||('Lỗi '+xhr.status))); };
+      xhr.onerror = ()=> reject(new Error('Lỗi mạng khi tải lên'));
+      xhr.ontimeout = ()=> reject(new Error('Hết thời gian tải lên — thử lại hoặc dùng link Drive'));
+      xhr.send(file);
+    }),
   };
   return <AppCtx.Provider value={api}>
     {children}
@@ -1759,6 +1768,9 @@ function iconFor(name){
   return '🎬';
 }
 const phaseBg = (i)=> ['#eef2ff','#fff7ed','#ecfdf5','#fdf2f8','#eff6ff','#f7fee7'][i%6];
+const fmtMB = (b)=> (b>=1048576? (b/1048576).toFixed(1)+'MB' : Math.max(1,Math.round(b/1024))+'KB');
+// map shot_id -> {ten, phase} từ tất cả quy trình
+function shotIndex(db){ const m={}; (db.filming_templates||[]).forEach(t=>t.phases.forEach(p=>p.shots.forEach(s=>{ m[s.id]={ten:s.ten, phase:p.ten, tpl:t.he_san_pham}; }))); return m; }
 function SampleModal({shot, onClose}){
   return <Modal open={!!shot} onClose={onClose} title={"Mẫu: "+(shot?.ten||'')}>
     {shot && <div className="space-y-2">
@@ -1901,16 +1913,19 @@ function ShotUploadModal({shot, media, onClose, onAdd, onDel}){
   const [tab, setTab] = useState('upload');
   const [link, setLink] = useState('');
   const [busy, setBusy] = useState(false);
+  const [prog, setProg] = useState(null); // {name, pct, loaded, total}
+  const MAX = 100*1024*1024;
 
   const onFile = async (e) => {
     const files = Array.from(e.target.files||[]); e.target.value='';
     for(const f of files){
-      setBusy(true);
+      if(f.size > MAX){ notify(`"${f.name}" ${fmtMB(f.size)} > 100MB — video lớn hãy dùng tab Dán link Drive`,'warn'); continue; }
+      setBusy(true); setProg({ name:f.name, pct:0, loaded:0, total:f.size });
       try{
-        const r = await uploadMedia(f);
+        const r = await uploadMedia(f, (pct,loaded,total)=>setProg({ name:f.name, pct, loaded, total }));
         onAdd({ media_type: r.media_type || (f.type.startsWith('image/')?MEDIA_TYPE.IMAGE:MEDIA_TYPE.VIDEO), media_url: r.media_url, nguon:'APP' });
       }catch(err){ notify(err.message||'Tải lên lỗi','err'); }
-      setBusy(false);
+      setProg(null); setBusy(false);
     }
   };
   const addLink = () => { if(!link.trim()) return; onAdd({ media_type: isImgUrl(link)?MEDIA_TYPE.IMAGE:MEDIA_TYPE.VIDEO, media_url: link.trim(), nguon:'LINK' }); setLink(''); };
@@ -1936,10 +1951,14 @@ function ShotUploadModal({shot, media, onClose, onAdd, onDel}){
       <label className={"block border-2 border-dashed rounded-2xl p-6 text-center cursor-pointer "+(busy?'opacity-60 pointer-events-none border-slate-300':'border-slate-300 hover:border-gold hover:bg-gold/5')}>
         <div className="text-3xl mb-1">{busy?'⏳':'📤'}</div>
         <div className="text-sm font-medium text-ink">{busy?'Đang tải lên…':'Chọn hoặc kéo-thả ảnh / video'}</div>
-        <div className="text-[11px] text-slate-400 mt-1">Tải trực tiếp, lưu vào hệ thống app</div>
+        <div className="text-[11px] text-slate-400 mt-1">Tải trực tiếp, lưu vào hệ thống app · tối đa 100MB/file</div>
         <input type="file" accept="image/*,video/*" multiple className="hidden" onChange={onFile} disabled={busy}/>
       </label>
-      <div className="text-[11px] text-slate-400 mt-2">Video dài/nặng nên cân nhắc dùng tab "Dán link Drive" để nhẹ hệ thống.</div>
+      {prog && <div className="mt-3">
+        <div className="flex items-center justify-between text-[11px] text-slate-500 mb-1"><span className="truncate max-w-[60%]">{prog.name}</span><span>{prog.pct}% · {fmtMB(prog.loaded)}/{fmtMB(prog.total)}</span></div>
+        <div className="h-2 bg-slate-200 rounded-full overflow-hidden"><div className="h-full bg-gold transition-all" style={{width:prog.pct+'%'}}></div></div>
+      </div>}
+      <div className="text-[11px] text-slate-400 mt-2">Video dài/nặng (&gt;100MB) hãy dùng tab "Dán link Drive" để nhẹ hệ thống.</div>
     </div> : <div>
       <Field label="Link Google Drive (đặt quyền 'Ai có link đều xem')"><Input value={link} onChange={e=>setLink(e.target.value)} placeholder="https://drive.google.com/file/d/…" onKeyDown={e=>e.key==='Enter'&&addLink()}/></Field>
       <Btn variant="gold" className="w-full" onClick={addLink}>Thêm link</Btn>
@@ -1979,12 +1998,80 @@ function FilmingDetailSales({project, template, onBack}){
 function MktFilming(){
   const { db } = useApp();
   const pending = (db.project_filmings||[]).filter(p=>p.trang_thai===ST.CHO_DUYET).length;
+  const mediaCount = (db.project_filmings||[]).reduce((s,p)=>s+(p.uploads||[]).length,0);
   const [tab, setTab] = useState('library');
   return <div className="space-y-4">
     <h2 className="text-lg font-bold text-ink">🎬 Quay công trình</h2>
-    <Tabs active={tab} onChange={setTab} tabs={[{key:'library', label:'Quy trình quay', count:(db.filming_templates||[]).length},{key:'queue', label:'Nghiệm thu', count:pending}]}/>
+    <Tabs active={tab} onChange={setTab} tabs={[
+      {key:'library', label:'Quy trình quay', count:(db.filming_templates||[]).length},
+      {key:'queue', label:'Nghiệm thu', count:pending},
+      {key:'media', label:'Kho media', count:mediaCount},
+    ]}/>
     {tab==='library' && <FilmLibrary/>}
     {tab==='queue' && <FilmQueue/>}
+    {tab==='media' && <MediaManager/>}
+  </div>;
+}
+// Kho media: tổng hợp toàn bộ ảnh/video theo công trình, lọc & xoá; dọn hết hạn 30 ngày
+function MediaManager(){
+  const { db, deleteUpload, cleanupMedia, notify } = useApp();
+  const sidx = shotIndex(db);
+  const users = db.users||[];
+  const [fSt, setFSt] = useState('');
+  const [fNguon, setFNguon] = useState('');
+  const [q, setQ] = useState('');
+  const cut = new Date(Date.now()-30*864e5).toISOString();
+
+  const rows = (db.project_filmings||[]).flatMap(p=>(p.uploads||[]).map(u=>{
+    const isApp = (u.media_url||'').startsWith('/media/');
+    const chuaDuyet = !['DAT','DA_CHI'].includes(p.trang_thai);
+    const expDay = chuaDuyet ? Math.max(0, 30 - Math.floor((Date.now()-new Date(p.created_at||Date.now()).getTime())/864e5)) : null;
+    return { up:u, p, isApp, chuaDuyet, expDay,
+      sales: users.find(x=>x.id===p.sales_id)?.ho_ten||'—',
+      shot: sidx[u.shot_id]?.ten||'(cảnh đã xoá)', phase: sidx[u.shot_id]?.phase||'' };
+  }))
+  .filter(r=> (!fSt||r.p.trang_thai===fSt) && (!fNguon|| (fNguon==='APP'?r.isApp:!r.isApp)) && (!q|| (r.p.ten_cong_trinh+' '+r.shot+' '+r.sales).toLowerCase().includes(q.toLowerCase())))
+  .sort((a,b)=>(b.up.uploaded_at||'').localeCompare(a.up.uploaded_at||''));
+
+  const appCount = rows.filter(r=>r.isApp).length;
+  const expiring = (db.project_filmings||[]).filter(p=>!['DAT','DA_CHI'].includes(p.trang_thai)&&(p.created_at||'')<cut).reduce((s,p)=>s+(p.uploads||[]).length,0);
+
+  const del = async (r)=>{ if(!confirm('Xoá media này khỏi công trình "'+r.p.ten_cong_trinh+'"?'))return; if(await deleteUpload(r.up.id)) notify('Đã xoá media'); };
+  const clean = async ()=>{ if(!confirm('Dọn ngay toàn bộ media của công trình CHƯA duyệt quá 30 ngày?'))return; await cleanupMedia(); };
+
+  return <div className="space-y-3">
+    <div className="grid grid-cols-3 gap-3">
+      <Stat label="Tổng media" value={rows.length}/>
+      <Stat label="Lưu trong app (R2)" value={appCount} sub="còn lại là link Drive"/>
+      <Stat label="Sắp bị dọn (quá 30 ngày)" value={expiring} color="text-rose-600"/>
+    </div>
+    <div className="bg-gold/10 border border-gold/30 rounded-xl px-3 py-2 text-[11px] text-gold-dark flex items-center justify-between gap-2">
+      <span>Media của công trình <b>chưa được duyệt</b> tự xoá sau <b>30 ngày</b> (chạy tự động mỗi ngày). File lưu trên app mới bị xoá; link Drive chỉ gỡ khỏi danh sách.</span>
+      <Btn variant="soft" onClick={clean}>🧹 Dọn ngay</Btn>
+    </div>
+    <div className="bg-white rounded-2xl border border-slate-100 p-3 flex flex-wrap gap-2 items-center">
+      <Input value={q} onChange={e=>setQ(e.target.value)} placeholder="Tìm công trình / cảnh / sales…" className="max-w-[220px]"/>
+      <Select value={fSt} onChange={e=>setFSt(e.target.value)} className="max-w-[160px]"><option value="">Mọi trạng thái</option>{Object.keys(ST_LABEL).map(s=><option key={s} value={s}>{ST_LABEL[s]}</option>)}</Select>
+      <Select value={fNguon} onChange={e=>setFNguon(e.target.value)} className="max-w-[150px]"><option value="">Mọi nguồn</option><option value="APP">Tải lên app</option><option value="LINK">Link Drive</option></Select>
+    </div>
+    {rows.length===0 ? <Empty>Chưa có media nào.</Empty> :
+    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+      {rows.map(r=><div key={r.up.id} className="bg-white rounded-2xl border border-slate-100 overflow-hidden">
+        <a href={r.up.media_url} target="_blank" className="block aspect-[4/3] bg-slate-50 relative">
+          {r.up.media_type===MEDIA_TYPE.IMAGE && r.up.media_url ? <img src={r.up.media_url} className="w-full h-full object-cover"/> :
+            <div className="w-full h-full flex flex-col items-center justify-center text-slate-400"><span className="text-3xl">{r.isApp?'🎬':'🔗'}</span><span className="text-[10px] mt-1">{r.isApp?'Video':'Link Drive'}</span></div>}
+          <span className="absolute top-1.5 left-1.5"><Badge st={r.p.trang_thai}/></span>
+        </a>
+        <div className="p-2.5">
+          <div className="text-xs font-medium text-ink truncate">{r.shot}</div>
+          <div className="text-[11px] text-slate-400 truncate">{r.p.ten_cong_trinh} · {r.sales}</div>
+          <div className="flex items-center justify-between mt-1">
+            <span className="text-[10px] text-slate-400">{r.isApp?'App':'Drive'}{r.expDay!=null && <span className="text-rose-400"> · còn {r.expDay}d</span>}</span>
+            <button onClick={()=>del(r)} className="text-[11px] text-rose-500 hover:underline">Xoá</button>
+          </div>
+        </div>
+      </div>)}
+    </div>}
   </div>;
 }
 function FilmLibrary(){
