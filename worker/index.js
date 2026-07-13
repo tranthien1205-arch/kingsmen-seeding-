@@ -47,12 +47,20 @@ async function ensureSchema(env){
     `CREATE TABLE IF NOT EXISTS cmt_seedings (id TEXT PRIMARY KEY, loai TEXT, post_seeding_id TEXT, post_link TEXT, suggestion_id TEXT, sales_id TEXT, so_cmt_seeding INTEGER, react INTEGER, so_cmt_tu_nhien INTEGER, trang_thai TEXT, reviewed_by TEXT, reviewed_at TEXT, ly_do_loai TEXT, thanh_tien REAL, ky_thanh_toan TEXT, created_at TEXT)`,
     `CREATE TABLE IF NOT EXISTS cmt_proofs (id TEXT PRIMARY KEY, cmt_seeding_id TEXT, image_url TEXT, uploaded_at TEXT)`,
     `CREATE TABLE IF NOT EXISTS audit (id TEXT PRIMARY KEY, at TEXT, by_id TEXT, by_name TEXT, action TEXT, entity TEXT, entity_id TEXT, detail TEXT)`,
+    // ---- QUAY CÔNG TRÌNH ----
+    `CREATE TABLE IF NOT EXISTS filming_templates (id TEXT PRIMARY KEY, ten TEXT, he_san_pham TEXT, active INTEGER DEFAULT 1, updated_at TEXT)`,
+    `CREATE TABLE IF NOT EXISTS filming_phases (id TEXT PRIMARY KEY, template_id TEXT, ten TEXT, thu_tu INTEGER)`,
+    `CREATE TABLE IF NOT EXISTS filming_shots (id TEXT PRIMARY KEY, phase_id TEXT, ten TEXT, mo_ta TEXT, source_mau_url TEXT, bat_buoc INTEGER DEFAULT 1, thu_tu INTEGER, active INTEGER DEFAULT 1)`,
+    `CREATE TABLE IF NOT EXISTS project_filmings (id TEXT PRIMARY KEY, sales_id TEXT, template_id TEXT, ten_cong_trinh TEXT, khu_vuc TEXT, ngay_quay TEXT, trang_thai TEXT, reviewed_by TEXT, reviewed_at TEXT, ly_do_loai TEXT, thanh_tien REAL, ky_thanh_toan TEXT, created_at TEXT)`,
+    `CREATE TABLE IF NOT EXISTS filming_uploads (id TEXT PRIMARY KEY, project_filming_id TEXT, shot_id TEXT, media_type TEXT, media_url TEXT, dat_item INTEGER, ghi_chu TEXT, uploaded_at TEXT)`,
   ];
   await env.DB.batch(stmts.map(s=>env.DB.prepare(s)));
+  // thêm cột đơn giá quay công trình cho DB cũ (bỏ qua nếu đã có)
+  try { await env.DB.prepare(`ALTER TABLE pricing ADD COLUMN don_gia_cong_trinh REAL DEFAULT 150000`).run(); } catch(e){}
 
   // seed pricing
   const pr = await env.DB.prepare(`SELECT id FROM pricing WHERE id=1`).first();
-  if(!pr) await env.DB.prepare(`INSERT INTO pricing (id,don_gia_post,don_gia_cmt,min_nhac_kingsmen,min_usp) VALUES (1,15000,3000,6,2)`).run();
+  if(!pr) await env.DB.prepare(`INSERT INTO pricing (id,don_gia_post,don_gia_cmt,don_gia_cong_trinh,min_nhac_kingsmen,min_usp) VALUES (1,15000,3000,150000,6,2)`).run();
 
   // seed tài khoản Marketing đầu tiên + thư viện (chỉ khi chưa có user nào)
   const anyUser = await env.DB.prepare(`SELECT id FROM users LIMIT 1`).first();
@@ -75,7 +83,51 @@ async function ensureSchema(env){
       c('Mình là thợ, chít Kingsmen nhanh hơn keo thường, khách ưng màu ColorMatch.','Chuyên gia','ColorMatch',3),
     ]);
   }
+
+  // seed quy trình quay khi chưa có (áp dụng cho cả DB đã tồn tại người dùng)
+  const anyTpl = await env.DB.prepare(`SELECT id FROM filming_templates LIMIT 1`).first();
+  if(!anyTpl) await seedFilming(env);
+
   SCHEMA_READY = true;
+}
+
+// Dữ liệu mẫu QUY TRÌNH QUAY (nhiều quy trình theo hệ sản phẩm)
+const FILM_SEED = [
+  ['Keo ron ColorMatch — quy trình chuẩn','Keo chít mạch', [
+    ['Tổng quan', [['Mặt tiền công trình','Quay ngang toàn mặt tiền, thấy rõ địa chỉ/biển hiệu.',1],['Toàn cảnh khu vực','Pan chậm bao quát khu vực thi công.',1],['Người cầm sản phẩm','Cầm hộp keo Kingsmen hướng camera, rõ nhãn.',1]]],
+    ['Before', [['Toàn cảnh nền trước khi làm','Quay toàn bộ nền/tường trước thi công (đánh dấu góc để After trùng góc).',1],['Cận gạch và khe ron','Cận khe ron bẩn/ố để so sánh.',1],['Sản phẩm trên nền Before','Đặt sản phẩm cạnh khu vực chưa làm.',0]]],
+    ['Chọn màu', [['So 2–3 màu trên gạch','Đặt 2–3 mẫu màu lên gạch cho khách so.',1],['Tư vấn khách hàng','Quay khoảnh khắc tư vấn/khách chọn màu.',0],['Cận màu ColorMatch đã chọn','Cận màu cuối cùng khách chốt.',1]]],
+    ['Thi công', [['Vệ sinh khe ron & bôi sáp','Quay bước làm sạch khe & bôi sáp.',1],['Lắp keo vào súng','Thao tác lắp tuýp keo vào súng.',0],['Bơm và miết ron','Quay rõ bơm keo & miết đều tay.',1],['Lột keo hoàn thiện','Bước lột/làm sạch keo thừa.',1]]],
+    ['After', [['Toàn cảnh After (trùng góc Before)','Quay đúng góc Before để so sánh.',1],['Cận đường ron hoàn thiện','Cận ron đều, sạch, lên màu.',1],['Sản phẩm trên nền After','Đặt sản phẩm cạnh khu vực đã hoàn thiện.',0]]],
+  ]],
+  ['Epoxy sàn — quy trình quay','Sơn Epoxy sàn', [
+    ['Tổng quan', [['Mặt tiền / khu vực sàn','Quay bao quát khu vực sàn cần thi công.',1],['Người cầm sản phẩm','Cầm thùng sơn epoxy Kingsmen.',1]]],
+    ['Before', [['Toàn cảnh sàn trước thi công','Quay toàn bộ mặt sàn ban đầu.',1],['Cận khuyết điểm sàn','Cận vết nứt, bong tróc, bụi bẩn.',1]]],
+    ['Thi công', [['Mài & xử lý bề mặt','Quay bước mài sàn, hút bụi.',1],['Thi công lớp lót (primer)','Lăn/gạt lớp lót.',1],['Đổ & gạt lớp epoxy','Quay rõ đổ và gạt phẳng.',1],['Lăn phá bọt hoàn thiện','Dùng rulo gai phá bọt.',0]]],
+    ['After', [['Toàn cảnh sàn After','Quay trùng góc Before.',1],['Cận bề mặt bóng gương','Cận độ phẳng, bóng.',1]]],
+  ]],
+  ['Terrazzo mài — quy trình quay','Terrazzo', [
+    ['Tổng quan', [['Mặt tiền công trình','Quay bao quát khu vực.',1],['Người cầm sản phẩm','Cầm vật liệu terrazzo Kingsmen.',1]]],
+    ['Thi công', [['Trộn vật liệu','Quay tỉ lệ trộn đá + xi/keo.',1],['Đổ terrazzo','Quay bước đổ, dàn đều.',1],['Mài thô','Quay máy mài thô.',1],['Mài tinh & đánh bóng','Quay mài tinh, lên bóng.',1]]],
+    ['After', [['Toàn cảnh After','Quay bề mặt hoàn thiện.',1],['Cận bề mặt đá lộ','Cận hạt đá, độ bóng.',1]]],
+  ]],
+];
+async function seedFilming(env){
+  const stmts=[];
+  for(const [ten, he, phases] of FILM_SEED){
+    const tid=uid('tpl');
+    stmts.push(env.DB.prepare(`INSERT INTO filming_templates (id,ten,he_san_pham,active,updated_at) VALUES (?,?,?,1,?)`).bind(tid,ten,he,nowISO()));
+    let po=1;
+    for(const [pten, shots] of phases){
+      const pid=uid('ph');
+      stmts.push(env.DB.prepare(`INSERT INTO filming_phases (id,template_id,ten,thu_tu) VALUES (?,?,?,?)`).bind(pid,tid,pten,po++));
+      let so=1;
+      for(const [sten,mo_ta,bb] of shots){
+        stmts.push(env.DB.prepare(`INSERT INTO filming_shots (id,phase_id,ten,mo_ta,source_mau_url,bat_buoc,thu_tu,active) VALUES (?,?,?,?,?,?,?,1)`).bind(uid('sh'),pid,sten,mo_ta,'',bb,so++));
+      }
+    }
+  }
+  await env.DB.batch(stmts);
 }
 
 // ---------- helpers ----------
@@ -121,10 +173,32 @@ async function bootstrap(env, u){
   for(const p of proofRows){ (proofsByCmt[p.cmt_seeding_id] ||= []).push({ id:p.id, image_url:p.image_url, uploaded_at:p.uploaded_at }); }
   const cmtsFull = cmts.map(c=>({ ...c, proofs: proofsByCmt[c.id]||[] }));
   const audit = staff ? (await env.DB.prepare(`SELECT * FROM audit ORDER BY at DESC LIMIT 200`).all()).results : [];
+
+  // ---- QUAY CÔNG TRÌNH ----
+  const ftpls  = (await env.DB.prepare(`SELECT * FROM filming_templates`).all()).results;
+  const fphs   = (await env.DB.prepare(`SELECT * FROM filming_phases`).all()).results;
+  const fshots = (await env.DB.prepare(`SELECT * FROM filming_shots`).all()).results;
+  const filming_templates = ftpls.map(t=>({
+    id:t.id, ten:t.ten, he_san_pham:t.he_san_pham, active:uBool(t.active),
+    phases: fphs.filter(p=>p.template_id===t.id).sort((a,b)=>(a.thu_tu||0)-(b.thu_tu||0)).map(p=>({
+      id:p.id, ten:p.ten, thu_tu:p.thu_tu,
+      shots: fshots.filter(s=>s.phase_id===p.id).sort((a,b)=>(a.thu_tu||0)-(b.thu_tu||0)).map(s=>({
+        id:s.id, ten:s.ten, mo_ta:s.mo_ta, source_mau_url:s.source_mau_url, bat_buoc:uBool(s.bat_buoc), thu_tu:s.thu_tu, active:uBool(s.active),
+      })),
+    })),
+  }));
+  const pfSql = staff ? `SELECT * FROM project_filmings` : `SELECT * FROM project_filmings WHERE sales_id=?`;
+  const pfRows = (await (staff ? env.DB.prepare(pfSql) : env.DB.prepare(pfSql).bind(u.id)).all()).results;
+  const fups = (await env.DB.prepare(`SELECT * FROM filming_uploads`).all()).results;
+  const project_filmings = pfRows.map(p=>({
+    ...p, uploads: fups.filter(x=>x.project_filming_id===p.id).map(x=>({ id:x.id, shot_id:x.shot_id, media_type:x.media_type, media_url:x.media_url, dat_item:x.dat_item==null?null:uBool(x.dat_item) })),
+  }));
+
   return {
     me: rowUser(u),
     users, groups, content_topics:topics, cmt_suggestions:cmtsug,
     post_seedings: posts, cmt_seedings: cmtsFull,
+    filming_templates, project_filmings,
     pricing: pricingRow, payouts: [], audit,
   };
 }
@@ -252,8 +326,8 @@ async function handleApi(request, env){
   if(path==='/pricing' && method==='PATCH'){
     if(me.vai_tro!==ROLES.ADMIN && me.vai_tro!==ROLES.MARKETING) return json({error:'Không có quyền'},403);
     const p=body;
-    await env.DB.prepare(`UPDATE pricing SET don_gia_post=?, don_gia_cmt=?, min_nhac_kingsmen=?, min_usp=? WHERE id=1`)
-      .bind(Number(p.don_gia_post)||0,Number(p.don_gia_cmt)||0,Number(p.min_nhac_kingsmen)||0,Number(p.min_usp)||0).run();
+    await env.DB.prepare(`UPDATE pricing SET don_gia_post=?, don_gia_cmt=?, don_gia_cong_trinh=?, min_nhac_kingsmen=?, min_usp=? WHERE id=1`)
+      .bind(Number(p.don_gia_post)||0,Number(p.don_gia_cmt)||0,Number(p.don_gia_cong_trinh)||0,Number(p.min_nhac_kingsmen)||0,Number(p.min_usp)||0).run();
     await logAudit(env,me,'sửa đơn giá','pricing','-');
     return json({ db: await bootstrap(env, me) });
   }
@@ -325,7 +399,114 @@ async function handleApi(request, env){
     const args = ky ? [sales_id, ky] : [sales_id];
     await env.DB.prepare(`UPDATE post_seedings SET trang_thai='DA_CHI' WHERE sales_id=? AND trang_thai='DAT'${kyCond}`).bind(...args).run();
     await env.DB.prepare(`UPDATE cmt_seedings SET trang_thai='DA_CHI' WHERE sales_id=? AND trang_thai='DAT'${kyCond}`).bind(...args).run();
+    await env.DB.prepare(`UPDATE project_filmings SET trang_thai='DA_CHI' WHERE sales_id=? AND trang_thai='DAT'${kyCond}`).bind(...args).run();
     await logAudit(env,me,'đánh dấu ĐÃ CHI','payroll',sales_id,'kỳ '+(ky||'all'));
+    return json({ db: await bootstrap(env, me) });
+  }
+
+  // ===== QUAY CÔNG TRÌNH — QUY TRÌNH (staff) =====
+  if(path==='/filming/templates' && method==='POST'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    if(!body.ten||!body.he_san_pham) return json({error:'Nhập hệ sản phẩm & tên quy trình'},400);
+    const id=uid('tpl');
+    await env.DB.prepare(`INSERT INTO filming_templates (id,ten,he_san_pham,active,updated_at) VALUES (?,?,?,1,?)`).bind(id,body.ten,body.he_san_pham,nowISO()).run();
+    await logAudit(env,me,'thêm','filming_template',id);
+    return json({ db: await bootstrap(env, me) });
+  }
+  if((m=path.match(/^\/filming\/templates\/(.+)$/)) && method==='PATCH'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    const id=m[1]; const t=await env.DB.prepare(`SELECT * FROM filming_templates WHERE id=?`).bind(id).first();
+    if(!t) return json({error:'Không tìm thấy'},404);
+    await env.DB.prepare(`UPDATE filming_templates SET ten=?, he_san_pham=?, active=?, updated_at=? WHERE id=?`)
+      .bind(body.ten??t.ten, body.he_san_pham??t.he_san_pham, body.active!=null?bool(body.active):t.active, nowISO(), id).run();
+    return json({ db: await bootstrap(env, me) });
+  }
+  if((m=path.match(/^\/filming\/templates\/(.+)$/)) && method==='DELETE'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    const id=m[1];
+    const phs=(await env.DB.prepare(`SELECT id FROM filming_phases WHERE template_id=?`).bind(id).all()).results;
+    for(const p of phs) await env.DB.prepare(`DELETE FROM filming_shots WHERE phase_id=?`).bind(p.id).run();
+    await env.DB.prepare(`DELETE FROM filming_phases WHERE template_id=?`).bind(id).run();
+    await env.DB.prepare(`DELETE FROM filming_templates WHERE id=?`).bind(id).run();
+    await logAudit(env,me,'xoá','filming_template',id);
+    return json({ db: await bootstrap(env, me) });
+  }
+  // giai đoạn
+  if(path==='/filming/phases' && method==='POST'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    const id=uid('ph');
+    const n=(await env.DB.prepare(`SELECT COUNT(*) c FROM filming_phases WHERE template_id=?`).bind(body.template_id).first()).c;
+    await env.DB.prepare(`INSERT INTO filming_phases (id,template_id,ten,thu_tu) VALUES (?,?,?,?)`).bind(id,body.template_id,body.ten||'',Number(n)+1).run();
+    return json({ db: await bootstrap(env, me) });
+  }
+  if((m=path.match(/^\/filming\/phases\/(.+)$/)) && method==='PATCH'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    await env.DB.prepare(`UPDATE filming_phases SET ten=? WHERE id=?`).bind(body.ten||'',m[1]).run();
+    return json({ db: await bootstrap(env, me) });
+  }
+  if((m=path.match(/^\/filming\/phases\/(.+)$/)) && method==='DELETE'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    await env.DB.prepare(`DELETE FROM filming_shots WHERE phase_id=?`).bind(m[1]).run();
+    await env.DB.prepare(`DELETE FROM filming_phases WHERE id=?`).bind(m[1]).run();
+    return json({ db: await bootstrap(env, me) });
+  }
+  // cảnh
+  if(path==='/filming/shots' && method==='POST'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    if(!body.ten) return json({error:'Nhập tên cảnh'},400);
+    const id=uid('sh');
+    const n=(await env.DB.prepare(`SELECT COUNT(*) c FROM filming_shots WHERE phase_id=?`).bind(body.phase_id).first()).c;
+    await env.DB.prepare(`INSERT INTO filming_shots (id,phase_id,ten,mo_ta,source_mau_url,bat_buoc,thu_tu,active) VALUES (?,?,?,?,?,?,?,?)`)
+      .bind(id,body.phase_id,body.ten,body.mo_ta||'',body.source_mau_url||'',bool(body.bat_buoc!==false),Number(n)+1,bool(body.active!==false)).run();
+    return json({ db: await bootstrap(env, me) });
+  }
+  if((m=path.match(/^\/filming\/shots\/(.+)$/)) && method==='PATCH'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    const id=m[1]; const s=await env.DB.prepare(`SELECT * FROM filming_shots WHERE id=?`).bind(id).first();
+    if(!s) return json({error:'Không tìm thấy'},404);
+    await env.DB.prepare(`UPDATE filming_shots SET ten=?, mo_ta=?, source_mau_url=?, bat_buoc=?, active=? WHERE id=?`)
+      .bind(body.ten??s.ten, body.mo_ta??s.mo_ta, body.source_mau_url??s.source_mau_url, body.bat_buoc!=null?bool(body.bat_buoc):s.bat_buoc, body.active!=null?bool(body.active):s.active, id).run();
+    return json({ db: await bootstrap(env, me) });
+  }
+  if((m=path.match(/^\/filming\/shots\/(.+)$/)) && method==='DELETE'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    await env.DB.prepare(`DELETE FROM filming_shots WHERE id=?`).bind(m[1]).run();
+    return json({ db: await bootstrap(env, me) });
+  }
+  // công trình quay (Sales tạo & gửi nghiệm thu)
+  if(path==='/filming/projects' && method==='POST'){
+    const tpl = await env.DB.prepare(`SELECT id FROM filming_templates WHERE id=?`).bind(body.template_id).first();
+    if(!tpl) return json({error:'Quy trình không tồn tại'},400);
+    if(!body.ten_cong_trinh) return json({error:'Nhập tên công trình'},400);
+    // kiểm tra đủ cảnh bắt buộc
+    const req = (await env.DB.prepare(`SELECT s.id FROM filming_shots s JOIN filming_phases p ON s.phase_id=p.id WHERE p.template_id=? AND s.active=1 AND s.bat_buoc=1`).bind(body.template_id).all()).results.map(x=>x.id);
+    const uploaded = new Set((Array.isArray(body.uploads)?body.uploads:[]).map(u=>u.shot_id));
+    if(!req.every(id=>uploaded.has(id))) return json({error:'Chưa đủ media cho các cảnh bắt buộc'},400);
+    const id=uid('pf');
+    await env.DB.prepare(`INSERT INTO project_filmings (id,sales_id,template_id,ten_cong_trinh,khu_vuc,ngay_quay,trang_thai,ly_do_loai,thanh_tien,created_at) VALUES (?,?,?,?,?,?,?,'',0,?)`)
+      .bind(id, me.id, body.template_id, body.ten_cong_trinh, body.khu_vuc||'', body.ngay_quay||nowISO(), ST.CHO_DUYET, nowISO()).run();
+    for(const up of (Array.isArray(body.uploads)?body.uploads:[])){
+      await env.DB.prepare(`INSERT INTO filming_uploads (id,project_filming_id,shot_id,media_type,media_url,uploaded_at) VALUES (?,?,?,?,?,?)`)
+        .bind(uid('up'), id, up.shot_id||null, up.media_type||'VIDEO', (up.media_url||'').trim(), nowISO()).run();
+    }
+    await logAudit(env,me,'gửi nghiệm thu','project_filming',id);
+    return json({ db: await bootstrap(env, me) });
+  }
+  if((m=path.match(/^\/filming\/projects\/(.+)\/review$/)) && method==='POST'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    const id=m[1]; const p=await env.DB.prepare(`SELECT * FROM project_filmings WHERE id=?`).bind(id).first();
+    if(!p) return json({error:'Không tìm thấy'},404);
+    const pricing=await env.DB.prepare(`SELECT * FROM pricing WHERE id=1`).first();
+    if(body.result===ST.DAT){
+      await env.DB.prepare(`UPDATE project_filmings SET trang_thai=?, thanh_tien=?, reviewed_by=?, reviewed_at=?, ky_thanh_toan=?, ly_do_loai='' WHERE id=?`)
+        .bind(ST.DAT, Number(pricing.don_gia_cong_trinh)||0, me.ho_ten, nowISO(), kyOf(), id).run();
+      await logAudit(env,me,'nghiệm thu ĐẠT','project_filming',id);
+    } else {
+      if(!body.reason) return json({error:'Cần lý do'},400);
+      await env.DB.prepare(`UPDATE project_filmings SET trang_thai=?, thanh_tien=0, reviewed_by=?, reviewed_at=?, ly_do_loai=? WHERE id=?`)
+        .bind(ST.KHONG_DAT, me.ho_ten, nowISO(), body.reason, id).run();
+      await logAudit(env,me,'nghiệm thu KHÔNG ĐẠT','project_filming',id,body.reason);
+    }
     return json({ db: await bootstrap(env, me) });
   }
 
