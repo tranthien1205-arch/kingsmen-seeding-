@@ -329,6 +329,7 @@ function AppProvider({children}){
       deleteFilmShot: async (templateId, phaseId, shotId) => patchTpl(templateId, t=>({...t, phases:t.phases.map(ph=>ph.id!==phaseId?ph:{...ph, shots:ph.shots.filter(s=>s.id!==shotId)})})),
       createFilming: async proj => { S.project_filmings.unshift({ id:uid('pf'), sales_id:meRef.current.id, template_id:proj.template_id, ten_cong_trinh:proj.ten_cong_trinh, khu_vuc:proj.khu_vuc||'', ngay_quay:proj.ngay_quay||now(), trang_thai:ST.CHO_DUYET, reviewed_by:null, reviewed_at:null, ly_do_loai:'', thanh_tien:0, ky_thanh_toan:null, created_at:now(), uploads:proj.uploads||[] }); commit(); return true; },
       reviewFilming: async (id, result, reason) => { const f=S.project_filmings.find(x=>x.id===id); if(!f) return false; if(result===ST.DAT){ f.trang_thai=ST.DAT; f.thanh_tien=Number(S.pricing.don_gia_cong_trinh)||0; f.reviewed_by=meRef.current.ho_ten; f.reviewed_at=now(); f.ky_thanh_toan=kyOf(); f.ly_do_loai=''; } else { f.trang_thai=ST.KHONG_DAT; f.thanh_tien=0; f.reviewed_by=meRef.current.ho_ten; f.reviewed_at=now(); f.ly_do_loai=reason||''; } commit(); return true; },
+      uploadMedia: (file) => new Promise((resolve,reject)=>{ const r=new FileReader(); r.onload=e=>resolve({ media_url:e.target.result, media_type: (file.type||'').startsWith('image/')?MEDIA_TYPE.IMAGE:MEDIA_TYPE.VIDEO }); r.onerror=()=>reject(new Error('Đọc file lỗi')); r.readAsDataURL(file); }),
     };
     return <AppCtx.Provider value={demoApi}>{children}{toast && <Toast toast={toast}/>}</AppCtx.Provider>;
   }
@@ -404,6 +405,13 @@ function AppProvider({children}){
     deleteFilmShot: (templateId, phaseId, shotId) => mut(`/filming/shots/${shotId}`, {method:'DELETE'}),
     createFilming: proj => mut('/filming/projects', {method:'POST', body:proj}),
     reviewFilming: (id, result, reason) => mut(`/filming/projects/${id}/review`, {method:'POST', body:{result, reason}}),
+    uploadMedia: async (file) => {
+      const res = await fetch(API_BASE+'/api/filming/upload?type='+encodeURIComponent(file.type||''), {
+        method:'POST', headers:{ ...(token?{'Authorization':'Bearer '+token}:{}), 'Content-Type': file.type||'application/octet-stream' }, body:file });
+      const data = await res.json().catch(()=>({}));
+      if(!res.ok) throw new Error(data.error || ('Lỗi '+res.status));
+      return data;
+    },
   };
   return <AppCtx.Provider value={api}>
     {children}
@@ -1727,11 +1735,30 @@ function HeChip({he}){ return <span className="text-[10px] px-1.5 py-0.5 rounded
 function isImgUrl(u){ return /\.(png|jpe?g|gif|webp|bmp)(\?|#|$)/i.test(u||''); }
 function MediaChip({m, onDel}){
   const isImg = m.media_type===MEDIA_TYPE.IMAGE;
+  const isLink = m.nguon==='LINK' || /^https?:/i.test(m.media_url||'');
   return <a href={m.media_url||'#'} target="_blank" className="relative group border border-slate-200 rounded-lg overflow-hidden bg-slate-50 w-20 h-20 shrink-0 flex flex-col items-center justify-center text-[10px] text-slate-500 p-1 text-center hover:border-gold">
-    <span className="text-xl">{isImg?'🖼️':'🎬'}</span><span className="truncate w-full">{isImg?'Ảnh':'Video'}</span>
+    {isImg && m.media_url ? <img src={m.media_url} className="w-full h-full object-cover"/> : <><span className="text-xl">{isLink?'🔗':(isImg?'🖼️':'🎬')}</span><span className="truncate w-full">{isLink?'Link':(isImg?'Ảnh':'Video')}</span></>}
     {onDel && <button onClick={e=>{e.preventDefault();onDel();}} className="absolute top-0.5 right-0.5 bg-black/60 text-white rounded-full w-5 h-5 text-xs leading-none opacity-0 group-hover:opacity-100">×</button>}
   </a>;
 }
+// biểu tượng trực quan theo tên cảnh
+function iconFor(name){
+  const n=(name||'').toLowerCase();
+  if(/mặt tiền/.test(n)) return '🏠';
+  if(/khu vực/.test(n)) return '🗺️';
+  if(/người cầm|sản phẩm/.test(n)) return '📦';
+  if(/nền trước|toàn cảnh nền|sàn trước/.test(n)) return '🧱';
+  if(/khe ron|cận gạch|khuyết điểm/.test(n)) return '🔍';
+  if(/màu|colormatch/.test(n)) return '🎨';
+  if(/tư vấn|khách/.test(n)) return '🤝';
+  if(/vệ sinh|sáp|mài|xử lý/.test(n)) return '🧽';
+  if(/súng|lắp keo|lót|primer/.test(n)) return '🔫';
+  if(/bơm|miết|đổ|gạt|trộn/.test(n)) return '🛠️';
+  if(/lột|hoàn thiện|bóng|phá bọt/.test(n)) return '✨';
+  if(/after|cận đường ron|cận bề mặt/.test(n)) return '🏆';
+  return '🎬';
+}
+const phaseBg = (i)=> ['#eef2ff','#fff7ed','#ecfdf5','#fdf2f8','#eff6ff','#f7fee7'][i%6];
 function SampleModal({shot, onClose}){
   return <Modal open={!!shot} onClose={onClose} title={"Mẫu: "+(shot?.ten||'')}>
     {shot && <div className="space-y-2">
@@ -1797,22 +1824,23 @@ function FilmingEditor({onDone}){
   const [khu, setKhu] = useState('');
   const [ngay, setNgay] = useState(new Date().toISOString().slice(0,10));
   const [uploads, setUploads] = useState([]);
-  const [sampleShot, setSampleShot] = useState(null);
+  const [openShot, setOpenShot] = useState(null); // cảnh đang mở popup
   const [busy, setBusy] = useState(false);
 
-  const changeTemplate = (id)=>{ if(id!==templateId && uploads.length && !confirm('Đổi quy trình sẽ xoá link đã thêm. Tiếp tục?')) return; setTemplateId(id); setUploads([]); };
-  const addLink = (shot, type) => { const url = prompt('Dán link '+(type===MEDIA_TYPE.IMAGE?'ảnh':'video')+' trên Google Drive (đặt quyền "Ai có link đều xem"):'); if(!url||!url.trim()) return; setUploads(prev=>[...prev, {id:uid('up'), shot_id:shot.id, media_type: type||(isImgUrl(url)?MEDIA_TYPE.IMAGE:MEDIA_TYPE.VIDEO), media_url:url.trim()}]); };
+  const changeTemplate = (id)=>{ if(id!==templateId && uploads.length && !confirm('Đổi quy trình sẽ xoá nguồn đã thêm. Tiếp tục?')) return; setTemplateId(id); setUploads([]); };
+  const addMedia = (shotId, item)=> setUploads(prev=>[...prev, {id:uid('up'), shot_id:shotId, ...item}]);
   const delMedia = (id)=> setUploads(prev=>prev.filter(u=>u.id!==id));
-  const mediaOf = (shot)=> uploads.filter(u=>u.shot_id===shot.id);
+  const mediaOf = (shotId)=> uploads.filter(u=>u.shot_id===shotId);
 
   const reqShots = template ? filmReqShots(template) : [];
-  const reqDone = reqShots.filter(s=>mediaOf(s).length>0).length;
+  const reqDone = reqShots.filter(s=>mediaOf(s.id).length>0).length;
   const canSubmit = ten.trim() && template && reqDone===reqShots.length;
 
   const submit = async () => {
-    if(!canSubmit) return notify('Nhập tên & đủ link cảnh bắt buộc','warn');
+    if(!canSubmit) return notify('Nhập tên & đủ nguồn cho cảnh bắt buộc','warn');
     setBusy(true);
-    const ok = await createFilming({ template_id:templateId, ten_cong_trinh:ten.trim(), khu_vuc:khu.trim(), ngay_quay:ngay, uploads });
+    const ok = await createFilming({ template_id:templateId, ten_cong_trinh:ten.trim(), khu_vuc:khu.trim(), ngay_quay:ngay,
+      uploads: uploads.map(u=>({shot_id:u.shot_id, media_type:u.media_type, media_url:u.media_url})) });
     setBusy(false);
     if(ok){ notify('Đã gửi nghiệm thu'); onDone(); }
   };
@@ -1820,45 +1848,105 @@ function FilmingEditor({onDone}){
   return <div className="space-y-4">
     <button onClick={onDone} className="text-sm text-slate-500 hover:text-ink">← Quay lại danh sách</button>
     <h2 className="text-lg font-bold text-ink">Quay công trình mới</h2>
-    <div className="bg-white rounded-2xl border border-slate-100 p-4">
-      <Field label="Quy trình áp dụng (theo hệ sản phẩm)" required hint="Marketing thiết lập sẵn checklist cho từng hệ sản phẩm">
+    <div className="bg-white rounded-2xl border border-slate-100 p-4 grid sm:grid-cols-2 gap-x-2">
+      <div className="sm:col-span-2"><Field label="Quy trình áp dụng (theo hệ sản phẩm)" required hint="Marketing thiết lập sẵn checklist cho từng hệ sản phẩm">
         <Select value={templateId} onChange={e=>changeTemplate(e.target.value)}>{templates.map(t=><option key={t.id} value={t.id}>{t.he_san_pham} — {t.ten}</option>)}</Select>
-      </Field>
-      <Field label="Tên công trình" required><Input value={ten} onChange={e=>setTen(e.target.value)} placeholder="VD: Nhà phố Q7 - anh Minh"/></Field>
-      <div className="grid grid-cols-2 gap-2">
-        <Field label="Khu vực"><Input value={khu} onChange={e=>setKhu(e.target.value)} placeholder="Quận / Tỉnh"/></Field>
-        <Field label="Ngày quay"><Input type="date" value={ngay} onChange={e=>setNgay(e.target.value)}/></Field>
-      </div>
+      </Field></div>
+      <div className="sm:col-span-2"><Field label="Tên công trình" required><Input value={ten} onChange={e=>setTen(e.target.value)} placeholder="VD: Nhà phố Q7 - anh Minh"/></Field></div>
+      <Field label="Khu vực"><Input value={khu} onChange={e=>setKhu(e.target.value)} placeholder="Quận / Tỉnh"/></Field>
+      <Field label="Ngày quay"><Input type="date" value={ngay} onChange={e=>setNgay(e.target.value)}/></Field>
     </div>
-    <div className="bg-gold/10 border border-gold/30 rounded-xl px-3 py-2 text-xs text-gold-dark flex items-center justify-between">
-      <span>Đã đủ link cảnh <b>bắt buộc</b>: {reqDone}/{reqShots.length}</span>
-      {canSubmit ? <span className="text-emerald-600 font-semibold">✓ Đủ điều kiện gửi</span> : <span>Cần đủ mới gửi được</span>}
+
+    <div className="bg-gold/10 border border-gold/30 rounded-xl px-3 py-2 text-xs text-gold-dark flex items-center justify-between gap-2">
+      <span>Tiến độ cảnh <b>bắt buộc</b>: {reqDone}/{reqShots.length}</span>
+      <span className="w-28 h-2 bg-white rounded-full overflow-hidden shrink-0"><span className="block h-full bg-gold transition-all" style={{width:(reqShots.length?reqDone/reqShots.length*100:0)+'%'}}></span></span>
     </div>
-    {template && template.phases.map(ph=><div key={ph.id} className="bg-white rounded-2xl border border-slate-100 overflow-hidden">
-      <div className="px-4 py-2 bg-slate-50 border-b text-sm font-semibold text-ink">{ph.thu_tu}. {ph.ten}</div>
-      <div className="divide-y">
-        {ph.shots.filter(s=>s.active).map(shot=>{ const md=mediaOf(shot);
-          return <div key={shot.id} className="p-3">
-            <div className="flex items-start justify-between gap-2">
-              <div className="min-w-0"><div className="flex items-center gap-2 flex-wrap"><span className="text-sm font-medium text-ink">{shot.ten}</span>{shot.bat_buoc&&<ReqBadge/>}{md.length>0&&<span className="text-[10px] text-emerald-600">✓ {md.length} link</span>}</div>
-                <div className="text-xs text-slate-500 mt-0.5">{shot.mo_ta}</div></div>
-              <button onClick={()=>setSampleShot(shot)} className="text-xs text-blue-500 hover:underline shrink-0">👁 Xem mẫu</button>
+
+    {template && template.phases.map((ph,pi)=><div key={ph.id}>
+      <div className="flex items-center gap-2 mb-2 mt-1"><span className="text-sm font-bold text-ink">{ph.thu_tu}. {ph.ten}</span><span className="text-[11px] text-slate-400">{ph.shots.filter(s=>s.active).length} cảnh</span></div>
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+        {ph.shots.filter(s=>s.active).map(shot=>{ const md=mediaOf(shot.id); const has=md.length>0;
+          return <button key={shot.id} onClick={()=>setOpenShot(shot)}
+            className={"text-left rounded-2xl border transition overflow-hidden bg-white hover:shadow-md "+(has?'border-emerald-300 ring-1 ring-emerald-200':'border-slate-200 hover:border-gold')}>
+            <div className="aspect-[4/3] flex items-center justify-center relative" style={{background:phaseBg(pi)}}>
+              {has && md[0].media_type===MEDIA_TYPE.IMAGE && md[0].media_url
+                ? <img src={md[0].media_url} className="absolute inset-0 w-full h-full object-cover"/>
+                : <span className="text-5xl opacity-90">{iconFor(shot.ten)}</span>}
+              {shot.bat_buoc && <span className="absolute top-2 left-2"><ReqBadge/></span>}
+              {has
+                ? <span className="absolute bottom-2 right-2 bg-emerald-500 text-white text-[10px] px-1.5 py-0.5 rounded-full font-medium shadow">✓ {md.length} nguồn</span>
+                : <span className="absolute bottom-2 right-2 w-7 h-7 rounded-full bg-white/90 border border-slate-300 text-gold-dark flex items-center justify-center text-lg shadow-sm">＋</span>}
             </div>
-            <div className="flex items-center gap-2 mt-2 flex-wrap">
-              {md.map(m=><MediaChip key={m.id} m={m} onDel={()=>delMedia(m.id)}/>)}
-              <button onClick={()=>addLink(shot, MEDIA_TYPE.VIDEO)} className="px-2.5 py-1.5 rounded-lg text-xs bg-slate-100 text-slate-600 hover:bg-slate-200">🔗 Link video</button>
-              <button onClick={()=>addLink(shot, MEDIA_TYPE.IMAGE)} className="px-2.5 py-1.5 rounded-lg text-xs bg-slate-100 text-slate-600 hover:bg-slate-200">🖼️ Link ảnh</button>
+            <div className="p-2.5">
+              <div className="text-sm font-medium text-ink leading-snug">{shot.ten}</div>
+              <div className="text-[11px] text-slate-400 line-clamp-2 mt-0.5">{shot.mo_ta}</div>
             </div>
-          </div>;
+          </button>;
         })}
       </div>
     </div>)}
-    <div className="sticky bottom-0 bg-slate-100 pt-2 pb-1 flex gap-2">
+
+    <div className="sticky bottom-0 -mx-3 sm:mx-0 bg-white/95 backdrop-blur border-t p-3 flex gap-2">
       <Btn variant="ghost" onClick={onDone}>Huỷ</Btn>
-      <Btn variant="gold" className="flex-1" onClick={submit} disabled={!canSubmit||busy}>{busy?'Đang gửi…':'Gửi nghiệm thu'}</Btn>
+      <Btn variant="gold" className="flex-1" onClick={submit} disabled={!canSubmit||busy}>{busy?'Đang gửi…':(reqDone<reqShots.length?`Còn ${reqShots.length-reqDone} cảnh bắt buộc`:'Gửi nghiệm thu')}</Btn>
     </div>
-    <SampleModal shot={sampleShot} onClose={()=>setSampleShot(null)}/>
+
+    {openShot && <ShotUploadModal shot={openShot} media={mediaOf(openShot.id)} onClose={()=>setOpenShot(null)}
+      onAdd={item=>addMedia(openShot.id, item)} onDel={delMedia}/>}
   </div>;
+}
+// Popup tải nguồn cho 1 cảnh: tải trực tiếp lên app (R2) hoặc dán link Drive
+function ShotUploadModal({shot, media, onClose, onAdd, onDel}){
+  const { uploadMedia, notify } = useApp();
+  const [tab, setTab] = useState('upload');
+  const [link, setLink] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const onFile = async (e) => {
+    const files = Array.from(e.target.files||[]); e.target.value='';
+    for(const f of files){
+      setBusy(true);
+      try{
+        const r = await uploadMedia(f);
+        onAdd({ media_type: r.media_type || (f.type.startsWith('image/')?MEDIA_TYPE.IMAGE:MEDIA_TYPE.VIDEO), media_url: r.media_url, nguon:'APP' });
+      }catch(err){ notify(err.message||'Tải lên lỗi','err'); }
+      setBusy(false);
+    }
+  };
+  const addLink = () => { if(!link.trim()) return; onAdd({ media_type: isImgUrl(link)?MEDIA_TYPE.IMAGE:MEDIA_TYPE.VIDEO, media_url: link.trim(), nguon:'LINK' }); setLink(''); };
+
+  return <Modal open onClose={onClose} title={shot.ten} wide>
+    <div className="flex items-start gap-2 mb-3">
+      <span className="text-3xl">{iconFor(shot.ten)}</span>
+      <div className="flex-1"><div className="text-sm text-slate-600">{shot.mo_ta}</div>{shot.bat_buoc&&<div className="mt-1"><ReqBadge/></div>}</div>
+      {shot.source_mau_url && <a href={shot.source_mau_url} target="_blank" className="text-xs text-blue-500 hover:underline shrink-0">👁 Xem mẫu</a>}
+    </div>
+
+    {media.length>0 && <div className="mb-3">
+      <div className="text-xs font-semibold text-slate-600 mb-1">Nguồn đã thêm ({media.length})</div>
+      <div className="flex gap-2 flex-wrap">{media.map(m=><MediaChip key={m.id} m={m} onDel={()=>onDel(m.id)}/>)}</div>
+    </div>}
+
+    <div className="flex gap-1 bg-slate-100 p-1 rounded-xl mb-3">
+      <button onClick={()=>setTab('upload')} className={"flex-1 px-3 py-1.5 rounded-lg text-sm font-medium "+(tab==='upload'?'bg-white shadow text-ink':'text-slate-500')}>📤 Tải lên app</button>
+      <button onClick={()=>setTab('link')} className={"flex-1 px-3 py-1.5 rounded-lg text-sm font-medium "+(tab==='link'?'bg-white shadow text-ink':'text-slate-500')}>🔗 Dán link Drive</button>
+    </div>
+
+    {tab==='upload' ? <div>
+      <label className={"block border-2 border-dashed rounded-2xl p-6 text-center cursor-pointer "+(busy?'opacity-60 pointer-events-none border-slate-300':'border-slate-300 hover:border-gold hover:bg-gold/5')}>
+        <div className="text-3xl mb-1">{busy?'⏳':'📤'}</div>
+        <div className="text-sm font-medium text-ink">{busy?'Đang tải lên…':'Chọn hoặc kéo-thả ảnh / video'}</div>
+        <div className="text-[11px] text-slate-400 mt-1">Tải trực tiếp, lưu vào hệ thống app</div>
+        <input type="file" accept="image/*,video/*" multiple className="hidden" onChange={onFile} disabled={busy}/>
+      </label>
+      <div className="text-[11px] text-slate-400 mt-2">Video dài/nặng nên cân nhắc dùng tab "Dán link Drive" để nhẹ hệ thống.</div>
+    </div> : <div>
+      <Field label="Link Google Drive (đặt quyền 'Ai có link đều xem')"><Input value={link} onChange={e=>setLink(e.target.value)} placeholder="https://drive.google.com/file/d/…" onKeyDown={e=>e.key==='Enter'&&addLink()}/></Field>
+      <Btn variant="gold" className="w-full" onClick={addLink}>Thêm link</Btn>
+    </div>}
+
+    <div className="flex justify-end mt-4"><Btn variant="ghost" onClick={onClose}>Xong</Btn></div>
+  </Modal>;
 }
 function FilmingDetailSales({project, template, onBack}){
   const [sampleShot, setSampleShot] = useState(null);
