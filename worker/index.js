@@ -210,6 +210,22 @@ async function handleApi(request, env){
   const url = new URL(request.url);
   const path = url.pathname.replace(/^\/api/,'');
   const method = request.method;
+
+  // Upload media lên R2 (đọc nhị phân — không parse JSON)
+  if(path==='/filming/upload' && method==='POST'){
+    await ensureSchema(env);
+    const sess = await getSession(env, request);
+    if(!sess) return json({error:'Chưa đăng nhập'}, 401);
+    if(!env.MEDIA) return json({error:'Chưa cấu hình kho lưu file (R2 MEDIA) — dùng tạm tab Dán link Drive'}, 503);
+    const ct = url.searchParams.get('type') || request.headers.get('content-type') || 'application/octet-stream';
+    const buf = await request.arrayBuffer();
+    if(!buf || buf.byteLength===0) return json({error:'File rỗng'}, 400);
+    const ext = ((ct.split('/')[1]||'bin').split(';')[0]).replace(/[^a-z0-9]/gi,'') || 'bin';
+    const key = 'filming/'+uid('m')+'.'+ext;
+    await env.MEDIA.put(key, buf, { httpMetadata:{ contentType: ct } });
+    return json({ media_url: '/media/'+key, media_type: ct.startsWith('image/') ? 'IMAGE' : 'VIDEO' });
+  }
+
   const body = (method==='POST'||method==='PATCH') ? await request.json().catch(()=>({})) : {};
 
   await ensureSchema(env);
@@ -520,6 +536,18 @@ export default {
       if(request.method==='OPTIONS') return new Response(null, { status:204, headers:CORS });
       try { return await handleApi(request, env); }
       catch(e){ return json({error:'Lỗi server: '+(e.message||e)}, 500); }
+    }
+    // media từ R2 (ảnh/video Sales tải lên app)
+    if(url.pathname.startsWith('/media/')){
+      if(!env.MEDIA) return new Response('R2 chưa cấu hình', { status:503 });
+      const key = decodeURIComponent(url.pathname.slice('/media/'.length));
+      const obj = await env.MEDIA.get(key);
+      if(!obj) return new Response('Not found', { status:404 });
+      const h = new Headers();
+      obj.writeHttpMetadata(h);
+      h.set('etag', obj.httpEtag);
+      h.set('Cache-Control', 'public, max-age=31536000, immutable');
+      return new Response(obj.body, { headers:h });
     }
     // web tĩnh
     const res = await env.ASSETS.fetch(request);

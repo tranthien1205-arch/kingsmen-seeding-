@@ -13,3 +13,8 @@ binding = "ASSETS"
 binding = "DB"
 database_name = "appseedingkingsmen-db"
 database_id = "184ebc6a-ebf2-451d-89ea-369501c25f02"
+
+# Kho lưu ảnh/video Sales tải lên app (Quay công trình)
+[[r2_buckets]]
+binding = "MEDIA"
+bucket_name = "kingsmen-media"
