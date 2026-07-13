@@ -1772,40 +1772,52 @@ function isImgUrl(u){ return /\.(png|jpe?g|gif|webp|bmp)(\?|#|$)/i.test(u||''); 
 // media là link Drive (không nhúng trực tiếp) khi không phải file app (/media/ hoặc data:)
 const isAppMedia = (url)=> !!url && (url.startsWith('/media/') || url.startsWith('data:'));
 const isDriveLink = (m)=> m.nguon==='LINK' || (/^https?:/i.test(m.media_url||'') && !isAppMedia(m.media_url));
-function MediaChip({m, onDel}){
-  const isImg = m.media_type===MEDIA_TYPE.IMAGE;
-  const link = isDriveLink(m);
-  return <a href={m.media_url||'#'} target="_blank" className="relative group border border-slate-200 rounded-lg overflow-hidden bg-slate-50 w-20 h-20 shrink-0 flex flex-col items-center justify-center text-[10px] text-slate-500 p-1 text-center hover:border-gold">
-    {isImg && m.media_url && !link ? <img src={m.media_url} className="w-full h-full object-cover"/>
-      : (!isImg && m.media_url && !link) ? <video src={m.media_url} muted preload="metadata" className="w-full h-full object-cover"/>
-      : <><span className="text-xl">{link?'🔗':(isImg?'🖼️':'🎬')}</span><span className="truncate w-full">{link?'Link':(isImg?'Ảnh':'Video')}</span></>}
-    {!isImg && !link && <span className="absolute inset-0 flex items-center justify-center text-white/80 text-lg pointer-events-none">▶</span>}
-    {onDel && <button onClick={e=>{e.preventDefault();onDel();}} className="absolute top-0.5 right-0.5 bg-black/60 text-white rounded-full w-5 h-5 text-xs leading-none opacity-0 group-hover:opacity-100">×</button>}
-  </a>;
+// URL để lấy khung hình đại diện của video (seek 0.1s → hiện frame làm thumbnail)
+const posterUrl = (m)=> (m.media_type!==MEDIA_TYPE.IMAGE && isAppMedia(m.media_url)) ? (m.media_url+'#t=0.1') : m.media_url;
+// Thumbnail nhỏ dùng lại nhiều nơi (ảnh / khung hình video / link)
+function MediaThumb({m, className='w-full h-full'}){
+  const isImg = m.media_type===MEDIA_TYPE.IMAGE; const link = isDriveLink(m);
+  if(isImg && m.media_url && !link) return <img src={m.media_url} className={className+' object-cover'}/>;
+  if(!isImg && m.media_url && !link) return <span className={className+' relative block'}><video src={posterUrl(m)} muted playsInline preload="metadata" className="w-full h-full object-cover"/><span className="absolute inset-0 flex items-center justify-center text-white text-xl drop-shadow pointer-events-none">▶</span></span>;
+  return <span className={className+' flex flex-col items-center justify-center text-slate-400 text-[10px]'}><span className="text-xl">{link?'🔗':(isImg?'🖼️':'🎬')}</span><span>{link?'Link':(isImg?'Ảnh':'Video')}</span></span>;
 }
-// Khung xem trước lớn: ảnh / video (có controls) / link Drive
+function MediaChip({m, onDel, onClick}){
+  return <button type="button" onClick={onClick} className="relative group border border-slate-200 rounded-lg overflow-hidden bg-slate-50 w-20 h-20 shrink-0 hover:border-gold">
+    <MediaThumb m={m}/>
+    {onDel && <span onClick={e=>{e.stopPropagation();onDel();}} className="absolute top-0.5 right-0.5 bg-black/60 text-white rounded-full w-5 h-5 text-xs leading-5 opacity-0 group-hover:opacity-100">×</span>}
+  </button>;
+}
+// Khung xem trước lớn: ảnh / video (tự phát lặp, không tiếng) / link Drive
 function MediaView({m, className='w-full h-full'}){
   const isImg = m.media_type===MEDIA_TYPE.IMAGE;
   const link = isDriveLink(m);
   if(link) return <div className={className+" flex flex-col items-center justify-center text-white/70 bg-slate-900"}><span className="text-5xl">🔗</span><a href={m.media_url} target="_blank" className="text-xs underline mt-2">Mở link Google Drive</a></div>;
   if(isImg) return <img src={m.media_url} className={className+" object-contain bg-slate-900"}/>;
-  return <video src={m.media_url} controls playsInline preload="metadata" className={className+" bg-black"}/>;
+  return <video src={m.media_url} controls autoPlay muted loop playsInline preload="metadata" className={className+" bg-black object-contain"}/>;
 }
-// biểu tượng trực quan theo tên cảnh
+// biểu tượng trực quan theo tên cảnh (gợi nhớ tốt hơn)
 function iconFor(name){
   const n=(name||'').toLowerCase();
   if(/mặt tiền/.test(n)) return '🏠';
-  if(/khu vực/.test(n)) return '🗺️';
-  if(/người cầm|sản phẩm/.test(n)) return '📦';
-  if(/nền trước|toàn cảnh nền|sàn trước/.test(n)) return '🧱';
-  if(/khe ron|cận gạch|khuyết điểm/.test(n)) return '🔍';
-  if(/màu|colormatch/.test(n)) return '🎨';
+  if(/toàn cảnh khu|khu vực/.test(n)) return '🌆';
+  if(/người cầm|cầm sản phẩm/.test(n)) return '🙋';
+  if(/sản phẩm trên nền|sản phẩm/.test(n)) return '🧴';
+  if(/toàn cảnh nền|nền trước|sàn trước/.test(n)) return '🧱';
+  if(/cận gạch|khe ron|khuyết điểm/.test(n)) return '🔎';
+  if(/so.*màu|2.*3 màu/.test(n)) return '🎨';
+  if(/colormatch|cận màu/.test(n)) return '🌈';
   if(/tư vấn|khách/.test(n)) return '🤝';
-  if(/vệ sinh|sáp|mài|xử lý/.test(n)) return '🧽';
-  if(/súng|lắp keo|lót|primer/.test(n)) return '🔫';
-  if(/bơm|miết|đổ|gạt|trộn/.test(n)) return '🛠️';
-  if(/lột|hoàn thiện|bóng|phá bọt/.test(n)) return '✨';
-  if(/after|cận đường ron|cận bề mặt/.test(n)) return '🏆';
+  if(/vệ sinh|sáp/.test(n)) return '🧽';
+  if(/mài|xử lý bề mặt/.test(n)) return '⚙️';
+  if(/lắp keo|súng/.test(n)) return '🔫';
+  if(/lót|primer/.test(n)) return '🪣';
+  if(/bơm|miết ron/.test(n)) return '🖊️';
+  if(/đổ|gạt|trộn/.test(n)) return '🛠️';
+  if(/phá bọt/.test(n)) return '🧯';
+  if(/lột keo|hoàn thiện/.test(n)) return '✨';
+  if(/bóng/.test(n)) return '💎';
+  if(/toàn cảnh after|after/.test(n)) return '🏆';
+  if(/cận đường ron|cận bề mặt|cận/.test(n)) return '🔬';
   return '🎬';
 }
 const phaseBg = (i)=> ['#eef2ff','#fff7ed','#ecfdf5','#fdf2f8','#eff6ff','#f7fee7'][i%6];
@@ -1898,10 +1910,11 @@ function FilmingEditor({onDone, project}){
   const upList = ()=> uploads.map(u=>({id:u.id, shot_id:u.shot_id, media_type:u.media_type, media_url:u.media_url}));
 
   const save = async (doSubmit) => {
-    if(!ten.trim()) return notify('Nhập tên công trình','warn');
+    if(doSubmit && !ten.trim()) return notify('Nhập tên công trình để gửi nghiệm thu','warn');
     if(doSubmit && !canSubmit) return notify('Cần đủ nguồn cho các cảnh bắt buộc mới gửi được','warn');
+    const finalTen = ten.trim() || ('Nháp — '+new Date().toLocaleDateString('vi-VN'));
     setBusy(true);
-    const payload = { template_id:templateId, ten_cong_trinh:ten.trim(), khu_vuc:khu.trim(), ngay_quay:ngay, submit:doSubmit, uploads: upList() };
+    const payload = { template_id:templateId, ten_cong_trinh:finalTen, khu_vuc:khu.trim(), ngay_quay:ngay, submit:doSubmit, uploads: upList() };
     const ok = editing ? await editFilming(project.id, payload) : await createFilming(payload);
     setBusy(false);
     if(ok){ notify(doSubmit?'Đã gửi nghiệm thu':'Đã lưu nháp'); onDone(); }
@@ -1931,8 +1944,8 @@ function FilmingEditor({onDone, project}){
           return <button key={shot.id} onClick={()=>setOpenShot(shot)}
             className={"text-left rounded-2xl border transition overflow-hidden bg-white hover:shadow-md "+(has?'border-emerald-300 ring-1 ring-emerald-200':'border-slate-200 hover:border-gold')}>
             <div className="aspect-[4/3] flex items-center justify-center relative" style={{background:phaseBg(pi)}}>
-              {has && md[0].media_type===MEDIA_TYPE.IMAGE && md[0].media_url
-                ? <img src={md[0].media_url} className="absolute inset-0 w-full h-full object-cover"/>
+              {has && md[0].media_url && !isDriveLink(md[0])
+                ? <span className="absolute inset-0"><MediaThumb m={md[0]}/></span>
                 : <span className="text-5xl opacity-90">{iconFor(shot.ten)}</span>}
               {shot.bat_buoc && <span className="absolute top-2 left-2"><ReqBadge/></span>}
               {has
@@ -1950,7 +1963,7 @@ function FilmingEditor({onDone, project}){
 
     <div className="sticky bottom-0 -mx-3 sm:mx-0 bg-white/95 backdrop-blur border-t p-3 flex gap-2">
       <Btn variant="ghost" onClick={onDone} disabled={busy}>Huỷ</Btn>
-      <Btn variant="soft" onClick={()=>save(false)} disabled={busy||!ten.trim()}>💾 Lưu nháp</Btn>
+      <Btn variant="soft" onClick={()=>save(false)} disabled={busy}>💾 Lưu nháp</Btn>
       <Btn variant="gold" className="flex-1" onClick={()=>save(true)} disabled={busy||!canSubmit}>{busy?'Đang lưu…':(reqDone<reqShots.length?`Còn ${reqShots.length-reqDone} cảnh bắt buộc`:'Gửi nghiệm thu')}</Btn>
     </div>
 
@@ -1965,6 +1978,8 @@ function ShotUploadModal({shot, media, onClose, onAdd, onDel}){
   const [link, setLink] = useState('');
   const [busy, setBusy] = useState(false);
   const [prog, setProg] = useState(null); // {name, pct, loaded, total}
+  const [preview, setPreview] = useState(null); // xem trước 1 nguồn
+  const fileRef = useRef(null);
   const MAX = 100*1024*1024;
 
   const onFile = async (e) => {
@@ -1975,22 +1990,30 @@ function ShotUploadModal({shot, media, onClose, onAdd, onDel}){
       try{
         const r = await uploadMedia(f, (pct,loaded,total)=>setProg({ name:f.name, pct, loaded, total }));
         onAdd({ media_type: r.media_type || (f.type.startsWith('image/')?MEDIA_TYPE.IMAGE:MEDIA_TYPE.VIDEO), media_url: r.media_url, nguon:'APP' });
+        notify('Đã thêm 1 nguồn','ok');
       }catch(err){ notify(err.message||'Tải lên lỗi','err'); }
       setProg(null); setBusy(false);
     }
   };
-  const addLink = () => { if(!link.trim()) return; onAdd({ media_type: isImgUrl(link)?MEDIA_TYPE.IMAGE:MEDIA_TYPE.VIDEO, media_url: link.trim(), nguon:'LINK' }); setLink(''); };
+  const addLink = () => { if(!link.trim()) return; onAdd({ media_type: isImgUrl(link)?MEDIA_TYPE.IMAGE:MEDIA_TYPE.VIDEO, media_url: link.trim(), nguon:'LINK' }); setLink(''); notify('Đã thêm link'); };
 
   return <Modal open onClose={onClose} title={shot.ten} wide>
     <div className="flex items-start gap-2 mb-3">
-      <span className="text-3xl">{iconFor(shot.ten)}</span>
-      <div className="flex-1"><div className="text-sm text-slate-600">{shot.mo_ta}</div>{shot.bat_buoc&&<div className="mt-1"><ReqBadge/></div>}</div>
+      <span className="text-2xl">{iconFor(shot.ten)}</span>
+      <div className="flex-1 min-w-0"><div className="text-sm text-slate-600">{shot.mo_ta}</div>{shot.bat_buoc&&<div className="mt-1"><ReqBadge/></div>}</div>
       {shot.source_mau_url && <a href={shot.source_mau_url} target="_blank" className="text-xs text-blue-500 hover:underline shrink-0">👁 Xem mẫu</a>}
     </div>
 
+    {/* Nguồn đã thêm — ô xem lớn, bấm để xem trước popup */}
     {media.length>0 && <div className="mb-3">
-      <div className="text-xs font-semibold text-slate-600 mb-1">Nguồn đã thêm ({media.length})</div>
-      <div className="flex gap-2 flex-wrap">{media.map(m=><MediaChip key={m.id} m={m} onDel={()=>onDel(m.id)}/>)}</div>
+      <div className="text-xs font-semibold text-slate-600 mb-1.5">Nguồn đã thêm ({media.length}) — bấm để xem</div>
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+        {media.map(m=><div key={m.id} className="relative group rounded-xl overflow-hidden border border-slate-200 bg-slate-100 aspect-video">
+          <button type="button" onClick={()=>setPreview(m)} className="block w-full h-full"><MediaThumb m={m}/></button>
+          <span onClick={()=>onDel(m.id)} className="absolute top-1 right-1 bg-black/60 text-white rounded-full w-6 h-6 text-sm leading-6 text-center cursor-pointer">×</span>
+          <span className="absolute bottom-1 left-1 text-[9px] px-1.5 py-0.5 rounded-full bg-black/55 text-white">{isDriveLink(m)?'🔗 Link':(m.media_type===MEDIA_TYPE.IMAGE?'🖼️ Ảnh':'🎬 Video')}</span>
+        </div>)}
+      </div>
     </div>}
 
     <div className="flex gap-1 bg-slate-100 p-1 rounded-xl mb-3">
@@ -1999,23 +2022,30 @@ function ShotUploadModal({shot, media, onClose, onAdd, onDel}){
     </div>
 
     {tab==='upload' ? <div>
-      <label className={"block border-2 border-dashed rounded-2xl p-6 text-center cursor-pointer "+(busy?'opacity-60 pointer-events-none border-slate-300':'border-slate-300 hover:border-gold hover:bg-gold/5')}>
-        <div className="text-3xl mb-1">{busy?'⏳':'📤'}</div>
-        <div className="text-sm font-medium text-ink">{busy?'Đang tải lên…':'Chọn hoặc kéo-thả ảnh / video'}</div>
-        <div className="text-[11px] text-slate-400 mt-1">Tải trực tiếp, lưu vào hệ thống app · tối đa 100MB/file</div>
-        <input type="file" accept="image/*,video/*" multiple className="hidden" onChange={onFile} disabled={busy}/>
-      </label>
-      {prog && <div className="mt-3">
-        <div className="flex items-center justify-between text-[11px] text-slate-500 mb-1"><span className="truncate max-w-[60%]">{prog.name}</span><span>{prog.pct}% · {fmtMB(prog.loaded)}/{fmtMB(prog.total)}</span></div>
+      <input ref={fileRef} type="file" accept="image/*,video/*" multiple className="hidden" onChange={onFile} disabled={busy}/>
+      <Btn variant="gold" className="w-full" disabled={busy} onClick={()=>fileRef.current && fileRef.current.click()}>{busy?'⏳ Đang tải lên…':'＋ Chọn ảnh / video'}</Btn>
+      {prog && <div className="mt-2">
+        <div className="flex items-center justify-between text-[11px] text-slate-500 mb-1"><span className="truncate max-w-[55%]">{prog.name}</span><span>{prog.pct}% · {fmtMB(prog.loaded)}/{fmtMB(prog.total)}</span></div>
         <div className="h-2 bg-slate-200 rounded-full overflow-hidden"><div className="h-full bg-gold transition-all" style={{width:prog.pct+'%'}}></div></div>
       </div>}
-      <div className="text-[11px] text-slate-400 mt-2">Video dài/nặng (&gt;100MB) hãy dùng tab "Dán link Drive" để nhẹ hệ thống.</div>
+      <div className="text-[11px] text-slate-400 mt-2">Lưu thẳng vào app · tối đa 100MB/file. Video &gt;100MB hãy dùng tab “Dán link Drive”.</div>
     </div> : <div>
       <Field label="Link Google Drive (đặt quyền 'Ai có link đều xem')"><Input value={link} onChange={e=>setLink(e.target.value)} placeholder="https://drive.google.com/file/d/…" onKeyDown={e=>e.key==='Enter'&&addLink()}/></Field>
       <Btn variant="gold" className="w-full" onClick={addLink}>Thêm link</Btn>
     </div>}
 
-    <div className="flex justify-end mt-4"><Btn variant="ghost" onClick={onClose}>Xong</Btn></div>
+    <div className="flex justify-end mt-4"><Btn variant="gold" onClick={onClose}>Xong</Btn></div>
+
+    {/* popup xem trước 1 nguồn */}
+    {preview && <div className="fixed inset-0 z-[60] bg-black/80 flex items-center justify-center p-3" onClick={()=>setPreview(null)}>
+      <div className="w-full max-w-2xl" onClick={e=>e.stopPropagation()}>
+        <div className="rounded-2xl overflow-hidden bg-black aspect-video"><MediaView m={preview}/></div>
+        <div className="flex justify-between mt-2">
+          <Btn variant="danger" onClick={()=>{onDel(preview.id); setPreview(null);}}>Xoá nguồn này</Btn>
+          <Btn variant="ghost" onClick={()=>setPreview(null)}>Đóng</Btn>
+        </div>
+      </div>
+    </div>}
   </Modal>;
 }
 function FilmingDetailSales({project, template, onBack}){
