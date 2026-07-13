@@ -41,6 +41,9 @@ const SCHEMA_VERSION = 1;
 // DEMO_MODE=true: lần đầu mở app sẽ seed sẵn vài post/cmt để xem ngay toàn bộ luồng.
 // Khi dùng thật (không phải demo) → đổi thành false.
 const DEMO_MODE = true;
+// DEMO=true: chạy hoàn toàn offline bằng dữ liệu trong bộ nhớ (dùng để PREVIEW, không cần backend).
+// Khi deploy thật → đổi thành false để dùng API Worker + D1.
+const DEMO = false;
 
 const ROLES = { MARKETING:'MARKETING', SALES:'SALES', ADMIN:'ADMIN' };
 const ROLE_LABEL = { MARKETING:'Marketing', SALES:'Sales', ADMIN:'Admin / Kế toán' };
@@ -60,6 +63,8 @@ const MUC_TIEU = ['BIẾT','TIN','CÂN NHẮC','HÀNH ĐỘNG'];
 const GROUP_LOAI = ['Nhà ở','Thầu thợ','Nội thất','Vật liệu XD','Khác'];
 const CMT_LOAI = { MINH_DANG:'MINH_DANG', DAO:'DAO' };
 const CMT_LOAI_LABEL = { MINH_DANG:'CMT mình đăng', DAO:'CMT dạo' };
+// Module QUAY CÔNG TRÌNH
+const MEDIA_TYPE = { VIDEO:'VIDEO', IMAGE:'IMAGE' };
 
 /* ============================================================
    1. TIỆN ÍCH
@@ -108,6 +113,41 @@ function compressImage(file, maxSide=1100, quality=0.7){
    2. DỮ LIỆU MẶC ĐỊNH (thư viện + users + đơn giá là cấu hình,
       KHÔNG bịa giao dịch — user tự tạo hoặc bấm "Nạp demo")
 ============================================================ */
+/* --- Dữ liệu mẫu QUY TRÌNH QUAY (nhiều quy trình, chia theo hệ sản phẩm) --- */
+const FILM_CHECKLISTS = {
+  keoron: ['Keo ron ColorMatch — quy trình chuẩn','Keo chít mạch', [
+    ['Tổng quan', [['Mặt tiền công trình','Quay ngang toàn mặt tiền, thấy rõ địa chỉ/biển hiệu.',true],['Toàn cảnh khu vực','Pan chậm bao quát khu vực thi công.',true],['Người cầm sản phẩm','Cầm hộp keo Kingsmen hướng camera, rõ nhãn.',true]]],
+    ['Before', [['Toàn cảnh nền trước khi làm','Quay toàn bộ nền/tường trước thi công (đánh dấu góc để After trùng góc).',true],['Cận gạch và khe ron','Cận khe ron bẩn/ố để so sánh.',true],['Sản phẩm trên nền Before','Đặt sản phẩm cạnh khu vực chưa làm.',false]]],
+    ['Chọn màu', [['So 2–3 màu trên gạch','Đặt 2–3 mẫu màu lên gạch cho khách so.',true],['Tư vấn khách hàng','Quay khoảnh khắc tư vấn/khách chọn màu.',false],['Cận màu ColorMatch đã chọn','Cận màu cuối cùng khách chốt.',true]]],
+    ['Thi công', [['Vệ sinh khe ron & bôi sáp','Quay bước làm sạch khe & bôi sáp.',true],['Lắp keo vào súng','Thao tác lắp tuýp keo vào súng.',false],['Bơm và miết ron','Quay rõ bơm keo & miết đều tay.',true],['Lột keo hoàn thiện','Bước lột/làm sạch keo thừa.',true]]],
+    ['After', [['Toàn cảnh After (trùng góc Before)','Quay đúng góc Before để so sánh.',true],['Cận đường ron hoàn thiện','Cận ron đều, sạch, lên màu.',true],['Sản phẩm trên nền After','Đặt sản phẩm cạnh khu vực đã hoàn thiện.',false]]],
+  ]],
+  epoxy: ['Epoxy sàn — quy trình quay','Sơn Epoxy sàn', [
+    ['Tổng quan', [['Mặt tiền / khu vực sàn','Quay bao quát khu vực sàn cần thi công.',true],['Người cầm sản phẩm','Cầm thùng sơn epoxy Kingsmen.',true]]],
+    ['Before', [['Toàn cảnh sàn trước thi công','Quay toàn bộ mặt sàn ban đầu.',true],['Cận khuyết điểm sàn','Cận vết nứt, bong tróc, bụi bẩn.',true]]],
+    ['Thi công', [['Mài & xử lý bề mặt','Quay bước mài sàn, hút bụi.',true],['Thi công lớp lót (primer)','Lăn/gạt lớp lót.',true],['Đổ & gạt lớp epoxy','Quay rõ đổ và gạt phẳng.',true],['Lăn phá bọt hoàn thiện','Dùng rulo gai phá bọt.',false]]],
+    ['After', [['Toàn cảnh sàn After','Quay trùng góc Before.',true],['Cận bề mặt bóng gương','Cận độ phẳng, bóng.',true]]],
+  ]],
+  terrazzo: ['Terrazzo mài — quy trình quay','Terrazzo', [
+    ['Tổng quan', [['Mặt tiền công trình','Quay bao quát khu vực.',true],['Người cầm sản phẩm','Cầm vật liệu terrazzo Kingsmen.',true]]],
+    ['Thi công', [['Trộn vật liệu','Quay tỉ lệ trộn đá + xi/keo.',true],['Đổ terrazzo','Quay bước đổ, dàn đều.',true],['Mài thô','Quay máy mài thô.',true],['Mài tinh & đánh bóng','Quay mài tinh, lên bóng.',true]]],
+    ['After', [['Toàn cảnh After','Quay bề mặt hoàn thiện.',true],['Cận bề mặt đá lộ','Cận hạt đá, độ bóng.',true]]],
+  ]],
+};
+function buildFilmTemplate(ten, he_san_pham, checklist){
+  const phases=[]; let po=1;
+  for(const [pname, shots] of checklist){
+    const phase={ id:uid('ph'), ten:pname, thu_tu:po++, shots:[] }; let so=1;
+    for(const [t,mo_ta,bb] of shots) phase.shots.push({ id:uid('sh'), ten:t, mo_ta, source_mau_url:'https://drive.google.com/mau/'+encodeURIComponent(t), bat_buoc:bb, thu_tu:so++, active:true });
+    phases.push(phase);
+  }
+  return { id:uid('tpl'), ten, he_san_pham, active:true, phases };
+}
+const filmCountShots = t => t.phases.reduce((s,ph)=>s+ph.shots.filter(x=>x.active).length,0);
+const filmReqShots = t => t.phases.flatMap(ph=>ph.shots.filter(s=>s.active&&s.bat_buoc));
+const filmFindTpl = (db,id) => (db.filming_templates||[]).find(t=>t.id===id) || (db.filming_templates||[])[0];
+const uniqShots = ups => [...new Set((ups||[]).map(u=>u.shot_id))];
+
 function seedDB(){
   const uMkt   = { id:uid('u'), ho_ten:'Ngọc (Marketing)', email:'mkt@kingsmen.vn', vai_tro:ROLES.MARKETING, active:true, password:'123456' };
   const uS1    = { id:uid('u'), ho_ten:'Hùng (Sales)',     email:'sale1@kingsmen.vn', vai_tro:ROLES.SALES, active:true, password:'123456' };
@@ -132,7 +172,16 @@ function seedDB(){
     { id:uid('c'), noi_dung_goi_y:'Mình là thợ, chít Kingsmen nhanh hơn keo thường, khách ưng màu ColorMatch.', tuyen:'Chuyên gia', loai_bai:'ColorMatch', tags:['thợ'], thu_tu:3, active:true, updated_at:nowISO() },
     { id:uid('c'), noi_dung_goi_y:'Có bảo hành không shop ơi, dùng cho công trình lớn.', tuyen:'Đặt câu hỏi', loai_bai:null, tags:['bảo hành'], thu_tu:4, active:true, updated_at:nowISO() },
   ];
-  const P = { don_gia_post: 15000, don_gia_cmt: 3000 };
+  const P = { don_gia_post: 15000, don_gia_cmt: 3000, don_gia_cong_trinh: 150000 };
+
+  // Quy trình quay (nhiều hệ sản phẩm)
+  const tKeoron = buildFilmTemplate(...FILM_CHECKLISTS.keoron);
+  const tEpoxy  = buildFilmTemplate(...FILM_CHECKLISTS.epoxy);
+  const tTerra  = buildFilmTemplate(...FILM_CHECKLISTS.terrazzo);
+  const filming_templates = [tKeoron, tEpoxy, tTerra];
+  const mkUploads = (tpl, ratio) => { const ups=[]; tpl.phases.forEach(ph=>ph.shots.forEach(sh=>{ if(ratio>=1) ups.push({id:uid('up'),shot_id:sh.id,media_type:MEDIA_TYPE.VIDEO,media_url:'https://drive.google.com/file/d/demo/view'}); })); return ups; };
+  let project_filmings = [];
+
   let demoPosts = [], demoCmts = [];
   if(DEMO_MODE){
     const now = nowISO();
@@ -146,13 +195,19 @@ function seedDB(){
       { id:uid('c'), loai:CMT_LOAI.MINH_DANG, post_seeding_id:demoPosts[0].id, post_link:demoPosts[0].link_bai, suggestion_id:cmts[0].id, sales_id:uS1.id, so_cmt_seeding:4, react:2, so_cmt_tu_nhien:0, trang_thai:ST.DAT, reviewed_by:uMkt.ho_ten, reviewed_at:now, ly_do_loai:'', thanh_tien:4*P.don_gia_cmt, ky_thanh_toan:kyOf(now), created_at:now, proofs:[] },
       { id:uid('c'), loai:CMT_LOAI.DAO, post_seeding_id:null, post_link:'https://facebook.com/groups/xaynha/posts/demo9', suggestion_id:cmts[1].id, sales_id:uS2.id, so_cmt_seeding:2, react:1, so_cmt_tu_nhien:0, trang_thai:ST.CHO_DUYET, reviewed_by:null, reviewed_at:null, ly_do_loai:'', thanh_tien:0, ky_thanh_toan:null, created_at:now, proofs:[] },
     ];
+    project_filmings = [
+      { id:uid('pf'), sales_id:uS1.id, template_id:tKeoron.id, ten_cong_trinh:'Nhà phố Q7 - anh Minh', khu_vuc:'Quận 7, HCM', ngay_quay:now, trang_thai:ST.CHO_DUYET, reviewed_by:null, reviewed_at:null, ly_do_loai:'', thanh_tien:0, ky_thanh_toan:null, created_at:now, uploads:mkUploads(tKeoron,1) },
+      { id:uid('pf'), sales_id:uS1.id, template_id:tKeoron.id, ten_cong_trinh:'Biệt thự Thảo Điền', khu_vuc:'TP Thủ Đức', ngay_quay:now, trang_thai:ST.DAT, reviewed_by:uMkt.ho_ten, reviewed_at:now, ly_do_loai:'', thanh_tien:P.don_gia_cong_trinh, ky_thanh_toan:kyOf(now), created_at:now, uploads:mkUploads(tKeoron,1) },
+      { id:uid('pf'), sales_id:uS2.id, template_id:tEpoxy.id, ten_cong_trinh:'Xưởng epoxy Bình Dương', khu_vuc:'Bình Dương', ngay_quay:now, trang_thai:ST.KHONG_DAT, reviewed_by:uMkt.ho_ten, reviewed_at:now, ly_do_loai:'Thiếu cảnh "Cận bề mặt bóng gương" — quay lại giúp.', thanh_tien:0, ky_thanh_toan:null, created_at:now, uploads:mkUploads(tEpoxy,1) },
+    ];
   }
   return {
     version: SCHEMA_VERSION,
     users: [uMkt,uS1,uS2,uAdmin],
     groups, content_topics:topics, cmt_suggestions:cmts,
     post_seedings: demoPosts, cmt_seedings: demoCmts,
-    pricing: { don_gia_post: P.don_gia_post, don_gia_cmt: P.don_gia_cmt, min_nhac_kingsmen: 6, min_usp: 2 },
+    filming_templates, project_filmings,
+    pricing: { don_gia_post: P.don_gia_post, don_gia_cmt: P.don_gia_cmt, don_gia_cong_trinh: P.don_gia_cong_trinh, min_nhac_kingsmen: 6, min_usp: 2 },
     payouts: [],
     audit: [],
   };
@@ -211,14 +266,74 @@ const API_BASE = (location.hostname==='localhost'||location.hostname==='127.0.0.
 
 function AppProvider({children}){
   const [db, setDb] = useState(null);
-  const [token, setToken] = useState(()=> localStorage.getItem(TOKEN_KEY) || null);
-  const [loading, setLoading] = useState(!!localStorage.getItem(TOKEN_KEY));
+  const [token, setToken] = useState(()=> DEMO ? 'demo' : (localStorage.getItem(TOKEN_KEY) || null));
+  const [loading, setLoading] = useState(()=> DEMO ? false : !!localStorage.getItem(TOKEN_KEY));
   const [toast, setToast] = useState(null);
   const notify = (msg, type='ok') => { setToast({msg,type}); setTimeout(()=>setToast(null), 2800); };
 
   const me = db ? db.me : null;
   const meId = me ? me.id : null;
 
+  /* ============ DEMO: chạy offline bằng dữ liệu trong bộ nhớ ============ */
+  const store = useRef(null);
+  if(DEMO && !store.current) store.current = seedDB();
+  const meRef = useRef(null);
+  const commit = () => setDb(meRef.current ? { ...store.current, me: meRef.current } : null);
+
+  if(DEMO){
+    const S = store.current;
+    const now = () => nowISO();
+    const upsertList = (name, obj, prefix) => {
+      const arr = S[name];
+      if(obj.id){ const i=arr.findIndex(x=>x.id===obj.id); if(i>=0) arr[i]={...arr[i],...obj, updated_at:now()}; }
+      else arr.push({...obj, id:uid(prefix), updated_at:now()});
+      commit(); return true;
+    };
+    const delList = (name, id) => { S[name]=S[name].filter(x=>x.id!==id); commit(); return true; };
+    const patchTpl = (id, fn) => { const i=S.filming_templates.findIndex(t=>t.id===id); if(i>=0) S.filming_templates[i]=fn(S.filming_templates[i]); commit(); return true; };
+
+    const demoApi = {
+      db, me, meId, notify, loading, token,
+      login: async (email, password) => {
+        const u = S.users.find(x=>x.email.toLowerCase()===(email||'').trim().toLowerCase());
+        if(!u) return { ok:false, msg:'Email chưa đăng ký' };
+        if(u.password!==password) return { ok:false, msg:'Sai mật khẩu' };
+        if(!u.active) return { ok:false, msg:'Tài khoản đang bị khoá — liên hệ Marketing' };
+        meRef.current = {...u}; commit(); return { ok:true };
+      },
+      logout: async () => { meRef.current=null; commit(); },
+      refresh: () => commit(),
+      audit: ()=>{},
+      updateProfile: async patch => { const i=S.users.findIndex(u=>u.id===meRef.current.id); S.users[i]={...S.users[i],...patch}; meRef.current={...S.users[i]}; commit(); return true; },
+      upsertGroup: g => upsertList('groups', g, 'g'),
+      deleteGroup: id => delList('groups', id),
+      upsertTopic: t => upsertList('content_topics', t, 't'),
+      deleteTopic: id => delList('content_topics', id),
+      upsertCmt: c => upsertList('cmt_suggestions', c, 'c'),
+      deleteCmt: id => delList('cmt_suggestions', id),
+      createUser: async u => { if(S.users.some(x=>x.email.toLowerCase()===u.email.toLowerCase())) { notify('Email đã tồn tại','err'); return false; } S.users.push({...u, id:uid('u'), created_at:now()}); commit(); return true; },
+      updateUser: async (id, patch) => { const i=S.users.findIndex(u=>u.id===id); if(i>=0){ S.users[i]={...S.users[i],...patch}; if(meRef.current.id===id) meRef.current={...S.users[i]}; } commit(); return true; },
+      deleteUser: async id => delList('users', id),
+      setPricing: async p => { S.pricing={...S.pricing,...p}; commit(); return true; },
+      createPost: async p => { S.post_seedings.unshift({ id:uid('p'), topic_id:p.topic_id||null, sales_id:meRef.current.id, group_id:p.group_id||null, link_bai:(p.link_bai||'').trim(), react:Number(p.react)||0, so_cmt_seeding:Number(p.so_cmt_seeding)||0, so_cmt_tu_nhien:Number(p.so_cmt_tu_nhien)||0, trang_thai:p.submit?ST.CHO_DUYET:ST.NHAP, reviewed_by:null, reviewed_at:null, ly_do_loai:'', thanh_tien:0, ky_thanh_toan:null, created_at:now() }); commit(); return true; },
+      reviewPost: async (id, result, reason) => { const p=S.post_seedings.find(x=>x.id===id); if(!p) return false; if(result===ST.DAT){ p.trang_thai=ST.DAT; p.thanh_tien=Number(S.pricing.don_gia_post)||0; p.reviewed_by=meRef.current.ho_ten; p.reviewed_at=now(); p.ky_thanh_toan=kyOf(); p.ly_do_loai=''; } else { p.trang_thai=ST.KHONG_DAT; p.thanh_tien=0; p.reviewed_by=meRef.current.ho_ten; p.reviewed_at=now(); p.ly_do_loai=reason||''; } commit(); return true; },
+      createCmtSeed: async c => { S.cmt_seedings.unshift({ id:uid('c'), loai:c.loai, post_seeding_id:c.post_seeding_id||null, post_link:(c.post_link||'').trim(), suggestion_id:c.suggestion_id||null, sales_id:meRef.current.id, so_cmt_seeding:Number(c.so_cmt_seeding)||0, react:Number(c.react)||0, so_cmt_tu_nhien:Number(c.so_cmt_tu_nhien)||0, trang_thai:c.submit?ST.CHO_DUYET:ST.NHAP, reviewed_by:null, reviewed_at:null, ly_do_loai:'', thanh_tien:0, ky_thanh_toan:null, created_at:now(), proofs:(c.proofs||[]).map(img=>({id:uid('img'),image_url:img,uploaded_at:now()})) }); commit(); return true; },
+      reviewCmtSeed: async (id, result, reason) => { const c=S.cmt_seedings.find(x=>x.id===id); if(!c) return false; if(result===ST.DAT){ c.trang_thai=ST.DAT; c.thanh_tien=(Number(c.so_cmt_seeding)||0)*(Number(S.pricing.don_gia_cmt)||0); c.reviewed_by=meRef.current.ho_ten; c.reviewed_at=now(); c.ky_thanh_toan=kyOf(); c.ly_do_loai=''; } else { c.trang_thai=ST.KHONG_DAT; c.thanh_tien=0; c.reviewed_by=meRef.current.ho_ten; c.reviewed_at=now(); c.ly_do_loai=reason||''; } commit(); return true; },
+      markPaid: async (sales_id, ky) => { const hit=x=>x.sales_id===sales_id && x.trang_thai===ST.DAT && (!ky || (x.ky_thanh_toan||kyOf(x.created_at))===ky); S.post_seedings.forEach(p=>{ if(hit(p)) p.trang_thai=ST.DA_CHI; }); S.cmt_seedings.forEach(c=>{ if(hit(c)) c.trang_thai=ST.DA_CHI; }); S.project_filmings.forEach(f=>{ if(hit(f)) f.trang_thai=ST.DA_CHI; }); commit(); return true; },
+      // ---- QUAY CÔNG TRÌNH ----
+      upsertFilmTemplate: async t => { if(t.id) return patchTpl(t.id, x=>({...x, ten:t.ten, he_san_pham:t.he_san_pham, active:t.active!==false})); S.filming_templates.push({ id:uid('tpl'), ten:t.ten, he_san_pham:t.he_san_pham, active:true, phases:[] }); commit(); return true; },
+      deleteFilmTemplate: async id => delList('filming_templates', id),
+      upsertFilmPhase: async (templateId, phase) => patchTpl(templateId, t=> phase.id ? {...t, phases:t.phases.map(ph=>ph.id===phase.id?{...ph, ten:phase.ten}:ph)} : {...t, phases:[...t.phases, {id:uid('ph'), ten:phase.ten, thu_tu:t.phases.length+1, shots:[]}]}),
+      deleteFilmPhase: async (templateId, phaseId) => patchTpl(templateId, t=>({...t, phases:t.phases.filter(ph=>ph.id!==phaseId)})),
+      upsertFilmShot: async (templateId, phaseId, shot) => patchTpl(templateId, t=>({...t, phases:t.phases.map(ph=> ph.id!==phaseId?ph:{...ph, shots: shot.id ? ph.shots.map(s=>s.id===shot.id?{...s,...shot}:s) : [...ph.shots, {...shot, id:uid('sh'), thu_tu:ph.shots.length+1}]})})),
+      deleteFilmShot: async (templateId, phaseId, shotId) => patchTpl(templateId, t=>({...t, phases:t.phases.map(ph=>ph.id!==phaseId?ph:{...ph, shots:ph.shots.filter(s=>s.id!==shotId)})})),
+      createFilming: async proj => { S.project_filmings.unshift({ id:uid('pf'), sales_id:meRef.current.id, template_id:proj.template_id, ten_cong_trinh:proj.ten_cong_trinh, khu_vuc:proj.khu_vuc||'', ngay_quay:proj.ngay_quay||now(), trang_thai:ST.CHO_DUYET, reviewed_by:null, reviewed_at:null, ly_do_loai:'', thanh_tien:0, ky_thanh_toan:null, created_at:now(), uploads:proj.uploads||[] }); commit(); return true; },
+      reviewFilming: async (id, result, reason) => { const f=S.project_filmings.find(x=>x.id===id); if(!f) return false; if(result===ST.DAT){ f.trang_thai=ST.DAT; f.thanh_tien=Number(S.pricing.don_gia_cong_trinh)||0; f.reviewed_by=meRef.current.ho_ten; f.reviewed_at=now(); f.ky_thanh_toan=kyOf(); f.ly_do_loai=''; } else { f.trang_thai=ST.KHONG_DAT; f.thanh_tien=0; f.reviewed_by=meRef.current.ho_ten; f.reviewed_at=now(); f.ly_do_loai=reason||''; } commit(); return true; },
+    };
+    return <AppCtx.Provider value={demoApi}>{children}{toast && <Toast toast={toast}/>}</AppCtx.Provider>;
+  }
+
+  /* ============ BACKEND: API Worker + D1 ============ */
   const call = async (path, opts) => {
     opts = opts || {};
     const res = await fetch(API_BASE+'/api'+path, {
@@ -231,8 +346,8 @@ function AppProvider({children}){
     return data;
   };
 
-  // nạp dữ liệu khi có token (mở lại trang vẫn giữ đăng nhập)
   useEffect(()=>{
+    if(DEMO) return;
     let alive=true;
     if(!token){ setDb(null); setLoading(false); return; }
     setLoading(true);
@@ -254,7 +369,6 @@ function AppProvider({children}){
     localStorage.removeItem(TOKEN_KEY); setToken(null); setDb(null);
   };
 
-  // mọi thao tác ghi: gọi API → server trả {db} mới → cập nhật; lỗi thì báo toast
   const mut = async (path, opts) => {
     try{ const r = await call(path, opts); if(r && r.db) setDb(r.db); return true; }
     catch(e){ notify(e.message,'err'); return false; }
@@ -264,27 +378,32 @@ function AppProvider({children}){
     db, me, meId, notify, loading, token,
     login, logout,
     refresh: () => call('/bootstrap').then(r=>setDb(r.db)).catch(()=>{}),
-    audit: ()=>{}, // server tự ghi nhật ký
+    audit: ()=>{},
     updateProfile: patch => mut('/me', {method:'PATCH', body:patch}),
-    // thư viện
     upsertGroup: g => mut(g.id?`/groups/${g.id}`:'/groups', {method:g.id?'PATCH':'POST', body:g}),
     deleteGroup: id => mut(`/groups/${id}`, {method:'DELETE'}),
     upsertTopic: t => mut(t.id?`/topics/${t.id}`:'/topics', {method:t.id?'PATCH':'POST', body:t}),
     deleteTopic: id => mut(`/topics/${id}`, {method:'DELETE'}),
     upsertCmt: c => mut(c.id?`/cmtsug/${c.id}`:'/cmtsug', {method:c.id?'PATCH':'POST', body:c}),
     deleteCmt: id => mut(`/cmtsug/${id}`, {method:'DELETE'}),
-    // tài khoản
     createUser: u => mut('/users', {method:'POST', body:u}),
     updateUser: (id, patch) => mut(`/users/${id}`, {method:'PATCH', body:patch}),
     deleteUser: id => mut(`/users/${id}`, {method:'DELETE'}),
-    // đơn giá
     setPricing: p => mut('/pricing', {method:'PATCH', body:p}),
-    // seeding
     createPost: p => mut('/posts', {method:'POST', body:p}),
     reviewPost: (id, result, reason) => mut(`/posts/${id}/review`, {method:'POST', body:{result, reason}}),
     createCmtSeed: c => mut('/cmtseed', {method:'POST', body:c}),
     reviewCmtSeed: (id, result, reason) => mut(`/cmtseed/${id}/review`, {method:'POST', body:{result, reason}}),
     markPaid: (sales_id, ky) => mut('/markpaid', {method:'POST', body:{sales_id, ky}}),
+    // QUAY CÔNG TRÌNH (route Worker sẽ bổ sung khi tích hợp backend)
+    upsertFilmTemplate: t => mut(t.id?`/filming/templates/${t.id}`:'/filming/templates', {method:t.id?'PATCH':'POST', body:t}),
+    deleteFilmTemplate: id => mut(`/filming/templates/${id}`, {method:'DELETE'}),
+    upsertFilmPhase: (templateId, phase) => mut(phase.id?`/filming/phases/${phase.id}`:'/filming/phases', {method:phase.id?'PATCH':'POST', body:{...phase, template_id:templateId}}),
+    deleteFilmPhase: (templateId, phaseId) => mut(`/filming/phases/${phaseId}`, {method:'DELETE'}),
+    upsertFilmShot: (templateId, phaseId, shot) => mut(shot.id?`/filming/shots/${shot.id}`:'/filming/shots', {method:shot.id?'PATCH':'POST', body:{...shot, phase_id:phaseId}}),
+    deleteFilmShot: (templateId, phaseId, shotId) => mut(`/filming/shots/${shotId}`, {method:'DELETE'}),
+    createFilming: proj => mut('/filming/projects', {method:'POST', body:proj}),
+    reviewFilming: (id, result, reason) => mut(`/filming/projects/${id}/review`, {method:'POST', body:{result, reason}}),
   };
   return <AppCtx.Provider value={api}>
     {children}
@@ -404,6 +523,14 @@ function Login(){
         onKeyDown={e=>e.key==='Enter'&&doLogin()}/></Field>
       <Btn variant="gold" className="w-full mt-1" onClick={doLogin} disabled={busy}>{busy?'Đang đăng nhập…':'Đăng nhập →'}</Btn>
 
+      {DEMO && <div className="mt-4 pt-3 border-t">
+        <div className="text-[11px] text-amber-600 text-center mb-2">⚡ BẢN PREVIEW — bấm để vào nhanh (mật khẩu demo: 123456)</div>
+        <div className="grid grid-cols-3 gap-1.5">
+          {[['mkt@kingsmen.vn','Marketing'],['sale1@kingsmen.vn','Sales'],['admin@kingsmen.vn','Kế toán']].map(([em,lb])=>
+            <button key={em} onClick={()=>login(em,'123456')} className="text-xs bg-slate-100 hover:bg-gold hover:text-white text-slate-600 rounded-lg py-2 transition">{lb}</button>)}
+        </div>
+      </div>}
+
       <p className="text-[11px] text-slate-400 text-center mt-3">Chưa có tài khoản? Liên hệ <b className="text-gold-dark">Marketing</b> để được cấp email & mật khẩu.</p>
     </div>
   </div>;
@@ -417,11 +544,13 @@ const NAV = {
     {key:'home', label:'Trang chủ', icon:'🏠'},
     {key:'new_post', label:'Tạo POST', icon:'📝'},
     {key:'new_cmt', label:'Tạo CMT', icon:'💬'},
+    {key:'filming', label:'Quay CT', icon:'🎥'},
     {key:'income', label:'Thu nhập', icon:'💰'},
   ],
   [ROLES.MARKETING]: [
     {key:'dash', label:'Dashboard', icon:'📊'},
     {key:'library', label:'Thư viện', icon:'📚'},
+    {key:'filming', label:'Quay CT', icon:'🎬'},
     {key:'queue', label:'Nghiệm thu', icon:'✅'},
     {key:'users', label:'Tài khoản', icon:'👥'},
     {key:'pay_report', label:'Thanh toán', icon:'📄'},
@@ -429,6 +558,7 @@ const NAV = {
   [ROLES.ADMIN]: [
     {key:'users', label:'Người dùng', icon:'👥'},
     {key:'library', label:'Thư viện', icon:'📚'},
+    {key:'filming', label:'Quay CT', icon:'🎬'},
     {key:'pricing', label:'Đơn giá', icon:'⚙️'},
     {key:'payroll', label:'Bảng lương', icon:'🧾'},
     {key:'audit', label:'Nhật ký', icon:'🕑'},
@@ -467,7 +597,8 @@ function Shell(){
   // badge số việc chờ duyệt cho Marketing
   const pendingCount = db.post_seedings.filter(p=>p.trang_thai===ST.CHO_DUYET).length
                      + db.cmt_seedings.filter(c=>c.trang_thai===ST.CHO_DUYET).length;
-  const badgeFor = (k) => k==='queue' ? pendingCount : 0;
+  const pendingFilming = (db.project_filmings||[]).filter(f=>f.trang_thai===ST.CHO_DUYET).length;
+  const badgeFor = (k) => k==='queue' ? pendingCount : (k==='filming' && me.vai_tro===ROLES.MARKETING) ? pendingFilming : 0;
 
   const render = () => {
     switch(page){
@@ -475,6 +606,7 @@ function Shell(){
       case 'new_post': return <SalesNewPost go={setPage}/>;
       case 'new_cmt': return <SalesNewCmt go={setPage}/>;
       case 'income': return <SalesIncome/>;
+      case 'filming': return me.vai_tro===ROLES.SALES ? <SalesFilming/> : me.vai_tro===ROLES.MARKETING ? <MktFilming/> : <AdminFilming/>;
       case 'dash': return <MktDashboard/>;
       case 'library': return <Library/>;
       case 'queue': return <MktQueue/>;
@@ -864,14 +996,16 @@ function SalesNewCmt({go}){
    12. SALES — THU NHẬP CỦA TÔI
 ============================================================ */
 function SalesIncome(){
-  const { db } = useApp();
+  const { db, meId } = useApp();
   const { posts, cmts } = useMyItems();
   const [ky, setKy] = useState('');
   const kyList = [...new Set([...posts,...cmts].map(x=>kyOf(x.created_at)))].sort().reverse();
 
+  const filmings = (db.project_filmings||[]).filter(f=>f.sales_id===meId);
   const rows = [
     ...posts.map(p=>({ ...p, kind:'POST', label:db.content_topics.find(t=>t.id===p.topic_id)?.chu_de||'POST', link:p.link_bai })),
     ...cmts.map(c=>({ ...c, kind:CMT_LOAI_LABEL[c.loai], label:CMT_LOAI_LABEL[c.loai], link:c.post_link })),
+    ...filmings.map(f=>({ ...f, kind:'QUAY', label:f.ten_cong_trinh, link:null })),
   ].filter(r=>!ky || kyOf(r.created_at)===ky).sort((a,b)=>(b.created_at||'').localeCompare(a.created_at||''));
 
   const dat = rows.filter(r=>r.trang_thai===ST.DAT).reduce((s,r)=>s+r.thanh_tien,0);
@@ -1484,18 +1618,19 @@ function AdminPricing(){
   const { db, setPricing, notify, audit } = useApp();
   const [f, setF] = useState(db.pricing);
   useEffect(()=>setF(db.pricing),[db.pricing]);
-  const save = async () => { const ok = await setPricing({don_gia_post:Number(f.don_gia_post)||0,don_gia_cmt:Number(f.don_gia_cmt)||0,min_nhac_kingsmen:Number(f.min_nhac_kingsmen)||0,min_usp:Number(f.min_usp)||0}); if(ok) notify('Đã lưu đơn giá'); };
+  const save = async () => { const ok = await setPricing({don_gia_post:Number(f.don_gia_post)||0,don_gia_cmt:Number(f.don_gia_cmt)||0,don_gia_cong_trinh:Number(f.don_gia_cong_trinh)||0,min_nhac_kingsmen:Number(f.min_nhac_kingsmen)||0,min_usp:Number(f.min_usp)||0}); if(ok) notify('Đã lưu đơn giá'); };
   return <div className="space-y-4 max-w-lg">
     <h2 className="text-lg font-bold text-ink">⚙️ Đơn giá & cấu hình</h2>
     <div className="bg-white rounded-2xl border border-slate-100 p-4">
       <div className="grid grid-cols-2 gap-3">
         <Field label="Đơn giá / POST đạt" hint="VNĐ mỗi post"><Input type="number" className="no-spin" value={f.don_gia_post} onChange={e=>setF({...f,don_gia_post:e.target.value})}/></Field>
         <Field label="Đơn giá / CMT" hint="VNĐ mỗi cmt seeding"><Input type="number" className="no-spin" value={f.don_gia_cmt} onChange={e=>setF({...f,don_gia_cmt:e.target.value})}/></Field>
+        <Field label="Đơn giá / Quay công trình" hint="VNĐ mỗi công trình đạt"><Input type="number" className="no-spin" value={f.don_gia_cong_trinh||0} onChange={e=>setF({...f,don_gia_cong_trinh:e.target.value})}/></Field>
         <Field label="Min nhắc Kingsmen" hint="chuẩn chất lượng cụm"><Input type="number" className="no-spin" value={f.min_nhac_kingsmen} onChange={e=>setF({...f,min_nhac_kingsmen:e.target.value})}/></Field>
         <Field label="Min USP" hint="số USP tối thiểu"><Input type="number" className="no-spin" value={f.min_usp} onChange={e=>setF({...f,min_usp:e.target.value})}/></Field>
       </div>
       <div className="bg-slate-50 rounded-xl p-3 text-xs text-slate-500 mb-3">
-        Công thức nghiệm thu: <b>POST</b> = đơn giá post · <b>CMT</b> = số cmt × đơn giá cmt. Áp dụng tự động khi Marketing bấm "Đạt".
+        Công thức nghiệm thu: <b>POST</b> = đơn giá post · <b>CMT</b> = số cmt × đơn giá cmt · <b>QUAY</b> = đơn giá công trình. Áp dụng tự động khi Marketing bấm "Đạt".
       </div>
       <Btn variant="gold" onClick={save}>Lưu đơn giá</Btn>
     </div>
@@ -1514,24 +1649,26 @@ function AdminPayroll(){
 
   const flt = x => (x.trang_thai===ST.DAT||x.trang_thai===ST.DA_CHI) && (!ky || (x.ky_thanh_toan||kyOf(x.created_at))===ky);
 
+  const filmings = (db.project_filmings||[]).map(f=>({...f}));
   // gom theo sales
   const bySales = {};
-  db.users.filter(u=>u.vai_tro===ROLES.SALES).forEach(u=>{ bySales[u.id]={u, postDat:0,tienPost:0,cmtDat:0,tienCmt:0,daChi:0,conLai:0}; });
+  db.users.filter(u=>u.vai_tro===ROLES.SALES).forEach(u=>{ bySales[u.id]={u, postDat:0,tienPost:0,cmtDat:0,tienCmt:0,quayDat:0,tienQuay:0,daChi:0,conLai:0}; });
   posts.filter(flt).forEach(p=>{ const r=bySales[p.sales_id]; if(!r)return; r.postDat++; r.tienPost+=p.thanh_tien; if(p.trang_thai===ST.DA_CHI)r.daChi+=p.thanh_tien; else r.conLai+=p.thanh_tien; });
   cmts.filter(flt).forEach(c=>{ const r=bySales[c.sales_id]; if(!r)return; r.cmtDat++; r.tienCmt+=c.thanh_tien; if(c.trang_thai===ST.DA_CHI)r.daChi+=c.thanh_tien; else r.conLai+=c.thanh_tien; });
-  const rows = Object.values(bySales).filter(r=>r.postDat||r.cmtDat);
+  filmings.filter(flt).forEach(f=>{ const r=bySales[f.sales_id]; if(!r)return; r.quayDat++; r.tienQuay+=f.thanh_tien; if(f.trang_thai===ST.DA_CHI)r.daChi+=f.thanh_tien; else r.conLai+=f.thanh_tien; });
+  const rows = Object.values(bySales).filter(r=>r.postDat||r.cmtDat||r.quayDat);
 
   const markPaid = async (salesId) => {
     if(!confirm('Đánh dấu ĐÃ CHI tất cả item Đạt của Sales này trong kỳ '+(ky||'tất cả')+'?')) return;
     if(await apiMarkPaid(salesId, ky||null)) notify('Đã đánh dấu Đã chi');
   };
   const exportPayroll = () => {
-    const r=[['Sales','Post đạt','Tiền post','Cmt đạt','Tiền cmt','Tổng phải trả','Đã chi','Còn lại']];
-    rows.forEach(x=>r.push([x.u.ho_ten,x.postDat,x.tienPost,x.cmtDat,x.tienCmt,x.tienPost+x.tienCmt,x.daChi,x.conLai]));
+    const r=[['Sales','Post đạt','Tiền post','Cmt đạt','Tiền cmt','Quay đạt','Tiền quay','Tổng phải trả','Đã chi','Còn lại']];
+    rows.forEach(x=>r.push([x.u.ho_ten,x.postDat,x.tienPost,x.cmtDat,x.tienCmt,x.quayDat,x.tienQuay,x.tienPost+x.tienCmt+x.tienQuay,x.daChi,x.conLai]));
     download('BANG_LUONG_'+(ky||'ALL')+'.csv', toCSV(r));
   };
 
-  const tong = rows.reduce((a,x)=>({tt:a.tt+x.tienPost+x.tienCmt, chi:a.chi+x.daChi, con:a.con+x.conLai}),{tt:0,chi:0,con:0});
+  const tong = rows.reduce((a,x)=>({tt:a.tt+x.tienPost+x.tienCmt+x.tienQuay, chi:a.chi+x.daChi, con:a.con+x.conLai}),{tt:0,chi:0,con:0});
 
   return <div className="space-y-4">
     <div className="flex items-center justify-between flex-wrap gap-2">
@@ -1549,13 +1686,14 @@ function AdminPayroll(){
     <div className="bg-white rounded-2xl border border-slate-100 overflow-auto">
       <table className="w-full text-sm min-w-[720px]">
         <thead className="bg-slate-50 text-xs text-slate-500 text-left"><tr>
-          <Th>Sales</Th><Th r>Post đạt</Th><Th r>Tiền post</Th><Th r>Cmt đạt</Th><Th r>Tiền cmt</Th><Th r>Tổng phải trả</Th><Th r>Đã chi</Th><Th r>Còn lại</Th><Th></Th>
+          <Th>Sales</Th><Th r>Post đạt</Th><Th r>Tiền post</Th><Th r>Cmt đạt</Th><Th r>Tiền cmt</Th><Th r>Quay đạt</Th><Th r>Tiền quay</Th><Th r>Tổng phải trả</Th><Th r>Đã chi</Th><Th r>Còn lại</Th><Th></Th>
         </tr></thead>
         <tbody className="divide-y">
-          {rows.length===0 ? <tr><td colSpan="9"><Empty>Chưa có item đạt trong kỳ.</Empty></td></tr> :
+          {rows.length===0 ? <tr><td colSpan="11"><Empty>Chưa có item đạt trong kỳ.</Empty></td></tr> :
             rows.map(x=><tr key={x.u.id} className="hover:bg-slate-50">
               <Td>{x.u.ho_ten}</Td><Td r>{x.postDat}</Td><Td r>{fmtVND(x.tienPost)}</Td><Td r>{x.cmtDat}</Td><Td r>{fmtVND(x.tienCmt)}</Td>
-              <Td r><b>{fmtVND(x.tienPost+x.tienCmt)}</b></Td><Td r className="text-indigo-600">{fmtVND(x.daChi)}</Td><Td r className="text-rose-600">{fmtVND(x.conLai)}</Td>
+              <Td r>{x.quayDat}</Td><Td r className="text-gold-dark font-medium">{fmtVND(x.tienQuay)}</Td>
+              <Td r><b>{fmtVND(x.tienPost+x.tienCmt+x.tienQuay)}</b></Td><Td r className="text-indigo-600">{fmtVND(x.daChi)}</Td><Td r className="text-rose-600">{fmtVND(x.conLai)}</Td>
               <Td>{x.conLai>0 && <Btn variant="soft" onClick={()=>markPaid(x.u.id)}>Đã chi</Btn>}</Td>
             </tr>)}
         </tbody>
@@ -1580,6 +1718,374 @@ function AdminAudit(){
     </div>
   </div>;
 }
+
+/* ============================================================
+   20b. MODULE — QUAY SOURCE CÔNG TRÌNH
+============================================================ */
+function ReqBadge(){ return <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-rose-50 text-rose-600 font-medium">Bắt buộc</span>; }
+function HeChip({he}){ return <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-gold/10 text-gold-dark font-medium">{he}</span>; }
+function isImgUrl(u){ return /\.(png|jpe?g|gif|webp|bmp)(\?|#|$)/i.test(u||''); }
+function MediaChip({m, onDel}){
+  const isImg = m.media_type===MEDIA_TYPE.IMAGE;
+  return <a href={m.media_url||'#'} target="_blank" className="relative group border border-slate-200 rounded-lg overflow-hidden bg-slate-50 w-20 h-20 shrink-0 flex flex-col items-center justify-center text-[10px] text-slate-500 p-1 text-center hover:border-gold">
+    <span className="text-xl">{isImg?'🖼️':'🎬'}</span><span className="truncate w-full">{isImg?'Ảnh':'Video'}</span>
+    {onDel && <button onClick={e=>{e.preventDefault();onDel();}} className="absolute top-0.5 right-0.5 bg-black/60 text-white rounded-full w-5 h-5 text-xs leading-none opacity-0 group-hover:opacity-100">×</button>}
+  </a>;
+}
+function SampleModal({shot, onClose}){
+  return <Modal open={!!shot} onClose={onClose} title={"Mẫu: "+(shot?.ten||'')}>
+    {shot && <div className="space-y-2">
+      <div className="text-sm text-slate-600">{shot.mo_ta||<span className="italic text-slate-400">Marketing chưa nhập mô tả</span>}</div>
+      <div className="aspect-video bg-slate-900 rounded-xl flex items-center justify-center text-white/70 text-sm">🎬 Video/ảnh mẫu</div>
+      {shot.source_mau_url && <a href={shot.source_mau_url} target="_blank" className="text-xs text-blue-500 underline break-all">{shot.source_mau_url}</a>}
+    </div>}
+  </Modal>;
+}
+
+/* ---- SALES ---- */
+function SalesFilming(){
+  const { db, meId } = useApp();
+  const templates = (db.filming_templates||[]);
+  const mine = (db.project_filmings||[]).filter(p=>p.sales_id===meId);
+  const [creating, setCreating] = useState(false);
+  const [view, setView] = useState(null);
+
+  const tienDat = mine.filter(p=>p.trang_thai===ST.DAT).reduce((s,p)=>s+p.thanh_tien,0);
+  const cho = mine.filter(p=>p.trang_thai===ST.CHO_DUYET).length;
+  const loai = mine.filter(p=>p.trang_thai===ST.KHONG_DAT).length;
+
+  if(creating) return <FilmingEditor onDone={()=>setCreating(false)}/>;
+  if(view) return <FilmingDetailSales project={view} template={filmFindTpl(db,view.template_id)} onBack={()=>setView(null)}/>;
+
+  return <div className="space-y-4">
+    <div className="flex items-center justify-between flex-wrap gap-2">
+      <h2 className="text-lg font-bold text-ink">🎥 Quay công trình</h2>
+      <Btn variant="gold" onClick={()=>setCreating(true)}>＋ Quay công trình mới</Btn>
+    </div>
+    <div className="grid grid-cols-3 gap-3">
+      <Stat label="Chờ duyệt" value={cho} color="text-amber-600"/>
+      <Stat label="Bị loại" value={loai} color="text-rose-600"/>
+      <Stat label="Tiền quay đã Đạt" value={fmtVND(tienDat)} color="text-emerald-600" sub="chưa chi"/>
+    </div>
+    {mine.some(p=>p.trang_thai===ST.KHONG_DAT) && <div className="bg-rose-50 border border-rose-200 rounded-2xl p-3">
+      <div className="text-sm font-semibold text-rose-700 mb-1">⚠️ Công trình bị loại — cần quay bổ sung</div>
+      {mine.filter(p=>p.trang_thai===ST.KHONG_DAT).map(p=><div key={p.id} className="text-xs text-slate-600 bg-white rounded-lg p-2 mt-1">{p.ten_cong_trinh}: <span className="text-rose-500">{p.ly_do_loai}</span></div>)}
+    </div>}
+    <div className="bg-white rounded-2xl border border-slate-100 divide-y">
+      {mine.length===0 && <Empty>Chưa có công trình nào. Bấm "Quay công trình mới".</Empty>}
+      {mine.map(p=>{ const tpl=filmFindTpl(db,p.template_id); const total=filmCountShots(tpl), have=uniqShots(p.uploads).length;
+        return <button key={p.id} onClick={()=>setView(p)} className="w-full text-left p-3 flex items-center justify-between gap-2 hover:bg-slate-50">
+          <div className="min-w-0">
+            <div className="text-sm font-medium text-ink truncate">{p.ten_cong_trinh}</div>
+            <div className="text-[11px] text-slate-400">{tpl?.he_san_pham} · {p.khu_vuc} · {fmtDay(p.ngay_quay)} · {have}/{total} cảnh</div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            {(p.trang_thai===ST.DAT||p.trang_thai===ST.DA_CHI) && <span className="text-xs font-semibold text-emerald-600">{fmtVND(p.thanh_tien)}</span>}
+            <Badge st={p.trang_thai}/>
+          </div>
+        </button>;
+      })}
+    </div>
+  </div>;
+}
+function FilmingEditor({onDone}){
+  const { db, createFilming, notify } = useApp();
+  const templates = (db.filming_templates||[]).filter(t=>t.active!==false);
+  const [templateId, setTemplateId] = useState(templates[0]?.id);
+  const template = filmFindTpl(db, templateId);
+  const [ten, setTen] = useState('');
+  const [khu, setKhu] = useState('');
+  const [ngay, setNgay] = useState(new Date().toISOString().slice(0,10));
+  const [uploads, setUploads] = useState([]);
+  const [sampleShot, setSampleShot] = useState(null);
+  const [busy, setBusy] = useState(false);
+
+  const changeTemplate = (id)=>{ if(id!==templateId && uploads.length && !confirm('Đổi quy trình sẽ xoá link đã thêm. Tiếp tục?')) return; setTemplateId(id); setUploads([]); };
+  const addLink = (shot, type) => { const url = prompt('Dán link '+(type===MEDIA_TYPE.IMAGE?'ảnh':'video')+' trên Google Drive (đặt quyền "Ai có link đều xem"):'); if(!url||!url.trim()) return; setUploads(prev=>[...prev, {id:uid('up'), shot_id:shot.id, media_type: type||(isImgUrl(url)?MEDIA_TYPE.IMAGE:MEDIA_TYPE.VIDEO), media_url:url.trim()}]); };
+  const delMedia = (id)=> setUploads(prev=>prev.filter(u=>u.id!==id));
+  const mediaOf = (shot)=> uploads.filter(u=>u.shot_id===shot.id);
+
+  const reqShots = template ? filmReqShots(template) : [];
+  const reqDone = reqShots.filter(s=>mediaOf(s).length>0).length;
+  const canSubmit = ten.trim() && template && reqDone===reqShots.length;
+
+  const submit = async () => {
+    if(!canSubmit) return notify('Nhập tên & đủ link cảnh bắt buộc','warn');
+    setBusy(true);
+    const ok = await createFilming({ template_id:templateId, ten_cong_trinh:ten.trim(), khu_vuc:khu.trim(), ngay_quay:ngay, uploads });
+    setBusy(false);
+    if(ok){ notify('Đã gửi nghiệm thu'); onDone(); }
+  };
+
+  return <div className="space-y-4">
+    <button onClick={onDone} className="text-sm text-slate-500 hover:text-ink">← Quay lại danh sách</button>
+    <h2 className="text-lg font-bold text-ink">Quay công trình mới</h2>
+    <div className="bg-white rounded-2xl border border-slate-100 p-4">
+      <Field label="Quy trình áp dụng (theo hệ sản phẩm)" required hint="Marketing thiết lập sẵn checklist cho từng hệ sản phẩm">
+        <Select value={templateId} onChange={e=>changeTemplate(e.target.value)}>{templates.map(t=><option key={t.id} value={t.id}>{t.he_san_pham} — {t.ten}</option>)}</Select>
+      </Field>
+      <Field label="Tên công trình" required><Input value={ten} onChange={e=>setTen(e.target.value)} placeholder="VD: Nhà phố Q7 - anh Minh"/></Field>
+      <div className="grid grid-cols-2 gap-2">
+        <Field label="Khu vực"><Input value={khu} onChange={e=>setKhu(e.target.value)} placeholder="Quận / Tỉnh"/></Field>
+        <Field label="Ngày quay"><Input type="date" value={ngay} onChange={e=>setNgay(e.target.value)}/></Field>
+      </div>
+    </div>
+    <div className="bg-gold/10 border border-gold/30 rounded-xl px-3 py-2 text-xs text-gold-dark flex items-center justify-between">
+      <span>Đã đủ link cảnh <b>bắt buộc</b>: {reqDone}/{reqShots.length}</span>
+      {canSubmit ? <span className="text-emerald-600 font-semibold">✓ Đủ điều kiện gửi</span> : <span>Cần đủ mới gửi được</span>}
+    </div>
+    {template && template.phases.map(ph=><div key={ph.id} className="bg-white rounded-2xl border border-slate-100 overflow-hidden">
+      <div className="px-4 py-2 bg-slate-50 border-b text-sm font-semibold text-ink">{ph.thu_tu}. {ph.ten}</div>
+      <div className="divide-y">
+        {ph.shots.filter(s=>s.active).map(shot=>{ const md=mediaOf(shot);
+          return <div key={shot.id} className="p-3">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0"><div className="flex items-center gap-2 flex-wrap"><span className="text-sm font-medium text-ink">{shot.ten}</span>{shot.bat_buoc&&<ReqBadge/>}{md.length>0&&<span className="text-[10px] text-emerald-600">✓ {md.length} link</span>}</div>
+                <div className="text-xs text-slate-500 mt-0.5">{shot.mo_ta}</div></div>
+              <button onClick={()=>setSampleShot(shot)} className="text-xs text-blue-500 hover:underline shrink-0">👁 Xem mẫu</button>
+            </div>
+            <div className="flex items-center gap-2 mt-2 flex-wrap">
+              {md.map(m=><MediaChip key={m.id} m={m} onDel={()=>delMedia(m.id)}/>)}
+              <button onClick={()=>addLink(shot, MEDIA_TYPE.VIDEO)} className="px-2.5 py-1.5 rounded-lg text-xs bg-slate-100 text-slate-600 hover:bg-slate-200">🔗 Link video</button>
+              <button onClick={()=>addLink(shot, MEDIA_TYPE.IMAGE)} className="px-2.5 py-1.5 rounded-lg text-xs bg-slate-100 text-slate-600 hover:bg-slate-200">🖼️ Link ảnh</button>
+            </div>
+          </div>;
+        })}
+      </div>
+    </div>)}
+    <div className="sticky bottom-0 bg-slate-100 pt-2 pb-1 flex gap-2">
+      <Btn variant="ghost" onClick={onDone}>Huỷ</Btn>
+      <Btn variant="gold" className="flex-1" onClick={submit} disabled={!canSubmit||busy}>{busy?'Đang gửi…':'Gửi nghiệm thu'}</Btn>
+    </div>
+    <SampleModal shot={sampleShot} onClose={()=>setSampleShot(null)}/>
+  </div>;
+}
+function FilmingDetailSales({project, template, onBack}){
+  const [sampleShot, setSampleShot] = useState(null);
+  const mediaOf = (shot)=> (project.uploads||[]).filter(u=>u.shot_id===shot.id);
+  return <div className="space-y-4">
+    <button onClick={onBack} className="text-sm text-slate-500 hover:text-ink">← Quay lại danh sách</button>
+    <div className="flex items-center justify-between gap-2 flex-wrap">
+      <div><h2 className="text-lg font-bold text-ink">{project.ten_cong_trinh}</h2>
+        <div className="text-xs text-slate-400 flex items-center gap-2"><HeChip he={template?.he_san_pham}/> {project.khu_vuc} · {fmtDay(project.ngay_quay)}</div></div>
+      <div className="flex items-center gap-2">{(project.trang_thai===ST.DAT||project.trang_thai===ST.DA_CHI)&&<span className="text-sm font-semibold text-emerald-600">{fmtVND(project.thanh_tien)}</span>}<Badge st={project.trang_thai}/></div>
+    </div>
+    {project.ly_do_loai && <div className="bg-rose-50 border border-rose-200 rounded-xl p-3 text-sm text-rose-700">Lý do loại: {project.ly_do_loai}</div>}
+    {template && template.phases.map(ph=><div key={ph.id} className="bg-white rounded-2xl border border-slate-100 overflow-hidden">
+      <div className="px-4 py-2 bg-slate-50 border-b text-sm font-semibold text-ink">{ph.thu_tu}. {ph.ten}</div>
+      <div className="divide-y">
+        {ph.shots.filter(s=>s.active).map(shot=>{ const md=mediaOf(shot); return <div key={shot.id} className="p-3">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 flex-wrap"><span className="text-sm font-medium text-ink">{shot.ten}</span>{shot.bat_buoc&&<ReqBadge/>}{md.length>0?<span className="text-[10px] text-emerald-600">✓ {md.length} link</span>:<span className="text-[10px] text-slate-400">chưa có</span>}</div>
+            <button onClick={()=>setSampleShot(shot)} className="text-xs text-blue-500 hover:underline shrink-0">👁 Xem mẫu</button>
+          </div>
+          {md.length>0 && <div className="flex gap-2 mt-2 flex-wrap">{md.map(m=><MediaChip key={m.id} m={m}/>)}</div>}
+        </div>; })}
+      </div>
+    </div>)}
+    <SampleModal shot={sampleShot} onClose={()=>setSampleShot(null)}/>
+  </div>;
+}
+
+/* ---- MARKETING ---- */
+function MktFilming(){
+  const { db } = useApp();
+  const pending = (db.project_filmings||[]).filter(p=>p.trang_thai===ST.CHO_DUYET).length;
+  const [tab, setTab] = useState('library');
+  return <div className="space-y-4">
+    <h2 className="text-lg font-bold text-ink">🎬 Quay công trình</h2>
+    <Tabs active={tab} onChange={setTab} tabs={[{key:'library', label:'Quy trình quay', count:(db.filming_templates||[]).length},{key:'queue', label:'Nghiệm thu', count:pending}]}/>
+    {tab==='library' && <FilmLibrary/>}
+    {tab==='queue' && <FilmQueue/>}
+  </div>;
+}
+function FilmLibrary(){
+  const { db, upsertFilmTemplate, deleteFilmTemplate, upsertFilmPhase, deleteFilmPhase, upsertFilmShot, deleteFilmShot, notify } = useApp();
+  const templates = (db.filming_templates||[]);
+  const [selId, setSelId] = useState(templates[0]?.id);
+  useEffect(()=>{ if(!templates.find(t=>t.id===selId)) setSelId(templates[0]?.id); }, [db.filming_templates]);
+  const template = templates.find(t=>t.id===selId) || templates[0];
+  const [editShot, setEditShot] = useState(null);
+  const [editPhase, setEditPhase] = useState(null);
+  const [editTpl, setEditTpl] = useState(null);
+
+  const saveShot = (phaseId, shot) => { upsertFilmShot(template.id, phaseId, shot); setEditShot(null); };
+  const delShot = (phaseId, id) => { if(confirm('Xoá cảnh này?')) deleteFilmShot(template.id, phaseId, id); };
+  const savePhase = (phase) => { upsertFilmPhase(template.id, phase); setEditPhase(null); };
+  const saveTpl = (tpl) => { upsertFilmTemplate(tpl); setEditTpl(null); };
+  const delTpl = () => { if(templates.length<=1) return notify('Phải còn ít nhất 1 quy trình','warn'); if(confirm('Xoá cả quy trình "'+template.ten+'"?')) deleteFilmTemplate(template.id); };
+
+  if(!template) return <Empty>Chưa có quy trình. Bấm "Quy trình mới".</Empty>;
+  return <div className="space-y-3">
+    <div className="bg-white rounded-2xl border border-slate-100 p-4 space-y-3">
+      <div className="flex items-end gap-2 flex-wrap">
+        <label className="flex-1 min-w-[200px]"><div className="text-xs font-semibold text-slate-600 mb-1">Quy trình / hệ sản phẩm</div>
+          <Select value={selId} onChange={e=>setSelId(e.target.value)}>{templates.map(t=><option key={t.id} value={t.id}>{t.he_san_pham} — {t.ten}{t.active===false?' (ẩn)':''}</option>)}</Select></label>
+        <Btn variant="gold" onClick={()=>setEditTpl({ten:'',he_san_pham:''})}>＋ Quy trình mới</Btn>
+      </div>
+      <div className="flex items-center justify-between flex-wrap gap-2 pt-1">
+        <div className="flex items-center gap-2 flex-wrap"><HeChip he={template.he_san_pham}/><span className="font-semibold text-ink">{template.ten}</span>
+          <span className="text-[11px] text-slate-400">{filmCountShots(template)} cảnh · {filmReqShots(template).length} bắt buộc · {template.phases.length} giai đoạn</span></div>
+        <div className="flex gap-2"><button onClick={()=>setEditTpl(template)} className="text-xs text-blue-500 hover:underline">Sửa quy trình</button>
+          <button onClick={delTpl} className="text-xs text-rose-500 hover:underline">Xoá quy trình</button></div>
+      </div>
+    </div>
+    <div className="flex justify-end"><Btn variant="ghost" onClick={()=>setEditPhase({ten:''})}>＋ Thêm giai đoạn</Btn></div>
+    {template.phases.map(ph=><div key={ph.id} className="bg-white rounded-2xl border border-slate-100 overflow-hidden">
+      <div className="px-4 py-2 bg-slate-50 border-b flex items-center justify-between">
+        <span className="text-sm font-semibold text-ink">{ph.thu_tu}. {ph.ten}</span>
+        <div className="flex gap-2"><button onClick={()=>setEditPhase(ph)} className="text-xs text-blue-500 hover:underline">Sửa</button>
+          <button onClick={()=>{ if(confirm('Xoá giai đoạn này và các cảnh bên trong?')) deleteFilmPhase(template.id, ph.id); }} className="text-xs text-rose-500 hover:underline">Xoá</button>
+          <button onClick={()=>setEditShot({phaseId:ph.id, shot:{ten:'',mo_ta:'',source_mau_url:'',bat_buoc:true,active:true}})} className="text-xs text-gold-dark hover:underline">＋ Thêm cảnh</button></div>
+      </div>
+      <div className="divide-y">
+        {ph.shots.length===0 && <div className="p-3 text-xs text-slate-400">Chưa có cảnh nào.</div>}
+        {ph.shots.map(shot=><div key={shot.id} className={"p-3 flex items-start gap-2 "+(shot.active?'':'opacity-50')}>
+          <div className="flex-1 min-w-0"><div className="flex items-center gap-2 flex-wrap"><span className="text-sm font-medium text-ink">{shot.ten}</span>{shot.bat_buoc&&<ReqBadge/>}</div>
+            <div className="text-xs text-slate-500 mt-0.5 line-clamp-2">{shot.mo_ta||<span className="italic text-slate-300">chưa có mô tả</span>}</div>
+            {shot.source_mau_url && <a href={shot.source_mau_url} target="_blank" className="text-[11px] text-blue-500 underline">🔗 mẫu</a>}</div>
+          <div className="flex flex-col items-end gap-1 shrink-0">
+            <Toggle on={shot.active} onClick={()=>saveShot(ph.id, {...shot, active:!shot.active})}/>
+            <div className="flex gap-1"><button onClick={()=>setEditShot({phaseId:ph.id, shot})} className="text-xs text-blue-500 hover:underline">Sửa</button>
+              <button onClick={()=>delShot(ph.id, shot.id)} className="text-xs text-rose-500 hover:underline">Xoá</button></div>
+          </div>
+        </div>)}
+      </div>
+    </div>)}
+    <Modal open={!!editTpl} onClose={()=>setEditTpl(null)} title={(editTpl?.id?'Sửa ':'Thêm ')+'quy trình quay'}>{editTpl && <TemplateForm tpl={editTpl} onCancel={()=>setEditTpl(null)} onSave={saveTpl}/>}</Modal>
+    <Modal open={!!editShot} onClose={()=>setEditShot(null)} title={(editShot?.shot?.id?'Sửa ':'Thêm ')+'cảnh cần quay'}>{editShot && <ShotForm shot={editShot.shot} onCancel={()=>setEditShot(null)} onSave={s=>saveShot(editShot.phaseId, s)}/>}</Modal>
+    <Modal open={!!editPhase} onClose={()=>setEditPhase(null)} title={(editPhase?.id?'Sửa ':'Thêm ')+'giai đoạn'}>{editPhase && <PhaseForm phase={editPhase} onCancel={()=>setEditPhase(null)} onSave={savePhase}/>}</Modal>
+  </div>;
+}
+function TemplateForm({tpl, onCancel, onSave}){
+  const [ten,setTen]=useState(tpl.ten||''); const [he,setHe]=useState(tpl.he_san_pham||'');
+  return <>
+    <Field label="Hệ sản phẩm" required hint="VD: Keo chít mạch · Sơn Epoxy sàn · Terrazzo…"><Input value={he} onChange={e=>setHe(e.target.value)}/></Field>
+    <Field label="Tên quy trình" required><Input value={ten} onChange={e=>setTen(e.target.value)}/></Field>
+    <div className="flex gap-2"><Btn variant="ghost" onClick={onCancel}>Huỷ</Btn><Btn variant="gold" className="flex-1" onClick={()=>ten.trim()&&he.trim()&&onSave({...tpl, ten:ten.trim(), he_san_pham:he.trim()})}>Lưu</Btn></div>
+  </>;
+}
+function ShotForm({shot, onCancel, onSave}){
+  const [f,setF]=useState(shot); const set=(k,v)=>setF(p=>({...p,[k]:v}));
+  return <>
+    <Field label="Tên cảnh" required><Input value={f.ten} onChange={e=>set('ten',e.target.value)} placeholder="VD: Cận đường ron hoàn thiện"/></Field>
+    <Field label="Mô tả yêu cầu" hint="Sales đọc để quay đúng ý"><Textarea rows="3" value={f.mo_ta} onChange={e=>set('mo_ta',e.target.value)}/></Field>
+    <Field label="Link video/ảnh mẫu" hint="Google Drive / YouTube unlisted để Sales tham khảo"><Input value={f.source_mau_url} onChange={e=>set('source_mau_url',e.target.value)}/></Field>
+    <div className="mb-3 flex items-center justify-between p-3 rounded-xl border border-slate-200 bg-slate-50">
+      <div><div className="text-xs font-semibold text-slate-700">Bắt buộc</div><div className="text-[11px] text-slate-400">Sales phải quay cảnh này mới gửi được</div></div>
+      <button type="button" onClick={()=>set('bat_buoc',!f.bat_buoc)} className={"w-12 h-7 rounded-full transition relative "+(f.bat_buoc?'bg-gold':'bg-slate-300')}><span className={"absolute top-0.5 w-6 h-6 bg-white rounded-full shadow transition-all "+(f.bat_buoc?'left-[22px]':'left-0.5')}></span></button>
+    </div>
+    <div className="flex gap-2"><Btn variant="ghost" onClick={onCancel}>Huỷ</Btn><Btn variant="gold" className="flex-1" onClick={()=>f.ten.trim()&&onSave(f)}>Lưu</Btn></div>
+  </>;
+}
+function PhaseForm({phase, onCancel, onSave}){
+  const [ten,setTen]=useState(phase.ten||'');
+  return <>
+    <Field label="Tên giai đoạn" required><Input value={ten} onChange={e=>setTen(e.target.value)} placeholder="VD: Thi công"/></Field>
+    <div className="flex gap-2"><Btn variant="ghost" onClick={onCancel}>Huỷ</Btn><Btn variant="gold" className="flex-1" onClick={()=>ten.trim()&&onSave({...phase, ten:ten.trim()})}>Lưu</Btn></div>
+  </>;
+}
+function FilmQueue(){
+  const { db } = useApp();
+  const [review, setReview] = useState(null);
+  const pend = (db.project_filmings||[]).filter(p=>p.trang_thai===ST.CHO_DUYET);
+  if(review) return <FilmReview project={review} template={filmFindTpl(db, review.template_id)} onBack={()=>setReview(null)}/>;
+  return <div className="space-y-3">
+    {pend.length===0 && <Empty>Không có công trình nào chờ duyệt 🎉</Empty>}
+    {pend.map(p=>{ const tpl=filmFindTpl(db,p.template_id); const total=filmCountShots(tpl), have=uniqShots(p.uploads).length; const sales=db.users.find(u=>u.id===p.sales_id);
+      return <button key={p.id} onClick={()=>setReview(p)} className="w-full text-left bg-white rounded-2xl border border-slate-100 p-3 flex items-center justify-between gap-2 hover:bg-slate-50">
+        <div className="min-w-0"><div className="text-sm font-medium text-ink truncate">{p.ten_cong_trinh}</div>
+          <div className="text-[11px] text-slate-400">{sales?.ho_ten||'—'} · {tpl?.he_san_pham} · {p.khu_vuc} · {have}/{total} cảnh</div></div>
+        <div className="flex items-center gap-2 shrink-0"><Badge st={p.trang_thai}/><span className="text-gold-dark text-sm">›</span></div>
+      </button>; })}
+  </div>;
+}
+function FilmReview({project, template, onBack}){
+  const { db, reviewFilming, notify } = useApp();
+  const [checks, setChecks] = useState({});
+  const [reason, setReason] = useState('');
+  const [rejecting, setRejecting] = useState(false);
+  const [sampleShot, setSampleShot] = useState(null);
+  const sales = db.users.find(u=>u.id===project.sales_id);
+  const mediaOf = (shot)=> (project.uploads||[]).filter(u=>u.shot_id===shot.id);
+  const reqShots = template ? filmReqShots(template) : [];
+  const allReqOk = reqShots.every(s=>checks[s.id]);
+  const gia = Number(db.pricing.don_gia_cong_trinh)||0;
+
+  const doDat = async ()=>{ if(await reviewFilming(project.id, ST.DAT)){ notify('✅ Đã duyệt Đạt — tự tính tiền'); onBack(); } };
+  const doReject = async ()=>{ if(!reason.trim()) return notify('Nhập lý do','warn'); if(await reviewFilming(project.id, ST.KHONG_DAT, reason.trim())){ notify('Đã trả về Sales quay lại'); onBack(); } };
+
+  return <div className="space-y-4">
+    <button onClick={onBack} className="text-sm text-slate-500 hover:text-ink">← Hàng chờ nghiệm thu</button>
+    <div><h3 className="text-lg font-bold text-ink">{project.ten_cong_trinh}</h3>
+      <div className="text-xs text-slate-400 flex items-center gap-2"><HeChip he={template?.he_san_pham}/> {sales?.ho_ten||'—'} · {project.khu_vuc} · {fmtDay(project.ngay_quay)}</div></div>
+    <div className="bg-gold/10 border border-gold/30 rounded-xl px-3 py-2 text-xs text-gold-dark">Tick <b>đạt</b> từng cảnh (đối chiếu link Sales nộp với mẫu). Đủ cảnh bắt buộc đạt → duyệt <b>Đạt</b> = {fmtVND(gia)}.</div>
+    {template && template.phases.map(ph=><div key={ph.id} className="bg-white rounded-2xl border border-slate-100 overflow-hidden">
+      <div className="px-4 py-2 bg-slate-50 border-b text-sm font-semibold text-ink">{ph.thu_tu}. {ph.ten}</div>
+      <div className="divide-y">
+        {ph.shots.filter(s=>s.active).map(shot=>{ const md=mediaOf(shot); const ok=checks[shot.id];
+          return <div key={shot.id} className="p-3">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0"><div className="flex items-center gap-2 flex-wrap"><span className="text-sm font-medium text-ink">{shot.ten}</span>{shot.bat_buoc&&<ReqBadge/>}</div>
+                <div className="text-xs text-slate-500 mt-0.5">{shot.mo_ta}</div></div>
+              <button onClick={()=>setSampleShot(shot)} className="text-xs text-blue-500 hover:underline shrink-0">👁 Mẫu</button>
+            </div>
+            <div className="flex items-center gap-2 mt-2 flex-wrap">
+              {md.length>0 ? md.map(m=><MediaChip key={m.id} m={m}/>) : <span className="text-xs text-rose-400">✗ Sales chưa nộp link</span>}
+              <button onClick={()=>setChecks(c=>({...c,[shot.id]:!c[shot.id]}))} className={"ml-auto px-3 py-1.5 rounded-lg text-xs font-medium "+(ok?'bg-emerald-100 text-emerald-700':'bg-slate-100 text-slate-500 hover:bg-slate-200')}>{ok?'✓ Đạt':'Chấm đạt'}</button>
+            </div>
+          </div>; })}
+      </div>
+    </div>)}
+    <div className="sticky bottom-0 bg-slate-100 pt-2 pb-1 space-y-2">
+      {rejecting && <Textarea rows="2" value={reason} onChange={e=>setReason(e.target.value)} placeholder="Lý do không đạt — nêu rõ cảnh nào cần quay lại…"/>}
+      <div className="flex gap-2">
+        {!rejecting
+          ? <><Btn variant="danger" onClick={()=>setRejecting(true)}>Không đạt</Btn><Btn variant="ok" className="flex-1" disabled={!allReqOk} onClick={doDat}>{allReqOk?'Duyệt Đạt · '+fmtVND(gia):'Cần đủ cảnh bắt buộc'}</Btn></>
+          : <><Btn variant="ghost" onClick={()=>setRejecting(false)}>Huỷ</Btn><Btn variant="danger" className="flex-1" disabled={!reason.trim()} onClick={doReject}>Xác nhận Không đạt</Btn></>}
+      </div>
+    </div>
+    <SampleModal shot={sampleShot} onClose={()=>setSampleShot(null)}/>
+  </div>;
+}
+
+/* ---- ADMIN / KẾ TOÁN ---- */
+function AdminFilming(){
+  const { db } = useApp();
+  const [from,setFrom]=useState(''); const [to,setTo]=useState(''); const [fSt,setFSt]=useState('');
+  const projects = (db.project_filmings||[]).filter(p=> inRangeOrAllG(p.created_at,from,to) && (!fSt||p.trang_thai===fSt)).sort(byDateDesc);
+  const exportCSV = () => {
+    const r=[['Ngày','Sales','Công trình','Hệ SP','Khu vực','Cảnh đạt','Tổng cảnh','Trạng thái','Thành tiền']];
+    projects.forEach(p=>{ const t=filmFindTpl(db,p.template_id); const sales=db.users.find(u=>u.id===p.sales_id); r.push([fmtDay(p.created_at),sales?.ho_ten||'—',p.ten_cong_trinh,t?.he_san_pham,p.khu_vuc,uniqShots(p.uploads).length,filmCountShots(t),ST_LABEL[p.trang_thai],p.thanh_tien]); });
+    download('QUAY_CONG_TRINH.csv', toCSV(r));
+  };
+  return <div className="space-y-4">
+    <div className="flex items-center justify-between flex-wrap gap-2">
+      <h2 className="text-lg font-bold text-ink">🎬 Báo cáo Quay công trình</h2>
+      <Btn variant="gold" onClick={exportCSV}>⬆ Xuất Excel</Btn>
+    </div>
+    <div className="bg-white rounded-2xl border border-slate-100 p-3 flex flex-wrap gap-2 items-center">
+      <DateRange from={from} to={to} setFrom={setFrom} setTo={setTo}/>
+      <Select value={fSt} onChange={e=>setFSt(e.target.value)} className="max-w-[160px]"><option value="">Mọi trạng thái</option>{Object.keys(ST_LABEL).map(s=><option key={s} value={s}>{ST_LABEL[s]}</option>)}</Select>
+    </div>
+    <div className="bg-white rounded-2xl border border-slate-100 overflow-auto">
+      <table className="w-full text-sm min-w-[760px]">
+        <thead className="bg-slate-50 text-xs text-slate-500 text-left"><tr><Th>Ngày</Th><Th>Sales</Th><Th>Công trình</Th><Th>Hệ SP / Quy trình</Th><Th>Khu vực</Th><Th r>Cảnh đạt</Th><Th>Trạng thái</Th><Th r>Thành tiền</Th></tr></thead>
+        <tbody className="divide-y">
+          {projects.length===0 ? <tr><td colSpan="8"><Empty>Không có dữ liệu.</Empty></td></tr> :
+            projects.map(p=>{ const t=filmFindTpl(db,p.template_id); const sales=db.users.find(u=>u.id===p.sales_id);
+              return <tr key={p.id} className="hover:bg-slate-50">
+                <Td>{fmtDay(p.created_at)}</Td><Td>{sales?.ho_ten||'—'}</Td><Td>{p.ten_cong_trinh}</Td>
+                <Td><span className="text-gold-dark text-xs font-medium">{t?.he_san_pham}</span></Td><Td>{p.khu_vuc}</Td>
+                <Td r>{uniqShots(p.uploads).length}/{filmCountShots(t)}</Td><Td><Badge st={p.trang_thai}/></Td><Td r><b>{p.thanh_tien?fmtVND(p.thanh_tien):'—'}</b></Td>
+              </tr>; })}
+        </tbody>
+      </table>
+    </div>
+    <div className="text-[11px] text-slate-400">Việc chi tiền gộp chung ở <b>Bảng lương</b> (cột <b className="text-gold-dark">Tiền quay</b>).</div>
+  </div>;
+}
+function inRangeOrAllG(iso,f,t){ if(!f&&!t) return true; return inRange(iso,f,t); }
 
 /* ============================================================
    21. ROOT
