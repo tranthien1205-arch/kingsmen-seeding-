@@ -522,6 +522,14 @@ export default {
       catch(e){ return json({error:'Lỗi server: '+(e.message||e)}, 500); }
     }
     // web tĩnh
-    return env.ASSETS.fetch(request);
+    const res = await env.ASSETS.fetch(request);
+    // HTML luôn revalidate để người dùng nhận bản deploy mới ngay (tránh kẹt cache cũ)
+    const ct = res.headers.get('content-type') || '';
+    if(ct.includes('text/html')){
+      const h = new Headers(res.headers);
+      h.set('Cache-Control', 'no-cache, must-revalidate');
+      return new Response(res.body, { status:res.status, statusText:res.statusText, headers:h });
+    }
+    return res;
   }
 };
