@@ -265,6 +265,7 @@ function AppProvider({children}){
     login, logout,
     refresh: () => call('/bootstrap').then(r=>setDb(r.db)).catch(()=>{}),
     audit: ()=>{}, // server tự ghi nhật ký
+    updateProfile: patch => mut('/me', {method:'PATCH', body:patch}),
     // thư viện
     upsertGroup: g => mut(g.id?`/groups/${g.id}`:'/groups', {method:g.id?'PATCH':'POST', body:g}),
     deleteGroup: id => mut(`/groups/${id}`, {method:'DELETE'}),
@@ -434,10 +435,34 @@ const NAV = {
   ],
 };
 
+function ProfileModal({open, onClose}){
+  const { me, updateProfile, notify } = useApp();
+  const [name, setName] = useState('');
+  const [pw, setPw] = useState('');
+  const [busy, setBusy] = useState(false);
+  useEffect(()=>{ if(open){ setName(me.ho_ten); setPw(''); } }, [open]);
+  if(!open) return null;
+  const save = async () => {
+    if(!name.trim()) return notify('Nhập tên hiển thị','warn');
+    setBusy(true);
+    const ok = await updateProfile({ ho_ten:name.trim(), ...(pw?{password:pw}:{}) });
+    setBusy(false);
+    if(ok){ notify('Đã cập nhật hồ sơ'); onClose(); }
+  };
+  return <Modal open={open} onClose={onClose} title="Hồ sơ của tôi">
+    <Field label="Tên hiển thị" required hint="Tên này hiện trong báo cáo & hàng chờ duyệt">
+      <Input value={name} onChange={e=>setName(e.target.value)}/></Field>
+    <Field label="Email (đăng nhập)"><Input value={me.email} disabled/></Field>
+    <Field label="Đổi mật khẩu" hint="Để trống nếu không đổi">
+      <Input type="password" value={pw} onChange={e=>setPw(e.target.value)} placeholder="Mật khẩu mới"/></Field>
+    <div className="flex gap-2 mt-2"><Btn variant="ghost" onClick={onClose}>Huỷ</Btn><Btn variant="gold" className="flex-1" onClick={save} disabled={busy}>{busy?'Đang lưu…':'Lưu'}</Btn></div>
+  </Modal>;
+}
 function Shell(){
   const { me, logout, db } = useApp();
   const nav = NAV[me.vai_tro];
   const [page, setPage] = useState(nav[0].key);
+  const [profileOpen, setProfileOpen] = useState(false);
 
   // badge số việc chờ duyệt cho Marketing
   const pendingCount = db.post_seedings.filter(p=>p.trang_thai===ST.CHO_DUYET).length
@@ -477,8 +502,10 @@ function Shell(){
         </button>)}
       </nav>
       <div className="p-3 border-t border-white/10">
-        <div className="text-sm font-medium">{me.ho_ten}</div>
-        <div className="text-[11px] text-white/50 mb-2">{ROLE_LABEL[me.vai_tro]}</div>
+        <button onClick={()=>setProfileOpen(true)} className="text-left w-full group mb-2">
+          <div className="text-sm font-medium group-hover:text-gold">{me.ho_ten} <span className="text-white/40 text-xs">✏️</span></div>
+          <div className="text-[11px] text-white/50">{ROLE_LABEL[me.vai_tro]}</div>
+        </button>
         <button onClick={logout} className="text-xs text-white/60 hover:text-white">↩ Đăng xuất</button>
       </div>
     </aside>
@@ -490,7 +517,10 @@ function Shell(){
           <div className="w-8 h-8 rounded-lg bg-gold flex items-center justify-center font-black text-sm">K</div>
           <span className="font-semibold text-sm">{nav.find(n=>n.key===page)?.label}</span>
         </div>
-        <button onClick={logout} className="text-xs text-white/70">{me.ho_ten} ↩</button>
+        <div className="flex items-center gap-3">
+          <button onClick={()=>setProfileOpen(true)} className="text-xs text-white/80">{me.ho_ten} ✏️</button>
+          <button onClick={logout} className="text-xs text-white/60">↩</button>
+        </div>
       </header>
 
       <main className="p-3 sm:p-6 max-w-5xl mx-auto">{render()}</main>
@@ -506,6 +536,8 @@ function Shell(){
         <span className="mt-0.5">{n.label}</span>
       </button>)}
     </nav>
+
+    <ProfileModal open={profileOpen} onClose={()=>setProfileOpen(false)}/>
   </div>;
 }
 

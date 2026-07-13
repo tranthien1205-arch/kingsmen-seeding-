@@ -161,6 +161,21 @@ async function handleApi(request, env){
   if(path==='/logout' && method==='POST'){ await env.DB.prepare(`DELETE FROM sessions WHERE token=?`).bind(sess.token).run(); return json({ok:true}); }
   if(path==='/bootstrap' && method==='GET'){ return json({ db: await bootstrap(env, me) }); }
 
+  // --- hồ sơ cá nhân: bất kỳ ai cũng tự đổi TÊN HIỂN THỊ (và mật khẩu) của chính mình ---
+  if(path==='/me' && method==='PATCH'){
+    const name = (body.ho_ten||'').trim();
+    if(!name) return json({error:'Nhập tên hiển thị'},400);
+    if(body.password){
+      const pass = await hashPassword(body.password);
+      await env.DB.prepare(`UPDATE users SET ho_ten=?, password=? WHERE id=?`).bind(name, pass, me.id).run();
+    } else {
+      await env.DB.prepare(`UPDATE users SET ho_ten=? WHERE id=?`).bind(name, me.id).run();
+    }
+    await logAudit(env, me, 'đổi hồ sơ cá nhân','user',me.id);
+    const meNew = await env.DB.prepare(`SELECT * FROM users WHERE id=?`).bind(me.id).first();
+    return json({ db: await bootstrap(env, meNew) });
+  }
+
   // ===== TÀI KHOẢN (staff) =====
   if(path==='/users' && method==='POST'){
     if(!isStaff(me)) return json({error:'Không có quyền'},403);
