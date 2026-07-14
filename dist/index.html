@@ -228,6 +228,11 @@ function seedDB(){
     groups, content_topics:topics, cmt_suggestions:cmts,
     post_seedings: demoPosts, cmt_seedings: demoCmts,
     filming_templates, project_filmings,
+    guides: {
+      post: { noi_dung:'Hướng dẫn tạo POST seeding:\n1. Chọn tuyến nội dung (ưu tiên ⭐).\n2. Chọn group, đăng theo brief.\n3. Dán link, nhập react & cmt.\n4. Gửi nghiệm thu.', video_url:'https://youtu.be/dQw4w9WgXcQ' },
+      cmt:  { noi_dung:'Hướng dẫn tạo CMT seeding:\n1. Chọn post cần cmt.\n2. Dùng gợi ý nội dung.\n3. Up ảnh bằng chứng.\n4. Gửi nghiệm thu.', video_url:'' },
+      filming: { noi_dung:'Hướng dẫn quay công trình:\n1. Chọn quy trình theo hệ sản phẩm.\n2. Xem video mẫu từng cảnh → quay.\n3. Upload từng cảnh, đủ bắt buộc thì gửi.', video_url:'' },
+    },
     pricing: { don_gia_post: P.don_gia_post, don_gia_cmt: P.don_gia_cmt, don_gia_cong_trinh: P.don_gia_cong_trinh, don_gia_canh: P.don_gia_canh, min_nhac_kingsmen: 6, min_usp: 2 },
     payouts: [],
     audit: [],
@@ -354,6 +359,7 @@ function AppProvider({children}){
       uploadMedia: (file, onProgress) => new Promise((resolve,reject)=>{ if(onProgress){ onProgress(40,4,10); setTimeout(()=>onProgress(100,10,10),150); } const r=new FileReader(); r.onload=e=>resolve({ media_url:e.target.result, media_type: (file.type||'').startsWith('image/')?MEDIA_TYPE.IMAGE:MEDIA_TYPE.VIDEO }); r.onerror=()=>reject(new Error('Đọc file lỗi')); r.readAsDataURL(file); }),
       deleteUpload: async (id) => { S.project_filmings.forEach(p=>{ p.uploads=(p.uploads||[]).filter(u=>u.id!==id); }); commit(); return true; },
       cleanupMedia: async () => { const cut=new Date(Date.now()-30*864e5).toISOString(); let n=0; S.project_filmings.forEach(p=>{ if(!['DAT','DA_CHI'].includes(p.trang_thai) && (p.created_at||'')<cut){ n+=(p.uploads||[]).length; p.uploads=[]; } }); commit(); notify('Đã dọn media của '+n+' nguồn hết hạn'); return true; },
+      upsertGuide: async (key, g) => { S.guides=S.guides||{}; S.guides[key]={ noi_dung:g.noi_dung||'', video_url:g.video_url||'' }; commit(); return true; },
     };
     return <AppCtx.Provider value={demoApi}>{children}{toast && <Toast toast={toast}/>}</AppCtx.Provider>;
   }
@@ -432,6 +438,7 @@ function AppProvider({children}){
     reviewFilming: (id, result, reason, ratings) => mut(`/filming/projects/${id}/review`, {method:'POST', body:{result, reason, ratings}}),
     deleteUpload: id => mut(`/filming/uploads/${id}`, {method:'DELETE'}),
     cleanupMedia: () => mut('/filming/cleanup', {method:'POST'}),
+    upsertGuide: (key, g) => mut('/guides/'+key, {method:'PATCH', body:g}),
     uploadMedia: (file, onProgress) => new Promise((resolve,reject)=>{
       const xhr = new XMLHttpRequest();
       xhr.open('POST', API_BASE+'/api/filming/upload?type='+encodeURIComponent(file.type||''));
@@ -876,7 +883,7 @@ function SalesNewPost({go}){
   };
 
   return <div className="space-y-4 max-w-2xl">
-    <h2 className="font-display text-lg font-bold text-ink">📝 Tạo POST seeding</h2>
+    <div className="flex items-center justify-between gap-2 flex-wrap"><h2 className="font-display text-lg font-bold text-ink">📝 Tạo POST seeding</h2><GuideBtn guideKey="post" title="Tạo POST seeding"/></div>
 
     {(priTopics>0 || priGroups>0) && <div className="bg-brand/10 border border-brand/30 rounded-2xl p-3 text-xs text-brand-dark">
       ⭐ Marketing đang ưu tiên {priTopics>0 && <b>{priTopics} tuyến nội dung</b>}{priTopics>0&&priGroups>0 && ' và '}{priGroups>0 && <b>{priGroups} group</b>} — hãy seeding các mục ⭐ trước.
@@ -1020,7 +1027,7 @@ function SalesNewCmt({go}){
   };
 
   return <div className="space-y-4 max-w-2xl">
-    <h2 className="font-display text-lg font-bold text-ink">💬 Tạo CMT seeding</h2>
+    <div className="flex items-center justify-between gap-2 flex-wrap"><h2 className="font-display text-lg font-bold text-ink">💬 Tạo CMT seeding</h2><GuideBtn guideKey="cmt" title="Tạo CMT seeding"/></div>
     <Tabs active={tab} onChange={t=>{setTab(t); reset();}} tabs={[
       {key:CMT_LOAI.MINH_DANG, label:'Mình đăng'}, {key:CMT_LOAI.DAO, label:'Dạo'} ]}/>
 
@@ -1238,17 +1245,20 @@ function Library(){
     {key:'groups', label:'Group mục tiêu', count:db.groups.length},
     {key:'topics', label:'Chủ đề/Nội dung POST', count:db.content_topics.length},
     {key:'cmts', label:'Gợi ý CMT', count:db.cmt_suggestions.length},
+    {key:'guides', label:'Hướng dẫn'},
   ];
 
   return <div className="space-y-4">
     <div className="flex items-center justify-between flex-wrap gap-2">
       <h2 className="font-display text-lg font-bold text-ink">📚 Thư viện chung</h2>
-      <div className="flex gap-2">
+      {tab!=='guides' && <div className="flex gap-2">
         <ImportBtn tab={tab}/>
         <Btn variant="brand" onClick={()=>openNew(tab)}>＋ Thêm</Btn>
-      </div>
+      </div>}
     </div>
     <Tabs active={tab} onChange={setTab} tabs={tabs}/>
+
+    {tab==='guides' && <GuideEditor/>}
 
     {tab==='groups' && <LibList items={sortPri(db.groups)} render={g=>(<>
       <div className="flex items-center gap-2">
@@ -1807,6 +1817,30 @@ function HeChip({he}){ return <span className="text-[10px] px-1.5 py-0.5 rounded
 function isImgUrl(u){ return /\.(png|jpe?g|gif|webp|bmp)(\?|#|$)/i.test(u||''); }
 // media là link Drive (không nhúng trực tiếp) khi không phải file app (/media/ hoặc data:)
 const isAppMedia = (url)=> !!url && (url.startsWith('/media/') || url.startsWith('data:'));
+// nhúng video mẫu / hướng dẫn: YouTube · Google Drive · video app/mp4 · ảnh · link khác
+const ytId = (u)=>{ const m=/(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)([\w-]{6,})/.exec(u||''); return m?m[1]:null; };
+const driveId = (u)=>{ const m=/drive\.google\.com\/file\/d\/([\w-]+)/.exec(u||''); return m?m[1]:null; };
+function EmbedMedia({url, className='w-full h-full'}){
+  if(!url) return <div className={className+" flex items-center justify-center bg-slate-900 text-white/60 text-sm"}>Chưa có video/ảnh mẫu</div>;
+  const yt=ytId(url); if(yt) return <iframe src={"https://www.youtube.com/embed/"+yt} title="mẫu" className={className} allow="accelerometer; autoplay; encrypted-media; picture-in-picture" allowFullScreen frameBorder="0"/>;
+  const dv=driveId(url); if(dv) return <iframe src={"https://drive.google.com/file/d/"+dv+"/preview"} title="mẫu" className={className} allow="autoplay" allowFullScreen frameBorder="0"/>;
+  if(isAppMedia(url) || /\.(mp4|webm|mov|m4v)(\?|#|$)/i.test(url)) return <video src={url} controls playsInline preload="metadata" className={className+" bg-black object-contain"}/>;
+  if(/\.(png|jpe?g|gif|webp)(\?|#|$)/i.test(url) || url.startsWith('data:image')) return <img src={url} className={className+" object-contain bg-slate-900"}/>;
+  return <div className={className+" flex flex-col items-center justify-center bg-slate-900 text-white/70"}><span className="text-4xl">🔗</span><a href={url} target="_blank" className="text-xs underline mt-2">Mở link mẫu</a></div>;
+}
+// Nút + popup xem hướng dẫn (văn bản + video) theo khoá (post/cmt/filming)
+function GuideBtn({guideKey, title}){
+  const [open,setOpen]=useState(false);
+  const { db } = useApp();
+  const g = (db.guides||{})[guideKey] || {};
+  return <>
+    <button onClick={()=>setOpen(true)} className="text-xs font-semibold text-brand-dark bg-brand/10 hover:bg-brand/20 px-2.5 py-1.5 rounded-lg whitespace-nowrap">❔ Xem hướng dẫn</button>
+    <Modal open={open} onClose={()=>setOpen(false)} title={"Hướng dẫn · "+title} wide>
+      {g.video_url && <div className="rounded-xl overflow-hidden aspect-video bg-black mb-3"><EmbedMedia url={g.video_url}/></div>}
+      <div className="text-sm text-ink whitespace-pre-wrap leading-relaxed">{g.noi_dung || <span className="text-ink-muted italic">Marketing chưa soạn hướng dẫn cho mục này.</span>}</div>
+    </Modal>
+  </>;
+}
 const isDriveLink = (m)=> m.nguon==='LINK' || (/^https?:/i.test(m.media_url||'') && !isAppMedia(m.media_url));
 // URL để lấy khung hình đại diện của video (seek 0.1s → hiện frame làm thumbnail)
 const posterUrl = (m)=> (m.media_type!==MEDIA_TYPE.IMAGE && isAppMedia(m.media_url)) ? (m.media_url+'#t=0.1') : m.media_url;
@@ -1861,13 +1895,45 @@ const fmtMB = (b)=> (b>=1048576? (b/1048576).toFixed(1)+'MB' : Math.max(1,Math.r
 // map shot_id -> {ten, phase} từ tất cả quy trình
 function shotIndex(db){ const m={}; (db.filming_templates||[]).forEach(t=>t.phases.forEach(p=>p.shots.forEach(s=>{ m[s.id]={ten:s.ten, phase:p.ten, tpl:t.he_san_pham}; }))); return m; }
 function SampleModal({shot, onClose}){
-  return <Modal open={!!shot} onClose={onClose} title={"Mẫu: "+(shot?.ten||'')}>
+  return <Modal open={!!shot} onClose={onClose} title={"Mẫu: "+(shot?.ten||'')} wide>
     {shot && <div className="space-y-2">
-      <div className="text-sm text-slate-600">{shot.mo_ta||<span className="italic text-slate-400">Marketing chưa nhập mô tả</span>}</div>
-      <div className="aspect-video bg-slate-900 rounded-xl flex items-center justify-center text-white/70 text-sm">🎬 Video/ảnh mẫu</div>
-      {shot.source_mau_url && <a href={shot.source_mau_url} target="_blank" className="text-xs text-blue-500 underline break-all">{shot.source_mau_url}</a>}
+      <div className="rounded-xl overflow-hidden aspect-video bg-black"><EmbedMedia url={shot.source_mau_url}/></div>
+      <div className="text-sm text-slate-600 whitespace-pre-wrap">{shot.mo_ta||<span className="italic text-slate-400">Marketing chưa nhập mô tả</span>}</div>
     </div>}
   </Modal>;
+}
+
+// Marketing soạn hướng dẫn (văn bản + video) cho POST / CMT / QUAY
+function GuideEditor(){
+  const { db, upsertGuide, uploadMedia, notify } = useApp();
+  const KEYS = [['post','📝 Tạo POST'],['cmt','💬 Tạo CMT'],['filming','🎥 Quay công trình']];
+  const [sel, setSel] = useState('post');
+  const g = (db.guides||{})[sel] || {};
+  const [txt, setTxt] = useState(g.noi_dung||'');
+  const [vid, setVid] = useState(g.video_url||'');
+  const [busy, setBusy] = useState(false);
+  const vidRef = useRef(null);
+  useEffect(()=>{ const cur=(db.guides||{})[sel]||{}; setTxt(cur.noi_dung||''); setVid(cur.video_url||''); }, [sel, db.guides]);
+  const save = async ()=>{ if(await upsertGuide(sel, {noi_dung:txt, video_url:vid})) notify('Đã lưu hướng dẫn'); };
+  const onVid = async (e)=>{ const f=e.target.files&&e.target.files[0]; e.target.value=''; if(!f) return; if(f.size>100*1024*1024) return notify('File >100MB — dùng link YouTube/Drive','warn'); setBusy(true); try{ const r=await uploadMedia(f); setVid(r.media_url); notify('Đã tải video hướng dẫn'); }catch(err){ notify(err.message||'Lỗi','err'); } setBusy(false); };
+  return <div className="space-y-3">
+    <div className="flex gap-1 bg-slate-100 p-1 rounded-xl w-fit">
+      {KEYS.map(([k,l])=><button key={k} onClick={()=>setSel(k)} className={"px-3 py-1.5 rounded-lg text-sm font-semibold "+(sel===k?'bg-white shadow-card text-ink':'text-ink-muted')}>{l}</button>)}
+    </div>
+    <div className="bg-white rounded-2xl border border-line shadow-card p-4">
+      <Field label="Nội dung hướng dẫn (văn bản)" hint="Xuống dòng để tạo các bước. Sales sẽ thấy đúng định dạng này.">
+        <Textarea rows="6" value={txt} onChange={e=>setTxt(e.target.value)} placeholder="Nhập các bước hướng dẫn…"/></Field>
+      <Field label="Video hướng dẫn" hint="Dán link YouTube / Google Drive, hoặc tải video lên app.">
+        <Input value={vid} onChange={e=>setVid(e.target.value)} placeholder="https://youtu.be/… hoặc link Drive…"/>
+        <div className="flex items-center gap-2 mt-2">
+          <input ref={vidRef} type="file" accept="video/*" className="hidden" onChange={onVid}/>
+          <Btn variant="soft" onClick={()=>vidRef.current&&vidRef.current.click()} disabled={busy}>{busy?'⏳ Đang tải…':'📤 Tải video lên app'}</Btn>
+        </div>
+      </Field>
+      {vid && <div className="rounded-xl overflow-hidden aspect-video bg-black max-w-md mb-3"><EmbedMedia url={vid}/></div>}
+      <Btn variant="brand" onClick={save}>Lưu hướng dẫn</Btn>
+    </div>
+  </div>;
 }
 
 /* ---- SALES ---- */
@@ -1892,7 +1958,7 @@ function SalesFilming(){
 
   return <div className="space-y-4">
     <div className="flex items-center justify-between flex-wrap gap-2">
-      <h2 className="font-display text-lg font-bold text-ink">🎥 Quay công trình</h2>
+      <div className="flex items-center gap-2"><h2 className="font-display text-lg font-bold text-ink">🎥 Quay công trình</h2><GuideBtn guideKey="filming" title="Quay công trình"/></div>
       <Btn variant="brand" onClick={()=>setCreating(true)}>＋ Quay công trình mới</Btn>
     </div>
     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -2309,11 +2375,23 @@ function TemplateForm({tpl, onCancel, onSave}){
   </>;
 }
 function ShotForm({shot, onCancel, onSave}){
+  const { uploadMedia, notify } = useApp();
   const [f,setF]=useState(shot); const set=(k,v)=>setF(p=>({...p,[k]:v}));
+  const [busy,setBusy]=useState(false);
+  const sampleRef = useRef(null);
+  const onSample = async (e)=>{ const file=e.target.files&&e.target.files[0]; e.target.value=''; if(!file) return; if(file.size>100*1024*1024) return notify('File >100MB — dùng link YouTube/Drive','warn'); setBusy(true); try{ const r=await uploadMedia(file); set('source_mau_url', r.media_url); notify('Đã tải video mẫu lên app'); }catch(err){ notify(err.message||'Tải lên lỗi','err'); } setBusy(false); };
   return <>
     <Field label="Tên cảnh" required><Input value={f.ten} onChange={e=>set('ten',e.target.value)} placeholder="VD: Cận đường ron hoàn thiện"/></Field>
     <Field label="Mô tả yêu cầu" hint="Sales đọc để quay đúng ý"><Textarea rows="3" value={f.mo_ta} onChange={e=>set('mo_ta',e.target.value)}/></Field>
-    <Field label="Link video/ảnh mẫu" hint="Google Drive / YouTube unlisted để Sales tham khảo"><Input value={f.source_mau_url} onChange={e=>set('source_mau_url',e.target.value)}/></Field>
+    <Field label="Video/ảnh mẫu cho cảnh" hint="Dán link YouTube/Google Drive, hoặc tải video mẫu thẳng lên app. Sales bấm 'Xem mẫu' sẽ phát được.">
+      <Input value={f.source_mau_url} onChange={e=>set('source_mau_url',e.target.value)} placeholder="https://youtu.be/… hoặc link Drive…"/>
+      <div className="flex items-center gap-2 mt-2">
+        <input ref={sampleRef} type="file" accept="video/*,image/*" className="hidden" onChange={onSample}/>
+        <Btn variant="soft" onClick={()=>sampleRef.current&&sampleRef.current.click()} disabled={busy}>{busy?'⏳ Đang tải…':'📤 Tải video mẫu lên app'}</Btn>
+        {f.source_mau_url && <span className="text-[11px] text-emerald-600">✓ đã có mẫu</span>}
+      </div>
+      {f.source_mau_url && <div className="mt-2 rounded-lg overflow-hidden aspect-video bg-black max-w-xs"><EmbedMedia url={f.source_mau_url}/></div>}
+    </Field>
     <Field label="Đơn giá riêng cho cảnh (tuỳ chọn)" hint="Để trống = dùng đơn giá chung. Điền số để ghi đè giá riêng cho cảnh này."><Input type="number" className="no-spin" value={f.don_gia==null?'':f.don_gia} onChange={e=>set('don_gia', e.target.value===''?null:Number(e.target.value))} placeholder="đ / cảnh (theo giá chung nếu để trống)"/></Field>
     <div className="mb-3 flex items-center justify-between p-3 rounded-xl border border-slate-200 bg-slate-50">
       <div><div className="text-xs font-semibold text-slate-700">Bắt buộc</div><div className="text-[11px] text-slate-400">Sales phải quay cảnh này mới gửi được</div></div>

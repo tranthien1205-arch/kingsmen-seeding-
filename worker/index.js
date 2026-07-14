@@ -53,6 +53,7 @@ async function ensureSchema(env){
     `CREATE TABLE IF NOT EXISTS filming_shots (id TEXT PRIMARY KEY, phase_id TEXT, ten TEXT, mo_ta TEXT, source_mau_url TEXT, bat_buoc INTEGER DEFAULT 1, thu_tu INTEGER, active INTEGER DEFAULT 1, don_gia REAL)`,
     `CREATE TABLE IF NOT EXISTS project_filmings (id TEXT PRIMARY KEY, sales_id TEXT, template_id TEXT, ten_cong_trinh TEXT, khu_vuc TEXT, ngay_quay TEXT, trang_thai TEXT, reviewed_by TEXT, reviewed_at TEXT, ly_do_loai TEXT, thanh_tien REAL, ky_thanh_toan TEXT, created_at TEXT)`,
     `CREATE TABLE IF NOT EXISTS filming_uploads (id TEXT PRIMARY KEY, project_filming_id TEXT, shot_id TEXT, media_type TEXT, media_url TEXT, dat_item INTEGER, ghi_chu TEXT, uploaded_at TEXT)`,
+    `CREATE TABLE IF NOT EXISTS guides (key TEXT PRIMARY KEY, noi_dung TEXT, video_url TEXT, updated_at TEXT)`,
   ];
   await env.DB.batch(stmts.map(s=>env.DB.prepare(s)));
   // thêm cột đơn giá quay công trình cho DB cũ (bỏ qua nếu đã có)
@@ -89,6 +90,17 @@ async function ensureSchema(env){
   // seed quy trình quay khi chưa có (áp dụng cho cả DB đã tồn tại người dùng)
   const anyTpl = await env.DB.prepare(`SELECT id FROM filming_templates LIMIT 1`).first();
   if(!anyTpl) await seedFilming(env);
+
+  // seed hướng dẫn mặc định (POST/CMT/QUAY)
+  const guideSeed = [
+    ['post','Hướng dẫn tạo POST seeding:\n1. Chọn tuyến nội dung phù hợp (ưu tiên mục ⭐).\n2. Chọn group mục tiêu, đăng bài theo brief.\n3. Dán link bài, nhập số react & cmt.\n4. Gửi nghiệm thu để Marketing duyệt.',''],
+    ['cmt','Hướng dẫn tạo CMT seeding:\n1. Chọn post cần cmt (hoặc CMT dạo).\n2. Dùng gợi ý nội dung cmt cho tự nhiên.\n3. Up ảnh đã seeding làm bằng chứng.\n4. Nhập số cmt, gửi nghiệm thu.',''],
+    ['filming','Hướng dẫn quay công trình:\n1. Chọn quy trình theo hệ sản phẩm.\n2. Xem VIDEO MẪU từng cảnh → quay đúng yêu cầu.\n3. Upload/dán link từng cảnh, đủ cảnh bắt buộc thì Gửi nghiệm thu.',''],
+  ];
+  for(const [k,txt,vid] of guideSeed){
+    const ex = await env.DB.prepare(`SELECT key FROM guides WHERE key=?`).bind(k).first();
+    if(!ex) await env.DB.prepare(`INSERT INTO guides (key,noi_dung,video_url,updated_at) VALUES (?,?,?,?)`).bind(k,txt,vid,nowISO()).run();
+  }
 
   SCHEMA_READY = true;
 }
@@ -195,12 +207,14 @@ async function bootstrap(env, u){
   const project_filmings = pfRows.map(p=>({
     ...p, uploads: fups.filter(x=>x.project_filming_id===p.id).map(x=>({ id:x.id, shot_id:x.shot_id, media_type:x.media_type, media_url:x.media_url, uploaded_at:x.uploaded_at, dat_item:x.dat_item==null?null:uBool(x.dat_item) })),
   }));
+  const guides = {};
+  (await env.DB.prepare(`SELECT * FROM guides`).all()).results.forEach(g=>{ guides[g.key]={ noi_dung:g.noi_dung, video_url:g.video_url }; });
 
   return {
     me: rowUser(u),
     users, groups, content_topics:topics, cmt_suggestions:cmtsug,
     post_seedings: posts, cmt_seedings: cmtsFull,
-    filming_templates, project_filmings,
+    filming_templates, project_filmings, guides,
     pricing: pricingRow, payouts: [], audit,
   };
 }
@@ -578,6 +592,15 @@ async function handleApi(request, env){
       await env.DB.prepare(`DELETE FROM filming_uploads WHERE id=?`).bind(m[1]).run();
       await logAudit(env,me,'xoá media','filming_upload',m[1]);
     }
+    return json({ db: await bootstrap(env, me) });
+  }
+  // hướng dẫn (staff sửa)
+  if((m=path.match(/^\/guides\/([^\/]+)$/)) && method==='PATCH'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    const k=m[1];
+    await env.DB.prepare(`INSERT INTO guides (key,noi_dung,video_url,updated_at) VALUES (?,?,?,?) ON CONFLICT(key) DO UPDATE SET noi_dung=excluded.noi_dung, video_url=excluded.video_url, updated_at=excluded.updated_at`)
+      .bind(k, body.noi_dung||'', body.video_url||'', nowISO()).run();
+    await logAudit(env,me,'sửa hướng dẫn','guide',k);
     return json({ db: await bootstrap(env, me) });
   }
   // dọn media hết hạn ngay (staff)
