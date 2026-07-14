@@ -8,21 +8,33 @@
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 <script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
 <script>
   tailwind.config = {
     theme: {
       extend: {
         colors: {
-          ink:   { DEFAULT: '#0f172a', soft: '#1e293b' },
-          gold:  { DEFAULT: '#c8a24a', dark: '#a5842f' },
+          ink:   { DEFAULT: '#0e1626', soft: '#1b2740', muted: '#5b6b86' },
+          gold:  { DEFAULT: '#c8a24a', dark: '#a5842f', light: '#e7d3a1', bg: '#faf5e9' },
+          line:  '#e8ebf0',
         },
-        fontFamily: { sans: ['Inter','system-ui','Segoe UI','Roboto','sans-serif'] }
+        fontFamily: {
+          sans: ['Inter','system-ui','Segoe UI','Roboto','sans-serif'],
+          display: ['Sora','Inter','system-ui','sans-serif'],
+        },
+        boxShadow: {
+          card: '0 1px 2px rgba(16,24,40,.04), 0 1px 3px rgba(16,24,40,.06)',
+          lift: '0 10px 30px -10px rgba(16,24,40,.22)',
+          gold: '0 8px 20px -6px rgba(200,162,74,.5)',
+        },
       }
     }
   }
 </script>
 <style>
   html,body{ -webkit-tap-highlight-color:transparent; }
+  body{ background:#f6f7f9; }
   ::-webkit-scrollbar{ width:8px; height:8px } ::-webkit-scrollbar-thumb{ background:#cbd5e1; border-radius:8px }
   .no-spin::-webkit-outer-spin-button,.no-spin::-webkit-inner-spin-button{ -webkit-appearance:none; margin:0 }
 </style>
@@ -443,7 +455,7 @@ function AppProvider({children}){
 ============================================================ */
 function Toast({toast}){
   const c = toast.type==='err' ? 'bg-rose-600' : toast.type==='warn' ? 'bg-amber-500' : 'bg-emerald-600';
-  return <div className={"fixed bottom-5 left-1/2 -translate-x-1/2 z-50 text-white px-4 py-2.5 rounded-xl shadow-lg text-sm max-w-[90%] "+c}>{toast.msg}</div>;
+  return <div className={"fixed bottom-5 left-1/2 -translate-x-1/2 z-50 text-white px-4 py-2.5 rounded-xl shadow-lift text-sm max-w-[90%] font-medium "+c}>{toast.msg}</div>;
 }
 function Badge({st}){ return <span className={"inline-block px-2 py-0.5 rounded-full text-xs font-medium "+(ST_STYLE[st]||'bg-slate-100')}>{ST_LABEL[st]||st}</span>; }
 function PriBadge({small}){ return <span className={"inline-flex items-center gap-0.5 rounded-full font-semibold bg-gold/15 text-gold-dark "+(small?'text-[9px] px-1.5 py-0.5':'text-[10px] px-2 py-0.5')}>⭐ Ưu tiên</span>; }
@@ -461,57 +473,57 @@ function PriSwitch({value, onChange, hint}){
 function Btn({children, onClick, variant='primary', className='', type='button', disabled}){
   const v = {
     primary:'bg-ink text-white hover:bg-ink-soft',
-    gold:'bg-gold text-white hover:bg-gold-dark',
-    ghost:'bg-white border border-slate-300 text-slate-700 hover:bg-slate-50',
+    gold:'bg-gold text-white hover:bg-gold-dark shadow-gold',
+    ghost:'bg-white border border-line text-ink hover:border-gold hover:text-gold-dark',
     danger:'bg-rose-600 text-white hover:bg-rose-700',
     ok:'bg-emerald-600 text-white hover:bg-emerald-700',
-    soft:'bg-slate-100 text-slate-700 hover:bg-slate-200',
+    soft:'bg-gold-bg text-gold-dark hover:bg-gold-light/60',
   }[variant];
   return <button type={type} disabled={disabled} onClick={onClick}
-    className={"px-3.5 py-2 rounded-xl text-sm font-medium transition disabled:opacity-40 disabled:cursor-not-allowed "+v+" "+className}>{children}</button>;
+    className={"px-3.5 py-2.5 rounded-xl text-sm font-semibold transition active:scale-[.98] disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100 "+v+" "+className}>{children}</button>;
 }
 function Field({label, children, hint, required}){
   return <label className="block mb-3">
-    <div className="text-xs font-semibold text-slate-600 mb-1">{label}{required && <span className="text-rose-500"> *</span>}</div>
+    <div className="text-[13px] font-semibold text-ink mb-1.5">{label}{required && <span className="text-rose-500"> *</span>}</div>
     {children}
-    {hint && <div className="text-[11px] text-slate-400 mt-1">{hint}</div>}
+    {hint && <div className="text-[11px] text-ink-muted mt-1">{hint}</div>}
   </label>;
 }
-const inputCls = "w-full px-3 py-2 rounded-xl border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-gold/40 focus:border-gold bg-white";
+const inputCls = "w-full px-3.5 py-2.5 rounded-xl border border-line text-sm text-ink placeholder:text-slate-400 focus:outline-none focus:ring-4 focus:ring-gold/15 focus:border-gold bg-white transition";
 function Input(p){ return <input {...p} className={inputCls+" "+(p.className||'')}/>; }
 function Textarea(p){ return <textarea {...p} className={inputCls+" "+(p.className||'')}/>; }
 function Select({children, ...p}){ return <select {...p} className={inputCls+" "+(p.className||'')}>{children}</select>; }
 
 function Modal({open, onClose, title, children, wide}){
   if(!open) return null;
-  return <div className="fixed inset-0 z-40 bg-black/40 flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={onClose}>
-    <div onClick={e=>e.stopPropagation()} className={"bg-white w-full rounded-t-2xl sm:rounded-2xl shadow-xl max-h-[92vh] overflow-auto "+(wide?'sm:max-w-3xl':'sm:max-w-lg')}>
-      <div className="sticky top-0 bg-white border-b px-4 py-3 flex items-center justify-between z-10">
-        <h3 className="font-semibold text-ink">{title}</h3>
-        <button onClick={onClose} className="text-slate-400 hover:text-slate-700 text-xl leading-none">×</button>
+  return <div className="fixed inset-0 z-40 bg-ink/50 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={onClose}>
+    <div onClick={e=>e.stopPropagation()} className={"bg-white w-full rounded-t-3xl sm:rounded-2xl shadow-lift max-h-[92vh] overflow-auto "+(wide?'sm:max-w-3xl':'sm:max-w-lg')}>
+      <div className="sticky top-0 bg-white/95 backdrop-blur border-b border-line px-4 py-3 flex items-center justify-between z-10">
+        <h3 className="font-display font-700 text-ink">{title}</h3>
+        <button onClick={onClose} className="w-8 h-8 rounded-lg text-ink-muted hover:bg-slate-100 text-xl leading-none">×</button>
       </div>
       <div className="p-4">{children}</div>
     </div>
   </div>;
 }
-function Empty({children}){ return <div className="text-center text-slate-400 text-sm py-10">{children}</div>; }
+function Empty({children}){ return <div className="text-center text-ink-muted text-sm py-10">{children}</div>; }
 function Stat({label, value, sub, color='text-ink'}){
-  return <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100">
-    <div className="text-xs text-slate-500">{label}</div>
-    <div className={"text-xl font-bold mt-1 "+color}>{value}</div>
-    {sub && <div className="text-[11px] text-slate-400 mt-0.5">{sub}</div>}
+  return <div className="bg-white rounded-2xl p-4 shadow-card border border-line">
+    <div className="text-[13px] text-ink-muted">{label}</div>
+    <div className={"font-display text-xl font-800 mt-1 "+color}>{value}</div>
+    {sub && <div className="text-[11px] text-ink-muted mt-0.5">{sub}</div>}
   </div>;
 }
 function Tabs({tabs, active, onChange}){
   return <div className="flex gap-1 bg-slate-100 p-1 rounded-xl overflow-x-auto">
     {tabs.map(t=><button key={t.key} onClick={()=>onChange(t.key)}
-      className={"px-3 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap transition "+(active===t.key?'bg-white shadow text-ink':'text-slate-500')}>
+      className={"px-3 py-1.5 rounded-lg text-sm font-semibold whitespace-nowrap transition "+(active===t.key?'bg-white shadow-card text-ink':'text-ink-muted hover:text-ink')}>
       {t.label}{t.count!=null && <span className={"ml-1.5 text-xs px-1.5 rounded-full "+(active===t.key?'bg-gold text-white':'bg-slate-200 text-slate-500')}>{t.count}</span>}
     </button>)}
   </div>;
 }
 function Toggle({on, onClick, labels=['Hiện','Ẩn']}){
-  return <button onClick={onClick} className={"px-2.5 py-1 rounded-lg text-xs font-medium "+(on?'bg-emerald-100 text-emerald-700':'bg-slate-200 text-slate-500')}>
+  return <button onClick={onClick} className={"px-2.5 py-1 rounded-lg text-xs font-semibold "+(on?'bg-emerald-50 text-emerald-700':'bg-slate-100 text-slate-500')}>
     {on?labels[0]:labels[1]}
   </button>;
 }
@@ -534,31 +546,52 @@ function Login(){
     if(!r.ok) setErr(r.msg);
   };
 
-  return <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-ink to-ink-soft">
-    <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
-      <div className="text-center mb-5">
-        <div className="inline-flex w-14 h-14 rounded-2xl bg-gold text-white items-center justify-center text-2xl font-black mb-2">K</div>
-        <h1 className="text-xl font-bold text-ink">Kingsmen Seeding</h1>
-        <p className="text-sm text-slate-500">Đăng nhập để tiếp tục</p>
-      </div>
-
-      {err && <div className="mb-3 text-sm text-rose-600 bg-rose-50 border border-rose-200 rounded-xl px-3 py-2">{err}</div>}
-
-      <Field label="Email"><Input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="email@congty.com"
-        onKeyDown={e=>e.key==='Enter'&&doLogin()}/></Field>
-      <Field label="Mật khẩu"><Input type="password" value={pw} onChange={e=>setPw(e.target.value)} placeholder="••••••"
-        onKeyDown={e=>e.key==='Enter'&&doLogin()}/></Field>
-      <Btn variant="gold" className="w-full mt-1" onClick={doLogin} disabled={busy}>{busy?'Đang đăng nhập…':'Đăng nhập →'}</Btn>
-
-      {DEMO && <div className="mt-4 pt-3 border-t">
-        <div className="text-[11px] text-amber-600 text-center mb-2">⚡ BẢN PREVIEW — bấm để vào nhanh (mật khẩu demo: 123456)</div>
-        <div className="grid grid-cols-3 gap-1.5">
-          {[['mkt@kingsmen.vn','Marketing'],['sale1@kingsmen.vn','Sales'],['admin@kingsmen.vn','Kế toán']].map(([em,lb])=>
-            <button key={em} onClick={()=>login(em,'123456')} className="text-xs bg-slate-100 hover:bg-gold hover:text-white text-slate-600 rounded-lg py-2 transition">{lb}</button>)}
+  return <div className="min-h-screen flex items-center justify-center p-4 bg-[#f6f7f9]">
+    <div className="w-full max-w-4xl grid md:grid-cols-2 rounded-3xl overflow-hidden shadow-lift border border-line bg-white">
+      {/* Panel thương hiệu */}
+      <div className="hidden md:flex flex-col justify-between p-8 bg-gradient-to-br from-ink to-ink-soft text-white relative overflow-hidden">
+        <div className="absolute -top-16 -right-16 w-56 h-56 rounded-full bg-gold/20 blur-3xl"></div>
+        <div className="flex items-center gap-2.5 relative">
+          <div className="w-11 h-11 rounded-2xl bg-gold flex items-center justify-center font-display font-800 text-ink text-xl">K</div>
+          <div><div className="font-display font-800 leading-none">KINGSMEN</div><div className="text-[11px] text-white/50 tracking-[0.2em] mt-0.5">SEEDING SYSTEM</div></div>
         </div>
-      </div>}
+        <div className="relative">
+          <div className="font-display text-2xl font-800 leading-snug">Quản lý & nghiệm thu<br/><span className="text-gold-light">seeding · quay công trình</span></div>
+          <div className="text-sm text-white/60 mt-3 max-w-xs">Marketing duyệt · Sales báo cáo · tự tính tiền. Một nguồn dữ liệu, đồng bộ mọi máy.</div>
+        </div>
+        <div className="flex gap-2 relative">
+          <span className="text-[11px] px-2 py-0.5 rounded-full bg-white/10 text-white/80">Bảo mật</span>
+          <span className="text-[11px] px-2 py-0.5 rounded-full bg-white/10 text-white/80">Đồng bộ</span>
+          <span className="text-[11px] px-2 py-0.5 rounded-full bg-white/10 text-white/80">Mobile-first</span>
+        </div>
+      </div>
+      {/* Form */}
+      <div className="p-8 flex flex-col justify-center">
+        <div className="flex md:hidden items-center gap-2.5 mb-5">
+          <div className="w-11 h-11 rounded-2xl bg-gold flex items-center justify-center font-display font-800 text-ink text-xl">K</div>
+          <div><div className="font-display font-800 text-ink leading-none">KINGSMEN</div><div className="text-[11px] text-ink-muted tracking-widest mt-0.5">SEEDING</div></div>
+        </div>
+        <div className="font-display text-xl font-700 text-ink mb-1">Đăng nhập</div>
+        <p className="text-sm text-ink-muted mb-5">Dùng email & mật khẩu Marketing cấp.</p>
 
-      <p className="text-[11px] text-slate-400 text-center mt-3">Chưa có tài khoản? Liên hệ <b className="text-gold-dark">Marketing</b> để được cấp email & mật khẩu.</p>
+        {err && <div className="mb-3 text-sm text-rose-600 bg-rose-50 border border-rose-200 rounded-xl px-3 py-2">{err}</div>}
+
+        <Field label="Email"><Input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="email@congty.com"
+          onKeyDown={e=>e.key==='Enter'&&doLogin()}/></Field>
+        <Field label="Mật khẩu"><Input type="password" value={pw} onChange={e=>setPw(e.target.value)} placeholder="••••••"
+          onKeyDown={e=>e.key==='Enter'&&doLogin()}/></Field>
+        <Btn variant="gold" className="w-full mt-1 py-3" onClick={doLogin} disabled={busy}>{busy?'Đang đăng nhập…':'Đăng nhập →'}</Btn>
+
+        {DEMO && <div className="mt-4 pt-3 border-t border-line">
+          <div className="text-[11px] text-amber-600 text-center mb-2">⚡ BẢN PREVIEW — bấm để vào nhanh (mật khẩu demo: 123456)</div>
+          <div className="grid grid-cols-3 gap-1.5">
+            {[['mkt@kingsmen.vn','Marketing'],['sale1@kingsmen.vn','Sales'],['admin@kingsmen.vn','Kế toán']].map(([em,lb])=>
+              <button key={em} onClick={()=>login(em,'123456')} className="text-xs bg-slate-100 hover:bg-gold hover:text-white text-slate-600 rounded-lg py-2 transition">{lb}</button>)}
+          </div>
+        </div>}
+
+        <p className="text-[11px] text-ink-muted text-center mt-3">Chưa có tài khoản? Liên hệ <b className="text-gold-dark">Marketing</b> để được cấp email & mật khẩu.</p>
+      </div>
     </div>
   </div>;
 }
@@ -646,24 +679,25 @@ function Shell(){
     }
   };
 
-  return <div className="min-h-screen pb-20 sm:pb-0 sm:flex">
+  return <div className="min-h-screen pb-20 sm:pb-0 sm:flex sm:gap-4 sm:p-4">
     {/* Sidebar desktop */}
-    <aside className="hidden sm:flex sm:flex-col w-60 bg-ink text-white min-h-screen sticky top-0">
-      <div className="p-4 flex items-center gap-2 border-b border-white/10">
-        <div className="w-9 h-9 rounded-xl bg-gold flex items-center justify-center font-black">K</div>
-        <div><div className="font-bold leading-tight">Kingsmen</div><div className="text-[11px] text-white/50">Seeding</div></div>
+    <aside className="hidden sm:flex sm:flex-col w-60 bg-ink text-white rounded-2xl sticky top-4 self-start max-h-[calc(100vh-2rem)] shadow-lift">
+      <div className="p-4 flex items-center gap-2.5 border-b border-white/10">
+        <div className="w-10 h-10 rounded-xl bg-gold flex items-center justify-center font-display font-800 text-ink">K</div>
+        <div><div className="font-display font-700 leading-tight">Kingsmen</div><div className="text-[11px] text-white/40">Seeding</div></div>
       </div>
-      <nav className="flex-1 p-2 space-y-1">
+      <nav className="flex-1 p-2 space-y-1 overflow-y-auto">
         {nav.map(n=><button key={n.key} onClick={()=>setPage(n.key)}
-          className={"w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition "+(page===n.key?'bg-gold text-white':'text-white/70 hover:bg-white/10')}>
-          <span>{n.icon}</span><span>{n.label}</span>
-          {badgeFor(n.key)>0 && <span className="ml-auto bg-white text-ink text-xs px-1.5 rounded-full">{badgeFor(n.key)}</span>}
+          className={"w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition "+(page===n.key?'bg-gold text-white shadow-gold':'text-white/70 hover:bg-white/10')}>
+          <span className="text-base">{n.icon}</span><span>{n.label}</span>
+          {badgeFor(n.key)>0 && <span className="ml-auto bg-white text-ink text-xs font-bold px-1.5 rounded-full">{badgeFor(n.key)}</span>}
         </button>)}
       </nav>
       <div className="p-3 border-t border-white/10">
-        <button onClick={()=>setProfileOpen(true)} className="text-left w-full group mb-2">
-          <div className="text-sm font-medium group-hover:text-gold">{me.ho_ten} <span className="text-white/40 text-xs">✏️</span></div>
-          <div className="text-[11px] text-white/50">{ROLE_LABEL[me.vai_tro]}</div>
+        <button onClick={()=>setProfileOpen(true)} className="text-left w-full group mb-2 flex items-center gap-2.5">
+          <span className="w-9 h-9 rounded-full bg-white/10 flex items-center justify-center font-semibold text-gold-light">{(me.ho_ten||'?')[0]}</span>
+          <span className="min-w-0"><span className="block text-sm font-medium group-hover:text-gold truncate">{me.ho_ten} ✏️</span>
+          <span className="block text-[11px] text-white/50">{ROLE_LABEL[me.vai_tro]}</span></span>
         </button>
         <button onClick={logout} className="text-xs text-white/60 hover:text-white">↩ Đăng xuất</button>
       </div>
@@ -673,8 +707,8 @@ function Shell(){
       {/* Topbar mobile */}
       <header className="sm:hidden sticky top-0 z-20 bg-ink text-white px-4 py-3 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg bg-gold flex items-center justify-center font-black text-sm">K</div>
-          <span className="font-semibold text-sm">{nav.find(n=>n.key===page)?.label}</span>
+          <div className="w-8 h-8 rounded-lg bg-gold flex items-center justify-center font-display font-800 text-ink text-sm">K</div>
+          <span className="font-display font-700 text-sm">{nav.find(n=>n.key===page)?.label}</span>
         </div>
         <div className="flex items-center gap-3">
           <button onClick={()=>setProfileOpen(true)} className="text-xs text-white/80">{me.ho_ten} ✏️</button>
@@ -682,13 +716,13 @@ function Shell(){
         </div>
       </header>
 
-      <main className="p-3 sm:p-6 max-w-5xl mx-auto">{render()}</main>
+      <main className="p-3 sm:p-2 max-w-5xl mx-auto">{render()}</main>
     </div>
 
     {/* Bottom nav mobile */}
-    <nav className="sm:hidden fixed bottom-0 inset-x-0 z-20 bg-white border-t flex">
+    <nav className="sm:hidden fixed bottom-0 inset-x-0 z-20 bg-white/95 backdrop-blur border-t border-line flex">
       {nav.map(n=><button key={n.key} onClick={()=>setPage(n.key)}
-        className={"flex-1 flex flex-col items-center py-2 text-[11px] "+(page===n.key?'text-gold':'text-slate-400')}>
+        className={"flex-1 flex flex-col items-center py-2 text-[11px] font-medium "+(page===n.key?'text-gold-dark':'text-ink-muted')}>
         <span className="text-lg leading-none relative">{n.icon}
           {badgeFor(n.key)>0 && <span className="absolute -top-1 -right-2 bg-rose-500 text-white text-[9px] px-1 rounded-full">{badgeFor(n.key)}</span>}
         </span>
@@ -731,7 +765,7 @@ function SalesHome({go}){
     </div>
 
     {/* tổng hợp 3 mảng công việc */}
-    <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden">
+    <div className="bg-white rounded-2xl border border-line shadow-card overflow-hidden">
       <div className="px-4 py-2 border-b bg-slate-50 text-xs font-semibold text-slate-500">Tổng hợp công việc của tôi</div>
       <div className="grid grid-cols-3 divide-x text-center">
         {[['📝 POST',gP,posts.length],['💬 CMT',gC,cmts.length],['🎥 QUAY',gQ,filmings.length]].map(([lb,g,n])=>
@@ -774,7 +808,7 @@ function RecentList({posts, cmts, filmings=[]}){
     ...filmings.map(f=>({ ...f, kind:'QUAY', when:f.created_at, label:'QUAY · '+f.ten_cong_trinh })),
   ].sort((a,b)=> (b.when||'').localeCompare(a.when||'')).slice(0,15);
   if(!rows.length) return <Empty>Chưa có việc nào. Bấm "Tạo POST", "Tạo CMT" hoặc "Quay CT" để bắt đầu.</Empty>;
-  return <div className="bg-white rounded-2xl border border-slate-100 divide-y">
+  return <div className="bg-white rounded-2xl border border-line shadow-card divide-y">
     {rows.map(r=><div key={r.id} className="p-3 flex items-center justify-between gap-2">
       <div className="min-w-0">
         <div className="text-sm text-ink truncate">{r.label}</div>
@@ -841,7 +875,7 @@ function SalesNewPost({go}){
   };
 
   return <div className="space-y-4 max-w-2xl">
-    <h2 className="text-lg font-bold text-ink">📝 Tạo POST seeding</h2>
+    <h2 className="font-display text-lg font-bold text-ink">📝 Tạo POST seeding</h2>
 
     {(priTopics>0 || priGroups>0) && <div className="bg-gold/10 border border-gold/30 rounded-2xl p-3 text-xs text-gold-dark">
       ⭐ Marketing đang ưu tiên {priTopics>0 && <b>{priTopics} tuyến nội dung</b>}{priTopics>0&&priGroups>0 && ' và '}{priGroups>0 && <b>{priGroups} group</b>} — hãy seeding các mục ⭐ trước.
@@ -985,7 +1019,7 @@ function SalesNewCmt({go}){
   };
 
   return <div className="space-y-4 max-w-2xl">
-    <h2 className="text-lg font-bold text-ink">💬 Tạo CMT seeding</h2>
+    <h2 className="font-display text-lg font-bold text-ink">💬 Tạo CMT seeding</h2>
     <Tabs active={tab} onChange={t=>{setTab(t); reset();}} tabs={[
       {key:CMT_LOAI.MINH_DANG, label:'Mình đăng'}, {key:CMT_LOAI.DAO, label:'Dạo'} ]}/>
 
@@ -1057,7 +1091,7 @@ function SalesIncome(){
 
   return <div className="space-y-4">
     <div className="flex items-center justify-between">
-      <h2 className="text-lg font-bold text-ink">💰 Thu nhập của tôi</h2>
+      <h2 className="font-display text-lg font-bold text-ink">💰 Thu nhập của tôi</h2>
       <Select value={ky} onChange={e=>setKy(e.target.value)} className="max-w-[45%]">
         <option value="">Tất cả kỳ</option>{kyList.map(k=><option key={k}>{k}</option>)}
       </Select>
@@ -1066,7 +1100,7 @@ function SalesIncome(){
       <Stat label="Đạt (chưa chi)" value={fmtVND(dat)} color="text-emerald-600"/>
       <Stat label="Đã được chi" value={fmtVND(chi)} color="text-indigo-600"/>
     </div>
-    <div className="bg-white rounded-2xl border border-slate-100 divide-y">
+    <div className="bg-white rounded-2xl border border-line shadow-card divide-y">
       {rows.length===0 && <Empty>Chưa có dữ liệu.</Empty>}
       {rows.map(r=><div key={r.id} className="p-3">
         <div className="flex items-center justify-between gap-2">
@@ -1125,7 +1159,7 @@ function MktDashboard(){
 
   return <div className="space-y-4">
     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-      <h2 className="text-lg font-bold text-ink">📊 Dashboard</h2>
+      <h2 className="font-display text-lg font-bold text-ink">📊 Dashboard</h2>
       <DateRange from={from} to={to} setFrom={setFrom} setTo={setTo}/>
     </div>
     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -1140,7 +1174,7 @@ function MktDashboard(){
       <BreakdownCard title="Theo mục tiêu (BIẾT→HÀNH ĐỘNG)" data={byMucTieu}/>
     </div>
 
-    <div className="bg-white rounded-2xl border border-slate-100 p-4">
+    <div className="bg-white rounded-2xl border border-line shadow-card p-4">
       <div className="text-sm font-semibold text-ink mb-3">Theo người</div>
       {Object.keys(byNguoi).length===0 ? <Empty>Chưa có item đạt.</Empty> :
         <table className="w-full text-sm">
@@ -1156,7 +1190,7 @@ function MktDashboard(){
 function BreakdownCard({title, data}){
   const entries = Object.entries(data).sort((a,b)=>b[1]-a[1]);
   const max = Math.max(1, ...entries.map(e=>e[1]));
-  return <div className="bg-white rounded-2xl border border-slate-100 p-4">
+  return <div className="bg-white rounded-2xl border border-line shadow-card p-4">
     <div className="text-sm font-semibold text-ink mb-3">{title}</div>
     {entries.length===0 ? <Empty>Chưa có dữ liệu.</Empty> :
       <div className="space-y-2">{entries.map(([k,v])=>
@@ -1206,7 +1240,7 @@ function Library(){
 
   return <div className="space-y-4">
     <div className="flex items-center justify-between flex-wrap gap-2">
-      <h2 className="text-lg font-bold text-ink">📚 Thư viện chung</h2>
+      <h2 className="font-display text-lg font-bold text-ink">📚 Thư viện chung</h2>
       <div className="flex gap-2">
         <ImportBtn tab={tab}/>
         <Btn variant="gold" onClick={()=>openNew(tab)}>＋ Thêm</Btn>
@@ -1241,7 +1275,7 @@ function Library(){
 }
 function LibList({items, render, onEdit, onToggle, onDel, onPri}){
   if(!items.length) return <Empty>Chưa có mục nào. Bấm "Thêm" hoặc "Import file".</Empty>;
-  return <div className="bg-white rounded-2xl border border-slate-100 divide-y">
+  return <div className="bg-white rounded-2xl border border-line shadow-card divide-y">
     {items.map(it=><div key={it.id} className={"p-3 flex items-start gap-2 "+(it.active?'':'opacity-50')}>
       <div className="flex-1 min-w-0">{render(it)}</div>
       <div className="flex flex-col items-end gap-1 shrink-0">
@@ -1439,7 +1473,7 @@ function MktQueue(){
 
   return <div className="space-y-4">
     <div className="flex items-center justify-between flex-wrap gap-2">
-      <h2 className="text-lg font-bold text-ink">✅ Hàng chờ nghiệm thu</h2>
+      <h2 className="font-display text-lg font-bold text-ink">✅ Hàng chờ nghiệm thu</h2>
       {selIds.length>0 && <Btn variant="ok" onClick={bulkApprove}>Duyệt {selIds.length} mục đã chọn</Btn>}
     </div>
     <Tabs active={tab} onChange={t=>{setTab(t);setSel({});}} tabs={[
@@ -1470,7 +1504,7 @@ function QueueCard({item, checked, onCheck, onApprove, onReject}){
   const tien = item._t==='post' ? tienPost(db.pricing) : tienCmt(db.pricing, item.so_cmt_seeding);
   const link = item._t==='post' ? item.link_bai : item.post_link;
 
-  return <div className="bg-white rounded-2xl border border-slate-100 p-4">
+  return <div className="bg-white rounded-2xl border border-line shadow-card p-4">
     <div className="flex items-start gap-3">
       <input type="checkbox" checked={checked} onChange={onCheck} className="mt-1 w-4 h-4 accent-emerald-600"/>
       <div className="flex-1 min-w-0">
@@ -1544,17 +1578,17 @@ function MktPayReport(){
 
   return <div className="space-y-4">
     <div className="flex items-center justify-between flex-wrap gap-2">
-      <h2 className="text-lg font-bold text-ink">📄 Báo cáo thanh toán</h2>
+      <h2 className="font-display text-lg font-bold text-ink">📄 Báo cáo thanh toán</h2>
       <Btn variant="gold" onClick={exportCSV}>⬆ Xuất Excel</Btn>
     </div>
-    <div className="bg-white rounded-2xl border border-slate-100 p-3 flex flex-wrap gap-2 items-center">
+    <div className="bg-white rounded-2xl border border-line shadow-card p-3 flex flex-wrap gap-2 items-center">
       <DateRange from={from} to={to} setFrom={setFrom} setTo={setTo}/>
       <Select value={fSales} onChange={e=>setFSales(e.target.value)} className="max-w-[180px]"><option value="">Mọi Sales</option>{db.users.filter(u=>u.vai_tro===ROLES.SALES).map(u=><option key={u.id} value={u.id}>{u.ho_ten}</option>)}</Select>
       <Select value={fSt} onChange={e=>setFSt(e.target.value)} className="max-w-[160px]"><option value="">Mọi trạng thái</option>{Object.keys(ST_LABEL).map(s=><option key={s} value={s}>{ST_LABEL[s]}</option>)}</Select>
     </div>
     <Tabs active={tab} onChange={setTab} tabs={[{key:'post',label:'POST'},{key:'mine',label:'CMT mình đăng'},{key:'dao',label:'CMT dạo'}]}/>
 
-    <div className="bg-white rounded-2xl border border-slate-100 overflow-auto">
+    <div className="bg-white rounded-2xl border border-line shadow-card overflow-auto">
       <table className="w-full text-sm min-w-[720px]">
         <thead className="bg-slate-50 text-xs text-slate-500 text-left">
           {tab==='post' ? <tr><Th>Ngày</Th><Th>Sales</Th><Th>Chủ đề</Th><Th>Loại bài</Th><Th>Group</Th><Th>Link</Th><Th r>React</Th><Th r>Cmt</Th><Th>Trạng thái</Th><Th r>Thành tiền</Th></tr>
@@ -1620,14 +1654,14 @@ function UserManagement(){
 
   return <div className="space-y-4">
     <div className="flex items-center justify-between">
-      <h2 className="text-lg font-bold text-ink">👥 Quản lý tài khoản</h2>
+      <h2 className="font-display text-lg font-bold text-ink">👥 Quản lý tài khoản</h2>
       <Btn variant="gold" onClick={()=>setEdit({...blank})}>＋ Tạo tài khoản</Btn>
     </div>
     <div className="bg-gold/10 border border-gold/30 rounded-2xl p-3 text-xs text-gold-dark">
       Marketing tạo & cấp tài khoản cho Sales và Kế toán — gửi <b>email + mật khẩu</b> để họ đăng nhập. Họ không tự đăng ký.
     </div>
 
-    <div className="bg-white rounded-2xl border border-slate-100 divide-y">
+    <div className="bg-white rounded-2xl border border-line shadow-card divide-y">
       {db.users.map(u=><div key={u.id} className={"p-3 flex items-center gap-3 "+(u.active?'':'opacity-50')}>
         <div className="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center font-bold text-slate-600">{u.ho_ten[0]}</div>
         <div className="flex-1 min-w-0">
@@ -1664,8 +1698,8 @@ function AdminPricing(){
   useEffect(()=>setF(db.pricing),[db.pricing]);
   const save = async () => { const ok = await setPricing({don_gia_post:Number(f.don_gia_post)||0,don_gia_cmt:Number(f.don_gia_cmt)||0,don_gia_cong_trinh:Number(f.don_gia_cong_trinh)||0,don_gia_canh:Number(f.don_gia_canh)||0,min_nhac_kingsmen:Number(f.min_nhac_kingsmen)||0,min_usp:Number(f.min_usp)||0}); if(ok) notify('Đã lưu đơn giá'); };
   return <div className="space-y-4 max-w-lg">
-    <h2 className="text-lg font-bold text-ink">⚙️ Đơn giá & cấu hình</h2>
-    <div className="bg-white rounded-2xl border border-slate-100 p-4">
+    <h2 className="font-display text-lg font-bold text-ink">⚙️ Đơn giá & cấu hình</h2>
+    <div className="bg-white rounded-2xl border border-line shadow-card p-4">
       <div className="grid grid-cols-2 gap-3">
         <Field label="Đơn giá / POST đạt" hint="VNĐ mỗi post"><Input type="number" className="no-spin" value={f.don_gia_post} onChange={e=>setF({...f,don_gia_post:e.target.value})}/></Field>
         <Field label="Đơn giá / CMT" hint="VNĐ mỗi cmt seeding"><Input type="number" className="no-spin" value={f.don_gia_cmt} onChange={e=>setF({...f,don_gia_cmt:e.target.value})}/></Field>
@@ -1716,7 +1750,7 @@ function AdminPayroll(){
 
   return <div className="space-y-4">
     <div className="flex items-center justify-between flex-wrap gap-2">
-      <h2 className="text-lg font-bold text-ink">🧾 Bảng lương</h2>
+      <h2 className="font-display text-lg font-bold text-ink">🧾 Bảng lương</h2>
       <div className="flex gap-2 items-center">
         <Select value={ky} onChange={e=>setKy(e.target.value)}><option value="">Tất cả kỳ</option>{kyList.map(k=><option key={k}>{k}</option>)}</Select>
         <Btn variant="gold" onClick={exportPayroll}>⬆ Xuất Excel</Btn>
@@ -1727,7 +1761,7 @@ function AdminPayroll(){
       <Stat label="Đã chi" value={fmtVND(tong.chi)} color="text-indigo-600"/>
       <Stat label="Còn lại" value={fmtVND(tong.con)} color="text-rose-600"/>
     </div>
-    <div className="bg-white rounded-2xl border border-slate-100 overflow-auto">
+    <div className="bg-white rounded-2xl border border-line shadow-card overflow-auto">
       <table className="w-full text-sm min-w-[720px]">
         <thead className="bg-slate-50 text-xs text-slate-500 text-left"><tr>
           <Th>Sales</Th><Th r>Post đạt</Th><Th r>Tiền post</Th><Th r>Cmt đạt</Th><Th r>Tiền cmt</Th><Th r>Quay đạt</Th><Th r>Tiền quay</Th><Th r>Tổng phải trả</Th><Th r>Đã chi</Th><Th r>Còn lại</Th><Th></Th>
@@ -1752,8 +1786,8 @@ function AdminPayroll(){
 function AdminAudit(){
   const { db } = useApp();
   return <div className="space-y-4">
-    <h2 className="text-lg font-bold text-ink">🕑 Nhật ký hoạt động</h2>
-    <div className="bg-white rounded-2xl border border-slate-100 divide-y max-h-[70vh] overflow-auto">
+    <h2 className="font-display text-lg font-bold text-ink">🕑 Nhật ký hoạt động</h2>
+    <div className="bg-white rounded-2xl border border-line shadow-card divide-y max-h-[70vh] overflow-auto">
       {db.audit.length===0 ? <Empty>Chưa có nhật ký.</Empty> :
         db.audit.map(a=><div key={a.id} className="p-3 text-sm flex items-center justify-between gap-2">
           <div><span className="font-medium text-ink">{a.by_name}</span> <span className="text-slate-500">{a.action}</span> <span className="text-xs text-slate-400">· {a.entity}{a.detail?' · '+a.detail:''}</span></div>
@@ -1856,7 +1890,7 @@ function SalesFilming(){
 
   return <div className="space-y-4">
     <div className="flex items-center justify-between flex-wrap gap-2">
-      <h2 className="text-lg font-bold text-ink">🎥 Quay công trình</h2>
+      <h2 className="font-display text-lg font-bold text-ink">🎥 Quay công trình</h2>
       <Btn variant="gold" onClick={()=>setCreating(true)}>＋ Quay công trình mới</Btn>
     </div>
     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -1869,7 +1903,7 @@ function SalesFilming(){
       <div className="text-sm font-semibold text-rose-700 mb-1">⚠️ Công trình bị loại — bấm vào để quay bổ sung & gửi lại</div>
       {mine.filter(p=>p.trang_thai===ST.KHONG_DAT).map(p=><div key={p.id} className="text-xs text-slate-600 bg-white rounded-lg p-2 mt-1">{p.ten_cong_trinh}: <span className="text-rose-500">{p.ly_do_loai}</span></div>)}
     </div>}
-    <div className="bg-white rounded-2xl border border-slate-100 divide-y">
+    <div className="bg-white rounded-2xl border border-line shadow-card divide-y">
       {mine.length===0 && <Empty>Chưa có công trình nào. Bấm "Quay công trình mới".</Empty>}
       {mine.map(p=>{ const tpl=filmFindTpl(db,p.template_id); const total=filmCountShots(tpl), have=uniqShots(p.uploads).length;
         return <button key={p.id} onClick={()=>openProject(p)} className="w-full text-left p-3 flex items-center justify-between gap-2 hover:bg-slate-50">
@@ -1922,8 +1956,8 @@ function FilmingEditor({onDone, project}){
 
   return <div className="space-y-4">
     <button onClick={onDone} className="text-sm text-slate-500 hover:text-ink">← Quay lại danh sách</button>
-    <h2 className="text-lg font-bold text-ink">{editing?'Tiếp tục công trình':'Quay công trình mới'}</h2>
-    <div className="bg-white rounded-2xl border border-slate-100 p-4 grid sm:grid-cols-2 gap-x-2">
+    <h2 className="font-display text-lg font-bold text-ink">{editing?'Tiếp tục công trình':'Quay công trình mới'}</h2>
+    <div className="bg-white rounded-2xl border border-line shadow-card p-4 grid sm:grid-cols-2 gap-x-2">
       <div className="sm:col-span-2"><Field label="Quy trình áp dụng (theo hệ sản phẩm)" required hint="Marketing thiết lập sẵn checklist cho từng hệ sản phẩm">
         <Select value={templateId} onChange={e=>changeTemplate(e.target.value)} disabled={editing}>{templates.map(t=><option key={t.id} value={t.id}>{t.he_san_pham} — {t.ten}</option>)}</Select>
       </Field></div>
@@ -2058,13 +2092,13 @@ function FilmingDetailSales({project, template, onBack}){
   return <div className="space-y-4">
     <button onClick={onBack} className="text-sm text-slate-500 hover:text-ink">← Quay lại danh sách</button>
     <div className="flex items-center justify-between gap-2 flex-wrap">
-      <div><h2 className="text-lg font-bold text-ink">{project.ten_cong_trinh}</h2>
+      <div><h2 className="font-display text-lg font-bold text-ink">{project.ten_cong_trinh}</h2>
         <div className="text-xs text-slate-400 flex items-center gap-2"><HeChip he={template?.he_san_pham}/> {project.khu_vuc} · {fmtDay(project.ngay_quay)}</div></div>
       <div className="flex items-center gap-2">{(project.trang_thai===ST.DAT||project.trang_thai===ST.DA_CHI)&&<span className="text-sm font-semibold text-emerald-600">{fmtVND(project.thanh_tien)}</span>}<Badge st={project.trang_thai}/></div>
     </div>
     {reviewed && <div className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-600">Kết quả nghiệm thu của Marketing: <b>{(template?template.phases.flatMap(p=>p.shots.filter(s=>s.active)).filter(shotOk).length:0)}</b> cảnh đạt · thành tiền <b className="text-emerald-600">{fmtVND(project.thanh_tien||0)}</b>{project.reviewed_by?' · bởi '+project.reviewed_by:''}</div>}
     {project.ly_do_loai && <div className="bg-rose-50 border border-rose-200 rounded-xl p-3 text-sm text-rose-700">Lý do trả về: {project.ly_do_loai}</div>}
-    {template && template.phases.map(ph=><div key={ph.id} className="bg-white rounded-2xl border border-slate-100 overflow-hidden">
+    {template && template.phases.map(ph=><div key={ph.id} className="bg-white rounded-2xl border border-line shadow-card overflow-hidden">
       <div className="px-4 py-2 bg-slate-50 border-b text-sm font-semibold text-ink">{ph.thu_tu}. {ph.ten}</div>
       <div className="divide-y">
         {ph.shots.filter(s=>s.active).map(shot=>{ const md=mediaOf(shot); const ok=shotOk(shot); return <div key={shot.id} className="p-3">
@@ -2100,7 +2134,7 @@ function MktFilming(){
   const mediaCount = (db.project_filmings||[]).reduce((s,p)=>s+(p.uploads||[]).length,0);
   const [tab, setTab] = useState('library');
   return <div className="space-y-4">
-    <h2 className="text-lg font-bold text-ink">🎬 Quay công trình</h2>
+    <h2 className="font-display text-lg font-bold text-ink">🎬 Quay công trình</h2>
     <Tabs active={tab} onChange={setTab} tabs={[
       {key:'library', label:'Quy trình quay', count:(db.filming_templates||[]).length},
       {key:'queue', label:'Nghiệm thu', count:pending},
@@ -2162,7 +2196,7 @@ function MediaManager(){
       <span>Media công trình <b>chưa duyệt</b> tự xoá sau <b>30 ngày</b>. File app mới bị xoá; link Drive chỉ gỡ khỏi danh sách.</span>
       <Btn variant="soft" onClick={clean}>🧹 Dọn ngay</Btn>
     </div>
-    <div className="bg-white rounded-2xl border border-slate-100 p-3 flex flex-wrap gap-2 items-center">
+    <div className="bg-white rounded-2xl border border-line shadow-card p-3 flex flex-wrap gap-2 items-center">
       <div className="flex gap-1 bg-slate-100 p-1 rounded-xl">
         <button onClick={()=>setGroupBy('project')} className={"px-2.5 py-1 rounded-lg text-xs font-medium "+(groupBy==='project'?'bg-white shadow text-ink':'text-slate-500')}>📁 Theo công trình</button>
         <button onClick={()=>setGroupBy('shot')} className={"px-2.5 py-1 rounded-lg text-xs font-medium "+(groupBy==='shot'?'bg-white shadow text-ink':'text-slate-500')}>🎬 Theo nhóm source</button>
@@ -2175,7 +2209,7 @@ function MediaManager(){
     {rows.length===0 ? <Empty>Chưa có media nào.</Empty> :
     <div className="grid md:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)] gap-3">
       {/* trái: danh sách theo thư mục */}
-      <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden max-h-[70vh] overflow-y-auto">
+      <div className="bg-white rounded-2xl border border-line shadow-card overflow-hidden max-h-[70vh] overflow-y-auto">
         {groups.map((g,gi)=><div key={gi}>
           <div className="px-3 py-2 border-b bg-slate-50 sticky top-0"><div className="text-xs font-semibold text-ink truncate">{g.t}</div><div className="text-[10px] text-slate-400">{g.s} · {g.items.length} nguồn</div></div>
           {g.items.map(r=><button key={r.key} onClick={()=>setSel(r)} className={"w-full flex items-center gap-2 px-3 py-1.5 text-left border-b border-slate-50 hover:bg-slate-50 "+(selRow&&selRow.key===r.key?'bg-gold/10':'')}>
@@ -2190,7 +2224,7 @@ function MediaManager(){
         </div>)}
       </div>
       {/* phải: xem trước */}
-      <div className="bg-white rounded-2xl border border-slate-100 p-3 md:sticky md:top-20 h-fit">
+      <div className="bg-white rounded-2xl border border-line shadow-card p-3 md:sticky md:top-20 h-fit">
         {selRow? <div>
           <div className="text-[11px] text-slate-400 mb-2 truncate">📁 {selRow.p.ten_cong_trinh} › {selRow.phase} › {selRow.shot}</div>
           <div className="rounded-xl overflow-hidden aspect-video bg-slate-900"><MediaView m={selRow.up}/></div>
@@ -2223,7 +2257,7 @@ function FilmLibrary(){
 
   if(!template) return <Empty>Chưa có quy trình. Bấm "Quy trình mới".</Empty>;
   return <div className="space-y-3">
-    <div className="bg-white rounded-2xl border border-slate-100 p-4 space-y-3">
+    <div className="bg-white rounded-2xl border border-line shadow-card p-4 space-y-3">
       <div className="flex items-end gap-2 flex-wrap">
         <label className="flex-1 min-w-[200px]"><div className="text-xs font-semibold text-slate-600 mb-1">Quy trình / hệ sản phẩm</div>
           <Select value={selId} onChange={e=>setSelId(e.target.value)}>{templates.map(t=><option key={t.id} value={t.id}>{t.he_san_pham} — {t.ten}{t.active===false?' (ẩn)':''}</option>)}</Select></label>
@@ -2237,7 +2271,7 @@ function FilmLibrary(){
       </div>
     </div>
     <div className="flex justify-end"><Btn variant="ghost" onClick={()=>setEditPhase({ten:''})}>＋ Thêm giai đoạn</Btn></div>
-    {template.phases.map(ph=><div key={ph.id} className="bg-white rounded-2xl border border-slate-100 overflow-hidden">
+    {template.phases.map(ph=><div key={ph.id} className="bg-white rounded-2xl border border-line shadow-card overflow-hidden">
       <div className="px-4 py-2 bg-slate-50 border-b flex items-center justify-between">
         <span className="text-sm font-semibold text-ink">{ph.thu_tu}. {ph.ten}</span>
         <div className="flex gap-2"><button onClick={()=>setEditPhase(ph)} className="text-xs text-blue-500 hover:underline">Sửa</button>
@@ -2301,7 +2335,7 @@ function FilmQueue(){
   return <div className="space-y-3">
     {pend.length===0 && <Empty>Không có công trình nào chờ duyệt 🎉</Empty>}
     {pend.map(p=>{ const tpl=filmFindTpl(db,p.template_id); const total=filmCountShots(tpl), have=uniqShots(p.uploads).length; const sales=db.users.find(u=>u.id===p.sales_id);
-      return <button key={p.id} onClick={()=>setReview(p)} className="w-full text-left bg-white rounded-2xl border border-slate-100 p-3 flex items-center justify-between gap-2 hover:bg-slate-50">
+      return <button key={p.id} onClick={()=>setReview(p)} className="w-full text-left bg-white rounded-2xl border border-line shadow-card p-3 flex items-center justify-between gap-2 hover:bg-slate-50">
         <div className="min-w-0"><div className="text-sm font-medium text-ink truncate">{p.ten_cong_trinh}</div>
           <div className="text-[11px] text-slate-400">{sales?.ho_ten||'—'} · {tpl?.he_san_pham} · {p.khu_vuc} · {have}/{total} cảnh</div></div>
         <div className="flex items-center gap-2 shrink-0"><Badge st={p.trang_thai}/><span className="text-gold-dark text-sm">›</span></div>
@@ -2331,13 +2365,13 @@ function FilmReview({project, template, onBack}){
 
   return <div className="space-y-4">
     <button onClick={onBack} className="text-sm text-slate-500 hover:text-ink">← Hàng chờ nghiệm thu</button>
-    <div><h3 className="text-lg font-bold text-ink">{project.ten_cong_trinh}</h3>
+    <div><h3 className="font-display text-lg font-bold text-ink">{project.ten_cong_trinh}</h3>
       <div className="text-xs text-slate-400 flex items-center gap-2"><HeChip he={template?.he_san_pham}/> {sales?.ho_ten||'—'} · {project.khu_vuc} · {fmtDay(project.ngay_quay)}</div></div>
     <div className="bg-gold/10 border border-gold/30 rounded-xl px-3 py-2 text-xs text-gold-dark flex items-center justify-between gap-2">
       <span>Chấm <b>Đạt/Loại</b> từng source. Cảnh đạt nếu còn ≥1 source đạt — tính tiền <b>1 lần/cảnh</b>.</span>
       <span className="shrink-0">Đạt <b>{datShots.length}/{shots.length}</b> · <b className="text-emerald-700">{fmtVND(total)}</b></span>
     </div>
-    {template && template.phases.map(ph=><div key={ph.id} className="bg-white rounded-2xl border border-slate-100 overflow-hidden">
+    {template && template.phases.map(ph=><div key={ph.id} className="bg-white rounded-2xl border border-line shadow-card overflow-hidden">
       <div className="px-4 py-2 bg-slate-50 border-b text-sm font-semibold text-ink">{ph.thu_tu}. {ph.ten}</div>
       <div className="divide-y">
         {ph.shots.filter(s=>s.active).map(shot=>{ const md=mediaOf(shot); const ok=shotOk(shot);
@@ -2404,14 +2438,14 @@ function AdminFilming(){
   };
   return <div className="space-y-4">
     <div className="flex items-center justify-between flex-wrap gap-2">
-      <h2 className="text-lg font-bold text-ink">🎬 Báo cáo Quay công trình</h2>
+      <h2 className="font-display text-lg font-bold text-ink">🎬 Báo cáo Quay công trình</h2>
       <Btn variant="gold" onClick={exportCSV}>⬆ Xuất Excel</Btn>
     </div>
-    <div className="bg-white rounded-2xl border border-slate-100 p-3 flex flex-wrap gap-2 items-center">
+    <div className="bg-white rounded-2xl border border-line shadow-card p-3 flex flex-wrap gap-2 items-center">
       <DateRange from={from} to={to} setFrom={setFrom} setTo={setTo}/>
       <Select value={fSt} onChange={e=>setFSt(e.target.value)} className="max-w-[160px]"><option value="">Mọi trạng thái</option>{Object.keys(ST_LABEL).map(s=><option key={s} value={s}>{ST_LABEL[s]}</option>)}</Select>
     </div>
-    <div className="bg-white rounded-2xl border border-slate-100 overflow-auto">
+    <div className="bg-white rounded-2xl border border-line shadow-card overflow-auto">
       <table className="w-full text-sm min-w-[760px]">
         <thead className="bg-slate-50 text-xs text-slate-500 text-left"><tr><Th>Ngày</Th><Th>Sales</Th><Th>Công trình</Th><Th>Hệ SP / Quy trình</Th><Th>Khu vực</Th><Th r>Cảnh đạt</Th><Th>Trạng thái</Th><Th r>Thành tiền</Th></tr></thead>
         <tbody className="divide-y">
