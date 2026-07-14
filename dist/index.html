@@ -9,24 +9,25 @@
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 <script src="https://cdn.tailwindcss.com"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600;700;800;900&family=Maven+Pro:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script>
+  // Bộ nhận diện Kingsmen: cyan/teal trên nền teal đậm · Montserrat (tiêu đề) + Maven Pro (nội dung)
   tailwind.config = {
     theme: {
       extend: {
         colors: {
-          ink:   { DEFAULT: '#0e1626', soft: '#1b2740', muted: '#5b6b86' },
-          gold:  { DEFAULT: '#c8a24a', dark: '#a5842f', light: '#e7d3a1', bg: '#faf5e9' },
-          line:  '#e8ebf0',
+          ink:   { DEFAULT: '#0b3543', soft: '#114654', muted: '#5c7480' }, // teal đậm
+          gold:  { DEFAULT: '#0a92b4', dark: '#0a6a80', light: '#7fd4e4', bg: '#eafafd' }, // cyan thương hiệu (giữ tên "gold" trong code)
+          line:  '#e2e8ea',
         },
         fontFamily: {
-          sans: ['Inter','system-ui','Segoe UI','Roboto','sans-serif'],
-          display: ['Sora','Inter','system-ui','sans-serif'],
+          sans: ['Maven Pro','Inter','system-ui','sans-serif'],
+          display: ['Montserrat','Maven Pro','system-ui','sans-serif'],
         },
         boxShadow: {
-          card: '0 1px 2px rgba(16,24,40,.04), 0 1px 3px rgba(16,24,40,.06)',
-          lift: '0 10px 30px -10px rgba(16,24,40,.22)',
-          gold: '0 8px 20px -6px rgba(200,162,74,.5)',
+          card: '0 1px 2px rgba(11,53,67,.05), 0 1px 3px rgba(11,53,67,.07)',
+          lift: '0 10px 30px -10px rgba(11,53,67,.25)',
+          gold: '0 8px 20px -6px rgba(10,146,180,.45)',
         },
       }
     }
