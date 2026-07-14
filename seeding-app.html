@@ -1138,12 +1138,13 @@ function MktDashboard(){
   const [from, setFrom] = useState(''); const [to, setTo] = useState('');
   const posts = db.post_seedings.filter(p=>inRange(p.created_at,from,to));
   const cmts  = db.cmt_seedings.filter(c=>inRange(c.created_at,from,to));
-  const all = [...posts.map(p=>({...p,_k:'POST'})), ...cmts.map(c=>({...c,_k:'CMT'}))];
+  const films = (db.project_filmings||[]).filter(f=>inRange(f.created_at,from,to));
+  const all = [...posts.map(p=>({...p,_k:'POST'})), ...cmts.map(c=>({...c,_k:'CMT'})), ...films.map(f=>({...f,_k:'QUAY'}))];
 
   const pending = all.filter(x=>x.trang_thai===ST.CHO_DUYET).length;
-  const tamTinh = all.filter(x=>x.trang_thai===ST.CHO_DUYET).reduce((s,x)=> s + (x._k==='POST'?tienPost(db.pricing):tienCmt(db.pricing,x.so_cmt_seeding)),0);
+  const tamTinh = all.filter(x=>x.trang_thai===ST.CHO_DUYET).reduce((s,x)=> s + (x._k==='POST'?tienPost(db.pricing):x._k==='CMT'?tienCmt(db.pricing,x.so_cmt_seeding):0),0);
   const datCount = all.filter(x=>x.trang_thai===ST.DAT||x.trang_thai===ST.DA_CHI).length;
-  const tongChi = all.filter(x=>x.trang_thai===ST.DAT||x.trang_thai===ST.DA_CHI).reduce((s,x)=>s+x.thanh_tien,0);
+  const tongChi = all.filter(x=>x.trang_thai===ST.DAT||x.trang_thai===ST.DA_CHI).reduce((s,x)=>s+(x.thanh_tien||0),0);
 
   // theo loại bài (POST) + theo người
   const byLoai = {};
@@ -1163,10 +1164,10 @@ function MktDashboard(){
       <DateRange from={from} to={to} setFrom={setFrom} setTo={setTo}/>
     </div>
     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-      <Stat label="Chờ duyệt" value={pending} color="text-amber-600"/>
+      <Stat label="Chờ duyệt" value={pending} color="text-amber-600" sub="POST · CMT · QUAY"/>
       <Stat label="Tổng chi tạm tính" value={fmtVND(tamTinh)} color="text-amber-600" sub="nếu duyệt hết"/>
       <Stat label="Item đã Đạt" value={datCount} color="text-emerald-600"/>
-      <Stat label="Tổng đã ghi công" value={fmtVND(tongChi)} color="text-emerald-600"/>
+      <Stat label="Tổng đã ghi công" value={fmtVND(tongChi)} color="text-emerald-600" sub="gồm cả quay công trình"/>
     </div>
 
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -1590,7 +1591,7 @@ function MktPayReport(){
 
     <div className="bg-white rounded-2xl border border-line shadow-card overflow-auto">
       <table className="w-full text-sm min-w-[720px]">
-        <thead className="bg-slate-50 text-xs text-slate-500 text-left">
+        <thead className="bg-slate-50/70 text-[11px] font-semibold uppercase tracking-wide text-ink-muted text-left">
           {tab==='post' ? <tr><Th>Ngày</Th><Th>Sales</Th><Th>Chủ đề</Th><Th>Loại bài</Th><Th>Group</Th><Th>Link</Th><Th r>React</Th><Th r>Cmt</Th><Th>Trạng thái</Th><Th r>Thành tiền</Th></tr>
             : <tr><Th>Ngày</Th><Th>Sales</Th><Th>Link post</Th><Th>Gợi ý cmt</Th><Th r>Số cmt</Th><Th>Ảnh</Th><Th>Trạng thái</Th><Th r>Thành tiền</Th></tr>}
         </thead>
@@ -1613,8 +1614,8 @@ function MktPayReport(){
   </div>;
 }
 const byDateDesc = (a,b)=>(b.created_at||'').localeCompare(a.created_at||'');
-function Th({children, r}){ return <th className={"px-3 py-2 font-medium "+(r?'text-right':'')}>{children}</th>; }
-function Td({children, r, className=''}){ return <td className={"px-3 py-2 "+(r?'text-right':'')+' '+className}>{children}</td>; }
+function Th({children, r}){ return <th className={"px-3 py-2.5 whitespace-nowrap "+(r?'text-right':'')}>{children}</th>; }
+function Td({children, r, className=''}){ return <td className={"px-3 py-2.5 text-ink "+(r?'text-right':'')+' '+className}>{children}</td>; }
 
 /* ============================================================
    17. QUẢN LÝ TÀI KHOẢN (Marketing quyền cao nhất — duyệt tài khoản)
@@ -1763,7 +1764,7 @@ function AdminPayroll(){
     </div>
     <div className="bg-white rounded-2xl border border-line shadow-card overflow-auto">
       <table className="w-full text-sm min-w-[720px]">
-        <thead className="bg-slate-50 text-xs text-slate-500 text-left"><tr>
+        <thead className="bg-slate-50/70 text-[11px] font-semibold uppercase tracking-wide text-ink-muted text-left"><tr>
           <Th>Sales</Th><Th r>Post đạt</Th><Th r>Tiền post</Th><Th r>Cmt đạt</Th><Th r>Tiền cmt</Th><Th r>Quay đạt</Th><Th r>Tiền quay</Th><Th r>Tổng phải trả</Th><Th r>Đã chi</Th><Th r>Còn lại</Th><Th></Th>
         </tr></thead>
         <tbody className="divide-y">
@@ -2447,7 +2448,7 @@ function AdminFilming(){
     </div>
     <div className="bg-white rounded-2xl border border-line shadow-card overflow-auto">
       <table className="w-full text-sm min-w-[760px]">
-        <thead className="bg-slate-50 text-xs text-slate-500 text-left"><tr><Th>Ngày</Th><Th>Sales</Th><Th>Công trình</Th><Th>Hệ SP / Quy trình</Th><Th>Khu vực</Th><Th r>Cảnh đạt</Th><Th>Trạng thái</Th><Th r>Thành tiền</Th></tr></thead>
+        <thead className="bg-slate-50/70 text-[11px] font-semibold uppercase tracking-wide text-ink-muted text-left"><tr><Th>Ngày</Th><Th>Sales</Th><Th>Công trình</Th><Th>Hệ SP / Quy trình</Th><Th>Khu vực</Th><Th r>Cảnh đạt</Th><Th>Trạng thái</Th><Th r>Thành tiền</Th></tr></thead>
         <tbody className="divide-y">
           {projects.length===0 ? <tr><td colSpan="8"><Empty>Không có dữ liệu.</Empty></td></tr> :
             projects.map(p=>{ const t=filmFindTpl(db,p.template_id); const sales=db.users.find(u=>u.id===p.sales_id);
