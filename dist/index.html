@@ -151,7 +151,7 @@ function buildFilmTemplate(ten, he_san_pham, checklist){
   const phases=[]; let po=1;
   for(const [pname, shots] of checklist){
     const phase={ id:uid('ph'), ten:pname, thu_tu:po++, shots:[] }; let so=1;
-    for(const [t,mo_ta,bb] of shots) phase.shots.push({ id:uid('sh'), ten:t, mo_ta, source_mau_url:'https://drive.google.com/mau/'+encodeURIComponent(t), bat_buoc:bb, thu_tu:so++, active:true });
+    for(const [t,mo_ta,bb] of shots) phase.shots.push({ id:uid('sh'), ten:t, mo_ta, source_mau_url:'https://youtu.be/dQw4w9WgXcQ', bat_buoc:bb, thu_tu:so++, active:true });
     phases.push(phase);
   }
   return { id:uid('tpl'), ten, he_san_pham, active:true, phases };
@@ -1828,6 +1828,13 @@ function EmbedMedia({url, className='w-full h-full'}){
   if(/\.(png|jpe?g|gif|webp)(\?|#|$)/i.test(url) || url.startsWith('data:image')) return <img src={url} className={className+" object-contain bg-slate-900"}/>;
   return <div className={className+" flex flex-col items-center justify-center bg-slate-900 text-white/70"}><span className="text-4xl">🔗</span><a href={url} target="_blank" className="text-xs underline mt-2">Mở link mẫu</a></div>;
 }
+// khung hình đại diện video mẫu để hiển thị trên thẻ cảnh (không tự phát)
+function SampleThumb({url}){
+  const yt=ytId(url); if(yt) return <img src={"https://img.youtube.com/vi/"+yt+"/hqdefault.jpg"} className="absolute inset-0 w-full h-full object-cover"/>;
+  if(isAppMedia(url) || /\.(mp4|webm|mov|m4v)(\?|#|$)/i.test(url)) return <video src={isAppMedia(url)?url+"#t=0.1":url} muted playsInline preload="metadata" className="absolute inset-0 w-full h-full object-cover"/>;
+  if(/\.(png|jpe?g|gif|webp)(\?|#|$)/i.test(url) || (url||'').startsWith('data:image')) return <img src={url} className="absolute inset-0 w-full h-full object-cover"/>;
+  return null;
+}
 // Nút + popup xem hướng dẫn (văn bản + video) theo khoá (post/cmt/filming)
 function GuideBtn({guideKey, title}){
   const [open,setOpen]=useState(false);
@@ -1999,6 +2006,7 @@ function FilmingEditor({onDone, project}){
   const [ngay, setNgay] = useState((project && project.ngay_quay ? String(project.ngay_quay) : new Date().toISOString()).slice(0,10));
   const [uploads, setUploads] = useState(project ? (project.uploads||[]).map(u=>({id:u.id, shot_id:u.shot_id, media_type:u.media_type, media_url:u.media_url})) : []);
   const [openShot, setOpenShot] = useState(null);
+  const [sampleShot, setSampleShot] = useState(null);
   const [busy, setBusy] = useState(false);
 
   const changeTemplate = (id)=>{ if(id!==templateId && uploads.length && !confirm('Đổi quy trình sẽ xoá nguồn đã thêm. Tiếp tục?')) return; setTemplateId(id); setUploads([]); };
@@ -2042,23 +2050,30 @@ function FilmingEditor({onDone, project}){
     {template && template.phases.map((ph,pi)=><div key={ph.id}>
       <div className="flex items-center gap-2 mb-2 mt-1"><span className="text-sm font-bold text-ink">{ph.thu_tu}. {ph.ten}</span><span className="text-[11px] text-slate-400">{ph.shots.filter(s=>s.active).length} cảnh</span></div>
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-        {ph.shots.filter(s=>s.active).map(shot=>{ const md=mediaOf(shot.id); const has=md.length>0;
-          return <button key={shot.id} onClick={()=>setOpenShot(shot)}
-            className={"text-left rounded-2xl border transition overflow-hidden bg-white hover:shadow-md "+(has?'border-emerald-300 ring-1 ring-emerald-200':'border-slate-200 hover:border-brand')}>
-            <div className="aspect-[4/3] flex items-center justify-center relative" style={{background:phaseBg(pi)}}>
-              {has && md[0].media_url && !isDriveLink(md[0])
-                ? <span className="absolute inset-0"><MediaThumb m={md[0]}/></span>
-                : <span className="text-5xl opacity-90">{iconFor(shot.ten)}</span>}
+        {ph.shots.filter(s=>s.active).map(shot=>{ const md=mediaOf(shot.id); const has=md.length>0; const hasSample=!!shot.source_mau_url;
+          return <div key={shot.id}
+            className={"text-left rounded-2xl border overflow-hidden bg-white "+(has?'border-emerald-300 ring-1 ring-emerald-200':'border-slate-200')}>
+            {/* KHU VỰC VIDEO MẪU — bấm để xem mẫu ngay */}
+            <button onClick={()=> hasSample ? setSampleShot(shot) : setOpenShot(shot)}
+              className="w-full aspect-video flex items-center justify-center relative group" style={{background:phaseBg(pi)}}>
+              {hasSample ? <SampleThumb url={shot.source_mau_url}/> : null}
+              {(!hasSample || SampleThumb({url:shot.source_mau_url})===null) && <span className="text-5xl opacity-90 relative">{iconFor(shot.ten)}</span>}
               {shot.bat_buoc && <span className="absolute top-2 left-2"><ReqBadge/></span>}
-              {has
-                ? <span className="absolute bottom-2 right-2 bg-emerald-500 text-white text-[10px] px-1.5 py-0.5 rounded-full font-medium shadow">✓ {md.length} nguồn</span>
-                : <span className="absolute bottom-2 right-2 w-7 h-7 rounded-full bg-white/90 border border-slate-300 text-brand-dark flex items-center justify-center text-lg shadow-sm">＋</span>}
-            </div>
+              {hasSample && <>
+                <span className="absolute inset-0 bg-black/25 group-hover:bg-black/35 transition flex items-center justify-center">
+                  <span className="w-11 h-11 rounded-full bg-white/90 text-brand-dark flex items-center justify-center text-lg shadow">▶</span></span>
+                <span className="absolute bottom-2 left-2 text-[10px] px-1.5 py-0.5 rounded-full bg-black/60 text-white font-medium">🎬 Xem mẫu</span>
+              </>}
+              {has && <span className="absolute bottom-2 right-2 bg-emerald-500 text-white text-[10px] px-1.5 py-0.5 rounded-full font-medium shadow">✓ {md.length} nguồn</span>}
+            </button>
             <div className="p-2.5">
               <div className="text-sm font-medium text-ink leading-snug">{shot.ten}</div>
-              <div className="text-[11px] text-slate-400 line-clamp-2 mt-0.5">{shot.mo_ta}</div>
+              <div className="text-[11px] text-slate-400 line-clamp-2 mt-0.5 mb-2">{shot.mo_ta}</div>
+              {/* nguồn Sales đã up (thu nhỏ) */}
+              {has && <div className="flex gap-1.5 flex-wrap mb-2">{md.slice(0,4).map(m=><span key={m.id} className="w-9 h-9 rounded-md overflow-hidden border border-line block relative"><MediaThumb m={m}/></span>)}</div>}
+              <Btn variant={has?'ghost':'brand'} className="w-full !py-2" onClick={()=>setOpenShot(shot)}>{has?'＋ Thêm / sửa nguồn':'📤 Quay xong · Tải lên'}</Btn>
             </div>
-          </button>;
+          </div>;
         })}
       </div>
     </div>)}
@@ -2071,6 +2086,7 @@ function FilmingEditor({onDone, project}){
 
     {openShot && <ShotUploadModal shot={openShot} media={mediaOf(openShot.id)} onClose={()=>setOpenShot(null)}
       onAdd={item=>addMedia(openShot.id, item)} onDel={delMedia}/>}
+    <SampleModal shot={sampleShot} onClose={()=>setSampleShot(null)}/>
   </div>;
 }
 // Popup tải nguồn cho 1 cảnh: tải trực tiếp lên app (R2) hoặc dán link Drive
