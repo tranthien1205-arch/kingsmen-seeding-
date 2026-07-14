@@ -17,7 +17,7 @@
       extend: {
         colors: {
           ink:   { DEFAULT: '#0b3543', soft: '#114654', muted: '#5c7480' }, // teal đậm
-          gold:  { DEFAULT: '#0a92b4', dark: '#0a6a80', light: '#7fd4e4', bg: '#eafafd' }, // cyan thương hiệu (giữ tên "gold" trong code)
+          brand:  { DEFAULT: '#0a92b4', dark: '#0a6a80', light: '#7fd4e4', bg: '#eafafd' }, // cyan thương hiệu Kingsmen
           line:  '#e2e8ea',
         },
         fontFamily: {
@@ -27,7 +27,7 @@
         boxShadow: {
           card: '0 1px 2px rgba(11,53,67,.05), 0 1px 3px rgba(11,53,67,.07)',
           lift: '0 10px 30px -10px rgba(11,53,67,.25)',
-          gold: '0 8px 20px -6px rgba(10,146,180,.45)',
+          brand: '0 8px 20px -6px rgba(10,146,180,.45)',
         },
       }
     }
@@ -459,14 +459,14 @@ function Toast({toast}){
   return <div className={"fixed bottom-5 left-1/2 -translate-x-1/2 z-50 text-white px-4 py-2.5 rounded-xl shadow-lift text-sm max-w-[90%] font-medium "+c}>{toast.msg}</div>;
 }
 function Badge({st}){ return <span className={"inline-block px-2 py-0.5 rounded-full text-xs font-medium "+(ST_STYLE[st]||'bg-slate-100')}>{ST_LABEL[st]||st}</span>; }
-function PriBadge({small}){ return <span className={"inline-flex items-center gap-0.5 rounded-full font-semibold bg-gold/15 text-gold-dark "+(small?'text-[9px] px-1.5 py-0.5':'text-[10px] px-2 py-0.5')}>⭐ Ưu tiên</span>; }
+function PriBadge({small}){ return <span className={"inline-flex items-center gap-0.5 rounded-full font-semibold bg-brand/15 text-brand-dark "+(small?'text-[9px] px-1.5 py-0.5':'text-[10px] px-2 py-0.5')}>⭐ Ưu tiên</span>; }
 const sortPri = (arr) => [...arr].sort((a,b)=> (b.uu_tien?1:0)-(a.uu_tien?1:0));
 function PriSwitch({value, onChange, hint}){
   return <div className="mb-3 flex items-center justify-between p-3 rounded-xl border border-slate-200 bg-slate-50">
     <div><div className="text-xs font-semibold text-slate-700">⭐ Ưu tiên seeding</div>
       <div className="text-[11px] text-slate-400">{hint||'Yêu cầu Sales seeding mục này trước'}</div></div>
     <button type="button" onClick={()=>onChange(!value)}
-      className={"w-12 h-7 rounded-full transition relative "+(value?'bg-gold':'bg-slate-300')}>
+      className={"w-12 h-7 rounded-full transition relative "+(value?'bg-brand':'bg-slate-300')}>
       <span className={"absolute top-0.5 w-6 h-6 bg-white rounded-full shadow transition-all "+(value?'left-[22px]':'left-0.5')}></span>
     </button>
   </div>;
@@ -474,11 +474,11 @@ function PriSwitch({value, onChange, hint}){
 function Btn({children, onClick, variant='primary', className='', type='button', disabled}){
   const v = {
     primary:'bg-ink text-white hover:bg-ink-soft',
-    gold:'bg-gold text-white hover:bg-gold-dark shadow-gold',
-    ghost:'bg-white border border-line text-ink hover:border-gold hover:text-gold-dark',
+    brand:'bg-brand text-white hover:bg-brand-dark shadow-brand',
+    ghost:'bg-white border border-line text-ink hover:border-brand hover:text-brand-dark',
     danger:'bg-rose-600 text-white hover:bg-rose-700',
     ok:'bg-emerald-600 text-white hover:bg-emerald-700',
-    soft:'bg-gold-bg text-gold-dark hover:bg-gold-light/60',
+    soft:'bg-brand-bg text-brand-dark hover:bg-brand-light/60',
   }[variant];
   return <button type={type} disabled={disabled} onClick={onClick}
     className={"px-3.5 py-2.5 rounded-xl text-sm font-semibold transition active:scale-[.98] disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100 "+v+" "+className}>{children}</button>;
@@ -490,7 +490,7 @@ function Field({label, children, hint, required}){
     {hint && <div className="text-[11px] text-ink-muted mt-1">{hint}</div>}
   </label>;
 }
-const inputCls = "w-full px-3.5 py-2.5 rounded-xl border border-line text-sm text-ink placeholder:text-slate-400 focus:outline-none focus:ring-4 focus:ring-gold/15 focus:border-gold bg-white transition";
+const inputCls = "w-full px-3.5 py-2.5 rounded-xl border border-line text-sm text-ink placeholder:text-slate-400 focus:outline-none focus:ring-4 focus:ring-brand/15 focus:border-brand bg-white transition";
 function Input(p){ return <input {...p} className={inputCls+" "+(p.className||'')}/>; }
 function Textarea(p){ return <textarea {...p} className={inputCls+" "+(p.className||'')}/>; }
 function Select({children, ...p}){ return <select {...p} className={inputCls+" "+(p.className||'')}>{children}</select>; }
@@ -519,7 +519,7 @@ function Tabs({tabs, active, onChange}){
   return <div className="flex gap-1 bg-slate-100 p-1 rounded-xl overflow-x-auto">
     {tabs.map(t=><button key={t.key} onClick={()=>onChange(t.key)}
       className={"px-3 py-1.5 rounded-lg text-sm font-semibold whitespace-nowrap transition "+(active===t.key?'bg-white shadow-card text-ink':'text-ink-muted hover:text-ink')}>
-      {t.label}{t.count!=null && <span className={"ml-1.5 text-xs px-1.5 rounded-full "+(active===t.key?'bg-gold text-white':'bg-slate-200 text-slate-500')}>{t.count}</span>}
+      {t.label}{t.count!=null && <span className={"ml-1.5 text-xs px-1.5 rounded-full "+(active===t.key?'bg-brand text-white':'bg-slate-200 text-slate-500')}>{t.count}</span>}
     </button>)}
   </div>;
 }
@@ -551,13 +551,13 @@ function Login(){
     <div className="w-full max-w-4xl grid md:grid-cols-2 rounded-3xl overflow-hidden shadow-lift border border-line bg-white">
       {/* Panel thương hiệu */}
       <div className="hidden md:flex flex-col justify-between p-8 bg-gradient-to-br from-ink to-ink-soft text-white relative overflow-hidden">
-        <div className="absolute -top-16 -right-16 w-56 h-56 rounded-full bg-gold/20 blur-3xl"></div>
+        <div className="absolute -top-16 -right-16 w-56 h-56 rounded-full bg-brand/20 blur-3xl"></div>
         <div className="flex items-center gap-2.5 relative">
-          <div className="w-11 h-11 rounded-2xl bg-gold flex items-center justify-center font-display font-800 text-ink text-xl">K</div>
+          <div className="w-11 h-11 rounded-2xl bg-brand flex items-center justify-center font-display font-800 text-ink text-xl">K</div>
           <div><div className="font-display font-800 leading-none">KINGSMEN</div><div className="text-[11px] text-white/50 tracking-[0.2em] mt-0.5">SEEDING SYSTEM</div></div>
         </div>
         <div className="relative">
-          <div className="font-display text-2xl font-800 leading-snug">Quản lý & nghiệm thu<br/><span className="text-gold-light">seeding · quay công trình</span></div>
+          <div className="font-display text-2xl font-800 leading-snug">Quản lý & nghiệm thu<br/><span className="text-brand-light">seeding · quay công trình</span></div>
           <div className="text-sm text-white/60 mt-3 max-w-xs">Marketing duyệt · Sales báo cáo · tự tính tiền. Một nguồn dữ liệu, đồng bộ mọi máy.</div>
         </div>
         <div className="flex gap-2 relative">
@@ -569,7 +569,7 @@ function Login(){
       {/* Form */}
       <div className="p-8 flex flex-col justify-center">
         <div className="flex md:hidden items-center gap-2.5 mb-5">
-          <div className="w-11 h-11 rounded-2xl bg-gold flex items-center justify-center font-display font-800 text-ink text-xl">K</div>
+          <div className="w-11 h-11 rounded-2xl bg-brand flex items-center justify-center font-display font-800 text-ink text-xl">K</div>
           <div><div className="font-display font-800 text-ink leading-none">KINGSMEN</div><div className="text-[11px] text-ink-muted tracking-widest mt-0.5">SEEDING</div></div>
         </div>
         <div className="font-display text-xl font-700 text-ink mb-1">Đăng nhập</div>
@@ -581,17 +581,17 @@ function Login(){
           onKeyDown={e=>e.key==='Enter'&&doLogin()}/></Field>
         <Field label="Mật khẩu"><Input type="password" value={pw} onChange={e=>setPw(e.target.value)} placeholder="••••••"
           onKeyDown={e=>e.key==='Enter'&&doLogin()}/></Field>
-        <Btn variant="gold" className="w-full mt-1 py-3" onClick={doLogin} disabled={busy}>{busy?'Đang đăng nhập…':'Đăng nhập →'}</Btn>
+        <Btn variant="brand" className="w-full mt-1 py-3" onClick={doLogin} disabled={busy}>{busy?'Đang đăng nhập…':'Đăng nhập →'}</Btn>
 
         {DEMO && <div className="mt-4 pt-3 border-t border-line">
           <div className="text-[11px] text-amber-600 text-center mb-2">⚡ BẢN PREVIEW — bấm để vào nhanh (mật khẩu demo: 123456)</div>
           <div className="grid grid-cols-3 gap-1.5">
             {[['mkt@kingsmen.vn','Marketing'],['sale1@kingsmen.vn','Sales'],['admin@kingsmen.vn','Kế toán']].map(([em,lb])=>
-              <button key={em} onClick={()=>login(em,'123456')} className="text-xs bg-slate-100 hover:bg-gold hover:text-white text-slate-600 rounded-lg py-2 transition">{lb}</button>)}
+              <button key={em} onClick={()=>login(em,'123456')} className="text-xs bg-slate-100 hover:bg-brand hover:text-white text-slate-600 rounded-lg py-2 transition">{lb}</button>)}
           </div>
         </div>}
 
-        <p className="text-[11px] text-ink-muted text-center mt-3">Chưa có tài khoản? Liên hệ <b className="text-gold-dark">Marketing</b> để được cấp email & mật khẩu.</p>
+        <p className="text-[11px] text-ink-muted text-center mt-3">Chưa có tài khoản? Liên hệ <b className="text-brand-dark">Marketing</b> để được cấp email & mật khẩu.</p>
       </div>
     </div>
   </div>;
@@ -646,7 +646,7 @@ function ProfileModal({open, onClose}){
     <Field label="Email (đăng nhập)"><Input value={me.email} disabled/></Field>
     <Field label="Đổi mật khẩu" hint="Để trống nếu không đổi">
       <Input type="password" value={pw} onChange={e=>setPw(e.target.value)} placeholder="Mật khẩu mới"/></Field>
-    <div className="flex gap-2 mt-2"><Btn variant="ghost" onClick={onClose}>Huỷ</Btn><Btn variant="gold" className="flex-1" onClick={save} disabled={busy}>{busy?'Đang lưu…':'Lưu'}</Btn></div>
+    <div className="flex gap-2 mt-2"><Btn variant="ghost" onClick={onClose}>Huỷ</Btn><Btn variant="brand" className="flex-1" onClick={save} disabled={busy}>{busy?'Đang lưu…':'Lưu'}</Btn></div>
   </Modal>;
 }
 function Shell(){
@@ -684,20 +684,20 @@ function Shell(){
     {/* Sidebar desktop */}
     <aside className="hidden sm:flex sm:flex-col w-60 bg-ink text-white rounded-2xl sticky top-4 self-start max-h-[calc(100vh-2rem)] shadow-lift">
       <div className="p-4 flex items-center gap-2.5 border-b border-white/10">
-        <div className="w-10 h-10 rounded-xl bg-gold flex items-center justify-center font-display font-800 text-ink">K</div>
+        <div className="w-10 h-10 rounded-xl bg-brand flex items-center justify-center font-display font-800 text-ink">K</div>
         <div><div className="font-display font-700 leading-tight">Kingsmen</div><div className="text-[11px] text-white/40">Seeding</div></div>
       </div>
       <nav className="flex-1 p-2 space-y-1 overflow-y-auto">
         {nav.map(n=><button key={n.key} onClick={()=>setPage(n.key)}
-          className={"w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition "+(page===n.key?'bg-gold text-white shadow-gold':'text-white/70 hover:bg-white/10')}>
+          className={"w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition "+(page===n.key?'bg-brand text-white shadow-brand':'text-white/70 hover:bg-white/10')}>
           <span className="text-base">{n.icon}</span><span>{n.label}</span>
           {badgeFor(n.key)>0 && <span className="ml-auto bg-white text-ink text-xs font-bold px-1.5 rounded-full">{badgeFor(n.key)}</span>}
         </button>)}
       </nav>
       <div className="p-3 border-t border-white/10">
         <button onClick={()=>setProfileOpen(true)} className="text-left w-full group mb-2 flex items-center gap-2.5">
-          <span className="w-9 h-9 rounded-full bg-white/10 flex items-center justify-center font-semibold text-gold-light">{(me.ho_ten||'?')[0]}</span>
-          <span className="min-w-0"><span className="block text-sm font-medium group-hover:text-gold truncate">{me.ho_ten} ✏️</span>
+          <span className="w-9 h-9 rounded-full bg-white/10 flex items-center justify-center font-semibold text-brand-light">{(me.ho_ten||'?')[0]}</span>
+          <span className="min-w-0"><span className="block text-sm font-medium group-hover:text-brand truncate">{me.ho_ten} ✏️</span>
           <span className="block text-[11px] text-white/50">{ROLE_LABEL[me.vai_tro]}</span></span>
         </button>
         <button onClick={logout} className="text-xs text-white/60 hover:text-white">↩ Đăng xuất</button>
@@ -708,7 +708,7 @@ function Shell(){
       {/* Topbar mobile */}
       <header className="sm:hidden sticky top-0 z-20 bg-ink text-white px-4 py-3 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg bg-gold flex items-center justify-center font-display font-800 text-ink text-sm">K</div>
+          <div className="w-8 h-8 rounded-lg bg-brand flex items-center justify-center font-display font-800 text-ink text-sm">K</div>
           <span className="font-display font-700 text-sm">{nav.find(n=>n.key===page)?.label}</span>
         </div>
         <div className="flex items-center gap-3">
@@ -723,7 +723,7 @@ function Shell(){
     {/* Bottom nav mobile */}
     <nav className="sm:hidden fixed bottom-0 inset-x-0 z-20 bg-white/95 backdrop-blur border-t border-line flex">
       {nav.map(n=><button key={n.key} onClick={()=>setPage(n.key)}
-        className={"flex-1 flex flex-col items-center py-2 text-[11px] font-medium "+(page===n.key?'text-gold-dark':'text-ink-muted')}>
+        className={"flex-1 flex flex-col items-center py-2 text-[11px] font-medium "+(page===n.key?'text-brand-dark':'text-ink-muted')}>
         <span className="text-lg leading-none relative">{n.icon}
           {badgeFor(n.key)>0 && <span className="absolute -top-1 -right-2 bg-rose-500 text-white text-[9px] px-1 rounded-full">{badgeFor(n.key)}</span>}
         </span>
@@ -781,7 +781,7 @@ function SalesHome({go}){
     <div className="grid grid-cols-3 gap-3">
       <button onClick={()=>go('new_post')} className="bg-ink text-white rounded-2xl p-3 text-left hover:bg-ink-soft transition">
         <div className="text-xl">📝</div><div className="font-semibold text-sm mt-1">Tạo POST</div></button>
-      <button onClick={()=>go('new_cmt')} className="bg-gold text-white rounded-2xl p-3 text-left hover:bg-gold-dark transition">
+      <button onClick={()=>go('new_cmt')} className="bg-brand text-white rounded-2xl p-3 text-left hover:bg-brand-dark transition">
         <div className="text-xl">💬</div><div className="font-semibold text-sm mt-1">Tạo CMT</div></button>
       <button onClick={()=>go('filming')} className="bg-ink-soft text-white rounded-2xl p-3 text-left hover:bg-ink transition">
         <div className="text-xl">🎥</div><div className="font-semibold text-sm mt-1">Quay CT</div></button>
@@ -878,7 +878,7 @@ function SalesNewPost({go}){
   return <div className="space-y-4 max-w-2xl">
     <h2 className="font-display text-lg font-bold text-ink">📝 Tạo POST seeding</h2>
 
-    {(priTopics>0 || priGroups>0) && <div className="bg-gold/10 border border-gold/30 rounded-2xl p-3 text-xs text-gold-dark">
+    {(priTopics>0 || priGroups>0) && <div className="bg-brand/10 border border-brand/30 rounded-2xl p-3 text-xs text-brand-dark">
       ⭐ Marketing đang ưu tiên {priTopics>0 && <b>{priTopics} tuyến nội dung</b>}{priTopics>0&&priGroups>0 && ' và '}{priGroups>0 && <b>{priGroups} group</b>} — hãy seeding các mục ⭐ trước.
     </div>}
 
@@ -887,7 +887,7 @@ function SalesNewPost({go}){
       <div className="flex items-center justify-between mb-2">
         <div className="text-sm font-semibold text-ink">1. Chọn chủ đề / nội dung</div>
         {priTopics>0 && <button onClick={()=>setOnlyPri(v=>!v)}
-          className={"px-2.5 py-1 rounded-lg text-xs font-medium "+(onlyPri?'bg-gold text-white':'bg-slate-100 text-slate-500')}>⭐ Chỉ ưu tiên</button>}
+          className={"px-2.5 py-1 rounded-lg text-xs font-medium "+(onlyPri?'bg-brand text-white':'bg-slate-100 text-slate-500')}>⭐ Chỉ ưu tiên</button>}
       </div>
       <div className="flex gap-2 mb-2">
         <Input placeholder="Tìm theo từ khoá…" value={q} onChange={e=>setQ(e.target.value)}/>
@@ -900,7 +900,7 @@ function SalesNewPost({go}){
         {topics.length===0 && <Empty>Không có nội dung phù hợp.</Empty>}
         {topics.map(t=>
           <div key={t.id} onClick={()=>setTopicId(t.id)}
-            className={"p-3 rounded-xl border cursor-pointer transition "+(topicId===t.id?'border-gold bg-gold/5':t.uu_tien?'border-gold/40 bg-gold/[0.03]':'border-slate-200 hover:border-slate-300')}>
+            className={"p-3 rounded-xl border cursor-pointer transition "+(topicId===t.id?'border-brand bg-brand/5':t.uu_tien?'border-brand/40 bg-brand/[0.03]':'border-slate-200 hover:border-slate-300')}>
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-1.5 min-w-0">
                 {t.uu_tien && <PriBadge small/>}
@@ -924,7 +924,7 @@ function SalesNewPost({go}){
         <option value="">— Chọn group mục tiêu —</option>
         {groups.map(g=><option key={g.id} value={g.id}>{g.uu_tien?'⭐ ':''}{g.ten_group} ({g.loai} · {(g.so_member||0).toLocaleString('vi-VN')} tv)</option>)}
       </Select>
-      {chosenGroup && chosenGroup.uu_tien && <div className="mt-2"><PriBadge small/> <span className="text-[11px] text-gold-dark">Group Marketing đang ưu tiên</span></div>}
+      {chosenGroup && chosenGroup.uu_tien && <div className="mt-2"><PriBadge small/> <span className="text-[11px] text-brand-dark">Group Marketing đang ưu tiên</span></div>}
       {chosenGroup && <div className="mt-3">
         {chosenGroup.link ? <>
           <a href={chosenGroup.link} target="_blank" rel="noopener"
@@ -951,7 +951,7 @@ function SalesNewPost({go}){
 
     <div className="flex gap-2">
       <Btn variant="ghost" onClick={()=>submit(true)}>Lưu nháp</Btn>
-      <Btn variant="gold" className="flex-1" onClick={()=>submit(false)}>Gửi nghiệm thu →</Btn>
+      <Btn variant="brand" className="flex-1" onClick={()=>submit(false)}>Gửi nghiệm thu →</Btn>
     </div>
   </div>;
 }
@@ -976,7 +976,7 @@ function ImageUploader({images, setImages}){
         <img src={im.image_url} className="w-full h-full object-cover"/>
         <button onClick={()=>setImages(prev=>prev.filter(x=>x.id!==im.id))} className="absolute top-0.5 right-0.5 bg-black/60 text-white w-5 h-5 rounded-full text-xs leading-none">×</button>
       </div>)}
-      <button onClick={()=>ref.current.click()} className="w-20 h-20 rounded-lg border-2 border-dashed border-slate-300 text-slate-400 flex flex-col items-center justify-center text-xs hover:border-gold">
+      <button onClick={()=>ref.current.click()} className="w-20 h-20 rounded-lg border-2 border-dashed border-slate-300 text-slate-400 flex flex-col items-center justify-center text-xs hover:border-brand">
         <span className="text-xl">＋</span>Chụp/Up
       </button>
     </div>
@@ -1066,7 +1066,7 @@ function SalesNewCmt({go}){
 
     <div className="flex gap-2">
       <Btn variant="ghost" onClick={()=>submit(true)}>Lưu nháp</Btn>
-      <Btn variant="gold" className="flex-1" onClick={()=>submit(false)}>Gửi nghiệm thu →</Btn>
+      <Btn variant="brand" className="flex-1" onClick={()=>submit(false)}>Gửi nghiệm thu →</Btn>
     </div>
   </div>;
 }
@@ -1198,7 +1198,7 @@ function BreakdownCard({title, data}){
       <div className="space-y-2">{entries.map(([k,v])=>
         <div key={k}>
           <div className="flex justify-between text-xs mb-0.5"><span className="text-slate-600">{k}</span><span className="font-semibold">{v}</span></div>
-          <div className="h-2 bg-slate-100 rounded-full overflow-hidden"><div className="h-full bg-gold rounded-full" style={{width:(v/max*100)+'%'}}/></div>
+          <div className="h-2 bg-slate-100 rounded-full overflow-hidden"><div className="h-full bg-brand rounded-full" style={{width:(v/max*100)+'%'}}/></div>
         </div>)}
       </div>}
   </div>;
@@ -1245,7 +1245,7 @@ function Library(){
       <h2 className="font-display text-lg font-bold text-ink">📚 Thư viện chung</h2>
       <div className="flex gap-2">
         <ImportBtn tab={tab}/>
-        <Btn variant="gold" onClick={()=>openNew(tab)}>＋ Thêm</Btn>
+        <Btn variant="brand" onClick={()=>openNew(tab)}>＋ Thêm</Btn>
       </div>
     </div>
     <Tabs active={tab} onChange={setTab} tabs={tabs}/>
@@ -1263,7 +1263,7 @@ function Library(){
         {t.uu_tien && <PriBadge/>}
         <span className="font-medium text-sm text-ink">{t.chu_de}</span>
         <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500">{t.loai_bai}</span>
-        {t.muc_tieu && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-gold/10 text-gold-dark">{t.muc_tieu}</span>}</div>
+        {t.muc_tieu && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-brand/10 text-brand-dark">{t.muc_tieu}</span>}</div>
       <div className="text-xs text-slate-500 line-clamp-2 mt-0.5">{t.noi_dung}</div>
     </>)} onEdit={t=>setEdit({type:'topics',item:t})} onToggle={t=>toggle('topics',t)} onDel={t=>remove('topics',t)} onPri={t=>togglePri('topics',t)}/>}
 
@@ -1283,7 +1283,7 @@ function LibList({items, render, onEdit, onToggle, onDel, onPri}){
       <div className="flex flex-col items-end gap-1 shrink-0">
         <div className="flex gap-1">
           {onPri && <button onClick={()=>onPri(it)} title={it.uu_tien?'Bỏ ưu tiên':'Đặt ưu tiên'}
-            className={"px-2 py-1 rounded-lg text-xs font-medium "+(it.uu_tien?'bg-gold/15 text-gold-dark':'bg-slate-100 text-slate-400 hover:text-gold-dark')}>{it.uu_tien?'⭐':'☆'}</button>}
+            className={"px-2 py-1 rounded-lg text-xs font-medium "+(it.uu_tien?'bg-brand/15 text-brand-dark':'bg-slate-100 text-slate-400 hover:text-brand-dark')}>{it.uu_tien?'⭐':'☆'}</button>}
           <Toggle on={it.active} onClick={()=>onToggle(it)}/>
         </div>
         <div className="flex gap-1">
@@ -1335,7 +1335,7 @@ function LibEditModal({edit, onClose}){
       </div>
       <Field label="Thứ tự"><Input type="number" className="no-spin" value={f.thu_tu||0} onChange={e=>set('thu_tu',Number(e.target.value))}/></Field>
     </>}
-    <div className="flex gap-2 mt-2"><Btn variant="ghost" onClick={onClose}>Huỷ</Btn><Btn variant="gold" className="flex-1" onClick={save}>Lưu</Btn></div>
+    <div className="flex gap-2 mt-2"><Btn variant="ghost" onClick={onClose}>Huỷ</Btn><Btn variant="brand" className="flex-1" onClick={save}>Lưu</Btn></div>
   </Modal>;
 }
 // Cấu hình template import cho từng tab thư viện: tiêu đề cột + dòng ví dụ mẫu + hàm dựng bản ghi
@@ -1436,7 +1436,7 @@ function ImportBtn({tab}){
       <p className="text-[11px] text-slate-400 mb-2">{tpl.note}</p>
       <p className="text-xs text-slate-500 mb-1">Hoặc copy các cột từ Excel rồi dán trực tiếp vào ô dưới (mỗi dòng 1 mục):</p>
       <Textarea rows="7" value={txt} onChange={e=>setTxt(e.target.value)} placeholder="Nội dung file sẽ hiện ở đây sau khi chọn file, hoặc dán dữ liệu từ Excel…"/>
-      <div className="flex gap-2 mt-3"><Btn variant="ghost" onClick={()=>setOpen(false)}>Huỷ</Btn><Btn variant="gold" className="flex-1" onClick={doImport}>Import</Btn></div>
+      <div className="flex gap-2 mt-3"><Btn variant="ghost" onClick={()=>setOpen(false)}>Huỷ</Btn><Btn variant="brand" className="flex-1" onClick={doImport}>Import</Btn></div>
     </Modal>
   </>;
 }
@@ -1581,7 +1581,7 @@ function MktPayReport(){
   return <div className="space-y-4">
     <div className="flex items-center justify-between flex-wrap gap-2">
       <h2 className="font-display text-lg font-bold text-ink">📄 Báo cáo thanh toán</h2>
-      <Btn variant="gold" onClick={exportCSV}>⬆ Xuất Excel</Btn>
+      <Btn variant="brand" onClick={exportCSV}>⬆ Xuất Excel</Btn>
     </div>
     <div className="bg-white rounded-2xl border border-line shadow-card p-3 flex flex-wrap gap-2 items-center">
       <DateRange from={from} to={to} setFrom={setFrom} setTo={setTo}/>
@@ -1657,9 +1657,9 @@ function UserManagement(){
   return <div className="space-y-4">
     <div className="flex items-center justify-between">
       <h2 className="font-display text-lg font-bold text-ink">👥 Quản lý tài khoản</h2>
-      <Btn variant="gold" onClick={()=>setEdit({...blank})}>＋ Tạo tài khoản</Btn>
+      <Btn variant="brand" onClick={()=>setEdit({...blank})}>＋ Tạo tài khoản</Btn>
     </div>
-    <div className="bg-gold/10 border border-gold/30 rounded-2xl p-3 text-xs text-gold-dark">
+    <div className="bg-brand/10 border border-brand/30 rounded-2xl p-3 text-xs text-brand-dark">
       Marketing tạo & cấp tài khoản cho Sales và Kế toán — gửi <b>email + mật khẩu</b> để họ đăng nhập. Họ không tự đăng ký.
     </div>
 
@@ -1685,7 +1685,7 @@ function UserManagement(){
         <Field label="Email" required hint={edit.id?'Không đổi được email sau khi tạo':''}><Input type="email" value={edit.email} disabled={!!edit.id} onChange={e=>setEdit({...edit,email:e.target.value})}/></Field>
         <Field label="Mật khẩu" hint={edit.id?'Để trống nếu không đổi mật khẩu':'Người dùng đăng nhập bằng email + mật khẩu này'}><Input value={edit.password||''} placeholder={edit.id?'••••••':''} onChange={e=>setEdit({...edit,password:e.target.value})}/></Field>
         <Field label="Vai trò"><Select value={edit.vai_tro} onChange={e=>setEdit({...edit,vai_tro:e.target.value})}>{Object.values(ROLES).map(r=><option key={r} value={r}>{ROLE_LABEL[r]}</option>)}</Select></Field>
-        <div className="flex gap-2 mt-2"><Btn variant="ghost" onClick={()=>setEdit(null)}>Huỷ</Btn><Btn variant="gold" className="flex-1" onClick={save}>{edit.id?'Lưu':'Tạo & cấp'}</Btn></div>
+        <div className="flex gap-2 mt-2"><Btn variant="ghost" onClick={()=>setEdit(null)}>Huỷ</Btn><Btn variant="brand" className="flex-1" onClick={save}>{edit.id?'Lưu':'Tạo & cấp'}</Btn></div>
       </>}
     </Modal>
   </div>;
@@ -1712,7 +1712,7 @@ function AdminPricing(){
       <div className="bg-slate-50 rounded-xl p-3 text-xs text-slate-500 mb-3">
         Công thức nghiệm thu: <b>POST</b> = đơn giá post · <b>CMT</b> = số cmt × đơn giá cmt · <b>QUAY</b> = tổng số <b>cảnh đạt</b> × đơn giá cảnh (mỗi cảnh 1 lần, có thể đặt giá riêng theo cảnh). Chốt khi Marketing bấm "Hoàn tất nghiệm thu".
       </div>
-      <Btn variant="gold" onClick={save}>Lưu đơn giá</Btn>
+      <Btn variant="brand" onClick={save}>Lưu đơn giá</Btn>
     </div>
   </div>;
 }
@@ -1755,7 +1755,7 @@ function AdminPayroll(){
       <h2 className="font-display text-lg font-bold text-ink">🧾 Bảng lương</h2>
       <div className="flex gap-2 items-center">
         <Select value={ky} onChange={e=>setKy(e.target.value)}><option value="">Tất cả kỳ</option>{kyList.map(k=><option key={k}>{k}</option>)}</Select>
-        <Btn variant="gold" onClick={exportPayroll}>⬆ Xuất Excel</Btn>
+        <Btn variant="brand" onClick={exportPayroll}>⬆ Xuất Excel</Btn>
       </div>
     </div>
     <div className="grid grid-cols-3 gap-3">
@@ -1772,7 +1772,7 @@ function AdminPayroll(){
           {rows.length===0 ? <tr><td colSpan="11"><Empty>Chưa có item đạt trong kỳ.</Empty></td></tr> :
             rows.map(x=><tr key={x.u.id} className="hover:bg-slate-50">
               <Td>{x.u.ho_ten}</Td><Td r>{x.postDat}</Td><Td r>{fmtVND(x.tienPost)}</Td><Td r>{x.cmtDat}</Td><Td r>{fmtVND(x.tienCmt)}</Td>
-              <Td r>{x.quayDat}</Td><Td r className="text-gold-dark font-medium">{fmtVND(x.tienQuay)}</Td>
+              <Td r>{x.quayDat}</Td><Td r className="text-brand-dark font-medium">{fmtVND(x.tienQuay)}</Td>
               <Td r><b>{fmtVND(x.tienPost+x.tienCmt+x.tienQuay)}</b></Td><Td r className="text-indigo-600">{fmtVND(x.daChi)}</Td><Td r className="text-rose-600">{fmtVND(x.conLai)}</Td>
               <Td>{x.conLai>0 && <Btn variant="soft" onClick={()=>markPaid(x.u.id)}>Đã chi</Btn>}</Td>
             </tr>)}
@@ -1803,7 +1803,7 @@ function AdminAudit(){
    20b. MODULE — QUAY SOURCE CÔNG TRÌNH
 ============================================================ */
 function ReqBadge(){ return <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-rose-50 text-rose-600 font-medium">Bắt buộc</span>; }
-function HeChip({he}){ return <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-gold/10 text-gold-dark font-medium">{he}</span>; }
+function HeChip({he}){ return <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-brand/10 text-brand-dark font-medium">{he}</span>; }
 function isImgUrl(u){ return /\.(png|jpe?g|gif|webp|bmp)(\?|#|$)/i.test(u||''); }
 // media là link Drive (không nhúng trực tiếp) khi không phải file app (/media/ hoặc data:)
 const isAppMedia = (url)=> !!url && (url.startsWith('/media/') || url.startsWith('data:'));
@@ -1818,7 +1818,7 @@ function MediaThumb({m, className='w-full h-full'}){
   return <span className={className+' flex flex-col items-center justify-center text-slate-400 text-[10px]'}><span className="text-xl">{link?'🔗':(isImg?'🖼️':'🎬')}</span><span>{link?'Link':(isImg?'Ảnh':'Video')}</span></span>;
 }
 function MediaChip({m, onDel, onClick}){
-  return <button type="button" onClick={onClick} className="relative group border border-slate-200 rounded-lg overflow-hidden bg-slate-50 w-20 h-20 shrink-0 hover:border-gold">
+  return <button type="button" onClick={onClick} className="relative group border border-slate-200 rounded-lg overflow-hidden bg-slate-50 w-20 h-20 shrink-0 hover:border-brand">
     <MediaThumb m={m}/>
     {onDel && <span onClick={e=>{e.stopPropagation();onDel();}} className="absolute top-0.5 right-0.5 bg-black/60 text-white rounded-full w-5 h-5 text-xs leading-5 opacity-0 group-hover:opacity-100">×</span>}
   </button>;
@@ -1893,7 +1893,7 @@ function SalesFilming(){
   return <div className="space-y-4">
     <div className="flex items-center justify-between flex-wrap gap-2">
       <h2 className="font-display text-lg font-bold text-ink">🎥 Quay công trình</h2>
-      <Btn variant="gold" onClick={()=>setCreating(true)}>＋ Quay công trình mới</Btn>
+      <Btn variant="brand" onClick={()=>setCreating(true)}>＋ Quay công trình mới</Btn>
     </div>
     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
       <Stat label="Nháp (chưa gửi)" value={nhap} color="text-slate-600"/>
@@ -1910,7 +1910,7 @@ function SalesFilming(){
       {mine.map(p=>{ const tpl=filmFindTpl(db,p.template_id); const total=filmCountShots(tpl), have=uniqShots(p.uploads).length;
         return <button key={p.id} onClick={()=>openProject(p)} className="w-full text-left p-3 flex items-center justify-between gap-2 hover:bg-slate-50">
           <div className="min-w-0">
-            <div className="text-sm font-medium text-ink truncate">{p.ten_cong_trinh} {editable(p.trang_thai)&&<span className="text-[10px] text-gold-dark">✏️ tiếp tục</span>}</div>
+            <div className="text-sm font-medium text-ink truncate">{p.ten_cong_trinh} {editable(p.trang_thai)&&<span className="text-[10px] text-brand-dark">✏️ tiếp tục</span>}</div>
             <div className="text-[11px] text-slate-400">{tpl?.he_san_pham} · {p.khu_vuc} · {fmtDay(p.ngay_quay)} · {have}/{total} cảnh</div>
           </div>
           <div className="flex items-center gap-2 shrink-0">
@@ -1968,9 +1968,9 @@ function FilmingEditor({onDone, project}){
       <Field label="Ngày quay"><Input type="date" value={ngay} onChange={e=>setNgay(e.target.value)}/></Field>
     </div>
 
-    <div className="bg-gold/10 border border-gold/30 rounded-xl px-3 py-2 text-xs text-gold-dark flex items-center justify-between gap-2">
+    <div className="bg-brand/10 border border-brand/30 rounded-xl px-3 py-2 text-xs text-brand-dark flex items-center justify-between gap-2">
       <span>Tiến độ cảnh <b>bắt buộc</b>: {reqDone}/{reqShots.length}</span>
-      <span className="w-28 h-2 bg-white rounded-full overflow-hidden shrink-0"><span className="block h-full bg-gold transition-all" style={{width:(reqShots.length?reqDone/reqShots.length*100:0)+'%'}}></span></span>
+      <span className="w-28 h-2 bg-white rounded-full overflow-hidden shrink-0"><span className="block h-full bg-brand transition-all" style={{width:(reqShots.length?reqDone/reqShots.length*100:0)+'%'}}></span></span>
     </div>
 
     {template && template.phases.map((ph,pi)=><div key={ph.id}>
@@ -1978,7 +1978,7 @@ function FilmingEditor({onDone, project}){
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
         {ph.shots.filter(s=>s.active).map(shot=>{ const md=mediaOf(shot.id); const has=md.length>0;
           return <button key={shot.id} onClick={()=>setOpenShot(shot)}
-            className={"text-left rounded-2xl border transition overflow-hidden bg-white hover:shadow-md "+(has?'border-emerald-300 ring-1 ring-emerald-200':'border-slate-200 hover:border-gold')}>
+            className={"text-left rounded-2xl border transition overflow-hidden bg-white hover:shadow-md "+(has?'border-emerald-300 ring-1 ring-emerald-200':'border-slate-200 hover:border-brand')}>
             <div className="aspect-[4/3] flex items-center justify-center relative" style={{background:phaseBg(pi)}}>
               {has && md[0].media_url && !isDriveLink(md[0])
                 ? <span className="absolute inset-0"><MediaThumb m={md[0]}/></span>
@@ -1986,7 +1986,7 @@ function FilmingEditor({onDone, project}){
               {shot.bat_buoc && <span className="absolute top-2 left-2"><ReqBadge/></span>}
               {has
                 ? <span className="absolute bottom-2 right-2 bg-emerald-500 text-white text-[10px] px-1.5 py-0.5 rounded-full font-medium shadow">✓ {md.length} nguồn</span>
-                : <span className="absolute bottom-2 right-2 w-7 h-7 rounded-full bg-white/90 border border-slate-300 text-gold-dark flex items-center justify-center text-lg shadow-sm">＋</span>}
+                : <span className="absolute bottom-2 right-2 w-7 h-7 rounded-full bg-white/90 border border-slate-300 text-brand-dark flex items-center justify-center text-lg shadow-sm">＋</span>}
             </div>
             <div className="p-2.5">
               <div className="text-sm font-medium text-ink leading-snug">{shot.ten}</div>
@@ -2000,7 +2000,7 @@ function FilmingEditor({onDone, project}){
     <div className="sticky bottom-0 -mx-3 sm:mx-0 bg-white/95 backdrop-blur border-t p-3 flex gap-2">
       <Btn variant="ghost" onClick={onDone} disabled={busy}>Huỷ</Btn>
       <Btn variant="soft" onClick={()=>save(false)} disabled={busy}>💾 Lưu nháp</Btn>
-      <Btn variant="gold" className="flex-1" onClick={()=>save(true)} disabled={busy||!canSubmit}>{busy?'Đang lưu…':(reqDone<reqShots.length?`Còn ${reqShots.length-reqDone} cảnh bắt buộc`:'Gửi nghiệm thu')}</Btn>
+      <Btn variant="brand" className="flex-1" onClick={()=>save(true)} disabled={busy||!canSubmit}>{busy?'Đang lưu…':(reqDone<reqShots.length?`Còn ${reqShots.length-reqDone} cảnh bắt buộc`:'Gửi nghiệm thu')}</Btn>
     </div>
 
     {openShot && <ShotUploadModal shot={openShot} media={mediaOf(openShot.id)} onClose={()=>setOpenShot(null)}
@@ -2059,18 +2059,18 @@ function ShotUploadModal({shot, media, onClose, onAdd, onDel}){
 
     {tab==='upload' ? <div>
       <input ref={fileRef} type="file" accept="image/*,video/*" multiple className="hidden" onChange={onFile} disabled={busy}/>
-      <Btn variant="gold" className="w-full" disabled={busy} onClick={()=>fileRef.current && fileRef.current.click()}>{busy?'⏳ Đang tải lên…':'＋ Chọn ảnh / video'}</Btn>
+      <Btn variant="brand" className="w-full" disabled={busy} onClick={()=>fileRef.current && fileRef.current.click()}>{busy?'⏳ Đang tải lên…':'＋ Chọn ảnh / video'}</Btn>
       {prog && <div className="mt-2">
         <div className="flex items-center justify-between text-[11px] text-slate-500 mb-1"><span className="truncate max-w-[55%]">{prog.name}</span><span>{prog.pct}% · {fmtMB(prog.loaded)}/{fmtMB(prog.total)}</span></div>
-        <div className="h-2 bg-slate-200 rounded-full overflow-hidden"><div className="h-full bg-gold transition-all" style={{width:prog.pct+'%'}}></div></div>
+        <div className="h-2 bg-slate-200 rounded-full overflow-hidden"><div className="h-full bg-brand transition-all" style={{width:prog.pct+'%'}}></div></div>
       </div>}
       <div className="text-[11px] text-slate-400 mt-2">Lưu thẳng vào app · tối đa 100MB/file. Video &gt;100MB hãy dùng tab “Dán link Drive”.</div>
     </div> : <div>
       <Field label="Link Google Drive (đặt quyền 'Ai có link đều xem')"><Input value={link} onChange={e=>setLink(e.target.value)} placeholder="https://drive.google.com/file/d/…" onKeyDown={e=>e.key==='Enter'&&addLink()}/></Field>
-      <Btn variant="gold" className="w-full" onClick={addLink}>Thêm link</Btn>
+      <Btn variant="brand" className="w-full" onClick={addLink}>Thêm link</Btn>
     </div>}
 
-    <div className="flex justify-end mt-4"><Btn variant="gold" onClick={onClose}>Xong</Btn></div>
+    <div className="flex justify-end mt-4"><Btn variant="brand" onClick={onClose}>Xong</Btn></div>
 
     {/* popup xem trước 1 nguồn */}
     {preview && <div className="fixed inset-0 z-[60] bg-black/80 flex items-center justify-center p-3" onClick={()=>setPreview(null)}>
@@ -2194,7 +2194,7 @@ function MediaManager(){
       <Stat label="Lưu trong app (R2)" value={appCount} sub="còn lại là link Drive"/>
       <Stat label="Sắp bị dọn (quá 30 ngày)" value={expiring} color="text-rose-600"/>
     </div>
-    <div className="bg-gold/10 border border-gold/30 rounded-xl px-3 py-2 text-[11px] text-gold-dark flex items-center justify-between gap-2">
+    <div className="bg-brand/10 border border-brand/30 rounded-xl px-3 py-2 text-[11px] text-brand-dark flex items-center justify-between gap-2">
       <span>Media công trình <b>chưa duyệt</b> tự xoá sau <b>30 ngày</b>. File app mới bị xoá; link Drive chỉ gỡ khỏi danh sách.</span>
       <Btn variant="soft" onClick={clean}>🧹 Dọn ngay</Btn>
     </div>
@@ -2214,7 +2214,7 @@ function MediaManager(){
       <div className="bg-white rounded-2xl border border-line shadow-card overflow-hidden max-h-[70vh] overflow-y-auto">
         {groups.map((g,gi)=><div key={gi}>
           <div className="px-3 py-2 border-b bg-slate-50 sticky top-0"><div className="text-xs font-semibold text-ink truncate">{g.t}</div><div className="text-[10px] text-slate-400">{g.s} · {g.items.length} nguồn</div></div>
-          {g.items.map(r=><button key={r.key} onClick={()=>setSel(r)} className={"w-full flex items-center gap-2 px-3 py-1.5 text-left border-b border-slate-50 hover:bg-slate-50 "+(selRow&&selRow.key===r.key?'bg-gold/10':'')}>
+          {g.items.map(r=><button key={r.key} onClick={()=>setSel(r)} className={"w-full flex items-center gap-2 px-3 py-1.5 text-left border-b border-slate-50 hover:bg-slate-50 "+(selRow&&selRow.key===r.key?'bg-brand/10':'')}>
             <span className="w-11 h-11 rounded-lg overflow-hidden bg-slate-100 flex items-center justify-center shrink-0 relative">
               <MediaThumbMini r={r}/>
               {r.up.dat_item===true&&<span className="absolute top-0 right-0 bg-emerald-500 text-white text-[8px] px-0.5 rounded-bl">✓</span>}
@@ -2263,7 +2263,7 @@ function FilmLibrary(){
       <div className="flex items-end gap-2 flex-wrap">
         <label className="flex-1 min-w-[200px]"><div className="text-xs font-semibold text-slate-600 mb-1">Quy trình / hệ sản phẩm</div>
           <Select value={selId} onChange={e=>setSelId(e.target.value)}>{templates.map(t=><option key={t.id} value={t.id}>{t.he_san_pham} — {t.ten}{t.active===false?' (ẩn)':''}</option>)}</Select></label>
-        <Btn variant="gold" onClick={()=>setEditTpl({ten:'',he_san_pham:''})}>＋ Quy trình mới</Btn>
+        <Btn variant="brand" onClick={()=>setEditTpl({ten:'',he_san_pham:''})}>＋ Quy trình mới</Btn>
       </div>
       <div className="flex items-center justify-between flex-wrap gap-2 pt-1">
         <div className="flex items-center gap-2 flex-wrap"><HeChip he={template.he_san_pham}/><span className="font-semibold text-ink">{template.ten}</span>
@@ -2278,13 +2278,13 @@ function FilmLibrary(){
         <span className="text-sm font-semibold text-ink">{ph.thu_tu}. {ph.ten}</span>
         <div className="flex gap-2"><button onClick={()=>setEditPhase(ph)} className="text-xs text-blue-500 hover:underline">Sửa</button>
           <button onClick={()=>{ if(confirm('Xoá giai đoạn này và các cảnh bên trong?')) deleteFilmPhase(template.id, ph.id); }} className="text-xs text-rose-500 hover:underline">Xoá</button>
-          <button onClick={()=>setEditShot({phaseId:ph.id, shot:{ten:'',mo_ta:'',source_mau_url:'',bat_buoc:true,active:true}})} className="text-xs text-gold-dark hover:underline">＋ Thêm cảnh</button></div>
+          <button onClick={()=>setEditShot({phaseId:ph.id, shot:{ten:'',mo_ta:'',source_mau_url:'',bat_buoc:true,active:true}})} className="text-xs text-brand-dark hover:underline">＋ Thêm cảnh</button></div>
       </div>
       <div className="divide-y">
         {ph.shots.length===0 && <div className="p-3 text-xs text-slate-400">Chưa có cảnh nào.</div>}
         {ph.shots.map(shot=><div key={shot.id} className={"p-3 flex items-start gap-2 "+(shot.active?'':'opacity-50')}>
           <div className="flex-1 min-w-0"><div className="flex items-center gap-2 flex-wrap"><span className="text-sm font-medium text-ink">{shot.ten}</span>{shot.bat_buoc&&<ReqBadge/>}
-            <span className={"text-[10px] px-1.5 py-0.5 rounded-full "+(shot.don_gia!=null?'bg-gold/15 text-gold-dark':'bg-slate-100 text-slate-500')}>{fmtVND(filmShotPrice(shot, db.pricing))}{shot.don_gia!=null?' (riêng)':''}</span></div>
+            <span className={"text-[10px] px-1.5 py-0.5 rounded-full "+(shot.don_gia!=null?'bg-brand/15 text-brand-dark':'bg-slate-100 text-slate-500')}>{fmtVND(filmShotPrice(shot, db.pricing))}{shot.don_gia!=null?' (riêng)':''}</span></div>
             <div className="text-xs text-slate-500 mt-0.5 line-clamp-2">{shot.mo_ta||<span className="italic text-slate-300">chưa có mô tả</span>}</div>
             {shot.source_mau_url && <a href={shot.source_mau_url} target="_blank" className="text-[11px] text-blue-500 underline">🔗 mẫu</a>}</div>
           <div className="flex flex-col items-end gap-1 shrink-0">
@@ -2305,7 +2305,7 @@ function TemplateForm({tpl, onCancel, onSave}){
   return <>
     <Field label="Hệ sản phẩm" required hint="VD: Keo chít mạch · Sơn Epoxy sàn · Terrazzo…"><Input value={he} onChange={e=>setHe(e.target.value)}/></Field>
     <Field label="Tên quy trình" required><Input value={ten} onChange={e=>setTen(e.target.value)}/></Field>
-    <div className="flex gap-2"><Btn variant="ghost" onClick={onCancel}>Huỷ</Btn><Btn variant="gold" className="flex-1" onClick={()=>ten.trim()&&he.trim()&&onSave({...tpl, ten:ten.trim(), he_san_pham:he.trim()})}>Lưu</Btn></div>
+    <div className="flex gap-2"><Btn variant="ghost" onClick={onCancel}>Huỷ</Btn><Btn variant="brand" className="flex-1" onClick={()=>ten.trim()&&he.trim()&&onSave({...tpl, ten:ten.trim(), he_san_pham:he.trim()})}>Lưu</Btn></div>
   </>;
 }
 function ShotForm({shot, onCancel, onSave}){
@@ -2317,16 +2317,16 @@ function ShotForm({shot, onCancel, onSave}){
     <Field label="Đơn giá riêng cho cảnh (tuỳ chọn)" hint="Để trống = dùng đơn giá chung. Điền số để ghi đè giá riêng cho cảnh này."><Input type="number" className="no-spin" value={f.don_gia==null?'':f.don_gia} onChange={e=>set('don_gia', e.target.value===''?null:Number(e.target.value))} placeholder="đ / cảnh (theo giá chung nếu để trống)"/></Field>
     <div className="mb-3 flex items-center justify-between p-3 rounded-xl border border-slate-200 bg-slate-50">
       <div><div className="text-xs font-semibold text-slate-700">Bắt buộc</div><div className="text-[11px] text-slate-400">Sales phải quay cảnh này mới gửi được</div></div>
-      <button type="button" onClick={()=>set('bat_buoc',!f.bat_buoc)} className={"w-12 h-7 rounded-full transition relative "+(f.bat_buoc?'bg-gold':'bg-slate-300')}><span className={"absolute top-0.5 w-6 h-6 bg-white rounded-full shadow transition-all "+(f.bat_buoc?'left-[22px]':'left-0.5')}></span></button>
+      <button type="button" onClick={()=>set('bat_buoc',!f.bat_buoc)} className={"w-12 h-7 rounded-full transition relative "+(f.bat_buoc?'bg-brand':'bg-slate-300')}><span className={"absolute top-0.5 w-6 h-6 bg-white rounded-full shadow transition-all "+(f.bat_buoc?'left-[22px]':'left-0.5')}></span></button>
     </div>
-    <div className="flex gap-2"><Btn variant="ghost" onClick={onCancel}>Huỷ</Btn><Btn variant="gold" className="flex-1" onClick={()=>f.ten.trim()&&onSave(f)}>Lưu</Btn></div>
+    <div className="flex gap-2"><Btn variant="ghost" onClick={onCancel}>Huỷ</Btn><Btn variant="brand" className="flex-1" onClick={()=>f.ten.trim()&&onSave(f)}>Lưu</Btn></div>
   </>;
 }
 function PhaseForm({phase, onCancel, onSave}){
   const [ten,setTen]=useState(phase.ten||'');
   return <>
     <Field label="Tên giai đoạn" required><Input value={ten} onChange={e=>setTen(e.target.value)} placeholder="VD: Thi công"/></Field>
-    <div className="flex gap-2"><Btn variant="ghost" onClick={onCancel}>Huỷ</Btn><Btn variant="gold" className="flex-1" onClick={()=>ten.trim()&&onSave({...phase, ten:ten.trim()})}>Lưu</Btn></div>
+    <div className="flex gap-2"><Btn variant="ghost" onClick={onCancel}>Huỷ</Btn><Btn variant="brand" className="flex-1" onClick={()=>ten.trim()&&onSave({...phase, ten:ten.trim()})}>Lưu</Btn></div>
   </>;
 }
 function FilmQueue(){
@@ -2340,7 +2340,7 @@ function FilmQueue(){
       return <button key={p.id} onClick={()=>setReview(p)} className="w-full text-left bg-white rounded-2xl border border-line shadow-card p-3 flex items-center justify-between gap-2 hover:bg-slate-50">
         <div className="min-w-0"><div className="text-sm font-medium text-ink truncate">{p.ten_cong_trinh}</div>
           <div className="text-[11px] text-slate-400">{sales?.ho_ten||'—'} · {tpl?.he_san_pham} · {p.khu_vuc} · {have}/{total} cảnh</div></div>
-        <div className="flex items-center gap-2 shrink-0"><Badge st={p.trang_thai}/><span className="text-gold-dark text-sm">›</span></div>
+        <div className="flex items-center gap-2 shrink-0"><Badge st={p.trang_thai}/><span className="text-brand-dark text-sm">›</span></div>
       </button>; })}
   </div>;
 }
@@ -2369,7 +2369,7 @@ function FilmReview({project, template, onBack}){
     <button onClick={onBack} className="text-sm text-slate-500 hover:text-ink">← Hàng chờ nghiệm thu</button>
     <div><h3 className="font-display text-lg font-bold text-ink">{project.ten_cong_trinh}</h3>
       <div className="text-xs text-slate-400 flex items-center gap-2"><HeChip he={template?.he_san_pham}/> {sales?.ho_ten||'—'} · {project.khu_vuc} · {fmtDay(project.ngay_quay)}</div></div>
-    <div className="bg-gold/10 border border-gold/30 rounded-xl px-3 py-2 text-xs text-gold-dark flex items-center justify-between gap-2">
+    <div className="bg-brand/10 border border-brand/30 rounded-xl px-3 py-2 text-xs text-brand-dark flex items-center justify-between gap-2">
       <span>Chấm <b>Đạt/Loại</b> từng source. Cảnh đạt nếu còn ≥1 source đạt — tính tiền <b>1 lần/cảnh</b>.</span>
       <span className="shrink-0">Đạt <b>{datShots.length}/{shots.length}</b> · <b className="text-emerald-700">{fmtVND(total)}</b></span>
     </div>
@@ -2441,7 +2441,7 @@ function AdminFilming(){
   return <div className="space-y-4">
     <div className="flex items-center justify-between flex-wrap gap-2">
       <h2 className="font-display text-lg font-bold text-ink">🎬 Báo cáo Quay công trình</h2>
-      <Btn variant="gold" onClick={exportCSV}>⬆ Xuất Excel</Btn>
+      <Btn variant="brand" onClick={exportCSV}>⬆ Xuất Excel</Btn>
     </div>
     <div className="bg-white rounded-2xl border border-line shadow-card p-3 flex flex-wrap gap-2 items-center">
       <DateRange from={from} to={to} setFrom={setFrom} setTo={setTo}/>
@@ -2455,13 +2455,13 @@ function AdminFilming(){
             projects.map(p=>{ const t=filmFindTpl(db,p.template_id); const sales=db.users.find(u=>u.id===p.sales_id);
               return <tr key={p.id} className="hover:bg-slate-50">
                 <Td>{fmtDay(p.created_at)}</Td><Td>{sales?.ho_ten||'—'}</Td><Td>{p.ten_cong_trinh}</Td>
-                <Td><span className="text-gold-dark text-xs font-medium">{t?.he_san_pham}</span></Td><Td>{p.khu_vuc}</Td>
+                <Td><span className="text-brand-dark text-xs font-medium">{t?.he_san_pham}</span></Td><Td>{p.khu_vuc}</Td>
                 <Td r>{uniqShots(p.uploads).length}/{filmCountShots(t)}</Td><Td><Badge st={p.trang_thai}/></Td><Td r><b>{p.thanh_tien?fmtVND(p.thanh_tien):'—'}</b></Td>
               </tr>; })}
         </tbody>
       </table>
     </div>
-    <div className="text-[11px] text-slate-400">Việc chi tiền gộp chung ở <b>Bảng lương</b> (cột <b className="text-gold-dark">Tiền quay</b>).</div>
+    <div className="text-[11px] text-slate-400">Việc chi tiền gộp chung ở <b>Bảng lương</b> (cột <b className="text-brand-dark">Tiền quay</b>).</div>
   </div>;
 }
 function inRangeOrAllG(iso,f,t){ if(!f&&!t) return true; return inRange(iso,f,t); }
