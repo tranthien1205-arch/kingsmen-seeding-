@@ -2058,6 +2058,7 @@ function FilmingEditor({onDone, project}){
               className="w-full aspect-video flex items-center justify-center relative group" style={{background:phaseBg(pi)}}>
               {hasSample ? <SampleThumb url={shot.source_mau_url}/> : null}
               {(!hasSample || SampleThumb({url:shot.source_mau_url})===null) && <span className="text-5xl opacity-90 relative">{iconFor(shot.ten)}</span>}
+              {!hasSample && <span className="absolute bottom-2 left-2 text-[10px] px-1.5 py-0.5 rounded-full bg-black/40 text-white/90 font-medium">Chưa có video mẫu</span>}
               {shot.bat_buoc && <span className="absolute top-2 left-2"><ReqBadge/></span>}
               {hasSample && <>
                 <span className="absolute inset-0 bg-black/25 group-hover:bg-black/35 transition flex items-center justify-center">
