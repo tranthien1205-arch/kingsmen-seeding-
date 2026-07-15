@@ -1218,6 +1218,22 @@ function Library(){
   const { db, upsertGroup, upsertTopic, upsertCmt, deleteGroup, deleteTopic, deleteCmt, notify, audit } = useApp();
   const [tab, setTab] = useState('groups');
   const [edit, setEdit] = useState(null); // {type, item}
+  const [selMode, setSelMode] = useState(false);
+  const [sel, setSel] = useState(()=>new Set());
+  useEffect(()=>{ setSelMode(false); setSel(new Set()); }, [tab]); // đổi tab thì reset chọn
+
+  const curItems = tab==='groups'?sortPri(db.groups) : tab==='topics'?sortPri(db.content_topics) : tab==='cmts'?db.cmt_suggestions : [];
+  const toggleSel = (id)=> setSel(prev=>{ const s=new Set(prev); s.has(id)?s.delete(id):s.add(id); return s; });
+  const allSel = curItems.length>0 && curItems.every(it=>sel.has(it.id));
+  const toggleAll = ()=> setSel(allSel ? new Set() : new Set(curItems.map(it=>it.id)));
+  const bulkDelete = async ()=>{
+    const ids=[...sel]; if(!ids.length) return;
+    if(!confirm(`Xoá ${ids.length} mục đã chọn khỏi thư viện?`)) return;
+    const fn = tab==='groups'?deleteGroup : tab==='topics'?deleteTopic : deleteCmt;
+    let n=0; for(const id of ids){ if(await fn(id)) n++; }
+    audit('xoá hàng loạt', tab, `${n} mục`);
+    setSel(new Set()); setSelMode(false); notify(`Đã xoá ${n} mục`);
+  };
 
   const openNew = (type) => setEdit({type, item:blankOf(type)});
   const blankOf = (type) => type==='groups' ? {ten_group:'',link:'',loai:GROUP_LOAI[0],so_member:0,active:true,uu_tien:false}
@@ -1252,11 +1268,20 @@ function Library(){
     <div className="flex items-center justify-between flex-wrap gap-2">
       <h2 className="font-display text-lg font-bold text-ink">📚 Thư viện chung</h2>
       {tab!=='guides' && <div className="flex gap-2">
+        <Btn variant={selMode?'ghost':'ghost'} onClick={()=>{ setSelMode(m=>!m); setSel(new Set()); }}>{selMode?'✕ Xong':'☑ Chọn'}</Btn>
         <ImportBtn tab={tab}/>
         <Btn variant="brand" onClick={()=>openNew(tab)}>＋ Thêm</Btn>
       </div>}
     </div>
     <Tabs active={tab} onChange={setTab} tabs={tabs}/>
+
+    {selMode && tab!=='guides' && <div className="flex items-center justify-between gap-2 bg-white rounded-xl border border-line shadow-card px-3 py-2 sticky top-2 z-20">
+      <label className="flex items-center gap-2 text-sm font-medium text-ink cursor-pointer select-none">
+        <input type="checkbox" checked={allSel} onChange={toggleAll} className="w-4 h-4 accent-brand"/>
+        Chọn tất cả <span className="text-ink-muted">({sel.size}/{curItems.length})</span>
+      </label>
+      <Btn variant="danger" disabled={!sel.size} onClick={bulkDelete} className="!py-2">🗑 Xoá đã chọn ({sel.size})</Btn>
+    </div>}
 
     {tab==='guides' && <GuideEditor/>}
 
@@ -1266,7 +1291,7 @@ function Library(){
         <span className="font-medium text-sm text-ink">{g.ten_group}</span>
       </div>
       <div className="text-xs text-slate-500">{g.loai} · {(g.so_member||0).toLocaleString('vi-VN')} tv · <a href={g.link} target="_blank" className="text-blue-500 underline">link</a></div>
-    </>)} onEdit={g=>setEdit({type:'groups',item:g})} onToggle={g=>toggle('groups',g)} onDel={g=>remove('groups',g)} onPri={g=>togglePri('groups',g)}/>}
+    </>)} onEdit={g=>setEdit({type:'groups',item:g})} onToggle={g=>toggle('groups',g)} onDel={g=>remove('groups',g)} onPri={g=>togglePri('groups',g)} selMode={selMode} sel={sel} onSel={toggleSel}/>}
 
     {tab==='topics' && <LibList items={sortPri(db.content_topics)} render={t=>(<>
       <div className="flex items-center gap-2 flex-wrap">
@@ -1275,22 +1300,26 @@ function Library(){
         <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500">{t.loai_bai}</span>
         {t.muc_tieu && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-brand/10 text-brand-dark">{t.muc_tieu}</span>}</div>
       <div className="text-xs text-slate-500 line-clamp-2 mt-0.5">{t.noi_dung}</div>
-    </>)} onEdit={t=>setEdit({type:'topics',item:t})} onToggle={t=>toggle('topics',t)} onDel={t=>remove('topics',t)} onPri={t=>togglePri('topics',t)}/>}
+    </>)} onEdit={t=>setEdit({type:'topics',item:t})} onToggle={t=>toggle('topics',t)} onDel={t=>remove('topics',t)} onPri={t=>togglePri('topics',t)} selMode={selMode} sel={sel} onSel={toggleSel}/>}
 
     {tab==='cmts' && <LibList items={db.cmt_suggestions} render={c=>(<>
       <div className="text-sm text-ink">{c.noi_dung_goi_y}</div>
       <div className="text-xs text-slate-500">{c.tuyen}{c.loai_bai?' · '+c.loai_bai:''}</div>
-    </>)} onEdit={c=>setEdit({type:'cmts',item:c})} onToggle={c=>toggle('cmts',c)} onDel={c=>remove('cmts',c)}/>}
+    </>)} onEdit={c=>setEdit({type:'cmts',item:c})} onToggle={c=>toggle('cmts',c)} onDel={c=>remove('cmts',c)} selMode={selMode} sel={sel} onSel={toggleSel}/>}
 
     <LibEditModal edit={edit} onClose={()=>setEdit(null)}/>
   </div>;
 }
-function LibList({items, render, onEdit, onToggle, onDel, onPri}){
+function LibList({items, render, onEdit, onToggle, onDel, onPri, selMode, sel, onSel}){
   if(!items.length) return <Empty>Chưa có mục nào. Bấm "Thêm" hoặc "Import file".</Empty>;
   return <div className="bg-white rounded-2xl border border-line shadow-card divide-y">
-    {items.map(it=><div key={it.id} className={"p-3 flex items-start gap-2 "+(it.active?'':'opacity-50')}>
+    {items.map(it=>{ const checked=selMode && sel && sel.has(it.id);
+      return <div key={it.id} onClick={selMode?()=>onSel(it.id):undefined}
+        className={"p-3 flex items-start gap-2 "+(it.active?'':'opacity-50')+(selMode?' cursor-pointer':'')+(checked?' bg-brand/5':'')}>
+      {selMode && <input type="checkbox" checked={checked} onChange={()=>onSel(it.id)} onClick={e=>e.stopPropagation()}
+        className="w-4 h-4 accent-brand mt-0.5 shrink-0"/>}
       <div className="flex-1 min-w-0">{render(it)}</div>
-      <div className="flex flex-col items-end gap-1 shrink-0">
+      {!selMode && <div className="flex flex-col items-end gap-1 shrink-0">
         <div className="flex gap-1">
           {onPri && <button onClick={()=>onPri(it)} title={it.uu_tien?'Bỏ ưu tiên':'Đặt ưu tiên'}
             className={"px-2 py-1 rounded-lg text-xs font-medium "+(it.uu_tien?'bg-brand/15 text-brand-dark':'bg-slate-100 text-slate-400 hover:text-brand-dark')}>{it.uu_tien?'⭐':'☆'}</button>}
@@ -1300,8 +1329,8 @@ function LibList({items, render, onEdit, onToggle, onDel, onPri}){
           <button onClick={()=>onEdit(it)} className="text-xs text-blue-500 hover:underline">Sửa</button>
           <button onClick={()=>onDel(it)} className="text-xs text-rose-500 hover:underline">Xoá</button>
         </div>
-      </div>
-    </div>)}
+      </div>}
+    </div>; })}
   </div>;
 }
 function LibEditModal({edit, onClose}){
