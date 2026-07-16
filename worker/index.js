@@ -60,10 +60,12 @@ async function ensureSchema(env){
   try { await env.DB.prepare(`ALTER TABLE pricing ADD COLUMN don_gia_cong_trinh REAL DEFAULT 150000`).run(); } catch(e){}
   try { await env.DB.prepare(`ALTER TABLE pricing ADD COLUMN don_gia_canh REAL DEFAULT 10000`).run(); } catch(e){}
   try { await env.DB.prepare(`ALTER TABLE filming_shots ADD COLUMN don_gia REAL`).run(); } catch(e){}
+  // chống spam: số ngày coi là "trùng nội dung–nhóm" (0 = tắt kiểm tra trùng)
+  try { await env.DB.prepare(`ALTER TABLE pricing ADD COLUMN dedupe_days INTEGER DEFAULT 7`).run(); } catch(e){}
 
   // seed pricing
   const pr = await env.DB.prepare(`SELECT id FROM pricing WHERE id=1`).first();
-  if(!pr) await env.DB.prepare(`INSERT INTO pricing (id,don_gia_post,don_gia_cmt,don_gia_cong_trinh,don_gia_canh,min_nhac_kingsmen,min_usp) VALUES (1,15000,3000,150000,10000,6,2)`).run();
+  if(!pr) await env.DB.prepare(`INSERT INTO pricing (id,don_gia_post,don_gia_cmt,don_gia_cong_trinh,don_gia_canh,min_nhac_kingsmen,min_usp,dedupe_days) VALUES (1,15000,3000,150000,10000,6,2,7)`).run();
 
   // seed tài khoản Marketing đầu tiên + thư viện (chỉ khi chưa có user nào)
   const anyUser = await env.DB.prepare(`SELECT id FROM users LIMIT 1`).first();
@@ -360,10 +362,32 @@ async function handleApi(request, env){
   if(path==='/pricing' && method==='PATCH'){
     if(me.vai_tro!==ROLES.ADMIN && me.vai_tro!==ROLES.MARKETING) return json({error:'Không có quyền'},403);
     const p=body;
-    await env.DB.prepare(`UPDATE pricing SET don_gia_post=?, don_gia_cmt=?, don_gia_cong_trinh=?, don_gia_canh=?, min_nhac_kingsmen=?, min_usp=? WHERE id=1`)
-      .bind(Number(p.don_gia_post)||0,Number(p.don_gia_cmt)||0,Number(p.don_gia_cong_trinh)||0,Number(p.don_gia_canh)||0,Number(p.min_nhac_kingsmen)||0,Number(p.min_usp)||0).run();
+    await env.DB.prepare(`UPDATE pricing SET don_gia_post=?, don_gia_cmt=?, don_gia_cong_trinh=?, don_gia_canh=?, min_nhac_kingsmen=?, min_usp=?, dedupe_days=? WHERE id=1`)
+      .bind(Number(p.don_gia_post)||0,Number(p.don_gia_cmt)||0,Number(p.don_gia_cong_trinh)||0,Number(p.don_gia_canh)||0,Number(p.min_nhac_kingsmen)||0,Number(p.min_usp)||0,Math.max(0,Number(p.dedupe_days)||0)).run();
     await logAudit(env,me,'sửa đơn giá','pricing','-');
     return json({ db: await bootstrap(env, me) });
+  }
+
+  // ===== CHỐNG SPAM: kiểm tra trùng nội dung–nhóm (bất kỳ Sales nào, trong N ngày) =====
+  if(path==='/posts/dupcheck' && method==='GET'){
+    const topic_id = url.searchParams.get('topic_id');
+    const group_id = url.searchParams.get('group_id');
+    const pr = await env.DB.prepare(`SELECT dedupe_days FROM pricing WHERE id=1`).first();
+    const days = Math.max(0, Number(pr && pr.dedupe_days!=null ? pr.dedupe_days : 7));
+    if(!topic_id || !group_id || !days) return json({ dup:false, days });
+    const since = new Date(Date.now() - days*864e5).toISOString();
+    const rows = (await env.DB.prepare(
+      `SELECT ps.id, ps.sales_id, ps.trang_thai, ps.created_at, u.ho_ten
+       FROM post_seedings ps LEFT JOIN users u ON u.id=ps.sales_id
+       WHERE ps.topic_id=? AND ps.group_id=? AND ps.trang_thai IN (?,?,?) AND ps.created_at>=?
+       ORDER BY ps.created_at ASC`
+    ).bind(topic_id, group_id, ST.CHO_DUYET, ST.DAT, ST.DA_CHI, since).all()).results;
+    return json({
+      dup: rows.length>0, days, count: rows.length,
+      mine: rows.some(r=>r.sales_id===me.id),
+      won: rows.some(r=>r.trang_thai===ST.DAT || r.trang_thai===ST.DA_CHI),
+      examples: rows.slice(0,5).map(r=>({ sales: r.sales_id===me.id?'Bạn':(r.ho_ten||'—'), trang_thai:r.trang_thai, created_at:r.created_at, mine:r.sales_id===me.id })),
+    });
   }
 
   // ===== POST SEEDING =====
@@ -381,6 +405,18 @@ async function handleApi(request, env){
     if(!p) return json({error:'Không tìm thấy'},404);
     const pricing=await env.DB.prepare(`SELECT * FROM pricing WHERE id=1`).first();
     if(body.result===ST.DAT){
+      // Chống trùng khi tính công: nếu đã có bài ĐẠT/ĐÃ CHI cùng nội dung–nhóm → bài này trùng, không tính tiền
+      const dupWinner = (p.topic_id && p.group_id) ? await env.DB.prepare(
+        `SELECT ps.id, u.ho_ten FROM post_seedings ps LEFT JOIN users u ON u.id=ps.sales_id
+         WHERE ps.topic_id=? AND ps.group_id=? AND ps.id<>? AND ps.trang_thai IN (?,?) LIMIT 1`
+      ).bind(p.topic_id, p.group_id, id, ST.DAT, ST.DA_CHI).first() : null;
+      if(dupWinner && !body.force){
+        const reason = 'Trùng nội dung–nhóm với bài đã duyệt'+(dupWinner.ho_ten?(' (của '+dupWinner.ho_ten+')'):'')+' — chỉ tính công 1 lần.';
+        await env.DB.prepare(`UPDATE post_seedings SET trang_thai=?, thanh_tien=0, reviewed_by=?, reviewed_at=?, ly_do_loai=? WHERE id=?`)
+          .bind(ST.KHONG_DAT, me.ho_ten, nowISO(), reason, id).run();
+        await logAudit(env,me,'nghiệm thu TRÙNG (không tính công)','post_seeding',id,reason);
+        return json({ db: await bootstrap(env, me), deduped:true, reason });
+      }
       await env.DB.prepare(`UPDATE post_seedings SET trang_thai=?, thanh_tien=?, reviewed_by=?, reviewed_at=?, ky_thanh_toan=?, ly_do_loai='' WHERE id=?`)
         .bind(ST.DAT, pricing.don_gia_post, me.ho_ten, nowISO(), kyOf(), id).run();
       await logAudit(env,me,'nghiệm thu ĐẠT','post_seeding',id);

@@ -235,7 +235,7 @@ function seedDB(){
       cmt:  { noi_dung:'Hướng dẫn tạo CMT seeding:\n1. Chọn post cần cmt.\n2. Dùng gợi ý nội dung.\n3. Up ảnh bằng chứng.\n4. Gửi nghiệm thu.', video_url:'' },
       filming: { noi_dung:'Hướng dẫn quay công trình:\n1. Chọn quy trình theo hệ sản phẩm.\n2. Xem video mẫu từng cảnh → quay.\n3. Upload từng cảnh, đủ bắt buộc thì gửi.', video_url:'' },
     },
-    pricing: { don_gia_post: P.don_gia_post, don_gia_cmt: P.don_gia_cmt, don_gia_cong_trinh: P.don_gia_cong_trinh, don_gia_canh: P.don_gia_canh, min_nhac_kingsmen: 6, min_usp: 2 },
+    pricing: { don_gia_post: P.don_gia_post, don_gia_cmt: P.don_gia_cmt, don_gia_cong_trinh: P.don_gia_cong_trinh, don_gia_canh: P.don_gia_canh, min_nhac_kingsmen: 6, min_usp: 2, dedupe_days: 7 },
     payouts: [],
     audit: [],
   };
@@ -258,7 +258,7 @@ function migrate(db){
   // đảm bảo đủ mảng (dữ liệu cũ thiếu field không crash)
   db.users ||= []; db.groups ||= []; db.content_topics ||= []; db.cmt_suggestions ||= [];
   db.post_seedings ||= []; db.cmt_seedings ||= []; db.payouts ||= []; db.audit ||= [];
-  db.pricing ||= { don_gia_post:15000, don_gia_cmt:3000, min_nhac_kingsmen:6, min_usp:2 };
+  db.pricing ||= { don_gia_post:15000, don_gia_cmt:3000, min_nhac_kingsmen:6, min_usp:2, dedupe_days:7 };
   db.post_seedings.forEach(p=>{ p.react ??= 0; p.so_cmt_seeding ??= 0; p.so_cmt_tu_nhien ??= 0; p.thanh_tien ??= 0; });
   db.cmt_seedings.forEach(c=>{ c.proofs ||= []; c.so_cmt_seeding ??= 0; c.react ??= 0; c.so_cmt_tu_nhien ??= 0; c.thanh_tien ??= 0; });
   db.groups.forEach(g=>{ g.uu_tien ??= false; });
@@ -344,7 +344,22 @@ function AppProvider({children}){
       deleteUser: async id => delList('users', id),
       setPricing: async p => { S.pricing={...S.pricing,...p}; commit(); return true; },
       createPost: async p => { S.post_seedings.unshift({ id:uid('p'), topic_id:p.topic_id||null, sales_id:meRef.current.id, group_id:p.group_id||null, link_bai:(p.link_bai||'').trim(), react:Number(p.react)||0, so_cmt_seeding:Number(p.so_cmt_seeding)||0, so_cmt_tu_nhien:Number(p.so_cmt_tu_nhien)||0, trang_thai:p.submit?ST.CHO_DUYET:ST.NHAP, reviewed_by:null, reviewed_at:null, ly_do_loai:'', thanh_tien:0, ky_thanh_toan:null, created_at:now() }); commit(); return true; },
-      reviewPost: async (id, result, reason) => { const p=S.post_seedings.find(x=>x.id===id); if(!p) return false; if(result===ST.DAT){ p.trang_thai=ST.DAT; p.thanh_tien=Number(S.pricing.don_gia_post)||0; p.reviewed_by=meRef.current.ho_ten; p.reviewed_at=now(); p.ky_thanh_toan=kyOf(); p.ly_do_loai=''; } else { p.trang_thai=ST.KHONG_DAT; p.thanh_tien=0; p.reviewed_by=meRef.current.ho_ten; p.reviewed_at=now(); p.ly_do_loai=reason||''; } commit(); return true; },
+      reviewPost: async (id, result, reason) => { const p=S.post_seedings.find(x=>x.id===id); if(!p) return {ok:false};
+        if(result===ST.DAT){
+          const winner = (p.topic_id && p.group_id) ? S.post_seedings.find(x=>x.id!==id && x.topic_id===p.topic_id && x.group_id===p.group_id && (x.trang_thai===ST.DAT||x.trang_thai===ST.DA_CHI)) : null;
+          if(winner){ const wn=S.users.find(u=>u.id===winner.sales_id); const rs='Trùng nội dung–nhóm với bài đã duyệt'+(wn?(' (của '+wn.ho_ten+')'):'')+' — chỉ tính công 1 lần.';
+            p.trang_thai=ST.KHONG_DAT; p.thanh_tien=0; p.reviewed_by=meRef.current.ho_ten; p.reviewed_at=now(); p.ly_do_loai=rs; commit(); return {ok:true, deduped:true, reason:rs}; }
+          p.trang_thai=ST.DAT; p.thanh_tien=Number(S.pricing.don_gia_post)||0; p.reviewed_by=meRef.current.ho_ten; p.reviewed_at=now(); p.ky_thanh_toan=kyOf(); p.ly_do_loai='';
+        } else { p.trang_thai=ST.KHONG_DAT; p.thanh_tien=0; p.reviewed_by=meRef.current.ho_ten; p.reviewed_at=now(); p.ly_do_loai=reason||''; }
+        commit(); return {ok:true}; },
+      dupCheckPost: async (topic_id, group_id) => {
+        const days = Math.max(0, Number(S.pricing.dedupe_days!=null?S.pricing.dedupe_days:7));
+        if(!topic_id||!group_id||!days) return {dup:false, days};
+        const since = Date.now()-days*864e5;
+        const rows = S.post_seedings.filter(p=>p.topic_id===topic_id && p.group_id===group_id && [ST.CHO_DUYET,ST.DAT,ST.DA_CHI].includes(p.trang_thai) && new Date(p.created_at).getTime()>=since).sort((a,b)=>new Date(a.created_at)-new Date(b.created_at));
+        return { dup:rows.length>0, days, count:rows.length, mine:rows.some(r=>r.sales_id===meRef.current.id), won:rows.some(r=>r.trang_thai===ST.DAT||r.trang_thai===ST.DA_CHI),
+          examples: rows.slice(0,5).map(r=>({ sales: r.sales_id===meRef.current.id?'Bạn':(S.users.find(u=>u.id===r.sales_id)?.ho_ten||'—'), trang_thai:r.trang_thai, created_at:r.created_at, mine:r.sales_id===meRef.current.id })) };
+      },
       createCmtSeed: async c => { S.cmt_seedings.unshift({ id:uid('c'), loai:c.loai, post_seeding_id:c.post_seeding_id||null, post_link:(c.post_link||'').trim(), suggestion_id:c.suggestion_id||null, sales_id:meRef.current.id, so_cmt_seeding:Number(c.so_cmt_seeding)||0, react:Number(c.react)||0, so_cmt_tu_nhien:Number(c.so_cmt_tu_nhien)||0, trang_thai:c.submit?ST.CHO_DUYET:ST.NHAP, reviewed_by:null, reviewed_at:null, ly_do_loai:'', thanh_tien:0, ky_thanh_toan:null, created_at:now(), proofs:(c.proofs||[]).map(img=>({id:uid('img'),image_url:img,uploaded_at:now()})) }); commit(); return true; },
       reviewCmtSeed: async (id, result, reason) => { const c=S.cmt_seedings.find(x=>x.id===id); if(!c) return false; if(result===ST.DAT){ c.trang_thai=ST.DAT; c.thanh_tien=(Number(c.so_cmt_seeding)||0)*(Number(S.pricing.don_gia_cmt)||0); c.reviewed_by=meRef.current.ho_ten; c.reviewed_at=now(); c.ky_thanh_toan=kyOf(); c.ly_do_loai=''; } else { c.trang_thai=ST.KHONG_DAT; c.thanh_tien=0; c.reviewed_by=meRef.current.ho_ten; c.reviewed_at=now(); c.ly_do_loai=reason||''; } commit(); return true; },
       markPaid: async (sales_id, ky) => { const hit=x=>x.sales_id===sales_id && x.trang_thai===ST.DAT && (!ky || (x.ky_thanh_toan||kyOf(x.created_at))===ky); S.post_seedings.forEach(p=>{ if(hit(p)) p.trang_thai=ST.DA_CHI; }); S.cmt_seedings.forEach(c=>{ if(hit(c)) c.trang_thai=ST.DA_CHI; }); S.project_filmings.forEach(f=>{ if(hit(f)) f.trang_thai=ST.DA_CHI; }); commit(); return true; },
@@ -424,7 +439,8 @@ function AppProvider({children}){
     deleteUser: id => mut(`/users/${id}`, {method:'DELETE'}),
     setPricing: p => mut('/pricing', {method:'PATCH', body:p}),
     createPost: p => mut('/posts', {method:'POST', body:p}),
-    reviewPost: (id, result, reason) => mut(`/posts/${id}/review`, {method:'POST', body:{result, reason}}),
+    reviewPost: async (id, result, reason) => { try { const r = await call(`/posts/${id}/review`, {method:'POST', body:{result, reason}}); if(r && r.db) setDb(r.db); return { ok:true, deduped:!!r.deduped, reason:r.reason }; } catch(e){ notify(e.message,'err'); return { ok:false }; } },
+    dupCheckPost: async (topic_id, group_id) => { try { return await call(`/posts/dupcheck?topic_id=${encodeURIComponent(topic_id)}&group_id=${encodeURIComponent(group_id)}`); } catch(e){ return {dup:false}; } },
     createCmtSeed: c => mut('/cmtseed', {method:'POST', body:c}),
     reviewCmtSeed: (id, result, reason) => mut(`/cmtseed/${id}/review`, {method:'POST', body:{result, reason}}),
     markPaid: (sales_id, ky) => mut('/markpaid', {method:'POST', body:{sales_id, ky}}),
@@ -847,7 +863,7 @@ function CopyBtn({text, className='', label='📋 Copy'}){
   return <Btn variant={done?'ok':'soft'} className={className} onClick={copy}>{done?'✓ Đã copy':label}</Btn>;
 }
 function SalesNewPost({go}){
-  const { db, meId, createPost, notify } = useApp();
+  const { db, meId, createPost, notify, dupCheckPost } = useApp();
   const [q, setQ] = useState('');
   const [fLoai, setFLoai] = useState('');
   const [topicId, setTopicId] = useState('');
@@ -869,6 +885,13 @@ function SalesNewPost({go}){
   const priGroups = groups.filter(g=>g.uu_tien).length;
 
   const dupLink = link && db.post_seedings.some(p=>p.link_bai && p.link_bai.trim()===link.trim());
+
+  // Chống spam: cảnh báo mềm nếu nội dung này đã đăng ở nhóm này (bất kỳ Sales nào) trong N ngày
+  const [dup, setDup] = useState(null);
+  useEffect(()=>{ let live=true; setDup(null);
+    if(topicId && groupId && dupCheckPost){ dupCheckPost(topicId, groupId).then(r=>{ if(live) setDup(r && r.dup ? r : null); }); }
+    return ()=>{ live=false; };
+  }, [topicId, groupId]);
 
   const submit = async (asDraft) => {
     if(!topicId) return notify('Chọn chủ đề/nội dung','warn');
@@ -934,6 +957,14 @@ function SalesNewPost({go}){
         {groups.map(g=><option key={g.id} value={g.id}>{g.uu_tien?'⭐ ':''}{g.ten_group} ({g.loai} · {(g.so_member||0).toLocaleString('vi-VN')} tv)</option>)}
       </Select>
       {chosenGroup && chosenGroup.uu_tien && <div className="mt-2"><PriBadge small/> <span className="text-[11px] text-brand-dark">Group Marketing đang ưu tiên</span></div>}
+      {dup && <div className={"mt-3 rounded-xl p-3 text-xs border "+(dup.won?'bg-rose-50 border-rose-300 text-rose-700':'bg-amber-50 border-amber-300 text-amber-800')}>
+        <div className="font-semibold">{dup.won?'🔁 Nội dung này đã có bài ĐƯỢC DUYỆT ở nhóm này':'⚠️ Trùng nội dung – nhóm'}</div>
+        <div className="mt-0.5">Trong {dup.days} ngày qua đã có <b>{dup.count} bài</b> cùng nội dung ở nhóm này{dup.mine?' (có bài của bạn)':''}.
+          {dup.examples && dup.examples.length>0 && <> Gần nhất: {dup.examples.map((e,i)=><span key={i}>{i>0?' · ':' '}{e.sales} ({ST_LABEL[e.trang_thai]||e.trang_thai})</span>)}.</>}</div>
+        <div className="mt-1">{dup.won
+          ? 'Nếu vẫn đăng, bài của bạn sẽ KHÔNG được tính công (mỗi cặp nội dung–nhóm chỉ tính 1 lần). Nên chọn nhóm khác hoặc nội dung khác.'
+          : 'Cân nhắc đổi nhóm hoặc nội dung để tránh spam cộng đồng — bạn vẫn có thể tiếp tục nếu cần.'}</div>
+      </div>}
       {chosenGroup && <div className="mt-3">
         {chosenGroup.link ? <>
           <a href={chosenGroup.link} target="_blank" rel="noopener"
@@ -1549,18 +1580,32 @@ function MktQueue(){
   const [rejFor, setRejFor] = useState(null);
   const [rejTxt, setRejTxt] = useState('');
 
+  const [showDup, setShowDup] = useState(false);
   const postItems = db.post_seedings.filter(p=>p.trang_thai===ST.CHO_DUYET);
   const cmtMine   = db.cmt_seedings.filter(c=>c.trang_thai===ST.CHO_DUYET && c.loai===CMT_LOAI.MINH_DANG);
   const cmtDao    = db.cmt_seedings.filter(c=>c.trang_thai===ST.CHO_DUYET && c.loai===CMT_LOAI.DAO);
 
+  // Chống trùng: gom các bài "còn hiệu lực" (không nháp/không loại) theo cặp nội dung–nhóm
+  const dKey = p => (p.topic_id||'')+'|'+(p.group_id||'');
+  const cellPosts = {};
+  db.post_seedings.forEach(p=>{ if(p.topic_id && p.group_id && p.trang_thai!==ST.NHAP && p.trang_thai!==ST.KHONG_DAT){ (cellPosts[dKey(p)] ||= []).push(p); } });
+  const dupOf = (p)=> (p.topic_id&&p.group_id) ? (cellPosts[dKey(p)]||[]) : [];
+  const dupInfoFor = (p)=>{ const arr=dupOf(p); if(arr.length<=1) return null;
+    return { count:arr.length, hasWinner: arr.some(x=>x.id!==p.id && (x.trang_thai===ST.DAT||x.trang_thai===ST.DA_CHI)) }; };
+  const dupClusters = Object.values(cellPosts).filter(arr=>arr.length>1)
+    .map(arr=>arr.slice().sort((a,b)=>new Date(a.created_at)-new Date(b.created_at)));
+
   const approve = async (item) => {
-    const ok = item._t==='post' ? await reviewPost(item.id, ST.DAT) : await reviewCmtSeed(item.id, ST.DAT);
-    if(ok) notify('✅ Đã duyệt Đạt — tự tính tiền');
+    if(item._t==='post'){
+      const r = await reviewPost(item.id, ST.DAT);
+      if(r && r.ok) notify(r.deduped ? '🔁 Bài trùng nội dung–nhóm → đã đánh Loại, không tính tiền' : '✅ Đã duyệt Đạt — tự tính tiền', r.deduped?'warn':undefined);
+    } else { const ok = await reviewCmtSeed(item.id, ST.DAT); if(ok) notify('✅ Đã duyệt Đạt — tự tính tiền'); }
   };
   const reject = async () => {
     if(!rejTxt.trim()) return notify('Nhập lý do','warn');
     const item = rejFor;
-    const ok = item._t==='post' ? await reviewPost(item.id, ST.KHONG_DAT, rejTxt.trim()) : await reviewCmtSeed(item.id, ST.KHONG_DAT, rejTxt.trim());
+    const res = item._t==='post' ? await reviewPost(item.id, ST.KHONG_DAT, rejTxt.trim()) : await reviewCmtSeed(item.id, ST.KHONG_DAT, rejTxt.trim());
+    const ok = item._t==='post' ? (res && res.ok) : res;
     if(ok){ notify('Đã trả về Sales sửa'); setRejFor(null); setRejTxt(''); }
   };
 
@@ -1576,6 +1621,22 @@ function MktQueue(){
       <h2 className="font-display text-lg font-bold text-ink">✅ Hàng chờ nghiệm thu</h2>
       {selIds.length>0 && <Btn variant="ok" onClick={bulkApprove}>Duyệt {selIds.length} mục đã chọn</Btn>}
     </div>
+    {dupClusters.length>0 && <div className="bg-amber-50 border border-amber-300 rounded-2xl overflow-hidden">
+      <button onClick={()=>setShowDup(v=>!v)} className="w-full flex items-center justify-between gap-2 px-4 py-3 text-left">
+        <span className="text-sm font-semibold text-amber-800">🔁 Trùng lặp nội dung–nhóm cần chú ý — {dupClusters.length} cặp</span>
+        <span className="text-amber-700 text-xs">{showDup?'Ẩn ▲':'Xem ▼'}</span>
+      </button>
+      {showDup && <div className="px-4 pb-3 space-y-2">
+        <p className="text-[11px] text-amber-700">Mỗi cặp nội dung–nhóm chỉ được tính công 1 lần. Khi bạn duyệt Đạt bài đầu, các bài trùng còn lại tự động bị đánh Loại (không tính tiền).</p>
+        {dupClusters.map((arr,i)=>{ const t=db.content_topics.find(x=>x.id===arr[0].topic_id); const g=db.groups.find(x=>x.id===arr[0].group_id);
+          return <div key={i} className="bg-white rounded-xl border border-amber-200 p-2.5 text-xs">
+            <div className="font-medium text-ink">{t?.chu_de||'—'} <span className="text-slate-400">·</span> <span className="text-slate-500">{g?.ten_group||'—'}</span></div>
+            <div className="mt-1 flex flex-wrap gap-1.5">{arr.map(p=>{ const s=db.users.find(u=>u.id===p.sales_id);
+              return <span key={p.id} className={"px-1.5 py-0.5 rounded-full "+(ST_STYLE[p.trang_thai]||'bg-slate-100 text-slate-600')}>{s?.ho_ten||'—'} · {ST_LABEL[p.trang_thai]}</span>; })}</div>
+          </div>; })}
+      </div>}
+    </div>}
+
     <Tabs active={tab} onChange={t=>{setTab(t);setSel({});}} tabs={[
       {key:'post', label:'POST', count:postItems.length},
       {key:'mine', label:'CMT mình đăng', count:cmtMine.length},
@@ -1584,7 +1645,7 @@ function MktQueue(){
 
     {curItems.length===0 ? <Empty>Không có mục nào chờ duyệt 🎉</Empty> :
       <div className="space-y-3">
-        {curItems.map(item=><QueueCard key={item.id} item={item} checked={!!sel[item.id]}
+        {curItems.map(item=><QueueCard key={item.id} item={item} checked={!!sel[item.id]} dupInfo={item._t==='post'?dupInfoFor(item):null}
           onCheck={()=>setSel(s=>({...s,[item.id]:!s[item.id]}))}
           onApprove={()=>approve(item)} onReject={()=>{setRejFor(item);setRejTxt('');}}/>)}
       </div>}
@@ -1595,7 +1656,7 @@ function MktQueue(){
     </Modal>
   </div>;
 }
-function QueueCard({item, checked, onCheck, onApprove, onReject}){
+function QueueCard({item, checked, onCheck, onApprove, onReject, dupInfo}){
   const { db } = useApp();
   const sales = db.users.find(u=>u.id===item.sales_id);
   const topic = item._t==='post' ? db.content_topics.find(t=>t.id===item.topic_id) : null;
@@ -1614,6 +1675,8 @@ function QueueCard({item, checked, onCheck, onApprove, onReject}){
         </div>
         {topic && <div className="text-sm text-slate-700 mt-1">{topic.chu_de} <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500">{topic.loai_bai}</span></div>}
         {group && <div className="text-xs text-slate-500">Group: {group.ten_group}</div>}
+        {dupInfo && <div className={"mt-1 inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full "+(dupInfo.hasWinner?'bg-rose-100 text-rose-700':'bg-amber-100 text-amber-700')}>
+          🔁 {dupInfo.hasWinner?'Trùng — đã có bài Đạt, duyệt sẽ tự Loại (0đ)':'Trùng nội dung–nhóm ('+dupInfo.count+' bài)'}</div>}
         {sug && <div className="text-xs text-slate-500 mt-0.5">Gợi ý: "{sug.noi_dung_goi_y.slice(0,60)}…"</div>}
         {link && <div className="text-xs mt-1 truncate"><a href={link} target="_blank" className="text-blue-500 underline">🔗 {link}</a></div>}
         <div className="flex gap-3 text-xs text-slate-500 mt-1">
@@ -1835,7 +1898,7 @@ function AdminPricing(){
   const { db, setPricing, notify, audit } = useApp();
   const [f, setF] = useState(db.pricing);
   useEffect(()=>setF(db.pricing),[db.pricing]);
-  const save = async () => { const ok = await setPricing({don_gia_post:Number(f.don_gia_post)||0,don_gia_cmt:Number(f.don_gia_cmt)||0,don_gia_cong_trinh:Number(f.don_gia_cong_trinh)||0,don_gia_canh:Number(f.don_gia_canh)||0,min_nhac_kingsmen:Number(f.min_nhac_kingsmen)||0,min_usp:Number(f.min_usp)||0}); if(ok) notify('Đã lưu đơn giá'); };
+  const save = async () => { const ok = await setPricing({don_gia_post:Number(f.don_gia_post)||0,don_gia_cmt:Number(f.don_gia_cmt)||0,don_gia_cong_trinh:Number(f.don_gia_cong_trinh)||0,don_gia_canh:Number(f.don_gia_canh)||0,min_nhac_kingsmen:Number(f.min_nhac_kingsmen)||0,min_usp:Number(f.min_usp)||0,dedupe_days:Math.max(0,Number(f.dedupe_days)||0)}); if(ok) notify('Đã lưu đơn giá'); };
   return <div className="space-y-4 max-w-lg">
     <h2 className="font-display text-lg font-bold text-ink">⚙️ Đơn giá & cấu hình</h2>
     <div className="bg-white rounded-2xl border border-line shadow-card p-4">
@@ -1845,6 +1908,7 @@ function AdminPricing(){
         <Field label="Đơn giá / cảnh quay đạt" hint="giá chung mỗi cảnh; có thể ghi đè theo từng cảnh trong quy trình"><Input type="number" className="no-spin" value={f.don_gia_canh||0} onChange={e=>setF({...f,don_gia_canh:e.target.value})}/></Field>
         <Field label="Min nhắc Kingsmen" hint="chuẩn chất lượng cụm"><Input type="number" className="no-spin" value={f.min_nhac_kingsmen} onChange={e=>setF({...f,min_nhac_kingsmen:e.target.value})}/></Field>
         <Field label="Min USP" hint="số USP tối thiểu"><Input type="number" className="no-spin" value={f.min_usp} onChange={e=>setF({...f,min_usp:e.target.value})}/></Field>
+        <Field label="Chống trùng (ngày)" hint="cảnh báo trùng nội dung–nhóm trong N ngày · 0 = tắt"><Input type="number" className="no-spin" value={f.dedupe_days==null?7:f.dedupe_days} onChange={e=>setF({...f,dedupe_days:e.target.value})}/></Field>
       </div>
       <div className="bg-slate-50 rounded-xl p-3 text-xs text-slate-500 mb-3">
         Công thức nghiệm thu: <b>POST</b> = đơn giá post · <b>CMT</b> = số cmt × đơn giá cmt · <b>QUAY</b> = tổng số <b>cảnh đạt</b> × đơn giá cảnh (mỗi cảnh 1 lần, có thể đặt giá riêng theo cảnh). Chốt khi Marketing bấm "Hoàn tất nghiệm thu".
