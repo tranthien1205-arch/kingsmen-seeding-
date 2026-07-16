@@ -1480,6 +1480,63 @@ function ImportBtn({tab}){
   </>;
 }
 
+// Import tài khoản từ file mẫu (.csv) — 3 cột: Tên | Tài khoản (email) | Mật khẩu. Vai trò mặc định Sales.
+function UserImportBtn(){
+  const { createUser, notify } = useApp();
+  const [open, setOpen] = useState(false);
+  const [txt, setTxt] = useState('');
+  const [busy, setBusy] = useState(false);
+  const fileRef = useRef(null);
+  const HEADERS = ['Tên','Tài khoản','Mật khẩu'];
+  const SAMPLE = [['Nguyễn Văn A','sales99.kingsmen@gmail.com','123456'],['Trần Thị B','sales100.masfico@gmail.com','123456']];
+
+  const downloadTpl = () => download('mau_tai_khoan.csv', toCSV([HEADERS, ...SAMPLE]));
+  const onFile = (e) => {
+    const file = e.target.files && e.target.files[0]; if(!file) return;
+    const r = new FileReader();
+    r.onload = ev => setTxt(String(ev.target.result||''));
+    r.onerror = () => notify('Không đọc được file','warn');
+    r.readAsText(file, 'utf-8'); e.target.value='';
+  };
+  const doImport = async () => {
+    const rows = parseTable(txt);
+    if(!rows.length) return notify('Chưa có dữ liệu để import','warn');
+    if((rows[0][0]||'').toLowerCase()===HEADERS[0].toLowerCase() || /tài khoản|email/i.test(rows[0][1]||'')) rows.shift();
+    setBusy(true);
+    let n=0, skip=0;
+    for(const c of rows){
+      const ho_ten=(c[0]||'').trim(), email=(c[1]||'').trim().toLowerCase(), password=(c[2]||'').trim()||'123456';
+      if(!ho_ten || !email){ skip++; continue; }
+      const ok = await createUser({ho_ten, email, password, vai_tro:ROLES.SALES, active:true});
+      ok ? n++ : skip++;
+    }
+    setBusy(false);
+    notify('Đã tạo '+n+' tài khoản'+(skip?' · bỏ qua '+skip+' dòng (thiếu tên/email hoặc email trùng)':''));
+    setTxt(''); setOpen(false);
+  };
+
+  return <>
+    <Btn variant="ghost" onClick={()=>setOpen(true)}>⬇ Import file</Btn>
+    <Modal open={open} onClose={()=>setOpen(false)} title="Import tài khoản" wide>
+      <ol className="text-sm text-slate-600 list-decimal ml-4 space-y-1 mb-3">
+        <li>Bấm <b>Tải file mẫu</b> → mở bằng Excel/Google Sheets.</li>
+        <li>Điền theo 3 cột <b>Tên · Tài khoản · Mật khẩu</b> (giữ nguyên dòng tiêu đề), lưu dạng <b>.csv</b>.</li>
+        <li>Bấm <b>Chọn file</b> để tải lên, xem trước rồi bấm <b>Import</b>.</li>
+      </ol>
+      <div className="flex flex-wrap gap-2 mb-3">
+        <Btn variant="ghost" onClick={downloadTpl}>⬇ Tải file mẫu</Btn>
+        <Btn variant="ghost" onClick={()=>fileRef.current && fileRef.current.click()}>📄 Chọn file (.csv)</Btn>
+        <input ref={fileRef} type="file" accept=".csv,.tsv,.txt,text/csv" className="hidden" onChange={onFile}/>
+      </div>
+      <div className="text-xs font-mono bg-slate-100 rounded-lg p-2 mb-1 overflow-x-auto whitespace-nowrap">{HEADERS.join(' | ')}</div>
+      <p className="text-[11px] text-slate-400 mb-2">Tài khoản = email đăng nhập · Mật khẩu để trống sẽ mặc định <b>123456</b> · Vai trò tạo mới đều là <b>Sales</b> (đổi sau nếu cần) · Email đã tồn tại sẽ được bỏ qua.</p>
+      <p className="text-xs text-slate-500 mb-1">Hoặc copy 3 cột từ Excel rồi dán trực tiếp vào ô dưới (mỗi dòng 1 tài khoản):</p>
+      <Textarea rows="7" value={txt} onChange={e=>setTxt(e.target.value)} placeholder="Nội dung file sẽ hiện ở đây sau khi chọn file, hoặc dán dữ liệu từ Excel…"/>
+      <div className="flex gap-2 mt-3"><Btn variant="ghost" onClick={()=>setOpen(false)} disabled={busy}>Huỷ</Btn><Btn variant="brand" className="flex-1" onClick={doImport} disabled={busy}>{busy?'Đang import…':'Import'}</Btn></div>
+    </Modal>
+  </>;
+}
+
 /* ============================================================
    15. MARKETING — HÀNG CHỜ NGHIỆM THU
 ============================================================ */
@@ -1663,9 +1720,30 @@ function Td({children, r, className=''}){ return <td className={"px-3 py-2.5 tex
 function UserManagement(){
   const { db, me, createUser, updateUser, deleteUser, notify } = useApp();
   const [edit, setEdit] = useState(null);
+  const [selMode, setSelMode] = useState(false);
+  const [sel, setSel] = useState(()=>new Set());
   const blank = {ho_ten:'',email:'',password:'123456',vai_tro:ROLES.SALES,active:true};
 
   const activeMkt = db.users.filter(u=>u.active && u.vai_tro===ROLES.MARKETING).length;
+
+  const selectable = db.users.filter(u=>u.id!==me.id); // không cho chọn chính mình
+  const toggleSel = (id)=> setSel(prev=>{ const s=new Set(prev); s.has(id)?s.delete(id):s.add(id); return s; });
+  const allSel = selectable.length>0 && selectable.every(u=>sel.has(u.id));
+  const toggleAll = ()=> setSel(allSel ? new Set() : new Set(selectable.map(u=>u.id)));
+  const exitSel = ()=>{ setSelMode(false); setSel(new Set()); };
+  const bulkDelete = async ()=>{
+    let users=[...sel].map(id=>db.users.find(u=>u.id===id)).filter(u=>u && u.id!==me.id);
+    if(!users.length) return notify('Chưa chọn tài khoản nào (không thể xoá chính mình)','warn');
+    // giữ tối thiểu 1 Marketing đang hoạt động
+    const activeMktIds = db.users.filter(u=>u.active && u.vai_tro===ROLES.MARKETING).map(u=>u.id);
+    const delMkt = users.filter(u=>activeMktIds.includes(u.id));
+    let blocked=0;
+    if(delMkt.length && activeMktIds.length - delMkt.length < 1){ users=users.filter(u=>!activeMktIds.includes(u.id)); blocked=delMkt.length; }
+    if(!users.length) return notify('Phải còn ít nhất 1 Marketing đang hoạt động','warn');
+    if(!confirm(`Xoá ${users.length} tài khoản đã chọn?`)) return;
+    let n=0; for(const u of users){ if(await deleteUser(u.id)) n++; }
+    exitSel(); notify('Đã xoá '+n+' tài khoản'+(blocked?' · giữ lại '+blocked+' Marketing để không mất quyền quản trị':''));
+  };
 
   const setActive = (u, on) => {
     if(!on && u.id===me.id) return notify('Không thể tự tắt tài khoản của mình','warn');
@@ -1694,28 +1772,46 @@ function UserManagement(){
   };
 
   return <div className="space-y-4">
-    <div className="flex items-center justify-between">
+    <div className="flex items-center justify-between flex-wrap gap-2">
       <h2 className="font-display text-lg font-bold text-ink">👥 Quản lý tài khoản</h2>
-      <Btn variant="brand" onClick={()=>setEdit({...blank})}>＋ Tạo tài khoản</Btn>
+      <div className="flex gap-2">
+        <Btn variant="ghost" onClick={()=> selMode ? exitSel() : setSelMode(true)}>{selMode?'✕ Xong':'☑ Chọn'}</Btn>
+        <UserImportBtn/>
+        <Btn variant="brand" onClick={()=>setEdit({...blank})}>＋ Tạo tài khoản</Btn>
+      </div>
     </div>
     <div className="bg-brand/10 border border-brand/30 rounded-2xl p-3 text-xs text-brand-dark">
       Marketing tạo & cấp tài khoản cho Sales và Kế toán — gửi <b>email + mật khẩu</b> để họ đăng nhập. Họ không tự đăng ký.
     </div>
 
+    {selMode && <div className="flex items-center justify-between gap-2 bg-white rounded-xl border border-line shadow-card px-3 py-2 sticky top-2 z-20">
+      <label className="flex items-center gap-2 text-sm font-medium text-ink cursor-pointer select-none">
+        <input type="checkbox" checked={allSel} onChange={toggleAll} className="w-4 h-4 accent-brand"/>
+        Chọn tất cả <span className="text-ink-muted">({sel.size}/{selectable.length})</span>
+      </label>
+      <Btn variant="danger" disabled={!sel.size} onClick={bulkDelete} className="!py-2">🗑 Xoá đã chọn ({sel.size})</Btn>
+    </div>}
+
     <div className="bg-white rounded-2xl border border-line shadow-card divide-y">
-      {db.users.map(u=><div key={u.id} className={"p-3 flex items-center gap-3 "+(u.active?'':'opacity-50')}>
+      {db.users.map(u=>{ const isSelf=u.id===me.id; const checked=selMode && sel.has(u.id);
+        return <div key={u.id} onClick={selMode&&!isSelf?()=>toggleSel(u.id):undefined}
+          className={"p-3 flex items-center gap-3 "+(u.active?'':'opacity-50')+(selMode&&!isSelf?' cursor-pointer':'')+(checked?' bg-brand/5':'')}>
+        {selMode && <input type="checkbox" checked={checked} disabled={isSelf} onChange={()=>toggleSel(u.id)} onClick={e=>e.stopPropagation()}
+          title={isSelf?'Không thể xoá chính mình':''} className="w-4 h-4 accent-brand shrink-0 disabled:opacity-30"/>}
         <div className="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center font-bold text-slate-600">{u.ho_ten[0]}</div>
         <div className="flex-1 min-w-0">
-          <div className="text-sm font-medium text-ink truncate">{u.ho_ten}{u.id===me.id && <span className="text-[10px] text-slate-400"> (bạn)</span>}</div>
+          <div className="text-sm font-medium text-ink truncate">{u.ho_ten}{isSelf && <span className="text-[10px] text-slate-400"> (bạn)</span>}</div>
           <div className="text-xs text-slate-400 truncate">{u.email}</div>
         </div>
-        <Select value={u.vai_tro} onChange={e=>setRole(u,e.target.value)} className="max-w-[130px] py-1 text-xs">
-          {Object.values(ROLES).map(r=><option key={r} value={r}>{ROLE_LABEL[r]}</option>)}
-        </Select>
-        <Toggle on={u.active} onClick={()=>setActive(u,!u.active)} labels={['Bật','Tắt']}/>
-        <button onClick={()=>setEdit(u)} className="text-xs text-blue-500 hover:underline">Sửa</button>
-        <button onClick={()=>remove(u)} className="text-xs text-rose-500 hover:underline">Xoá</button>
-      </div>)}
+        {!selMode && <>
+          <Select value={u.vai_tro} onChange={e=>setRole(u,e.target.value)} className="max-w-[130px] py-1 text-xs">
+            {Object.values(ROLES).map(r=><option key={r} value={r}>{ROLE_LABEL[r]}</option>)}
+          </Select>
+          <Toggle on={u.active} onClick={()=>setActive(u,!u.active)} labels={['Bật','Tắt']}/>
+          <button onClick={()=>setEdit(u)} className="text-xs text-blue-500 hover:underline">Sửa</button>
+          <button onClick={()=>remove(u)} className="text-xs text-rose-500 hover:underline">Xoá</button>
+        </>}
+      </div>; })}
     </div>
 
     <Modal open={!!edit} onClose={()=>setEdit(null)} title={edit&&edit.id?'Sửa tài khoản':'Tạo tài khoản'}>
