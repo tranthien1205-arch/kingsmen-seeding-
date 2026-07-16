@@ -38,6 +38,8 @@
   body{ background:#f6f7f9; }
   ::-webkit-scrollbar{ width:8px; height:8px } ::-webkit-scrollbar-thumb{ background:#cbd5e1; border-radius:8px }
   .no-spin::-webkit-outer-spin-button,.no-spin::-webkit-inner-spin-button{ -webkit-appearance:none; margin:0 }
+  @keyframes fadeIn{ from{ opacity:0 } to{ opacity:1 } }
+  @media (prefers-reduced-motion:reduce){ .animate-\[fadeIn_\.2s_ease\]{ animation:none !important } }
 </style>
 </head>
 <body class="bg-slate-100 text-slate-800 font-sans">
@@ -1945,11 +1947,11 @@ const isAppMedia = (url)=> !!url && (url.startsWith('/media/') || url.startsWith
 // nhúng video mẫu / hướng dẫn: YouTube · Google Drive · video app/mp4 · ảnh · link khác
 const ytId = (u)=>{ const m=/(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)([\w-]{6,})/.exec(u||''); return m?m[1]:null; };
 const driveId = (u)=>{ const m=/drive\.google\.com\/file\/d\/([\w-]+)/.exec(u||''); return m?m[1]:null; };
-function EmbedMedia({url, className='w-full h-full'}){
+function EmbedMedia({url, className='w-full h-full', autoplay=false}){
   if(!url) return <div className={className+" flex items-center justify-center bg-slate-900 text-white/60 text-sm"}>Chưa có video/ảnh mẫu</div>;
-  const yt=ytId(url); if(yt) return <iframe src={"https://www.youtube.com/embed/"+yt} title="mẫu" className={className} allow="accelerometer; autoplay; encrypted-media; picture-in-picture" allowFullScreen frameBorder="0"/>;
-  const dv=driveId(url); if(dv) return <iframe src={"https://drive.google.com/file/d/"+dv+"/preview"} title="mẫu" className={className} allow="autoplay" allowFullScreen frameBorder="0"/>;
-  if(isAppMedia(url) || /\.(mp4|webm|mov|m4v)(\?|#|$)/i.test(url)) return <video src={url} controls playsInline preload="metadata" className={className+" bg-black object-contain"}/>;
+  const yt=ytId(url); if(yt) return <iframe src={"https://www.youtube.com/embed/"+yt+"?rel=0&playsinline=1&modestbranding=1"+(autoplay?"&autoplay=1":"")} title="mẫu" className={className} allow="accelerometer; autoplay; encrypted-media; picture-in-picture; fullscreen" allowFullScreen frameBorder="0"/>;
+  const dv=driveId(url); if(dv) return <iframe src={"https://drive.google.com/file/d/"+dv+"/preview"} title="mẫu" className={className} allow="autoplay; fullscreen" allowFullScreen frameBorder="0"/>;
+  if(isAppMedia(url) || /\.(mp4|webm|mov|m4v)(\?|#|$)/i.test(url)) return <video src={url} controls autoPlay={autoplay} playsInline preload="metadata" className={className+" bg-black object-contain"}/>;
   if(/\.(png|jpe?g|gif|webp)(\?|#|$)/i.test(url) || url.startsWith('data:image')) return <img src={url} className={className+" object-contain bg-slate-900"}/>;
   return <div className={className+" flex flex-col items-center justify-center bg-slate-900 text-white/70"}><span className="text-4xl">🔗</span><a href={url} target="_blank" className="text-xs underline mt-2">Mở link mẫu</a></div>;
 }
@@ -2026,13 +2028,39 @@ const phaseBg = (i)=> ['#eef2ff','#fff7ed','#ecfdf5','#fdf2f8','#eff6ff','#f7fee
 const fmtMB = (b)=> (b>=1048576? (b/1048576).toFixed(1)+'MB' : Math.max(1,Math.round(b/1024))+'KB');
 // map shot_id -> {ten, phase} từ tất cả quy trình
 function shotIndex(db){ const m={}; (db.filming_templates||[]).forEach(t=>t.phases.forEach(p=>p.shots.forEach(s=>{ m[s.id]={ten:s.ten, phase:p.ten, tpl:t.he_san_pham}; }))); return m; }
+// Xem video mẫu TOÀN MÀN HÌNH, tự chạy khi Sales mở
 function SampleModal({shot, onClose}){
-  return <Modal open={!!shot} onClose={onClose} title={"Mẫu: "+(shot?.ten||'')} wide>
-    {shot && <div className="space-y-2">
-      <div className="rounded-xl overflow-hidden aspect-video bg-black"><EmbedMedia url={shot.source_mau_url}/></div>
-      <div className="text-sm text-slate-600 whitespace-pre-wrap">{shot.mo_ta||<span className="italic text-slate-400">Marketing chưa nhập mô tả</span>}</div>
-    </div>}
-  </Modal>;
+  const wrapRef = useRef(null);
+  useEffect(()=>{
+    if(!shot) return;
+    const onKey = e => { if(e.key==='Escape') onClose(); };
+    document.addEventListener('keydown', onKey);
+    const prev = document.body.style.overflow; document.body.style.overflow='hidden';
+    return ()=>{ document.removeEventListener('keydown', onKey); document.body.style.overflow=prev;
+      if(document.fullscreenElement) document.exitFullscreen&&document.exitFullscreen().catch(()=>{}); };
+  }, [shot]);
+  if(!shot) return null;
+  const goFs = ()=>{ const el=wrapRef.current; if(!el) return;
+    if(!document.fullscreenElement){ (el.requestFullscreen||el.webkitRequestFullscreen||(()=>{})).call(el); }
+    else { document.exitFullscreen&&document.exitFullscreen(); } };
+  return <div className="fixed inset-0 z-[60] bg-black flex flex-col animate-[fadeIn_.2s_ease]" onClick={onClose}>
+    <div className="flex items-center justify-between gap-3 px-4 py-3 shrink-0 text-white" onClick={e=>e.stopPropagation()}>
+      <div className="min-w-0">
+        <div className="font-display font-bold truncate flex items-center gap-2">🎬 Mẫu: {shot.ten}</div>
+        {shot.mo_ta && <div className="text-xs text-white/55 truncate mt-0.5">{shot.mo_ta}</div>}
+      </div>
+      <div className="flex items-center gap-2 shrink-0">
+        <button onClick={goFs} title="Toàn màn hình thiết bị" className="w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-lg">⛶</button>
+        <button onClick={onClose} title="Đóng (Esc)" className="w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-2xl leading-none">×</button>
+      </div>
+    </div>
+    <div ref={wrapRef} className="flex-1 min-h-0 bg-black flex items-center justify-center" onClick={e=>e.stopPropagation()}>
+      <EmbedMedia url={shot.source_mau_url} autoplay className="w-full h-full"/>
+    </div>
+    <div className="px-4 py-2.5 text-center text-white/45 text-[11px] shrink-0" onClick={e=>e.stopPropagation()}>
+      Xem mẫu kỹ → tiến hành quay → tải nguồn lên · Chạm nền đen hoặc bấm ✕ để đóng
+    </div>
+  </div>;
 }
 
 // Marketing soạn hướng dẫn (văn bản + video) cho POST / CMT / QUAY
