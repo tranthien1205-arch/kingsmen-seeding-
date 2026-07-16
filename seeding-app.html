@@ -162,14 +162,22 @@ const filmCountShots = t => t.phases.reduce((s,ph)=>s+ph.shots.filter(x=>x.activ
 const filmReqShots = t => t.phases.flatMap(ph=>ph.shots.filter(s=>s.active&&s.bat_buoc));
 const filmFindTpl = (db,id) => (db.filming_templates||[]).find(t=>t.id===id) || (db.filming_templates||[])[0];
 const uniqShots = ups => [...new Set((ups||[]).map(u=>u.shot_id))];
-// đơn giá 1 cảnh: giá riêng của cảnh (nếu có) hoặc giá chung
-const filmShotPrice = (shot, pricing) => (shot && shot.don_gia!=null) ? Number(shot.don_gia) : (Number(pricing&&pricing.don_gia_canh)||0);
-// tiền công trình = tổng giá các cảnh ĐẠT (cảnh đạt nếu còn ≥1 source đạt), mỗi cảnh 1 lần
+// 3 mức chất lượng nghiệm thu mỗi source (Kế toán/Admin cấu hình giá)
+const FILM_LEVELS = [
+  { v:1, ten:'Tạm ổn', key:'film_lv1', def:5000,  cls:'bg-amber-100 text-amber-700',   dot:'#c07d16' },
+  { v:2, ten:'Chuẩn',  key:'film_lv2', def:10000, cls:'bg-sky-100 text-sky-700',       dot:'#0a92b4' },
+  { v:3, ten:'Đẹp',    key:'film_lv3', def:15000, cls:'bg-emerald-100 text-emerald-700', dot:'#0f9d6a' },
+];
+const filmLevelOf = (v)=> FILM_LEVELS.find(l=>l.v===Number(v));
+const filmLevelPrice = (level, pricing)=>{ const L=filmLevelOf(level); return L ? (Number(pricing&&pricing[L.key]) || L.def) : 0; };
+// mức của 1 source: theo level đã chấm; source cũ (đạt mà chưa có level) mặc định Chuẩn
+const filmSrcLevel = (u)=> (u && u.level!=null) ? Number(u.level) : (u && u.dat_item===true ? 2 : 0);
+// tiền công trình = tổng theo MỨC của TỪNG source đạt (mỗi source tính riêng)
 function filmProjectTien(project, template, pricing){
-  if(!template) return 0;
-  const okShots = new Set((project.uploads||[]).filter(u=>u.dat_item===true).map(u=>u.shot_id));
-  let t=0; template.phases.forEach(ph=>ph.shots.forEach(s=>{ if(s.active && okShots.has(s.id)) t+=filmShotPrice(s,pricing); })); return t;
+  return (project.uploads||[]).reduce((t,u)=>{ const lv=filmSrcLevel(u); return t + (lv>0?filmLevelPrice(lv,pricing):0); }, 0);
 }
+// (giữ tương thích cũ) đơn giá 1 cảnh — không còn dùng để tính tiền
+const filmShotPrice = (shot, pricing) => (shot && shot.don_gia!=null) ? Number(shot.don_gia) : (Number(pricing&&pricing.don_gia_canh)||0);
 
 function seedDB(){
   const uMkt   = { id:uid('u'), ho_ten:'Ngọc (Marketing)', email:'mkt@kingsmen.vn', vai_tro:ROLES.MARKETING, active:true, password:'123456' };
@@ -195,7 +203,7 @@ function seedDB(){
     { id:uid('c'), noi_dung_goi_y:'Mình là thợ, chít Kingsmen nhanh hơn keo thường, khách ưng màu ColorMatch.', tuyen:'Chuyên gia', loai_bai:'ColorMatch', tags:['thợ'], thu_tu:3, active:true, updated_at:nowISO() },
     { id:uid('c'), noi_dung_goi_y:'Có bảo hành không shop ơi, dùng cho công trình lớn.', tuyen:'Đặt câu hỏi', loai_bai:null, tags:['bảo hành'], thu_tu:4, active:true, updated_at:nowISO() },
   ];
-  const P = { don_gia_post: 15000, don_gia_cmt: 3000, don_gia_cong_trinh: 150000, don_gia_canh: 10000 };
+  const P = { don_gia_post: 15000, don_gia_cmt: 3000, don_gia_cong_trinh: 150000, don_gia_canh: 10000, film_lv1: 5000, film_lv2: 10000, film_lv3: 15000 };
 
   // Quy trình quay (nhiều hệ sản phẩm)
   const tKeoron = buildFilmTemplate(...FILM_CHECKLISTS.keoron);
@@ -235,7 +243,7 @@ function seedDB(){
       cmt:  { noi_dung:'Hướng dẫn tạo CMT seeding:\n1. Chọn post cần cmt.\n2. Dùng gợi ý nội dung.\n3. Up ảnh bằng chứng.\n4. Gửi nghiệm thu.', video_url:'' },
       filming: { noi_dung:'Hướng dẫn quay công trình:\n1. Chọn quy trình theo hệ sản phẩm.\n2. Xem video mẫu từng cảnh → quay.\n3. Upload từng cảnh, đủ bắt buộc thì gửi.', video_url:'' },
     },
-    pricing: { don_gia_post: P.don_gia_post, don_gia_cmt: P.don_gia_cmt, don_gia_cong_trinh: P.don_gia_cong_trinh, don_gia_canh: P.don_gia_canh, min_nhac_kingsmen: 6, min_usp: 2, dedupe_days: 7 },
+    pricing: { don_gia_post: P.don_gia_post, don_gia_cmt: P.don_gia_cmt, don_gia_cong_trinh: P.don_gia_cong_trinh, don_gia_canh: P.don_gia_canh, min_nhac_kingsmen: 6, min_usp: 2, dedupe_days: 7, film_lv1: P.film_lv1, film_lv2: P.film_lv2, film_lv3: P.film_lv3 },
     post_type_prefs: {},
     payouts: [],
     audit: [],
@@ -260,6 +268,9 @@ function migrate(db){
   db.users ||= []; db.groups ||= []; db.content_topics ||= []; db.cmt_suggestions ||= [];
   db.post_seedings ||= []; db.cmt_seedings ||= []; db.payouts ||= []; db.audit ||= [];
   db.pricing ||= { don_gia_post:15000, don_gia_cmt:3000, min_nhac_kingsmen:6, min_usp:2, dedupe_days:7 };
+  if(db.pricing.film_lv1==null) db.pricing.film_lv1=5000;
+  if(db.pricing.film_lv2==null) db.pricing.film_lv2=10000;
+  if(db.pricing.film_lv3==null) db.pricing.film_lv3=15000;
   db.post_type_prefs ||= {};
   db.post_seedings.forEach(p=>{ p.react ??= 0; p.so_cmt_seeding ??= 0; p.so_cmt_tu_nhien ??= 0; p.thanh_tien ??= 0; });
   db.cmt_seedings.forEach(c=>{ c.proofs ||= []; c.so_cmt_seeding ??= 0; c.react ??= 0; c.so_cmt_tu_nhien ??= 0; c.thanh_tien ??= 0; });
@@ -374,8 +385,8 @@ function AppProvider({children}){
       upsertFilmShot: async (templateId, phaseId, shot) => patchTpl(templateId, t=>({...t, phases:t.phases.map(ph=> ph.id!==phaseId?ph:{...ph, shots: shot.id ? ph.shots.map(s=>s.id===shot.id?{...s,...shot}:s) : [...ph.shots, {...shot, id:uid('sh'), thu_tu:ph.shots.length+1}]})})),
       deleteFilmShot: async (templateId, phaseId, shotId) => patchTpl(templateId, t=>({...t, phases:t.phases.map(ph=>ph.id!==phaseId?ph:{...ph, shots:ph.shots.filter(s=>s.id!==shotId)})})),
       createFilming: async proj => { const submit=proj.submit!==false; S.project_filmings.unshift({ id:uid('pf'), sales_id:meRef.current.id, template_id:proj.template_id, ten_cong_trinh:proj.ten_cong_trinh, khu_vuc:proj.khu_vuc||'', ngay_quay:proj.ngay_quay||now(), trang_thai:submit?ST.CHO_DUYET:ST.NHAP, reviewed_by:null, reviewed_at:null, ly_do_loai:'', thanh_tien:0, ky_thanh_toan:null, created_at:now(), uploads:(proj.uploads||[]).map(u=>({id:uid('up'), shot_id:u.shot_id, media_type:u.media_type, media_url:u.media_url})) }); commit(); return true; },
-      editFilming: async (id, proj) => { const f=S.project_filmings.find(x=>x.id===id); if(!f) return false; const submit=proj.submit===true; f.ten_cong_trinh=proj.ten_cong_trinh??f.ten_cong_trinh; f.khu_vuc=proj.khu_vuc??f.khu_vuc; f.ngay_quay=proj.ngay_quay??f.ngay_quay; f.uploads=(proj.uploads||[]).map(u=>({id:u.id&&String(u.id).startsWith('up_')?u.id:uid('up'), shot_id:u.shot_id, media_type:u.media_type, media_url:u.media_url, dat_item:u.dat_item})); if(submit){ f.trang_thai=ST.CHO_DUYET; f.ly_do_loai=''; } else f.trang_thai=ST.NHAP; commit(); return true; },
-      reviewFilming: async (id, result, reason, ratings) => { const f=S.project_filmings.find(x=>x.id===id); if(!f) return false; if(ratings){ (f.uploads||[]).forEach(u=>{ if(u.id in ratings) u.dat_item=!!ratings[u.id]; }); } const tpl=S.filming_templates.find(t=>t.id===f.template_id); const tien=filmProjectTien(f,tpl,S.pricing); if(result===ST.DAT){ f.trang_thai=ST.DAT; f.thanh_tien=tien; f.reviewed_by=meRef.current.ho_ten; f.reviewed_at=now(); f.ky_thanh_toan=kyOf(); f.ly_do_loai=''; } else { f.trang_thai=ST.KHONG_DAT; f.thanh_tien=0; f.reviewed_by=meRef.current.ho_ten; f.reviewed_at=now(); f.ly_do_loai=reason||''; } commit(); return true; },
+      editFilming: async (id, proj) => { const f=S.project_filmings.find(x=>x.id===id); if(!f) return false; const submit=proj.submit===true; f.ten_cong_trinh=proj.ten_cong_trinh??f.ten_cong_trinh; f.khu_vuc=proj.khu_vuc??f.khu_vuc; f.ngay_quay=proj.ngay_quay??f.ngay_quay; f.uploads=(proj.uploads||[]).map(u=>({id:u.id&&String(u.id).startsWith('up_')?u.id:uid('up'), shot_id:u.shot_id, media_type:u.media_type, media_url:u.media_url, dat_item:u.dat_item, level:u.level})); if(submit){ f.trang_thai=ST.CHO_DUYET; f.ly_do_loai=''; } else f.trang_thai=ST.NHAP; commit(); return true; },
+      reviewFilming: async (id, result, reason, ratings) => { const f=S.project_filmings.find(x=>x.id===id); if(!f) return false; if(ratings){ (f.uploads||[]).forEach(u=>{ if(u.id in ratings){ const lv=Number(ratings[u.id])||0; u.level = lv>0?lv:null; u.dat_item = lv>0; } }); } const tpl=S.filming_templates.find(t=>t.id===f.template_id); const tien=filmProjectTien(f,tpl,S.pricing); if(result===ST.DAT){ f.trang_thai=ST.DAT; f.thanh_tien=tien; f.reviewed_by=meRef.current.ho_ten; f.reviewed_at=now(); f.ky_thanh_toan=kyOf(); f.ly_do_loai=''; } else { f.trang_thai=ST.KHONG_DAT; f.thanh_tien=0; f.reviewed_by=meRef.current.ho_ten; f.reviewed_at=now(); f.ly_do_loai=reason||''; } commit(); return true; },
       uploadMedia: (file, onProgress) => new Promise((resolve,reject)=>{ if(onProgress){ onProgress(40,4,10); setTimeout(()=>onProgress(100,10,10),150); } const r=new FileReader(); r.onload=e=>resolve({ media_url:e.target.result, media_type: (file.type||'').startsWith('image/')?MEDIA_TYPE.IMAGE:MEDIA_TYPE.VIDEO }); r.onerror=()=>reject(new Error('Đọc file lỗi')); r.readAsDataURL(file); }),
       deleteUpload: async (id) => { S.project_filmings.forEach(p=>{ p.uploads=(p.uploads||[]).filter(u=>u.id!==id); }); commit(); return true; },
       cleanupMedia: async () => { const cut=new Date(Date.now()-30*864e5).toISOString(); let n=0; S.project_filmings.forEach(p=>{ if(!['DAT','DA_CHI'].includes(p.trang_thai) && (p.created_at||'')<cut){ n+=(p.uploads||[]).length; p.uploads=[]; } }); commit(); notify('Đã dọn media của '+n+' nguồn hết hạn'); return true; },
@@ -1944,20 +1955,27 @@ function AdminPricing(){
   const { db, setPricing, notify, audit } = useApp();
   const [f, setF] = useState(db.pricing);
   useEffect(()=>setF(db.pricing),[db.pricing]);
-  const save = async () => { const ok = await setPricing({don_gia_post:Number(f.don_gia_post)||0,don_gia_cmt:Number(f.don_gia_cmt)||0,don_gia_cong_trinh:Number(f.don_gia_cong_trinh)||0,don_gia_canh:Number(f.don_gia_canh)||0,min_nhac_kingsmen:Number(f.min_nhac_kingsmen)||0,min_usp:Number(f.min_usp)||0,dedupe_days:Math.max(0,Number(f.dedupe_days)||0)}); if(ok) notify('Đã lưu đơn giá'); };
+  const save = async () => { const ok = await setPricing({don_gia_post:Number(f.don_gia_post)||0,don_gia_cmt:Number(f.don_gia_cmt)||0,don_gia_cong_trinh:Number(f.don_gia_cong_trinh)||0,don_gia_canh:Number(f.don_gia_canh)||0,min_nhac_kingsmen:Number(f.min_nhac_kingsmen)||0,min_usp:Number(f.min_usp)||0,dedupe_days:Math.max(0,Number(f.dedupe_days)||0),film_lv1:Number(f.film_lv1)||0,film_lv2:Number(f.film_lv2)||0,film_lv3:Number(f.film_lv3)||0}); if(ok) notify('Đã lưu đơn giá'); };
   return <div className="space-y-4 max-w-lg">
     <h2 className="font-display text-lg font-bold text-ink">⚙️ Đơn giá & cấu hình</h2>
     <div className="bg-white rounded-2xl border border-line shadow-card p-4">
       <div className="grid grid-cols-2 gap-3">
         <Field label="Đơn giá / POST đạt" hint="VNĐ mỗi post"><Input type="number" className="no-spin" value={f.don_gia_post} onChange={e=>setF({...f,don_gia_post:e.target.value})}/></Field>
         <Field label="Đơn giá / CMT" hint="VNĐ mỗi cmt seeding"><Input type="number" className="no-spin" value={f.don_gia_cmt} onChange={e=>setF({...f,don_gia_cmt:e.target.value})}/></Field>
-        <Field label="Đơn giá / cảnh quay đạt" hint="giá chung mỗi cảnh; có thể ghi đè theo từng cảnh trong quy trình"><Input type="number" className="no-spin" value={f.don_gia_canh||0} onChange={e=>setF({...f,don_gia_canh:e.target.value})}/></Field>
         <Field label="Min nhắc Kingsmen" hint="chuẩn chất lượng cụm"><Input type="number" className="no-spin" value={f.min_nhac_kingsmen} onChange={e=>setF({...f,min_nhac_kingsmen:e.target.value})}/></Field>
         <Field label="Min USP" hint="số USP tối thiểu"><Input type="number" className="no-spin" value={f.min_usp} onChange={e=>setF({...f,min_usp:e.target.value})}/></Field>
         <Field label="Chống trùng (ngày)" hint="cảnh báo trùng nội dung–nhóm trong N ngày · 0 = tắt"><Input type="number" className="no-spin" value={f.dedupe_days==null?7:f.dedupe_days} onChange={e=>setF({...f,dedupe_days:e.target.value})}/></Field>
       </div>
+      <div className="mt-1 mb-3">
+        <div className="text-[13px] font-semibold text-ink mb-1.5">🎬 Nghiệm thu quay công trình — giá mỗi source theo mức</div>
+        <div className="grid grid-cols-3 gap-3">
+          <Field label="① Tạm ổn" hint="VNĐ / source"><Input type="number" className="no-spin" value={f.film_lv1==null?5000:f.film_lv1} onChange={e=>setF({...f,film_lv1:e.target.value})}/></Field>
+          <Field label="② Chuẩn" hint="VNĐ / source"><Input type="number" className="no-spin" value={f.film_lv2==null?10000:f.film_lv2} onChange={e=>setF({...f,film_lv2:e.target.value})}/></Field>
+          <Field label="③ Đẹp" hint="VNĐ / source"><Input type="number" className="no-spin" value={f.film_lv3==null?15000:f.film_lv3} onChange={e=>setF({...f,film_lv3:e.target.value})}/></Field>
+        </div>
+      </div>
       <div className="bg-slate-50 rounded-xl p-3 text-xs text-slate-500 mb-3">
-        Công thức nghiệm thu: <b>POST</b> = đơn giá post · <b>CMT</b> = số cmt × đơn giá cmt · <b>QUAY</b> = tổng số <b>cảnh đạt</b> × đơn giá cảnh (mỗi cảnh 1 lần, có thể đặt giá riêng theo cảnh). Chốt khi Marketing bấm "Hoàn tất nghiệm thu".
+        Công thức nghiệm thu: <b>POST</b> = đơn giá post · <b>CMT</b> = số cmt × đơn giá cmt · <b>QUAY</b> = tổng tiền theo <b>mức của từng source đạt</b> (Marketing chấm Tạm ổn/Chuẩn/Đẹp, mỗi source tính riêng). Chốt khi Marketing bấm "Hoàn tất nghiệm thu".
       </div>
       <Btn variant="brand" onClick={save}>Lưu đơn giá</Btn>
     </div>
@@ -2444,7 +2462,7 @@ function FilmingDetailSales({project, template, onBack}){
         <div className="text-xs text-slate-400 flex items-center gap-2"><HeChip he={template?.he_san_pham}/> {project.khu_vuc} · {fmtDay(project.ngay_quay)}</div></div>
       <div className="flex items-center gap-2">{(project.trang_thai===ST.DAT||project.trang_thai===ST.DA_CHI)&&<span className="text-sm font-semibold text-emerald-600">{fmtVND(project.thanh_tien)}</span>}<Badge st={project.trang_thai}/></div>
     </div>
-    {reviewed && <div className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-600">Kết quả nghiệm thu của Marketing: <b>{(template?template.phases.flatMap(p=>p.shots.filter(s=>s.active)).filter(shotOk).length:0)}</b> cảnh đạt · thành tiền <b className="text-emerald-600">{fmtVND(project.thanh_tien||0)}</b>{project.reviewed_by?' · bởi '+project.reviewed_by:''}</div>}
+    {reviewed && <div className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-600">Kết quả nghiệm thu của Marketing: <b>{(project.uploads||[]).filter(u=>u.dat_item===true).length}</b> source đạt · thành tiền <b className="text-emerald-600">{fmtVND(project.thanh_tien||0)}</b>{project.reviewed_by?' · bởi '+project.reviewed_by:''}</div>}
     {project.ly_do_loai && <div className="bg-rose-50 border border-rose-200 rounded-xl p-3 text-sm text-rose-700">Lý do trả về: {project.ly_do_loai}</div>}
     {template && template.phases.map(ph=><div key={ph.id} className="bg-white rounded-2xl border border-line shadow-card overflow-hidden">
       <div className="px-4 py-2 bg-slate-50 border-b text-sm font-semibold text-ink">{ph.thu_tu}. {ph.ten}</div>
@@ -2452,7 +2470,7 @@ function FilmingDetailSales({project, template, onBack}){
         {ph.shots.filter(s=>s.active).map(shot=>{ const md=mediaOf(shot); const ok=shotOk(shot); return <div key={shot.id} className="p-3">
           <div className="flex items-center justify-between gap-2 flex-wrap">
             <div className="flex items-center gap-2 flex-wrap"><span className="text-sm font-medium text-ink">{shot.ten}</span>{shot.bat_buoc&&<ReqBadge/>}
-              {reviewed ? (ok? <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700">✓ Đạt +{fmtVND(filmShotPrice(shot, db.pricing))}</span> : <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-rose-100 text-rose-600">Chưa đạt</span>)
+              {reviewed ? (ok? <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700">✓ {md.filter(u=>u.dat_item===true).length} source đạt</span> : <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-rose-100 text-rose-600">Chưa đạt</span>)
                 : (md.length>0?<span className="text-[10px] text-emerald-600">✓ {md.length} nguồn</span>:<span className="text-[10px] text-slate-400">chưa có</span>)}
             </div>
             <button onClick={()=>setSampleShot(shot)} className="text-xs text-blue-500 hover:underline shrink-0">👁 Xem mẫu</button>
@@ -2462,7 +2480,7 @@ function FilmingDetailSales({project, template, onBack}){
               {m.media_type===MEDIA_TYPE.IMAGE && !isDriveLink(m) ? <img src={m.media_url} className="w-full h-full object-cover"/>
                 : !isDriveLink(m) ? <video src={m.media_url} muted preload="metadata" className="w-full h-full object-cover"/>
                 : <span className="w-full h-full flex items-center justify-center text-xl">🔗</span>}
-              {m.dat_item===true&&<span className="absolute top-0.5 right-0.5 bg-emerald-500 text-white text-[9px] px-1 rounded-full">✓</span>}
+              {m.dat_item===true&&(()=>{ const L=filmLevelOf(filmSrcLevel(m)); return <span className={"absolute top-0.5 right-0.5 text-white text-[9px] px-1 rounded-full "+(filmSrcLevel(m)===1?'bg-amber-500':filmSrcLevel(m)===2?'bg-sky-500':'bg-emerald-500')}>{L?L.ten:'✓'}</span>; })()}
               {m.dat_item===false&&<span className="absolute top-0.5 right-0.5 bg-rose-500 text-white text-[9px] px-1 rounded-full">✗ loại</span>}
             </button>)}</div>}
         </div>; })}
@@ -2629,8 +2647,7 @@ function FilmLibrary(){
       <div className="divide-y">
         {ph.shots.length===0 && <div className="p-3 text-xs text-slate-400">Chưa có cảnh nào.</div>}
         {ph.shots.map(shot=><div key={shot.id} className={"p-3 flex items-start gap-2 "+(shot.active?'':'opacity-50')}>
-          <div className="flex-1 min-w-0"><div className="flex items-center gap-2 flex-wrap"><span className="text-sm font-medium text-ink">{shot.ten}</span>{shot.bat_buoc&&<ReqBadge/>}
-            <span className={"text-[10px] px-1.5 py-0.5 rounded-full "+(shot.don_gia!=null?'bg-brand/15 text-brand-dark':'bg-slate-100 text-slate-500')}>{fmtVND(filmShotPrice(shot, db.pricing))}{shot.don_gia!=null?' (riêng)':''}</span></div>
+          <div className="flex-1 min-w-0"><div className="flex items-center gap-2 flex-wrap"><span className="text-sm font-medium text-ink">{shot.ten}</span>{shot.bat_buoc&&<ReqBadge/>}</div>
             <div className="text-xs text-slate-500 mt-0.5 line-clamp-2">{shot.mo_ta||<span className="italic text-slate-300">chưa có mô tả</span>}</div>
             {shot.source_mau_url && <a href={shot.source_mau_url} target="_blank" className="text-[11px] text-blue-500 underline">🔗 mẫu</a>}</div>
           <div className="flex flex-col items-end gap-1 shrink-0">
@@ -2672,7 +2689,7 @@ function ShotForm({shot, onCancel, onSave}){
       </div>
       {f.source_mau_url && <div className="mt-2 rounded-lg overflow-hidden aspect-video bg-black max-w-xs"><EmbedMedia url={f.source_mau_url}/></div>}
     </Field>
-    <Field label="Đơn giá riêng cho cảnh (tuỳ chọn)" hint="Để trống = dùng đơn giá chung. Điền số để ghi đè giá riêng cho cảnh này."><Input type="number" className="no-spin" value={f.don_gia==null?'':f.don_gia} onChange={e=>set('don_gia', e.target.value===''?null:Number(e.target.value))} placeholder="đ / cảnh (theo giá chung nếu để trống)"/></Field>
+    <div className="mb-3 text-[11px] text-slate-400 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5">💡 Tiền quay tính theo <b>mức chất lượng từng source</b> (Tạm ổn/Chuẩn/Đẹp) khi Marketing nghiệm thu — cấu hình giá ở mục Đơn giá.</div>
     <div className="mb-3 flex items-center justify-between p-3 rounded-xl border border-slate-200 bg-slate-50">
       <div><div className="text-xs font-semibold text-slate-700">Bắt buộc</div><div className="text-[11px] text-slate-400">Sales phải quay cảnh này mới gửi được</div></div>
       <button type="button" onClick={()=>set('bat_buoc',!f.bat_buoc)} className={"w-12 h-7 rounded-full transition relative "+(f.bat_buoc?'bg-brand':'bg-slate-300')}><span className={"absolute top-0.5 w-6 h-6 bg-white rounded-full shadow transition-all "+(f.bat_buoc?'left-[22px]':'left-0.5')}></span></button>
@@ -2704,32 +2721,38 @@ function FilmQueue(){
 }
 function FilmReview({project, template, onBack}){
   const { db, reviewFilming, notify } = useApp();
-  // chấm từng source: rate[uploadId] = true(đạt) | false(loại) | undefined(chưa)
-  const [rate, setRate] = useState(()=>{ const r={}; (project.uploads||[]).forEach(u=>{ if(u.dat_item!=null) r[u.id]=u.dat_item; }); return r; });
+  // chấm từng source theo MỨC: rate[uploadId] = 0(loại) | 1(Tạm ổn) | 2(Chuẩn) | 3(Đẹp) | undefined(chưa)
+  const [rate, setRate] = useState(()=>{ const r={}; (project.uploads||[]).forEach(u=>{ if(u.dat_item===false) r[u.id]=0; else if(filmSrcLevel(u)>0) r[u.id]=filmSrcLevel(u); }); return r; });
   const [reason, setReason] = useState('');
   const [rejecting, setRejecting] = useState(false);
   const [preview, setPreview] = useState(null);
   const [sampleShot, setSampleShot] = useState(null);
   const sales = db.users.find(u=>u.id===project.sales_id);
   const mediaOf = (shot)=> (project.uploads||[]).filter(u=>u.shot_id===shot.id);
-  const setSrc = (id,v)=> setRate(r=>({...r, [id]: r[id]===v ? undefined : v}));
-  const shotOk = (shot)=> mediaOf(shot).some(u=>rate[u.id]===true);
+  const setSrc = (id,v)=> setRate(r=>({...r, [id]: v}));   // v: undefined chưa · 0 loại · 1/2/3 mức
+  const srcOk = (u)=> (rate[u.id]||0) >= 1;
+  const shotOk = (shot)=> mediaOf(shot).some(srcOk);
 
   const shots = template ? template.phases.flatMap(p=>p.shots.filter(s=>s.active)) : [];
   const datShots = shots.filter(shotOk);
-  const total = datShots.reduce((t,s)=>t+filmShotPrice(s, db.pricing), 0);
-  const ratings = ()=>{ const o={}; Object.keys(rate).forEach(k=>{ if(rate[k]!==undefined) o[k]=rate[k]?1:0; }); return o; };
+  const okSources = (project.uploads||[]).filter(srcOk);
+  const total = okSources.reduce((t,u)=> t + filmLevelPrice(rate[u.id], db.pricing), 0);
+  const lvCount = (lv)=> okSources.filter(u=>Number(rate[u.id])===lv).length;
+  const ratings = ()=>{ const o={}; Object.keys(rate).forEach(k=>{ if(rate[k]!==undefined) o[k]=Number(rate[k])||0; }); return o; };
 
-  const doDone = async ()=>{ if(await reviewFilming(project.id, ST.DAT, '', ratings())){ notify('✅ Hoàn tất — chốt '+fmtVND(total)+' ('+datShots.length+' cảnh)'); onBack(); } };
+  const doDone = async ()=>{ if(await reviewFilming(project.id, ST.DAT, '', ratings())){ notify('✅ Hoàn tất — chốt '+fmtVND(total)+' ('+okSources.length+' source đạt)'); onBack(); } };
   const doReject = async ()=>{ if(!reason.trim()) return notify('Nhập lý do','warn'); if(await reviewFilming(project.id, ST.KHONG_DAT, reason.trim(), ratings())){ notify('Đã trả về Sales quay lại'); onBack(); } };
 
   return <div className="space-y-4">
     <button onClick={onBack} className="text-sm text-slate-500 hover:text-ink">← Hàng chờ nghiệm thu</button>
     <div><h3 className="font-display text-lg font-bold text-ink">{project.ten_cong_trinh}</h3>
       <div className="text-xs text-slate-400 flex items-center gap-2"><HeChip he={template?.he_san_pham}/> {sales?.ho_ten||'—'} · {project.khu_vuc} · {fmtDay(project.ngay_quay)}</div></div>
-    <div className="bg-brand/10 border border-brand/30 rounded-xl px-3 py-2 text-xs text-brand-dark flex items-center justify-between gap-2">
-      <span>Chấm <b>Đạt/Loại</b> từng source. Cảnh đạt nếu còn ≥1 source đạt — tính tiền <b>1 lần/cảnh</b>.</span>
-      <span className="shrink-0">Đạt <b>{datShots.length}/{shots.length}</b> · <b className="text-emerald-700">{fmtVND(total)}</b></span>
+    <div className="bg-brand/10 border border-brand/30 rounded-xl px-3 py-2 text-xs text-brand-dark space-y-1">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <span>Chấm <b>mức chất lượng</b> mỗi source — tính tiền theo từng source: {FILM_LEVELS.map(l=><span key={l.v}>{l.v>1?' · ':''}<b>{l.ten}</b> {fmtVND(filmLevelPrice(l.v,db.pricing))}</span>)}.</span>
+        <span className="shrink-0">Đạt <b>{okSources.length}</b> source · Cảnh <b>{datShots.length}/{shots.length}</b> · <b className="text-emerald-700">{fmtVND(total)}</b></span>
+      </div>
+      {okSources.length>0 && <div className="flex gap-2 flex-wrap">{FILM_LEVELS.map(l=> lvCount(l.v)>0 ? <span key={l.v} className={"px-1.5 py-0.5 rounded-full "+l.cls}>{l.ten}: {lvCount(l.v)} × {fmtVND(filmLevelPrice(l.v,db.pricing))}</span> : null)}</div>}
     </div>
     {template && template.phases.map(ph=><div key={ph.id} className="bg-white rounded-2xl border border-line shadow-card overflow-hidden">
       <div className="px-4 py-2 bg-slate-50 border-b text-sm font-semibold text-ink">{ph.thu_tu}. {ph.ten}</div>
@@ -2737,29 +2760,30 @@ function FilmReview({project, template, onBack}){
         {ph.shots.filter(s=>s.active).map(shot=>{ const md=mediaOf(shot); const ok=shotOk(shot);
           return <div key={shot.id} className="p-3">
             <div className="flex items-start justify-between gap-2 flex-wrap">
-              <div className="min-w-0"><div className="flex items-center gap-2 flex-wrap"><span className="text-sm font-medium text-ink">{shot.ten}</span>{shot.bat_buoc&&<ReqBadge/>}
-                <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500">{fmtVND(filmShotPrice(shot, db.pricing))}{shot.don_gia!=null?' (riêng)':''}</span></div>
+              <div className="min-w-0"><div className="flex items-center gap-2 flex-wrap"><span className="text-sm font-medium text-ink">{shot.ten}</span>{shot.bat_buoc&&<ReqBadge/>}</div>
                 <div className="text-xs text-slate-500 mt-0.5">{shot.mo_ta}</div></div>
               <div className="flex items-center gap-2 shrink-0">
-                {md.length>0 && <span className={"text-[11px] font-semibold "+(ok?'text-emerald-600':'text-rose-500')}>{ok?'✓ Đạt +'+fmtVND(filmShotPrice(shot, db.pricing)):'Chưa đạt'}</span>}
+                {md.length>0 && <span className={"text-[11px] font-semibold "+(ok?'text-emerald-600':'text-slate-400')}>{ok?('✓ '+md.filter(srcOk).length+' source đạt'):'Chưa chấm đạt'}</span>}
                 <button onClick={()=>setSampleShot(shot)} className="text-xs text-blue-500 hover:underline">👁 Mẫu</button>
               </div>
             </div>
             {md.length===0 ? <div className="text-xs text-rose-400 mt-2">✗ Sales chưa nộp source</div> :
             <div className="flex gap-2 mt-2 flex-wrap">
-              {md.map(m=>{ const st=rate[m.id];
-                return <div key={m.id} className={"w-24 rounded-lg border overflow-hidden "+(st===true?'border-emerald-400 ring-1 ring-emerald-200':st===false?'border-rose-300 opacity-60':'border-slate-200')}>
+              {md.map(m=>{ const st=rate[m.id]; const L=filmLevelOf(st);
+                return <div key={m.id} className={"w-28 rounded-lg border overflow-hidden "+(st>=1?'border-emerald-400 ring-1 ring-emerald-200':st===0?'border-rose-300 opacity-70':'border-slate-200')}>
                   <button onClick={()=>setPreview(m)} className="block w-full h-16 bg-slate-100 relative">
                     {m.media_type===MEDIA_TYPE.IMAGE && !isDriveLink(m) ? <img src={m.media_url} className="w-full h-full object-cover"/>
                       : (!isDriveLink(m)) ? <video src={m.media_url} muted preload="metadata" className="w-full h-full object-cover"/>
                       : <span className="absolute inset-0 flex items-center justify-center text-2xl">🔗</span>}
-                    {st===true&&<span className="absolute top-0.5 right-0.5 bg-emerald-500 text-white text-[9px] px-1 rounded-full">✓</span>}
-                    {st===false&&<span className="absolute top-0.5 right-0.5 bg-rose-500 text-white text-[9px] px-1 rounded-full">✗</span>}
+                    {L&&<span className={"absolute top-0.5 right-0.5 text-white text-[9px] px-1 rounded-full "+(st===1?'bg-amber-500':st===2?'bg-sky-500':'bg-emerald-500')}>{L.ten}</span>}
+                    {st===0&&<span className="absolute top-0.5 right-0.5 bg-rose-500 text-white text-[9px] px-1 rounded-full">✗</span>}
                   </button>
-                  <div className="flex text-[10px] divide-x border-t">
-                    <button onClick={()=>setSrc(m.id,true)} className={"flex-1 py-1 "+(st===true?'bg-emerald-500 text-white':'text-emerald-600 hover:bg-emerald-50')}>Đạt</button>
-                    <button onClick={()=>setSrc(m.id,false)} className={"flex-1 py-1 "+(st===false?'bg-rose-500 text-white':'text-rose-600 hover:bg-rose-50')}>Loại</button>
-                  </div>
+                  <select value={st===undefined?'':String(st)} onChange={e=>setSrc(m.id, e.target.value===''?undefined:Number(e.target.value))}
+                    className="w-full text-[11px] border-t px-1 py-1 bg-white focus:outline-none cursor-pointer">
+                    <option value="">— chấm —</option>
+                    <option value="0">✗ Loại</option>
+                    {FILM_LEVELS.map(l=><option key={l.v} value={l.v}>{l.ten} · {fmtVND(filmLevelPrice(l.v,db.pricing))}</option>)}
+                  </select>
                 </div>;})}
             </div>}
           </div>; })}
@@ -2778,7 +2802,10 @@ function FilmReview({project, template, onBack}){
       <div className="bg-white rounded-2xl overflow-hidden max-w-2xl w-full" onClick={e=>e.stopPropagation()}>
         <div className="aspect-video"><MediaView m={preview}/></div>
         <div className="p-3 flex justify-between items-center">
-          <div className="flex gap-2"><Btn variant="ok" onClick={()=>{setSrc(preview.id,true);}}>Đạt</Btn><Btn variant="danger" onClick={()=>{setSrc(preview.id,false);}}>Loại</Btn></div>
+          <div className="flex gap-1.5 flex-wrap">
+            <Btn variant={rate[preview.id]===0?'danger':'ghost'} onClick={()=>setSrc(preview.id,0)}>✗ Loại</Btn>
+            {FILM_LEVELS.map(l=><Btn key={l.v} variant={Number(rate[preview.id])===l.v?'ok':'ghost'} onClick={()=>setSrc(preview.id,l.v)}>{l.ten}</Btn>)}
+          </div>
           <Btn variant="ghost" onClick={()=>setPreview(null)}>Đóng</Btn>
         </div>
       </div>
@@ -2791,9 +2818,14 @@ function AdminFilming(){
   const { db } = useApp();
   const [from,setFrom]=useState(''); const [to,setTo]=useState(''); const [fSt,setFSt]=useState('');
   const projects = (db.project_filmings||[]).filter(p=> inRangeOrAllG(p.created_at,from,to) && (!fSt||p.trang_thai===fSt)).sort(byDateDesc);
+  const projLv = (p,v)=> (p.uploads||[]).filter(u=>u.dat_item===true && filmSrcLevel(u)===v).length;
+  // thống kê tính tiền theo mức của từng source (trên các công trình đang lọc)
+  const lvStats = FILM_LEVELS.map(l=>{ const n=projects.reduce((s,p)=>s+projLv(p,l.v),0); return { ...l, n, money:n*filmLevelPrice(l.v, db.pricing) }; });
+  const okTotalMoney = projects.filter(p=>p.trang_thai===ST.DAT||p.trang_thai===ST.DA_CHI).reduce((s,p)=>s+(p.thanh_tien||0),0);
+  const okSrcTotal = lvStats.reduce((s,l)=>s+l.n,0);
   const exportCSV = () => {
-    const r=[['Ngày','Sales','Công trình','Hệ SP','Khu vực','Cảnh đạt','Tổng cảnh','Trạng thái','Thành tiền']];
-    projects.forEach(p=>{ const t=filmFindTpl(db,p.template_id); const sales=db.users.find(u=>u.id===p.sales_id); r.push([fmtDay(p.created_at),sales?.ho_ten||'—',p.ten_cong_trinh,t?.he_san_pham,p.khu_vuc,uniqShots(p.uploads).length,filmCountShots(t),ST_LABEL[p.trang_thai],p.thanh_tien]); });
+    const r=[['Ngày','Sales','Công trình','Hệ SP','Khu vực','Cảnh đạt','Tổng cảnh','Tạm ổn','Chuẩn','Đẹp','Trạng thái','Thành tiền']];
+    projects.forEach(p=>{ const t=filmFindTpl(db,p.template_id); const sales=db.users.find(u=>u.id===p.sales_id); r.push([fmtDay(p.created_at),sales?.ho_ten||'—',p.ten_cong_trinh,t?.he_san_pham,p.khu_vuc,uniqShots(p.uploads).length,filmCountShots(t),projLv(p,1),projLv(p,2),projLv(p,3),ST_LABEL[p.trang_thai],p.thanh_tien]); });
     download('QUAY_CONG_TRINH.csv', toCSV(r));
   };
   return <div className="space-y-4">
@@ -2801,20 +2833,26 @@ function AdminFilming(){
       <h2 className="font-display text-lg font-bold text-ink">🎬 Báo cáo Quay công trình</h2>
       <Btn variant="brand" onClick={exportCSV}>⬆ Xuất Excel</Btn>
     </div>
+    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <Stat label="Tổng tiền đã nghiệm thu" value={fmtVND(okTotalMoney)} sub={okSrcTotal+' source đạt'} color="text-emerald-600"/>
+      {lvStats.map(l=><Stat key={l.v} label={l.ten+' · '+fmtVND(filmLevelPrice(l.v,db.pricing))} value={l.n+' source'} sub={fmtVND(l.money)} color="text-brand-dark"/>)}
+    </div>
     <div className="bg-white rounded-2xl border border-line shadow-card p-3 flex flex-wrap gap-2 items-center">
       <DateRange from={from} to={to} setFrom={setFrom} setTo={setTo}/>
       <Select value={fSt} onChange={e=>setFSt(e.target.value)} className="max-w-[160px]"><option value="">Mọi trạng thái</option>{Object.keys(ST_LABEL).map(s=><option key={s} value={s}>{ST_LABEL[s]}</option>)}</Select>
     </div>
     <div className="bg-white rounded-2xl border border-line shadow-card overflow-auto">
       <table className="w-full text-sm min-w-[760px]">
-        <thead className="bg-slate-50/70 text-[11px] font-semibold uppercase tracking-wide text-ink-muted text-left"><tr><Th>Ngày</Th><Th>Sales</Th><Th>Công trình</Th><Th>Hệ SP / Quy trình</Th><Th>Khu vực</Th><Th r>Cảnh đạt</Th><Th>Trạng thái</Th><Th r>Thành tiền</Th></tr></thead>
+        <thead className="bg-slate-50/70 text-[11px] font-semibold uppercase tracking-wide text-ink-muted text-left"><tr><Th>Ngày</Th><Th>Sales</Th><Th>Công trình</Th><Th>Hệ SP / Quy trình</Th><Th>Khu vực</Th><Th r>Cảnh đạt</Th><Th r>Mức source (Ổn·Chuẩn·Đẹp)</Th><Th>Trạng thái</Th><Th r>Thành tiền</Th></tr></thead>
         <tbody className="divide-y">
-          {projects.length===0 ? <tr><td colSpan="8"><Empty>Không có dữ liệu.</Empty></td></tr> :
+          {projects.length===0 ? <tr><td colSpan="9"><Empty>Không có dữ liệu.</Empty></td></tr> :
             projects.map(p=>{ const t=filmFindTpl(db,p.template_id); const sales=db.users.find(u=>u.id===p.sales_id);
               return <tr key={p.id} className="hover:bg-slate-50">
                 <Td>{fmtDay(p.created_at)}</Td><Td>{sales?.ho_ten||'—'}</Td><Td>{p.ten_cong_trinh}</Td>
                 <Td><span className="text-brand-dark text-xs font-medium">{t?.he_san_pham}</span></Td><Td>{p.khu_vuc}</Td>
-                <Td r>{uniqShots(p.uploads).length}/{filmCountShots(t)}</Td><Td><Badge st={p.trang_thai}/></Td><Td r><b>{p.thanh_tien?fmtVND(p.thanh_tien):'—'}</b></Td>
+                <Td r>{uniqShots(p.uploads).length}/{filmCountShots(t)}</Td>
+                <Td r><span className="tabular-nums text-xs">{FILM_LEVELS.map((l,i)=><span key={l.v}>{i>0?' · ':''}<b className={projLv(p,l.v)?'text-ink':'text-slate-300'}>{projLv(p,l.v)}</b></span>)}</span></Td>
+                <Td><Badge st={p.trang_thai}/></Td><Td r><b>{p.thanh_tien?fmtVND(p.thanh_tien):'—'}</b></Td>
               </tr>; })}
         </tbody>
       </table>

@@ -64,10 +64,15 @@ async function ensureSchema(env){
   try { await env.DB.prepare(`ALTER TABLE filming_shots ADD COLUMN don_gia REAL`).run(); } catch(e){}
   // chống spam: số ngày coi là "trùng nội dung–nhóm" (0 = tắt kiểm tra trùng)
   try { await env.DB.prepare(`ALTER TABLE pricing ADD COLUMN dedupe_days INTEGER DEFAULT 7`).run(); } catch(e){}
+  // nghiệm thu quay công trình theo 3 mức chất lượng mỗi source (Kế toán/Admin cấu hình)
+  try { await env.DB.prepare(`ALTER TABLE filming_uploads ADD COLUMN level INTEGER`).run(); } catch(e){}
+  try { await env.DB.prepare(`ALTER TABLE pricing ADD COLUMN film_lv1 REAL DEFAULT 5000`).run(); } catch(e){}
+  try { await env.DB.prepare(`ALTER TABLE pricing ADD COLUMN film_lv2 REAL DEFAULT 10000`).run(); } catch(e){}
+  try { await env.DB.prepare(`ALTER TABLE pricing ADD COLUMN film_lv3 REAL DEFAULT 15000`).run(); } catch(e){}
 
   // seed pricing
   const pr = await env.DB.prepare(`SELECT id FROM pricing WHERE id=1`).first();
-  if(!pr) await env.DB.prepare(`INSERT INTO pricing (id,don_gia_post,don_gia_cmt,don_gia_cong_trinh,don_gia_canh,min_nhac_kingsmen,min_usp,dedupe_days) VALUES (1,15000,3000,150000,10000,6,2,7)`).run();
+  if(!pr) await env.DB.prepare(`INSERT INTO pricing (id,don_gia_post,don_gia_cmt,don_gia_cong_trinh,don_gia_canh,min_nhac_kingsmen,min_usp,dedupe_days,film_lv1,film_lv2,film_lv3) VALUES (1,15000,3000,150000,10000,6,2,7,5000,10000,15000)`).run();
 
   // seed tài khoản Marketing đầu tiên + thư viện (chỉ khi chưa có user nào)
   const anyUser = await env.DB.prepare(`SELECT id FROM users LIMIT 1`).first();
@@ -209,7 +214,7 @@ async function bootstrap(env, u){
   const pfRows = (await (staff ? env.DB.prepare(pfSql) : env.DB.prepare(pfSql).bind(u.id)).all()).results;
   const fups = (await env.DB.prepare(`SELECT * FROM filming_uploads`).all()).results;
   const project_filmings = pfRows.map(p=>({
-    ...p, uploads: fups.filter(x=>x.project_filming_id===p.id).map(x=>({ id:x.id, shot_id:x.shot_id, media_type:x.media_type, media_url:x.media_url, uploaded_at:x.uploaded_at, dat_item:x.dat_item==null?null:uBool(x.dat_item) })),
+    ...p, uploads: fups.filter(x=>x.project_filming_id===p.id).map(x=>({ id:x.id, shot_id:x.shot_id, media_type:x.media_type, media_url:x.media_url, uploaded_at:x.uploaded_at, dat_item:x.dat_item==null?null:uBool(x.dat_item), level:x.level==null?null:Number(x.level) })),
   }));
   const guides = {};
   (await env.DB.prepare(`SELECT * FROM guides`).all()).results.forEach(g=>{ guides[g.key]={ noi_dung:g.noi_dung, video_url:g.video_url }; });
@@ -366,8 +371,10 @@ async function handleApi(request, env){
   if(path==='/pricing' && method==='PATCH'){
     if(me.vai_tro!==ROLES.ADMIN && me.vai_tro!==ROLES.MARKETING) return json({error:'Không có quyền'},403);
     const p=body;
-    await env.DB.prepare(`UPDATE pricing SET don_gia_post=?, don_gia_cmt=?, don_gia_cong_trinh=?, don_gia_canh=?, min_nhac_kingsmen=?, min_usp=?, dedupe_days=? WHERE id=1`)
-      .bind(Number(p.don_gia_post)||0,Number(p.don_gia_cmt)||0,Number(p.don_gia_cong_trinh)||0,Number(p.don_gia_canh)||0,Number(p.min_nhac_kingsmen)||0,Number(p.min_usp)||0,Math.max(0,Number(p.dedupe_days)||0)).run();
+    const cur = await env.DB.prepare(`SELECT * FROM pricing WHERE id=1`).first() || {};
+    const num = (v, d)=> (v!=null && v!=='' ? Number(v)||0 : Number(d)||0);
+    await env.DB.prepare(`UPDATE pricing SET don_gia_post=?, don_gia_cmt=?, don_gia_cong_trinh=?, don_gia_canh=?, min_nhac_kingsmen=?, min_usp=?, dedupe_days=?, film_lv1=?, film_lv2=?, film_lv3=? WHERE id=1`)
+      .bind(Number(p.don_gia_post)||0,Number(p.don_gia_cmt)||0,Number(p.don_gia_cong_trinh)||0,Number(p.don_gia_canh)||0,Number(p.min_nhac_kingsmen)||0,Number(p.min_usp)||0,Math.max(0,Number(p.dedupe_days)||0),num(p.film_lv1,cur.film_lv1),num(p.film_lv2,cur.film_lv2),num(p.film_lv3,cur.film_lv3)).run();
     await logAudit(env,me,'sửa đơn giá','pricing','-');
     return json({ db: await bootstrap(env, me) });
   }
@@ -612,23 +619,21 @@ async function handleApi(request, env){
     const id=m[1]; const p=await env.DB.prepare(`SELECT * FROM project_filmings WHERE id=?`).bind(id).first();
     if(!p) return json({error:'Không tìm thấy'},404);
     const pricing=await env.DB.prepare(`SELECT * FROM pricing WHERE id=1`).first();
-    // lưu kết quả chấm từng source (ratings: { uploadId: 1|0 })
+    // lưu kết quả chấm từng source theo MỨC (ratings: { uploadId: 0=loại | 1=Tạm ổn | 2=Chuẩn | 3=Đẹp })
     const ratings = body.ratings || {};
     for(const upId of Object.keys(ratings)){
-      await env.DB.prepare(`UPDATE filming_uploads SET dat_item=? WHERE id=? AND project_filming_id=?`).bind(bool(ratings[upId]), upId, id).run();
+      const lv = Number(ratings[upId])||0;
+      await env.DB.prepare(`UPDATE filming_uploads SET dat_item=?, level=? WHERE id=? AND project_filming_id=?`).bind(lv>0?1:0, lv>0?lv:null, upId, id).run();
     }
-    // tính tiền theo CẢNH đạt (cảnh đạt nếu còn ≥1 source đạt) — mỗi cảnh 1 lần, dùng giá riêng của cảnh nếu có
+    // tính tiền theo MỨC của TỪNG source đạt (Tạm ổn/Chuẩn/Đẹp), mỗi source tính riêng
+    const lvPrice = (lv)=>{ lv=Number(lv); return lv===1?(Number(pricing.film_lv1)||0):lv===2?(Number(pricing.film_lv2)||0):lv===3?(Number(pricing.film_lv3)||0):0; };
     const ups = (await env.DB.prepare(`SELECT * FROM filming_uploads WHERE project_filming_id=?`).bind(id).all()).results;
-    const okShots = new Set(ups.filter(u=>uBool(u.dat_item)).map(u=>u.shot_id));
-    let tien = 0;
-    if(okShots.size){
-      const shotRows = (await env.DB.prepare(`SELECT s.id, s.don_gia FROM filming_shots s JOIN filming_phases ph ON s.phase_id=ph.id WHERE ph.template_id=? AND s.active=1`).bind(p.template_id).all()).results;
-      for(const s of shotRows){ if(okShots.has(s.id)) tien += (s.don_gia==null ? (Number(pricing.don_gia_canh)||0) : Number(s.don_gia)); }
-    }
+    let tien = 0, okCount = 0;
+    for(const u of ups){ const lv = u.level!=null ? Number(u.level) : (uBool(u.dat_item)?2:0); if(lv>0){ tien += lvPrice(lv); okCount++; } }
     if(body.result===ST.DAT){
       await env.DB.prepare(`UPDATE project_filmings SET trang_thai=?, thanh_tien=?, reviewed_by=?, reviewed_at=?, ky_thanh_toan=?, ly_do_loai='' WHERE id=?`)
         .bind(ST.DAT, tien, me.ho_ten, nowISO(), kyOf(), id).run();
-      await logAudit(env,me,'hoàn tất nghiệm thu ĐẠT','project_filming',id, okShots.size+' cảnh · '+tien);
+      await logAudit(env,me,'hoàn tất nghiệm thu ĐẠT','project_filming',id, okCount+' source · '+tien);
     } else {
       if(!body.reason) return json({error:'Cần lý do'},400);
       await env.DB.prepare(`UPDATE project_filmings SET trang_thai=?, thanh_tien=0, reviewed_by=?, reviewed_at=?, ly_do_loai=? WHERE id=?`)
