@@ -236,6 +236,7 @@ function seedDB(){
       filming: { noi_dung:'Hướng dẫn quay công trình:\n1. Chọn quy trình theo hệ sản phẩm.\n2. Xem video mẫu từng cảnh → quay.\n3. Upload từng cảnh, đủ bắt buộc thì gửi.', video_url:'' },
     },
     pricing: { don_gia_post: P.don_gia_post, don_gia_cmt: P.don_gia_cmt, don_gia_cong_trinh: P.don_gia_cong_trinh, don_gia_canh: P.don_gia_canh, min_nhac_kingsmen: 6, min_usp: 2, dedupe_days: 7 },
+    post_type_prefs: {},
     payouts: [],
     audit: [],
   };
@@ -259,6 +260,7 @@ function migrate(db){
   db.users ||= []; db.groups ||= []; db.content_topics ||= []; db.cmt_suggestions ||= [];
   db.post_seedings ||= []; db.cmt_seedings ||= []; db.payouts ||= []; db.audit ||= [];
   db.pricing ||= { don_gia_post:15000, don_gia_cmt:3000, min_nhac_kingsmen:6, min_usp:2, dedupe_days:7 };
+  db.post_type_prefs ||= {};
   db.post_seedings.forEach(p=>{ p.react ??= 0; p.so_cmt_seeding ??= 0; p.so_cmt_tu_nhien ??= 0; p.thanh_tien ??= 0; });
   db.cmt_seedings.forEach(c=>{ c.proofs ||= []; c.so_cmt_seeding ??= 0; c.react ??= 0; c.so_cmt_tu_nhien ??= 0; c.thanh_tien ??= 0; });
   db.groups.forEach(g=>{ g.uu_tien ??= false; });
@@ -352,6 +354,7 @@ function AppProvider({children}){
           p.trang_thai=ST.DAT; p.thanh_tien=Number(S.pricing.don_gia_post)||0; p.reviewed_by=meRef.current.ho_ten; p.reviewed_at=now(); p.ky_thanh_toan=kyOf(); p.ly_do_loai='';
         } else { p.trang_thai=ST.KHONG_DAT; p.thanh_tien=0; p.reviewed_by=meRef.current.ho_ten; p.reviewed_at=now(); p.ly_do_loai=reason||''; }
         commit(); return {ok:true}; },
+      setPostTypePref: async (loai, patch) => { S.post_type_prefs ||= {}; S.post_type_prefs[loai] = { an:false, uu_tien:false, thu_tu:null, ...(S.post_type_prefs[loai]||{}), ...patch }; commit(); return true; },
       dupCheckPost: async (topic_id, group_id) => {
         const days = Math.max(0, Number(S.pricing.dedupe_days!=null?S.pricing.dedupe_days:7));
         if(!topic_id||!group_id||!days) return {dup:false, days};
@@ -441,6 +444,7 @@ function AppProvider({children}){
     createPost: p => mut('/posts', {method:'POST', body:p}),
     reviewPost: async (id, result, reason) => { try { const r = await call(`/posts/${id}/review`, {method:'POST', body:{result, reason}}); if(r && r.db) setDb(r.db); return { ok:true, deduped:!!r.deduped, reason:r.reason }; } catch(e){ notify(e.message,'err'); return { ok:false }; } },
     dupCheckPost: async (topic_id, group_id) => { try { return await call(`/posts/dupcheck?topic_id=${encodeURIComponent(topic_id)}&group_id=${encodeURIComponent(group_id)}`); } catch(e){ return {dup:false}; } },
+    setPostTypePref: (loai, patch) => mut('/posttypes/'+encodeURIComponent(loai), {method:'PATCH', body:patch}),
     createCmtSeed: c => mut('/cmtseed', {method:'POST', body:c}),
     reviewCmtSeed: (id, result, reason) => mut(`/cmtseed/${id}/review`, {method:'POST', body:{result, reason}}),
     markPaid: (sales_id, ky) => mut('/markpaid', {method:'POST', body:{sales_id, ky}}),
@@ -874,10 +878,15 @@ function SalesNewPost({go}){
   const [cmtT, setCmtT] = useState('');
 
   const [onlyPri, setOnlyPri] = useState(false);
-  const topics = sortPri(db.content_topics.filter(t=>t.active
-    && (!onlyPri || t.uu_tien)
+  const ptPrefs = db.post_type_prefs||{};
+  const typeHidden = (loai)=> !!(ptPrefs[loai] && ptPrefs[loai].an);   // loại bài Marketing đang ẩn theo giai đoạn
+  const typePri = (loai)=> (ptPrefs[loai] && ptPrefs[loai].uu_tien)?1:0;
+  const topics = db.content_topics.filter(t=>t.active
+    && !typeHidden(t.loai_bai)
+    && (!onlyPri || t.uu_tien || typePri(t.loai_bai))
     && (!fLoai || t.loai_bai===fLoai)
-    && (!q || (t.chu_de+' '+t.noi_dung+' '+(t.tags||[]).join(' ')).toLowerCase().includes(q.toLowerCase()))));
+    && (!q || (t.chu_de+' '+t.noi_dung+' '+(t.tags||[]).join(' ')).toLowerCase().includes(q.toLowerCase())))
+    .sort((a,b)=>{ const tp=typePri(b.loai_bai)-typePri(a.loai_bai); if(tp) return tp; return (b.uu_tien?1:0)-(a.uu_tien?1:0); });
   const groups = sortPri(db.groups.filter(g=>g.active));
   const topic = db.content_topics.find(t=>t.id===topicId);
   const chosenGroup = groups.find(g=>g.id===groupId);
@@ -925,7 +934,7 @@ function SalesNewPost({go}){
         <Input placeholder="Tìm theo từ khoá…" value={q} onChange={e=>setQ(e.target.value)}/>
         <Select value={fLoai} onChange={e=>setFLoai(e.target.value)} className="max-w-[45%]">
           <option value="">Mọi loại bài</option>
-          {LOAI_BAI.map(l=><option key={l}>{l}</option>)}
+          {LOAI_BAI.filter(l=>!typeHidden(l)).map(l=><option key={l}>{l}</option>)}
         </Select>
       </div>
       <div className="space-y-2 max-h-64 overflow-auto">
@@ -1248,7 +1257,7 @@ function BreakdownCard({title, data}){
    14. THƯ VIỆN CHUNG (Marketing/Admin)
 ============================================================ */
 function Library(){
-  const { db, upsertGroup, upsertTopic, upsertCmt, deleteGroup, deleteTopic, deleteCmt, notify, audit } = useApp();
+  const { db, upsertGroup, upsertTopic, upsertCmt, deleteGroup, deleteTopic, deleteCmt, setPostTypePref, notify, audit } = useApp();
   const [tab, setTab] = useState('groups');
   const [edit, setEdit] = useState(null); // {type, item}
   const [selMode, setSelMode] = useState(false);
@@ -1326,14 +1335,14 @@ function Library(){
       <div className="text-xs text-slate-500">{g.loai} · {(g.so_member||0).toLocaleString('vi-VN')} tv · <a href={g.link} target="_blank" className="text-blue-500 underline">link</a></div>
     </>)} onEdit={g=>setEdit({type:'groups',item:g})} onToggle={g=>toggle('groups',g)} onDel={g=>remove('groups',g)} onPri={g=>togglePri('groups',g)} selMode={selMode} sel={sel} onSel={toggleSel}/>}
 
-    {tab==='topics' && <LibList items={sortPri(db.content_topics)} render={t=>(<>
-      <div className="flex items-center gap-2 flex-wrap">
-        {t.uu_tien && <PriBadge/>}
-        <span className="font-medium text-sm text-ink">{t.chu_de}</span>
-        <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500">{t.loai_bai}</span>
-        {t.muc_tieu && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-brand/10 text-brand-dark">{t.muc_tieu}</span>}</div>
-      <div className="text-xs text-slate-500 line-clamp-2 mt-0.5">{t.noi_dung}</div>
-    </>)} onEdit={t=>setEdit({type:'topics',item:t})} onToggle={t=>toggle('topics',t)} onDel={t=>remove('topics',t)} onPri={t=>togglePri('topics',t)} selMode={selMode} sel={sel} onSel={toggleSel}/>}
+    {tab==='topics' && <LibTopicsGrouped items={db.content_topics} prefs={db.post_type_prefs||{}} setPref={setPostTypePref}
+      render={t=>(<>
+        <div className="flex items-center gap-2 flex-wrap">
+          {t.uu_tien && <PriBadge/>}
+          <span className="font-medium text-sm text-ink">{t.chu_de}</span>
+          {t.muc_tieu && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-brand/10 text-brand-dark">{t.muc_tieu}</span>}</div>
+        <div className="text-xs text-slate-500 line-clamp-2 mt-0.5">{t.noi_dung}</div>
+      </>)} onEdit={t=>setEdit({type:'topics',item:t})} onToggle={t=>toggle('topics',t)} onDel={t=>remove('topics',t)} onPri={t=>togglePri('topics',t)} selMode={selMode} sel={sel} onSel={toggleSel}/>}
 
     {tab==='cmts' && <LibList items={db.cmt_suggestions} render={c=>(<>
       <div className="text-sm text-ink">{c.noi_dung_goi_y}</div>
@@ -1343,27 +1352,64 @@ function Library(){
     <LibEditModal edit={edit} onClose={()=>setEdit(null)}/>
   </div>;
 }
+function LibRow({it, render, onEdit, onToggle, onDel, onPri, selMode, sel, onSel}){
+  const checked = selMode && sel && sel.has(it.id);
+  return <div onClick={selMode?()=>onSel(it.id):undefined}
+    className={"p-3 flex items-start gap-2 "+(it.active?'':'opacity-50')+(selMode?' cursor-pointer':'')+(checked?' bg-brand/5':'')}>
+    {selMode && <input type="checkbox" checked={checked} onChange={()=>onSel(it.id)} onClick={e=>e.stopPropagation()}
+      className="w-4 h-4 accent-brand mt-0.5 shrink-0"/>}
+    <div className="flex-1 min-w-0">{render(it)}</div>
+    {!selMode && <div className="flex flex-col items-end gap-1 shrink-0">
+      <div className="flex gap-1">
+        {onPri && <button onClick={()=>onPri(it)} title={it.uu_tien?'Bỏ ưu tiên':'Đặt ưu tiên'}
+          className={"px-2 py-1 rounded-lg text-xs font-medium "+(it.uu_tien?'bg-brand/15 text-brand-dark':'bg-slate-100 text-slate-400 hover:text-brand-dark')}>{it.uu_tien?'⭐':'☆'}</button>}
+        <Toggle on={it.active} onClick={()=>onToggle(it)}/>
+      </div>
+      <div className="flex gap-1">
+        <button onClick={()=>onEdit(it)} className="text-xs text-blue-500 hover:underline">Sửa</button>
+        <button onClick={()=>onDel(it)} className="text-xs text-rose-500 hover:underline">Xoá</button>
+      </div>
+    </div>}
+  </div>;
+}
 function LibList({items, render, onEdit, onToggle, onDel, onPri, selMode, sel, onSel}){
   if(!items.length) return <Empty>Chưa có mục nào. Bấm "Thêm" hoặc "Import file".</Empty>;
   return <div className="bg-white rounded-2xl border border-line shadow-card divide-y">
-    {items.map(it=>{ const checked=selMode && sel && sel.has(it.id);
-      return <div key={it.id} onClick={selMode?()=>onSel(it.id):undefined}
-        className={"p-3 flex items-start gap-2 "+(it.active?'':'opacity-50')+(selMode?' cursor-pointer':'')+(checked?' bg-brand/5':'')}>
-      {selMode && <input type="checkbox" checked={checked} onChange={()=>onSel(it.id)} onClick={e=>e.stopPropagation()}
-        className="w-4 h-4 accent-brand mt-0.5 shrink-0"/>}
-      <div className="flex-1 min-w-0">{render(it)}</div>
-      {!selMode && <div className="flex flex-col items-end gap-1 shrink-0">
-        <div className="flex gap-1">
-          {onPri && <button onClick={()=>onPri(it)} title={it.uu_tien?'Bỏ ưu tiên':'Đặt ưu tiên'}
-            className={"px-2 py-1 rounded-lg text-xs font-medium "+(it.uu_tien?'bg-brand/15 text-brand-dark':'bg-slate-100 text-slate-400 hover:text-brand-dark')}>{it.uu_tien?'⭐':'☆'}</button>}
-          <Toggle on={it.active} onClick={()=>onToggle(it)}/>
+    {items.map(it=><LibRow key={it.id} it={it} render={render} onEdit={onEdit} onToggle={onToggle} onDel={onDel} onPri={onPri} selMode={selMode} sel={sel} onSel={onSel}/>)}
+  </div>;
+}
+// Nhóm Chủ đề/Nội dung POST theo LOẠI BÀI · mỗi loại có nút ⭐ ưu tiên và Hiện/Ẩn (ẩn = không cho Sales chọn)
+function LibTopicsGrouped({items, prefs, setPref, render, onEdit, onToggle, onDel, onPri, selMode, sel, onSel}){
+  const [collapsed, setCollapsed] = useState(()=>new Set());
+  const toggleCollapse = (loai)=> setCollapsed(prev=>{ const s=new Set(prev); s.has(loai)?s.delete(loai):s.add(loai); return s; });
+  const prefOf = (loai)=> (prefs&&prefs[loai]) || {an:false, uu_tien:false};
+  if(!items.length) return <Empty>Chưa có mục nào. Bấm "Thêm" hoặc "Import file".</Empty>;
+  const groupsMap = {};
+  items.forEach(t=>{ const k = LOAI_BAI.includes(t.loai_bai)? t.loai_bai : 'Khác'; (groupsMap[k] ||= []).push(t); });
+  let order = LOAI_BAI.filter(l=>groupsMap[l]); if(groupsMap['Khác']) order.push('Khác');
+  order = order.sort((a,b)=>{ const pa=prefOf(a).uu_tien?1:0, pb=prefOf(b).uu_tien?1:0; if(pa!==pb) return pb-pa; return LOAI_BAI.indexOf(a)-LOAI_BAI.indexOf(b); });
+  return <div className="space-y-3">
+    {order.map(loai=>{ const arr=sortPri(groupsMap[loai]); const pf=prefOf(loai); const known=loai!=='Khác'; const open=!collapsed.has(loai);
+      return <div key={loai} className={"rounded-2xl border shadow-card overflow-hidden "+(pf.an?'border-slate-200 bg-slate-50/70':'border-line bg-white')}>
+        <div className="flex items-center gap-2 px-3 py-2.5 border-b border-line">
+          <button onClick={()=>toggleCollapse(loai)} className="flex-1 min-w-0 text-left flex items-center gap-2">
+            <span className="w-5 text-slate-400 shrink-0">{open?'▾':'▸'}</span>
+            <span className="font-display font-bold text-ink text-sm truncate">{loai}</span>
+            <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500 shrink-0">{arr.length}</span>
+            {pf.uu_tien && <PriBadge small/>}
+            {pf.an && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-200 text-slate-600 shrink-0">🙈 Đang ẩn với Sales</span>}
+          </button>
+          {known && setPref && <div className="flex items-center gap-1 shrink-0">
+            <button onClick={()=>setPref(loai,{uu_tien:!pf.uu_tien})} title={pf.uu_tien?'Bỏ ưu tiên loại bài':'Ưu tiên loại bài này (giai đoạn)'}
+              className={"px-2 py-1 rounded-lg text-xs font-medium "+(pf.uu_tien?'bg-brand/15 text-brand-dark':'bg-slate-100 text-slate-400 hover:text-brand-dark')}>{pf.uu_tien?'⭐':'☆'}</button>
+            <Toggle on={!pf.an} onClick={()=>setPref(loai,{an:!pf.an})} labels={['Hiện','Ẩn']}/>
+          </div>}
         </div>
-        <div className="flex gap-1">
-          <button onClick={()=>onEdit(it)} className="text-xs text-blue-500 hover:underline">Sửa</button>
-          <button onClick={()=>onDel(it)} className="text-xs text-rose-500 hover:underline">Xoá</button>
-        </div>
-      </div>}
-    </div>; })}
+        {open && <div className="divide-y">
+          {arr.map(it=><LibRow key={it.id} it={it} render={render} onEdit={onEdit} onToggle={onToggle} onDel={onDel} onPri={onPri} selMode={selMode} sel={sel} onSel={onSel}/>)}
+        </div>}
+      </div>;
+    })}
   </div>;
 }
 function LibEditModal({edit, onClose}){

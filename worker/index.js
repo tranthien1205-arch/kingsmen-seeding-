@@ -54,6 +54,8 @@ async function ensureSchema(env){
     `CREATE TABLE IF NOT EXISTS project_filmings (id TEXT PRIMARY KEY, sales_id TEXT, template_id TEXT, ten_cong_trinh TEXT, khu_vuc TEXT, ngay_quay TEXT, trang_thai TEXT, reviewed_by TEXT, reviewed_at TEXT, ly_do_loai TEXT, thanh_tien REAL, ky_thanh_toan TEXT, created_at TEXT)`,
     `CREATE TABLE IF NOT EXISTS filming_uploads (id TEXT PRIMARY KEY, project_filming_id TEXT, shot_id TEXT, media_type TEXT, media_url TEXT, dat_item INTEGER, ghi_chu TEXT, uploaded_at TEXT)`,
     `CREATE TABLE IF NOT EXISTS guides (key TEXT PRIMARY KEY, noi_dung TEXT, video_url TEXT, updated_at TEXT)`,
+    // Ưu tiên/ẩn-hiện từng LOẠI BÀI theo giai đoạn (an=1: ẩn khỏi Sales · uu_tien=1: ưu tiên)
+    `CREATE TABLE IF NOT EXISTS post_type_prefs (loai TEXT PRIMARY KEY, an INTEGER DEFAULT 0, uu_tien INTEGER DEFAULT 0, thu_tu INTEGER)`,
   ];
   await env.DB.batch(stmts.map(s=>env.DB.prepare(s)));
   // thêm cột đơn giá quay công trình cho DB cũ (bỏ qua nếu đã có)
@@ -211,12 +213,14 @@ async function bootstrap(env, u){
   }));
   const guides = {};
   (await env.DB.prepare(`SELECT * FROM guides`).all()).results.forEach(g=>{ guides[g.key]={ noi_dung:g.noi_dung, video_url:g.video_url }; });
+  const post_type_prefs = {};
+  (await env.DB.prepare(`SELECT * FROM post_type_prefs`).all()).results.forEach(r=>{ post_type_prefs[r.loai]={ an:uBool(r.an), uu_tien:uBool(r.uu_tien), thu_tu:r.thu_tu==null?null:Number(r.thu_tu) }; });
 
   return {
     me: rowUser(u),
     users, groups, content_topics:topics, cmt_suggestions:cmtsug,
     post_seedings: posts, cmt_seedings: cmtsFull,
-    filming_templates, project_filmings, guides,
+    filming_templates, project_filmings, guides, post_type_prefs,
     pricing: pricingRow, payouts: [], audit,
   };
 }
@@ -365,6 +369,20 @@ async function handleApi(request, env){
     await env.DB.prepare(`UPDATE pricing SET don_gia_post=?, don_gia_cmt=?, don_gia_cong_trinh=?, don_gia_canh=?, min_nhac_kingsmen=?, min_usp=?, dedupe_days=? WHERE id=1`)
       .bind(Number(p.don_gia_post)||0,Number(p.don_gia_cmt)||0,Number(p.don_gia_cong_trinh)||0,Number(p.don_gia_canh)||0,Number(p.min_nhac_kingsmen)||0,Number(p.min_usp)||0,Math.max(0,Number(p.dedupe_days)||0)).run();
     await logAudit(env,me,'sửa đơn giá','pricing','-');
+    return json({ db: await bootstrap(env, me) });
+  }
+
+  // ===== Ưu tiên / ẩn-hiện LOẠI BÀI theo giai đoạn =====
+  if((m=path.match(/^\/posttypes\/(.+)$/)) && method==='PATCH'){
+    if(me.vai_tro!==ROLES.ADMIN && me.vai_tro!==ROLES.MARKETING) return json({error:'Không có quyền'},403);
+    const loai = decodeURIComponent(m[1]);
+    const cur = await env.DB.prepare(`SELECT * FROM post_type_prefs WHERE loai=?`).bind(loai).first();
+    const an = body.an!=null ? (body.an?1:0) : (cur?cur.an:0);
+    const uu = body.uu_tien!=null ? (body.uu_tien?1:0) : (cur?cur.uu_tien:0);
+    const tt = body.thu_tu!=null ? Number(body.thu_tu) : (cur?cur.thu_tu:null);
+    if(cur) await env.DB.prepare(`UPDATE post_type_prefs SET an=?, uu_tien=?, thu_tu=? WHERE loai=?`).bind(an,uu,tt,loai).run();
+    else await env.DB.prepare(`INSERT INTO post_type_prefs (loai,an,uu_tien,thu_tu) VALUES (?,?,?,?)`).bind(loai,an,uu,tt).run();
+    await logAudit(env,me,'đổi ưu tiên/ẩn loại bài','post_type',loai);
     return json({ db: await bootstrap(env, me) });
   }
 
