@@ -179,6 +179,36 @@ function filmProjectTien(project, template, pricing){
 // (giữ tương thích cũ) đơn giá 1 cảnh — không còn dùng để tính tiền
 const filmShotPrice = (shot, pricing) => (shot && shot.don_gia!=null) ? Number(shot.don_gia) : (Number(pricing&&pricing.don_gia_canh)||0);
 
+// ---------- LỊCH ĐĂNG POST (xoay vòng Sales + chủ đề) ----------
+const SCHED_DOW = {0:'CN',1:'T2',2:'T3',3:'T4',4:'T5',5:'T6',6:'T7'};
+const SCHED_DOW_FULL = {0:'Chủ nhật',1:'Thứ 2',2:'Thứ 3',3:'Thứ 4',4:'Thứ 5',5:'Thứ 6',6:'Thứ 7'};
+const schedOn = (pricing)=> !!(pricing && (pricing.sched_on===1 || pricing.sched_on===true));
+const schedEnforce = (pricing)=> !pricing || pricing.sched_enforce==null ? true : (pricing.sched_enforce===1 || pricing.sched_enforce===true);
+const schedDaysSet = (pricing)=> new Set(String((pricing&&pricing.sched_days)||'0,2,4,6').split(',').map(s=>parseInt(s,10)).filter(n=>!isNaN(n)));
+const ymdOf = (d)=> d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+const todayYMD = ()=> ymdOf(new Date());
+const ymdDow = (ymd)=> new Date(ymd+'T00:00:00').getDay();
+const fmtSlotDay = (ymd)=>{ const [y,mo,da]=ymd.split('-'); return SCHED_DOW[ymdDow(ymd)]+' '+da+'/'+mo; };
+// DEMO: sinh suất cuốn chiếu + đánh dấu bỏ lỡ (mô phỏng backend)
+function ensureDemoSlots(S){
+  const p=S.pricing||{}; if(!schedOn(p)) return;
+  const days=schedDaysSet(p); if(!days.size) return;
+  S.post_slots ||= [];
+  const today=todayYMD();
+  S.post_slots.forEach(s=>{ if(s.status==='CHO' && !s.post_id && s.ngay<today) s.status='BO_LO'; });
+  const sales=(S.users||[]).filter(u=>u.active && u.vai_tro===ROLES.SALES); if(!sales.length) return;
+  const hidden=new Set(Object.entries(S.post_type_prefs||{}).filter(([k,v])=>v&&v.an).map(([k])=>k));
+  const topics=(S.content_topics||[]).filter(t=>t.active && !hidden.has(t.loai_bai)).slice().sort((a,b)=>(b.uu_tien?1:0)-(a.uu_tien?1:0));
+  let ord=S.post_slots.length;
+  for(let k=0;k<21;k++){ const d=new Date(today+'T00:00:00'); d.setDate(d.getDate()+k); const ymd=ymdOf(d);
+    if(!days.has(d.getDay())) continue;
+    if(S.post_slots.some(s=>s.ngay===ymd)) continue;
+    S.post_slots.push({ id:uid('slot'), ngay:ymd, sales_id:sales[ord%sales.length].id, topic_id:topics.length?topics[ord%topics.length].id:null, post_id:null, status:'CHO', created_at:now() });
+    ord++;
+  }
+  S.post_slots.sort((a,b)=>a.ngay<b.ngay?-1:1);
+}
+
 function seedDB(){
   const uMkt   = { id:uid('u'), ho_ten:'Ngọc (Marketing)', email:'mkt@kingsmen.vn', vai_tro:ROLES.MARKETING, active:true, password:'123456' };
   const uS1    = { id:uid('u'), ho_ten:'Hùng (Sales)',     email:'sale1@kingsmen.vn', vai_tro:ROLES.SALES, active:true, password:'123456' };
@@ -243,8 +273,9 @@ function seedDB(){
       cmt:  { noi_dung:'Hướng dẫn tạo CMT seeding:\n1. Chọn post cần cmt.\n2. Dùng gợi ý nội dung.\n3. Up ảnh bằng chứng.\n4. Gửi nghiệm thu.', video_url:'' },
       filming: { noi_dung:'Hướng dẫn quay công trình:\n1. Chọn quy trình theo hệ sản phẩm.\n2. Xem video mẫu từng cảnh → quay.\n3. Upload từng cảnh, đủ bắt buộc thì gửi.', video_url:'' },
     },
-    pricing: { don_gia_post: P.don_gia_post, don_gia_cmt: P.don_gia_cmt, don_gia_cong_trinh: P.don_gia_cong_trinh, don_gia_canh: P.don_gia_canh, min_nhac_kingsmen: 6, min_usp: 2, dedupe_days: 7, film_lv1: P.film_lv1, film_lv2: P.film_lv2, film_lv3: P.film_lv3 },
+    pricing: { don_gia_post: P.don_gia_post, don_gia_cmt: P.don_gia_cmt, don_gia_cong_trinh: P.don_gia_cong_trinh, don_gia_canh: P.don_gia_canh, min_nhac_kingsmen: 6, min_usp: 2, dedupe_days: 7, film_lv1: P.film_lv1, film_lv2: P.film_lv2, film_lv3: P.film_lv3, sched_on: 0, sched_enforce: 1, sched_days: '0,2,4,6' },
     post_type_prefs: {},
+    post_slots: [],
     payouts: [],
     audit: [],
   };
@@ -271,7 +302,11 @@ function migrate(db){
   if(db.pricing.film_lv1==null) db.pricing.film_lv1=5000;
   if(db.pricing.film_lv2==null) db.pricing.film_lv2=10000;
   if(db.pricing.film_lv3==null) db.pricing.film_lv3=15000;
+  if(db.pricing.sched_on==null) db.pricing.sched_on=0;
+  if(db.pricing.sched_enforce==null) db.pricing.sched_enforce=1;
+  if(db.pricing.sched_days==null) db.pricing.sched_days='0,2,4,6';
   db.post_type_prefs ||= {};
+  db.post_slots ||= [];
   db.post_seedings.forEach(p=>{ p.react ??= 0; p.so_cmt_seeding ??= 0; p.so_cmt_tu_nhien ??= 0; p.thanh_tien ??= 0; });
   db.cmt_seedings.forEach(c=>{ c.proofs ||= []; c.so_cmt_seeding ??= 0; c.react ??= 0; c.so_cmt_tu_nhien ??= 0; c.thanh_tien ??= 0; });
   db.groups.forEach(g=>{ g.uu_tien ??= false; });
@@ -355,8 +390,24 @@ function AppProvider({children}){
       createUser: async u => { if(S.users.some(x=>x.email.toLowerCase()===u.email.toLowerCase())) { notify('Email đã tồn tại','err'); return false; } S.users.push({...u, id:uid('u'), created_at:now()}); commit(); return true; },
       updateUser: async (id, patch) => { const i=S.users.findIndex(u=>u.id===id); if(i>=0){ S.users[i]={...S.users[i],...patch}; if(meRef.current.id===id) meRef.current={...S.users[i]}; } commit(); return true; },
       deleteUser: async id => delList('users', id),
-      setPricing: async p => { S.pricing={...S.pricing,...p}; commit(); return true; },
-      createPost: async p => { S.post_seedings.unshift({ id:uid('p'), topic_id:p.topic_id||null, sales_id:meRef.current.id, group_id:p.group_id||null, link_bai:(p.link_bai||'').trim(), react:Number(p.react)||0, so_cmt_seeding:Number(p.so_cmt_seeding)||0, so_cmt_tu_nhien:Number(p.so_cmt_tu_nhien)||0, trang_thai:p.submit?ST.CHO_DUYET:ST.NHAP, reviewed_by:null, reviewed_at:null, ly_do_loai:'', thanh_tien:0, ky_thanh_toan:null, created_at:now() }); commit(); return true; },
+      setPricing: async p => { S.pricing={...S.pricing,...p}; if(schedOn(S.pricing)) ensureDemoSlots(S); commit(); return true; },
+      createPost: async p => {
+        if(p.submit && meRef.current.vai_tro===ROLES.SALES){
+          ensureDemoSlots(S); const pr=S.pricing||{};
+          if(schedOn(pr) && schedEnforce(pr)){
+            const days=schedDaysSet(pr); const ymd=todayYMD();
+            if(!days.has(ymdDow(ymd))){ notify('Hôm nay không phải ngày đăng bài (chỉ Thứ 3 · Thứ 5 · Thứ 7 · Chủ nhật).','err'); return false; }
+            const slot=(S.post_slots||[]).find(s=>s.ngay===ymd);
+            if(slot){ if(slot.sales_id!==meRef.current.id){ const o=S.users.find(u=>u.id===slot.sales_id); notify('Hôm nay là lượt của '+((o&&o.ho_ten)||'người khác')+' — chưa tới lượt bạn.','err'); return false; }
+              if(slot.post_id){ notify('Suất đăng hôm nay đã hoàn thành (mỗi ngày 1 post).','err'); return false; } }
+          }
+        }
+        const newId=uid('p');
+        S.post_seedings.unshift({ id:newId, topic_id:p.topic_id||null, sales_id:meRef.current.id, group_id:p.group_id||null, link_bai:(p.link_bai||'').trim(), react:Number(p.react)||0, so_cmt_seeding:Number(p.so_cmt_seeding)||0, so_cmt_tu_nhien:Number(p.so_cmt_tu_nhien)||0, trang_thai:p.submit?ST.CHO_DUYET:ST.NHAP, reviewed_by:null, reviewed_at:null, ly_do_loai:'', thanh_tien:0, ky_thanh_toan:null, created_at:now() });
+        if(p.submit){ const slot=(S.post_slots||[]).find(s=>s.ngay===todayYMD()); if(slot && slot.sales_id===meRef.current.id && !slot.post_id){ slot.post_id=newId; slot.status='DA_DANG'; } }
+        commit(); return true; },
+      regenSchedule: async ()=>{ const today=todayYMD(); S.post_slots=(S.post_slots||[]).filter(s=>!(s.ngay>=today && !s.post_id)); ensureDemoSlots(S); commit(); return true; },
+      reassignSlot: async (id, patch)=>{ const s=(S.post_slots||[]).find(x=>x.id===id); if(s){ if(patch.sales_id!==undefined) s.sales_id=patch.sales_id; if(patch.topic_id!==undefined) s.topic_id=patch.topic_id||null; } commit(); return true; },
       reviewPost: async (id, result, reason) => { const p=S.post_seedings.find(x=>x.id===id); if(!p) return {ok:false};
         if(result===ST.DAT){
           const winner = (p.topic_id && p.group_id) ? S.post_seedings.find(x=>x.id!==id && x.topic_id===p.topic_id && x.group_id===p.group_id && (x.trang_thai===ST.DAT||x.trang_thai===ST.DA_CHI)) : null;
@@ -456,6 +507,8 @@ function AppProvider({children}){
     reviewPost: async (id, result, reason) => { try { const r = await call(`/posts/${id}/review`, {method:'POST', body:{result, reason}}); if(r && r.db) setDb(r.db); return { ok:true, deduped:!!r.deduped, reason:r.reason }; } catch(e){ notify(e.message,'err'); return { ok:false }; } },
     dupCheckPost: async (topic_id, group_id) => { try { return await call(`/posts/dupcheck?topic_id=${encodeURIComponent(topic_id)}&group_id=${encodeURIComponent(group_id)}`); } catch(e){ return {dup:false}; } },
     setPostTypePref: (loai, patch) => mut('/posttypes/'+encodeURIComponent(loai), {method:'PATCH', body:patch}),
+    regenSchedule: () => mut('/schedule/regen', {method:'POST'}),
+    reassignSlot: (id, patch) => mut('/slots/'+id, {method:'PATCH', body:patch}),
     createCmtSeed: c => mut('/cmtseed', {method:'POST', body:c}),
     reviewCmtSeed: (id, result, reason) => mut(`/cmtseed/${id}/review`, {method:'POST', body:{result, reason}}),
     markPaid: (sales_id, ky) => mut('/markpaid', {method:'POST', body:{sales_id, ky}}),
@@ -653,6 +706,7 @@ const NAV = {
     {key:'library', label:'Thư viện', icon:'📚'},
     {key:'filming', label:'Quay CT', icon:'🎬'},
     {key:'queue', label:'Nghiệm thu', icon:'✅'},
+    {key:'schedule', label:'Lịch đăng', icon:'📅'},
     {key:'users', label:'Tài khoản', icon:'👥'},
     {key:'pay_report', label:'Thanh toán', icon:'📄'},
   ],
@@ -660,6 +714,7 @@ const NAV = {
     {key:'users', label:'Người dùng', icon:'👥'},
     {key:'library', label:'Thư viện', icon:'📚'},
     {key:'filming', label:'Quay CT', icon:'🎬'},
+    {key:'schedule', label:'Lịch đăng', icon:'📅'},
     {key:'pricing', label:'Đơn giá', icon:'⚙️'},
     {key:'payroll', label:'Bảng lương', icon:'🧾'},
     {key:'audit', label:'Nhật ký', icon:'🕑'},
@@ -711,6 +766,7 @@ function Shell(){
       case 'dash': return <MktDashboard/>;
       case 'library': return <Library/>;
       case 'queue': return <MktQueue/>;
+      case 'schedule': return <PostSchedule/>;
       case 'pay_report': return <MktPayReport/>;
       case 'users': return <UserManagement/>;
       case 'pricing': return <AdminPricing/>;
@@ -796,8 +852,23 @@ function SalesHome({go}){
   // tổng hợp theo loại công việc
   const sumBy = (arr)=>({ dat: arr.filter(x=>x.trang_thai===ST.DAT).reduce((s,x)=>s+(x.thanh_tien||0),0), chi: arr.filter(x=>x.trang_thai===ST.DA_CHI).reduce((s,x)=>s+(x.thanh_tien||0),0), cho: arr.filter(x=>x.trang_thai===ST.CHO_DUYET).length });
   const gP=sumBy(posts), gC=sumBy(cmts), gQ=sumBy(filmings);
+  // Thông báo lịch đăng theo lượt
+  const schedEnabled = schedOn(db.pricing);
+  const _today = todayYMD();
+  const slots = db.post_slots||[];
+  const todaySlot = slots.find(s=>s.ngay===_today);
+  const myTurnToday = schedEnabled && !!todaySlot && todaySlot.sales_id===meId && !todaySlot.post_id;
+  const myNextSlot = slots.filter(s=>s.ngay>=_today && s.sales_id===meId && s.status==='CHO').sort((a,b)=>a.ngay<b.ngay?-1:1)[0];
+  const sgTopic = todaySlot ? db.content_topics.find(t=>t.id===todaySlot.topic_id) : null;
 
   return <div className="space-y-4">
+    {schedEnabled && myTurnToday && <button onClick={()=>go('new_post')} className="w-full text-left bg-emerald-50 border border-emerald-300 rounded-2xl p-4 hover:bg-emerald-100/70 transition">
+      <div className="font-display font-bold text-emerald-800">🟢 Hôm nay tới lượt bạn đăng bài!</div>
+      <div className="text-xs text-emerald-700 mt-0.5">Đăng 1 post hôm nay{sgTopic && <> · gợi ý: <b>{sgTopic.chu_de}</b></>} — bấm để tạo POST ngay.</div>
+    </button>}
+    {schedEnabled && !myTurnToday && myNextSlot && <div className="bg-amber-50 border border-amber-200 rounded-2xl p-3 text-xs text-amber-800">
+      📅 Lượt đăng kế của bạn: <b>{fmtSlotDay(myNextSlot.ngay)}</b>{myNextSlot.topic_id && db.content_topics.find(t=>t.id===myNextSlot.topic_id) ? <> · gợi ý: <b>{db.content_topics.find(t=>t.id===myNextSlot.topic_id).chu_de}</b></> : ''}.
+    </div>}
     <div className="grid grid-cols-2 gap-3">
       <Stat label="Đang chờ duyệt" value={cho} color="text-amber-600"/>
       <Stat label="Bị loại (sửa lại)" value={loai} color="text-rose-600"/>
@@ -913,6 +984,19 @@ function SalesNewPost({go}){
     return ()=>{ live=false; };
   }, [topicId, groupId]);
 
+  // Lịch đăng theo lượt (xoay vòng)
+  const schedEnabled = schedOn(db.pricing);
+  const schedHard = schedEnabled && schedEnforce(db.pricing);
+  const slots = db.post_slots||[];
+  const _today = todayYMD();
+  const todaySlot = slots.find(s=>s.ngay===_today);
+  const myTurnToday = schedEnabled && !!todaySlot && todaySlot.sales_id===meId && !todaySlot.post_id;
+  const myNextSlot = slots.filter(s=>s.ngay>=_today && s.sales_id===meId && s.status==='CHO').sort((a,b)=>a.ngay<b.ngay?-1:1)[0];
+  const suggestedTopic = todaySlot ? db.content_topics.find(t=>t.id===todaySlot.topic_id) : null;
+  const blockedBySched = schedHard && !myTurnToday;
+  // Tới lượt mình: tự chọn sẵn chủ đề gợi ý
+  useEffect(()=>{ if(myTurnToday && suggestedTopic && !topicId) setTopicId(suggestedTopic.id); }, [myTurnToday, suggestedTopic && suggestedTopic.id]);
+
   const submit = async (asDraft) => {
     if(!topicId) return notify('Chọn chủ đề/nội dung','warn');
     if(!groupId) return notify('Chọn group mục tiêu','warn');
@@ -929,6 +1013,16 @@ function SalesNewPost({go}){
 
   return <div className="space-y-4 max-w-2xl">
     <div className="flex items-center justify-between gap-2 flex-wrap"><h2 className="font-display text-lg font-bold text-ink">📝 Tạo POST seeding</h2><GuideBtn guideKey="post" title="Tạo POST seeding"/></div>
+
+    {schedEnabled && (myTurnToday
+      ? <div className="bg-emerald-50 border border-emerald-300 rounded-2xl p-3.5 text-sm text-emerald-800">
+          <div className="font-semibold">🟢 Hôm nay tới lượt bạn đăng bài!</div>
+          <div className="text-xs mt-0.5">Chỉ đăng <b>1 post</b> hôm nay.{suggestedTopic && <> Chủ đề gợi ý (đã chọn sẵn): <b>{suggestedTopic.chu_de}</b>.</>}</div>
+        </div>
+      : <div className="bg-amber-50 border border-amber-300 rounded-2xl p-3.5 text-sm text-amber-800">
+          <div className="font-semibold">{todaySlot ? '⏳ Hôm nay là lượt của '+(db.users.find(u=>u.id===todaySlot.sales_id)?.ho_ten||'người khác') : '📅 Hôm nay không đăng bài (chỉ Thứ 3 · Thứ 5 · Thứ 7 · Chủ nhật)'}</div>
+          <div className="text-xs mt-0.5">{myNextSlot ? <>Lượt kế của bạn: <b>{fmtSlotDay(myNextSlot.ngay)}</b>{myNextSlot.topic_id && db.content_topics.find(t=>t.id===myNextSlot.topic_id) ? ' · gợi ý: '+db.content_topics.find(t=>t.id===myNextSlot.topic_id).chu_de : ''}.</> : 'Bạn chưa có suất nào sắp tới — hỏi Marketing.'}{schedHard && ' Bạn chỉ gửi nghiệm thu được vào đúng ngày tới lượt.'}</div>
+        </div>)}
 
     {(priTopics>0 || priGroups>0) && <div className="bg-brand/10 border border-brand/30 rounded-2xl p-3 text-xs text-brand-dark">
       ⭐ Marketing đang ưu tiên {priTopics>0 && <b>{priTopics} tuyến nội dung</b>}{priTopics>0&&priGroups>0 && ' và '}{priGroups>0 && <b>{priGroups} group</b>} — hãy seeding các mục ⭐ trước.
@@ -1011,7 +1105,7 @@ function SalesNewPost({go}){
 
     <div className="flex gap-2">
       <Btn variant="ghost" onClick={()=>submit(true)}>Lưu nháp</Btn>
-      <Btn variant="brand" className="flex-1" onClick={()=>submit(false)}>Gửi nghiệm thu →</Btn>
+      <Btn variant="brand" className="flex-1" disabled={blockedBySched} onClick={()=>submit(false)}>{blockedBySched ? (myNextSlot?'Chờ tới lượt: '+fmtSlotDay(myNextSlot.ngay):'Chưa tới lượt đăng') : 'Gửi nghiệm thu →'}</Btn>
     </div>
   </div>;
 }
@@ -1945,6 +2039,73 @@ function UserManagement(){
         <div className="flex gap-2 mt-2"><Btn variant="ghost" onClick={()=>setEdit(null)}>Huỷ</Btn><Btn variant="brand" className="flex-1" onClick={save}>{edit.id?'Lưu':'Tạo & cấp'}</Btn></div>
       </>}
     </Modal>
+  </div>;
+}
+
+/* ============================================================
+   LỊCH ĐĂNG POST — Marketing/Admin quản lý phân lượt
+============================================================ */
+function PostSchedule(){
+  const { db, setPricing, regenSchedule, reassignSlot, notify } = useApp();
+  const [on,setOn]=useState(schedOn(db.pricing));
+  const [enf,setEnf]=useState(schedEnforce(db.pricing));
+  const [days,setDays]=useState(schedDaysSet(db.pricing));
+  const [busy,setBusy]=useState(false);
+  useEffect(()=>{ setOn(schedOn(db.pricing)); setEnf(schedEnforce(db.pricing)); setDays(schedDaysSet(db.pricing)); }, [db.pricing]);
+  const sales = db.users.filter(u=>u.active && u.vai_tro===ROLES.SALES);
+  const topics = db.content_topics.filter(t=>t.active);
+  const today = todayYMD();
+  const upcoming = (db.post_slots||[]).filter(s=>s.ngay>=today).sort((a,b)=>a.ngay<b.ngay?-1:1);
+  const past = (db.post_slots||[]).filter(s=>s.ngay<today).sort((a,b)=>a.ngay<b.ngay?1:-1).slice(0,10);
+  const cnt={}; upcoming.forEach(s=>{ cnt[s.sales_id]=(cnt[s.sales_id]||0)+1; });
+  const toggleDay=(d)=> setDays(prev=>{ const s=new Set(prev); s.has(d)?s.delete(d):s.add(d); return s; });
+  const saveCfg=async()=>{ setBusy(true); const ok=await setPricing({...db.pricing, sched_on:on?1:0, sched_enforce:enf?1:0, sched_days:[...days].sort((a,b)=>a-b).join(',')}); setBusy(false); if(ok) notify('Đã lưu cấu hình lịch đăng'); };
+  const regen=async()=>{ if(!confirm('Tạo lại lịch cho các suất CHƯA đăng? (suất đã đăng giữ nguyên)')) return; if(await regenSchedule()) notify('Đã tạo lại lịch đăng'); };
+  const DOW_ORDER=[1,2,3,4,5,6,0];
+  const slotRow=(s)=>{ const st=s.status;
+    return <div key={s.id} className="p-3 flex flex-wrap items-center gap-2 border-b last:border-0">
+      <div className="w-20 shrink-0"><div className="font-display font-bold text-ink text-sm">{SCHED_DOW[ymdDow(s.ngay)]}</div><div className="text-[11px] text-slate-400">{s.ngay.slice(8)+'/'+s.ngay.slice(5,7)}</div></div>
+      <Select value={s.sales_id||''} onChange={e=>reassignSlot(s.id,{sales_id:e.target.value})} className="flex-1 min-w-[130px] !py-1.5 text-xs" disabled={st==='DA_DANG'}>
+        {sales.map(u=><option key={u.id} value={u.id}>{u.ho_ten}</option>)}
+      </Select>
+      <Select value={s.topic_id||''} onChange={e=>reassignSlot(s.id,{topic_id:e.target.value})} className="flex-1 min-w-[150px] !py-1.5 text-xs" disabled={st==='DA_DANG'}>
+        <option value="">— chủ đề gợi ý —</option>
+        {topics.map(t=><option key={t.id} value={t.id}>{t.chu_de}</option>)}
+      </Select>
+      <span className={"text-[10px] px-1.5 py-0.5 rounded-full shrink-0 "+(st==='DA_DANG'?'bg-emerald-100 text-emerald-700':st==='BO_LO'?'bg-rose-100 text-rose-600':'bg-amber-100 text-amber-700')}>{st==='DA_DANG'?'✓ Đã đăng':st==='BO_LO'?'Bỏ lỡ':'Chờ đăng'}</span>
+    </div>;
+  };
+  return <div className="space-y-4">
+    <div className="flex items-center justify-between flex-wrap gap-2">
+      <h2 className="font-display text-lg font-bold text-ink">📅 Lịch đăng POST (xoay vòng)</h2>
+      {schedOn(db.pricing) && <Btn variant="ghost" onClick={regen}>🔄 Tạo lại lịch</Btn>}
+    </div>
+    <div className="bg-white rounded-2xl border border-line shadow-card p-4 space-y-3">
+      <div className="flex items-center justify-between gap-3">
+        <div><div className="text-sm font-semibold text-ink">Bật lịch đăng theo lượt</div><div className="text-[11px] text-slate-400">Hệ thống xoay vòng phân Sales + chủ đề gợi ý cho từng ngày.</div></div>
+        <button onClick={()=>setOn(v=>!v)} className={"w-12 h-7 rounded-full transition relative shrink-0 "+(on?'bg-brand':'bg-slate-300')}><span className={"absolute top-0.5 w-6 h-6 bg-white rounded-full shadow transition-all "+(on?'left-[22px]':'left-0.5')}></span></button>
+      </div>
+      <div className="flex items-center justify-between gap-3">
+        <div><div className="text-sm font-semibold text-ink">Chặn cứng</div><div className="text-[11px] text-slate-400">Chỉ đúng người, đúng ngày mới gửi POST được. Tắt = chỉ nhắc, vẫn cho đăng.</div></div>
+        <button onClick={()=>setEnf(v=>!v)} className={"w-12 h-7 rounded-full transition relative shrink-0 "+(enf?'bg-brand':'bg-slate-300')}><span className={"absolute top-0.5 w-6 h-6 bg-white rounded-full shadow transition-all "+(enf?'left-[22px]':'left-0.5')}></span></button>
+      </div>
+      <div>
+        <div className="text-sm font-semibold text-ink mb-1.5">Ngày đăng trong tuần</div>
+        <div className="flex flex-wrap gap-1.5">{DOW_ORDER.map(d=><button key={d} onClick={()=>toggleDay(d)} className={"px-3 py-1.5 rounded-lg text-xs font-semibold "+(days.has(d)?'bg-brand text-white':'bg-slate-100 text-slate-500')}>{SCHED_DOW[d]}</button>)}</div>
+      </div>
+      <Btn variant="brand" onClick={saveCfg} disabled={busy}>{busy?'Đang lưu…':'Lưu cấu hình'}</Btn>
+    </div>
+    {!schedOn(db.pricing) ? <Empty>Lịch đăng đang tắt. Bật ở trên để hệ thống tự phân lượt cho Sales.</Empty> : <>
+      {sales.length>0 && <div className="text-[11px] text-slate-500 flex flex-wrap gap-x-3 gap-y-1">Suất sắp tới theo Sales: {sales.map(u=><span key={u.id}>{u.ho_ten}: <b className="text-ink">{cnt[u.id]||0}</b></span>)}</div>}
+      <div className="bg-white rounded-2xl border border-line shadow-card overflow-hidden">
+        <div className="px-4 py-2 bg-slate-50 border-b text-sm font-semibold text-ink">Sắp tới ({upcoming.length} suất)</div>
+        {upcoming.length===0 ? <div className="p-4"><Empty>Chưa có suất nào — bấm "Tạo lại lịch". (Cần có Sales đang hoạt động.)</Empty></div> : upcoming.map(slotRow)}
+      </div>
+      {past.length>0 && <div className="bg-white rounded-2xl border border-line shadow-card overflow-hidden">
+        <div className="px-4 py-2 bg-slate-50 border-b text-sm font-semibold text-slate-500">Đã qua (gần đây)</div>
+        {past.map(slotRow)}
+      </div>}
+    </>}
   </div>;
 }
 

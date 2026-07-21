@@ -56,6 +56,8 @@ async function ensureSchema(env){
     `CREATE TABLE IF NOT EXISTS guides (key TEXT PRIMARY KEY, noi_dung TEXT, video_url TEXT, updated_at TEXT)`,
     // Ưu tiên/ẩn-hiện từng LOẠI BÀI theo giai đoạn (an=1: ẩn khỏi Sales · uu_tien=1: ưu tiên)
     `CREATE TABLE IF NOT EXISTS post_type_prefs (loai TEXT PRIMARY KEY, an INTEGER DEFAULT 0, uu_tien INTEGER DEFAULT 0, thu_tu INTEGER)`,
+    // Lịch đăng POST: mỗi ngày đủ điều kiện 1 suất, xoay vòng Sales + chủ đề gợi ý
+    `CREATE TABLE IF NOT EXISTS post_slots (id TEXT PRIMARY KEY, ngay TEXT UNIQUE, sales_id TEXT, topic_id TEXT, post_id TEXT, status TEXT, created_at TEXT)`,
   ];
   await env.DB.batch(stmts.map(s=>env.DB.prepare(s)));
   // thêm cột đơn giá quay công trình cho DB cũ (bỏ qua nếu đã có)
@@ -69,10 +71,14 @@ async function ensureSchema(env){
   try { await env.DB.prepare(`ALTER TABLE pricing ADD COLUMN film_lv1 REAL DEFAULT 5000`).run(); } catch(e){}
   try { await env.DB.prepare(`ALTER TABLE pricing ADD COLUMN film_lv2 REAL DEFAULT 10000`).run(); } catch(e){}
   try { await env.DB.prepare(`ALTER TABLE pricing ADD COLUMN film_lv3 REAL DEFAULT 15000`).run(); } catch(e){}
+  // lịch đăng POST: bật/tắt · chặn cứng · các thứ trong tuần (JS getDay: CN=0..T7=6) mặc định T3,T5,T7,CN
+  try { await env.DB.prepare(`ALTER TABLE pricing ADD COLUMN sched_on INTEGER DEFAULT 0`).run(); } catch(e){}
+  try { await env.DB.prepare(`ALTER TABLE pricing ADD COLUMN sched_enforce INTEGER DEFAULT 1`).run(); } catch(e){}
+  try { await env.DB.prepare(`ALTER TABLE pricing ADD COLUMN sched_days TEXT DEFAULT '0,2,4,6'`).run(); } catch(e){}
 
   // seed pricing
   const pr = await env.DB.prepare(`SELECT id FROM pricing WHERE id=1`).first();
-  if(!pr) await env.DB.prepare(`INSERT INTO pricing (id,don_gia_post,don_gia_cmt,don_gia_cong_trinh,don_gia_canh,min_nhac_kingsmen,min_usp,dedupe_days,film_lv1,film_lv2,film_lv3) VALUES (1,15000,3000,150000,10000,6,2,7,5000,10000,15000)`).run();
+  if(!pr) await env.DB.prepare(`INSERT INTO pricing (id,don_gia_post,don_gia_cmt,don_gia_cong_trinh,don_gia_canh,min_nhac_kingsmen,min_usp,dedupe_days,film_lv1,film_lv2,film_lv3,sched_on,sched_enforce,sched_days) VALUES (1,15000,3000,150000,10000,6,2,7,5000,10000,15000,0,1,'0,2,4,6')`).run();
 
   // seed tài khoản Marketing đầu tiên + thư viện (chỉ khi chưa có user nào)
   const anyUser = await env.DB.prepare(`SELECT id FROM users LIMIT 1`).first();
@@ -178,9 +184,47 @@ async function logAudit(env, u, action, entity, entity_id, detail=''){
     .bind(uid('a'),nowISO(),u?.id||null,u?.ho_ten||'—',action,entity,String(entity_id||''),detail).run();
 }
 
+// ---------- LỊCH ĐĂNG POST (xoay vòng Sales + chủ đề) ----------
+// ngày theo giờ Việt Nam (UTC+7); trả {ymd, dow} với dow theo JS getDay (CN=0..T7=6)
+function vnDayInfo(ms){ const d=new Date((ms==null?Date.now():ms)+7*3600*1000); return { ymd:d.toISOString().slice(0,10), dow:d.getUTCDay() }; }
+function ymdPlus(ymd, k){ const d=new Date(Date.parse(ymd+'T00:00:00Z')+k*864e5); return { ymd:d.toISOString().slice(0,10), dow:d.getUTCDay() }; }
+function schedCfg(pricing){
+  return { on: uBool(pricing && pricing.sched_on), enforce: pricing==null||pricing.sched_enforce==null?true:uBool(pricing.sched_enforce),
+    days: new Set(String((pricing&&pricing.sched_days)||'0,2,4,6').split(',').map(s=>parseInt(s,10)).filter(n=>!isNaN(n))) };
+}
+// đảm bảo có suất cho ~3 tuần tới + đánh dấu bỏ lỡ các suất quá hạn chưa đăng
+async function ensurePostSlots(env){
+  const pricing = await env.DB.prepare(`SELECT * FROM pricing WHERE id=1`).first();
+  const cfg = schedCfg(pricing);
+  if(!cfg.on || !cfg.days.size) return;
+  const today = vnDayInfo().ymd;
+  // đánh dấu bỏ lỡ
+  await env.DB.prepare(`UPDATE post_slots SET status='BO_LO' WHERE status='CHO' AND post_id IS NULL AND ngay < ?`).bind(today).run();
+  // pool Sales đang hoạt động (theo thứ tự tạo) + chủ đề gợi ý (active, không thuộc loại bài đang ẩn, ưu tiên trước)
+  const sales = (await env.DB.prepare(`SELECT id FROM users WHERE active=1 AND vai_tro='SALES' ORDER BY created_at ASC, id ASC`).all()).results.map(r=>r.id);
+  if(!sales.length) return;
+  const hidden = new Set((await env.DB.prepare(`SELECT loai FROM post_type_prefs WHERE an=1`).all()).results.map(r=>r.loai));
+  const topics = (await env.DB.prepare(`SELECT id, loai_bai, uu_tien FROM content_topics WHERE active=1 ORDER BY uu_tien DESC, updated_at ASC, id ASC`).all()).results
+    .filter(t=>!hidden.has(t.loai_bai)).map(r=>r.id);
+  // ordinal xoay vòng = số suất đã tạo từ trước
+  let ord = Number((await env.DB.prepare(`SELECT COUNT(*) c FROM post_slots`).first())?.c || 0);
+  for(let k=0;k<21;k++){
+    const d = ymdPlus(today, k);
+    if(!cfg.days.has(d.dow)) continue;
+    const exist = await env.DB.prepare(`SELECT id FROM post_slots WHERE ngay=?`).bind(d.ymd).first();
+    if(exist) continue;
+    const sid = sales[ord % sales.length];
+    const tid = topics.length ? topics[ord % topics.length] : null;
+    await env.DB.prepare(`INSERT INTO post_slots (id,ngay,sales_id,topic_id,post_id,status,created_at) VALUES (?,?,?,?,NULL,'CHO',?)`)
+      .bind(uid('slot'), d.ymd, sid, tid, nowISO()).run();
+    ord++;
+  }
+}
+
 // ---------- bootstrap: toàn bộ dữ liệu theo quyền ----------
 async function bootstrap(env, u){
   const staff = isStaff(u);
+  try { await ensurePostSlots(env); } catch(e){}
   const pricingRow = await env.DB.prepare(`SELECT * FROM pricing WHERE id=1`).first();
   const groups = (await env.DB.prepare(`SELECT * FROM groups`).all()).results.map(rowGroup);
   const topics = (await env.DB.prepare(`SELECT * FROM content_topics`).all()).results.map(rowTopic);
@@ -220,12 +264,14 @@ async function bootstrap(env, u){
   (await env.DB.prepare(`SELECT * FROM guides`).all()).results.forEach(g=>{ guides[g.key]={ noi_dung:g.noi_dung, video_url:g.video_url }; });
   const post_type_prefs = {};
   (await env.DB.prepare(`SELECT * FROM post_type_prefs`).all()).results.forEach(r=>{ post_type_prefs[r.loai]={ an:uBool(r.an), uu_tien:uBool(r.uu_tien), thu_tu:r.thu_tu==null?null:Number(r.thu_tu) }; });
+  const slotSince = ymdPlus(vnDayInfo().ymd, -14).ymd;
+  const post_slots = (await env.DB.prepare(`SELECT * FROM post_slots WHERE ngay>=? ORDER BY ngay ASC`).bind(slotSince).all()).results;
 
   return {
     me: rowUser(u),
     users, groups, content_topics:topics, cmt_suggestions:cmtsug,
     post_seedings: posts, cmt_seedings: cmtsFull,
-    filming_templates, project_filmings, guides, post_type_prefs,
+    filming_templates, project_filmings, guides, post_type_prefs, post_slots,
     pricing: pricingRow, payouts: [], audit,
   };
 }
@@ -373,8 +419,12 @@ async function handleApi(request, env){
     const p=body;
     const cur = await env.DB.prepare(`SELECT * FROM pricing WHERE id=1`).first() || {};
     const num = (v, d)=> (v!=null && v!=='' ? Number(v)||0 : Number(d)||0);
-    await env.DB.prepare(`UPDATE pricing SET don_gia_post=?, don_gia_cmt=?, don_gia_cong_trinh=?, don_gia_canh=?, min_nhac_kingsmen=?, min_usp=?, dedupe_days=?, film_lv1=?, film_lv2=?, film_lv3=? WHERE id=1`)
-      .bind(Number(p.don_gia_post)||0,Number(p.don_gia_cmt)||0,Number(p.don_gia_cong_trinh)||0,Number(p.don_gia_canh)||0,Number(p.min_nhac_kingsmen)||0,Number(p.min_usp)||0,Math.max(0,Number(p.dedupe_days)||0),num(p.film_lv1,cur.film_lv1),num(p.film_lv2,cur.film_lv2),num(p.film_lv3,cur.film_lv3)).run();
+    const schedOn = p.sched_on!=null ? (p.sched_on?1:0) : (cur.sched_on||0);
+    const schedEnf = p.sched_enforce!=null ? (p.sched_enforce?1:0) : (cur.sched_enforce==null?1:cur.sched_enforce);
+    const schedDays = p.sched_days!=null ? String(p.sched_days) : (cur.sched_days||'0,2,4,6');
+    await env.DB.prepare(`UPDATE pricing SET don_gia_post=?, don_gia_cmt=?, don_gia_cong_trinh=?, don_gia_canh=?, min_nhac_kingsmen=?, min_usp=?, dedupe_days=?, film_lv1=?, film_lv2=?, film_lv3=?, sched_on=?, sched_enforce=?, sched_days=? WHERE id=1`)
+      .bind(Number(p.don_gia_post)||0,Number(p.don_gia_cmt)||0,Number(p.don_gia_cong_trinh)||0,Number(p.don_gia_canh)||0,Number(p.min_nhac_kingsmen)||0,Number(p.min_usp)||0,Math.max(0,Number(p.dedupe_days)||0),num(p.film_lv1,cur.film_lv1),num(p.film_lv2,cur.film_lv2),num(p.film_lv3,cur.film_lv3),schedOn,schedEnf,schedDays).run();
+    if(schedOn) { try { await ensurePostSlots(env); } catch(e){} }
     await logAudit(env,me,'sửa đơn giá','pricing','-');
     return json({ db: await bootstrap(env, me) });
   }
@@ -417,11 +467,46 @@ async function handleApi(request, env){
 
   // ===== POST SEEDING =====
   if(path==='/posts' && method==='POST'){
+    // Giới hạn theo LỊCH ĐĂNG: chỉ đúng người, đúng ngày (T3/T5/T7/CN), mỗi ngày 1 post
+    let slotToday = null;
+    if(body.submit && me.vai_tro===ROLES.SALES){
+      const pricing = await env.DB.prepare(`SELECT * FROM pricing WHERE id=1`).first();
+      const cfg = schedCfg(pricing);
+      if(cfg.on && cfg.enforce){
+        const t = vnDayInfo();
+        if(!cfg.days.has(t.dow)) return json({error:'Hôm nay không phải ngày đăng bài (chỉ đăng Thứ 3 · Thứ 5 · Thứ 7 · Chủ nhật).'},403);
+        slotToday = await env.DB.prepare(`SELECT * FROM post_slots WHERE ngay=?`).bind(t.ymd).first();
+        if(slotToday){
+          if(slotToday.sales_id!==me.id){ const owner=await env.DB.prepare(`SELECT ho_ten FROM users WHERE id=?`).bind(slotToday.sales_id).first(); return json({error:'Hôm nay là lượt của '+((owner&&owner.ho_ten)||'người khác')+' — chưa tới lượt đăng của bạn.'},403); }
+          if(slotToday.post_id) return json({error:'Suất đăng hôm nay đã hoàn thành (mỗi ngày 1 post).'},403);
+        }
+      }
+    }
     const id=uid('p');
     const status = body.submit ? ST.CHO_DUYET : ST.NHAP;
     await env.DB.prepare(`INSERT INTO post_seedings (id,topic_id,sales_id,group_id,link_bai,react,so_cmt_seeding,so_cmt_tu_nhien,trang_thai,ly_do_loai,thanh_tien,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,0,?)`)
       .bind(id, body.topic_id||null, me.id, body.group_id||null, (body.link_bai||'').trim(), Number(body.react)||0, Number(body.so_cmt_seeding)||0, Number(body.so_cmt_tu_nhien)||0, status, '', nowISO()).run();
+    if(slotToday && !slotToday.post_id) await env.DB.prepare(`UPDATE post_slots SET post_id=?, status='DA_DANG' WHERE id=?`).bind(id, slotToday.id).run();
     await logAudit(env,me, body.submit?'gửi nghiệm thu':'tạo nháp','post_seeding',id);
+    return json({ db: await bootstrap(env, me) });
+  }
+  // ===== LỊCH ĐĂNG POST: cấu hình / tạo lại / phân lại (staff) =====
+  if(path==='/schedule/regen' && method==='POST'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    const today = vnDayInfo().ymd;
+    await env.DB.prepare(`DELETE FROM post_slots WHERE ngay>=? AND post_id IS NULL`).bind(today).run();
+    await ensurePostSlots(env);
+    await logAudit(env,me,'tạo lại lịch đăng','post_slots','-');
+    return json({ db: await bootstrap(env, me) });
+  }
+  if((m=path.match(/^\/slots\/(.+)$/)) && method==='PATCH'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    const s = await env.DB.prepare(`SELECT * FROM post_slots WHERE id=?`).bind(m[1]).first();
+    if(!s) return json({error:'Không tìm thấy suất'},404);
+    const sid = body.sales_id!==undefined ? body.sales_id : s.sales_id;
+    const tid = body.topic_id!==undefined ? (body.topic_id||null) : s.topic_id;
+    await env.DB.prepare(`UPDATE post_slots SET sales_id=?, topic_id=? WHERE id=?`).bind(sid, tid, m[1]).run();
+    await logAudit(env,me,'đổi phân công suất đăng','post_slots',m[1]);
     return json({ db: await bootstrap(env, me) });
   }
   if((m=path.match(/^\/posts\/(.+)\/review$/)) && method==='POST'){
