@@ -76,6 +76,8 @@ const ST_STYLE = {
 const LOAI_BAI = ['Nhắc thương hiệu','Chuyên dụng khu vực','Chống ố vàng/Bảo hành','ColorMatch','Pain – Nỗi đau','Review','Hỏi đáp','Thảo luận'];
 const MUC_TIEU = ['BIẾT','TIN','CÂN NHẮC','HÀNH ĐỘNG'];
 const GROUP_LOAI = ['Nhà ở','Thầu thợ','Nội thất','Vật liệu XD','Khác'];
+const MUC_DICH_LIB = [{v:'POST',ten:'Ảnh POST'},{v:'CMT',ten:'Ảnh CMT'},{v:'CA_HAI',ten:'Cả hai'}];
+const mucDichLabel = (v)=> ({POST:'POST',CMT:'CMT',CA_HAI:'Cả hai'}[v]||'Cả hai');
 const CMT_LOAI = { MINH_DANG:'MINH_DANG', DAO:'DAO' };
 const CMT_LOAI_LABEL = { MINH_DANG:'CMT mình đăng', DAO:'CMT dạo' };
 // Module QUAY CÔNG TRÌNH
@@ -276,6 +278,7 @@ function seedDB(){
     pricing: { don_gia_post: P.don_gia_post, don_gia_cmt: P.don_gia_cmt, don_gia_cong_trinh: P.don_gia_cong_trinh, don_gia_canh: P.don_gia_canh, min_nhac_kingsmen: 6, min_usp: 2, dedupe_days: 7, film_lv1: P.film_lv1, film_lv2: P.film_lv2, film_lv3: P.film_lv3, sched_on: 0, sched_enforce: 1, sched_days: '0,2,4,6' },
     post_type_prefs: {},
     post_slots: [],
+    media_library: [],
     payouts: [],
     audit: [],
   };
@@ -307,6 +310,7 @@ function migrate(db){
   if(db.pricing.sched_days==null) db.pricing.sched_days='0,2,4,6';
   db.post_type_prefs ||= {};
   db.post_slots ||= [];
+  db.media_library ||= [];
   db.post_seedings.forEach(p=>{ p.react ??= 0; p.so_cmt_seeding ??= 0; p.so_cmt_tu_nhien ??= 0; p.thanh_tien ??= 0; });
   db.cmt_seedings.forEach(c=>{ c.proofs ||= []; c.so_cmt_seeding ??= 0; c.react ??= 0; c.so_cmt_tu_nhien ??= 0; c.thanh_tien ??= 0; });
   db.groups.forEach(g=>{ g.uu_tien ??= false; });
@@ -408,6 +412,10 @@ function AppProvider({children}){
         commit(); return true; },
       regenSchedule: async ()=>{ const today=todayYMD(); S.post_slots=(S.post_slots||[]).filter(s=>!(s.ngay>=today && !s.post_id)); ensureDemoSlots(S); commit(); return true; },
       reassignSlot: async (id, patch)=>{ const s=(S.post_slots||[]).find(x=>x.id===id); if(s){ if(patch.sales_id!==undefined) s.sales_id=patch.sales_id; if(patch.topic_id!==undefined) s.topic_id=patch.topic_id||null; } commit(); return true; },
+      createLibImg: async o=>{ S.media_library ||= []; S.media_library.unshift({ id:uid('lib'), media_url:o.media_url, caption:o.caption||'', muc_dich:o.muc_dich||'CA_HAI', topic_id:o.topic_id||null, tags:o.tags||[], uploaded_by:meRef.current.id, uploaded_by_name:meRef.current.ho_ten, active:true, uploaded_at:now() }); commit(); return true; },
+      patchLibImg: async (id, patch)=>{ const r=(S.media_library||[]).find(x=>x.id===id); if(r) Object.assign(r, patch); commit(); return true; },
+      deleteLibImg: async id=>{ S.media_library=(S.media_library||[]).filter(x=>x.id!==id); commit(); return true; },
+      bulkDeleteLibImg: async ids=>{ const set=new Set(ids); S.media_library=(S.media_library||[]).filter(x=>!set.has(x.id)); commit(); return true; },
       reviewPost: async (id, result, reason) => { const p=S.post_seedings.find(x=>x.id===id); if(!p) return {ok:false};
         if(result===ST.DAT){
           const winner = (p.topic_id && p.group_id) ? S.post_seedings.find(x=>x.id!==id && x.topic_id===p.topic_id && x.group_id===p.group_id && (x.trang_thai===ST.DAT||x.trang_thai===ST.DA_CHI)) : null;
@@ -509,6 +517,10 @@ function AppProvider({children}){
     setPostTypePref: (loai, patch) => mut('/posttypes/'+encodeURIComponent(loai), {method:'PATCH', body:patch}),
     regenSchedule: () => mut('/schedule/regen', {method:'POST'}),
     reassignSlot: (id, patch) => mut('/slots/'+id, {method:'PATCH', body:patch}),
+    createLibImg: o => mut('/library', {method:'POST', body:o}),
+    patchLibImg: (id, patch) => mut('/library/'+id, {method:'PATCH', body:patch}),
+    deleteLibImg: id => mut('/library/'+id, {method:'DELETE'}),
+    bulkDeleteLibImg: ids => mut('/library/bulkdelete', {method:'POST', body:{ids}}),
     createCmtSeed: c => mut('/cmtseed', {method:'POST', body:c}),
     reviewCmtSeed: (id, result, reason) => mut(`/cmtseed/${id}/review`, {method:'POST', body:{result, reason}}),
     markPaid: (sales_id, ky) => mut('/markpaid', {method:'POST', body:{sales_id, ky}}),
@@ -699,6 +711,7 @@ const NAV = {
     {key:'new_post', label:'Tạo POST', icon:'📝'},
     {key:'new_cmt', label:'Tạo CMT', icon:'💬'},
     {key:'filming', label:'Quay CT', icon:'🎥'},
+    {key:'imglib', label:'Thư viện ảnh', icon:'🖼'},
     {key:'income', label:'Thu nhập', icon:'💰'},
   ],
   [ROLES.MARKETING]: [
@@ -761,6 +774,7 @@ function Shell(){
       case 'home': return <SalesHome go={setPage}/>;
       case 'new_post': return <SalesNewPost go={setPage}/>;
       case 'new_cmt': return <SalesNewCmt go={setPage}/>;
+      case 'imglib': return <ImageLibrary/>;
       case 'income': return <SalesIncome/>;
       case 'filming': return me.vai_tro===ROLES.SALES ? <SalesFilming/> : me.vai_tro===ROLES.MARKETING ? <MktFilming/> : <AdminFilming/>;
       case 'dash': return <MktDashboard/>;
@@ -1012,7 +1026,7 @@ function SalesNewPost({go}){
   };
 
   return <div className="space-y-4 max-w-2xl">
-    <div className="flex items-center justify-between gap-2 flex-wrap"><h2 className="font-display text-lg font-bold text-ink">📝 Tạo POST seeding</h2><GuideBtn guideKey="post" title="Tạo POST seeding"/></div>
+    <div className="flex items-center justify-between gap-2 flex-wrap"><h2 className="font-display text-lg font-bold text-ink">📝 Tạo POST seeding</h2><div className="flex gap-2"><ImageLibModalBtn/><GuideBtn guideKey="post" title="Tạo POST seeding"/></div></div>
 
     {schedEnabled && (myTurnToday
       ? <div className="bg-emerald-50 border border-emerald-300 rounded-2xl p-3.5 text-sm text-emerald-800">
@@ -1174,7 +1188,7 @@ function SalesNewCmt({go}){
   };
 
   return <div className="space-y-4 max-w-2xl">
-    <div className="flex items-center justify-between gap-2 flex-wrap"><h2 className="font-display text-lg font-bold text-ink">💬 Tạo CMT seeding</h2><GuideBtn guideKey="cmt" title="Tạo CMT seeding"/></div>
+    <div className="flex items-center justify-between gap-2 flex-wrap"><h2 className="font-display text-lg font-bold text-ink">💬 Tạo CMT seeding</h2><div className="flex gap-2"><ImageLibModalBtn/><GuideBtn guideKey="cmt" title="Tạo CMT seeding"/></div></div>
     <Tabs active={tab} onChange={t=>{setTab(t); reset();}} tabs={[
       {key:CMT_LOAI.MINH_DANG, label:'Mình đăng'}, {key:CMT_LOAI.DAO, label:'Dạo'} ]}/>
 
@@ -1361,6 +1375,111 @@ function BreakdownCard({title, data}){
 /* ============================================================
    14. THƯ VIỆN CHUNG (Marketing/Admin)
 ============================================================ */
+// Thư viện ảnh dùng chung — MKT & Sales cùng tải; MKT có chọn nhiều + xoá hàng loạt
+function ImageLibrary(){
+  const { db, me, uploadMedia, createLibImg, deleteLibImg, bulkDeleteLibImg, notify } = useApp();
+  const staff = me.vai_tro!==ROLES.SALES;
+  const imgs = db.media_library||[];
+  const topics = db.content_topics||[];
+  const [q,setQ]=useState(''); const [fMuc,setFMuc]=useState(''); const [fTopic,setFTopic]=useState('');
+  const [selMode,setSelMode]=useState(false); const [sel,setSel]=useState(()=>new Set());
+  const [busy,setBusy]=useState(false); const [edit,setEdit]=useState(null); const [preview,setPreview]=useState(null);
+  const fileRef=useRef();
+  const filtered = imgs.filter(im=> (staff||im.active!==false)
+    && (!fMuc || im.muc_dich===fMuc || (fMuc!=='CA_HAI' && im.muc_dich==='CA_HAI'))
+    && (!fTopic||im.topic_id===fTopic)
+    && (!q || ((im.caption||'')+' '+(im.tags||[]).join(' ')).toLowerCase().includes(q.toLowerCase())));
+  const onFiles = async e=>{ const files=Array.from(e.target.files||[]); e.target.value=''; if(!files.length) return; setBusy(true); let n=0;
+    for(const f of files){ if(!(f.type||'').startsWith('image/')) continue; if(f.size>25*1024*1024){ notify(f.name+' >25MB — bỏ qua','warn'); continue; }
+      try{ const r=await uploadMedia(f); await createLibImg({media_url:r.media_url, muc_dich:'CA_HAI'}); n++; }catch(err){ notify(err.message||'Lỗi tải','err'); } }
+    setBusy(false); if(n) notify('Đã tải '+n+' ảnh lên thư viện'); };
+  const toggleSel=id=> setSel(prev=>{ const s=new Set(prev); s.has(id)?s.delete(id):s.add(id); return s; });
+  const exitSel=()=>{ setSelMode(false); setSel(new Set()); };
+  const allSel = filtered.length>0 && filtered.every(im=>sel.has(im.id));
+  const toggleAll=()=> setSel(allSel?new Set():new Set(filtered.map(im=>im.id)));
+  const bulkDel=async()=>{ const ids=[...sel]; if(!ids.length) return; if(!confirm('Xoá '+ids.length+' ảnh đã chọn khỏi thư viện?')) return; if(await bulkDeleteLibImg(ids)){ notify('Đã xoá '+ids.length+' ảnh'); exitSel(); } };
+  const dl=im=>{ const a=document.createElement('a'); a.href=im.media_url; a.download=((im.caption||'kingsmen').replace(/[^\w-]+/g,'_')||'kingsmen')+'.jpg'; a.target='_blank'; a.rel='noopener'; document.body.appendChild(a); a.click(); a.remove(); };
+  const canEdit=im=> staff || im.uploaded_by===me.id;
+  const remove1=async im=>{ if(!confirm('Xoá ảnh này?')) return; if(await deleteLibImg(im.id)) notify('Đã xoá'); };
+  return <div className="space-y-4">
+    <div className="flex items-center justify-between flex-wrap gap-2">
+      <h2 className="font-display text-lg font-bold text-ink">🖼 Thư viện ảnh seeding</h2>
+      <div className="flex gap-2">
+        {staff && <Btn variant="ghost" onClick={()=> selMode?exitSel():setSelMode(true)}>{selMode?'✕ Xong':'☑ Chọn'}</Btn>}
+        <Btn variant="brand" disabled={busy} onClick={()=>fileRef.current&&fileRef.current.click()}>{busy?'Đang tải…':'⬆ Tải ảnh lên'}</Btn>
+        <input ref={fileRef} type="file" accept="image/*" multiple className="hidden" onChange={onFiles}/>
+      </div>
+    </div>
+    <div className="bg-brand/10 border border-brand/30 rounded-2xl p-2.5 text-[11px] text-brand-dark">Thư viện dùng chung — Marketing & Sales cùng tải ảnh để seeding POST/CMT. Bấm ảnh để xem lớn &amp; tải về.</div>
+    <div className="bg-white rounded-2xl border border-line shadow-card p-3 flex flex-wrap gap-2 items-center">
+      <Input placeholder="Tìm theo mô tả / tag…" value={q} onChange={e=>setQ(e.target.value)} className="flex-1 min-w-[150px]"/>
+      <Select value={fMuc} onChange={e=>setFMuc(e.target.value)} className="max-w-[150px]"><option value="">Mọi mục đích</option>{MUC_DICH_LIB.map(m=><option key={m.v} value={m.v}>{m.ten}</option>)}</Select>
+      <Select value={fTopic} onChange={e=>setFTopic(e.target.value)} className="max-w-[180px]"><option value="">Mọi chủ đề</option>{topics.map(t=><option key={t.id} value={t.id}>{t.chu_de}</option>)}</Select>
+    </div>
+    {selMode && <div className="flex items-center justify-between gap-2 bg-white rounded-xl border border-line shadow-card px-3 py-2 sticky top-2 z-20">
+      <label className="flex items-center gap-2 text-sm font-medium text-ink cursor-pointer select-none"><input type="checkbox" checked={allSel} onChange={toggleAll} className="w-4 h-4 accent-brand"/>Chọn tất cả <span className="text-ink-muted">({sel.size}/{filtered.length})</span></label>
+      <Btn variant="danger" disabled={!sel.size} onClick={bulkDel} className="!py-2">🗑 Xoá đã chọn ({sel.size})</Btn>
+    </div>}
+    {filtered.length===0 ? <Empty>Chưa có ảnh. Bấm "Tải ảnh lên" để đóng góp.</Empty> :
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+        {filtered.map(im=>{ const checked=selMode&&sel.has(im.id); const topic=topics.find(t=>t.id===im.topic_id);
+          return <div key={im.id} className={"bg-white rounded-2xl border overflow-hidden shadow-card "+(checked?'border-brand ring-2 ring-brand/30':'border-line')+(im.active===false?' opacity-60':'')}>
+            <div className="relative aspect-square bg-slate-100 cursor-pointer" onClick={()=> selMode?toggleSel(im.id):setPreview(im)}>
+              <img src={im.media_url} className="w-full h-full object-cover"/>
+              {selMode && <span className={"absolute top-2 left-2 w-6 h-6 rounded-md border flex items-center justify-center text-xs font-bold "+(checked?'bg-brand text-white border-brand':'bg-white/90 text-transparent')}>✓</span>}
+              <span className="absolute bottom-2 left-2 text-[9px] px-1.5 py-0.5 rounded-full bg-black/60 text-white">{mucDichLabel(im.muc_dich)}</span>
+              {im.active===false && <span className="absolute top-2 right-2 text-[9px] px-1.5 py-0.5 rounded-full bg-slate-700 text-white">Ẩn</span>}
+            </div>
+            <div className="p-2">
+              <div className="text-xs font-medium text-ink truncate">{im.caption||<span className="text-slate-300 italic">chưa mô tả</span>}</div>
+              {topic && <div className="text-[10px] text-brand-dark truncate">▸ {topic.chu_de}</div>}
+              <div className="text-[10px] text-slate-400 truncate">bởi {im.uploaded_by_name||'—'}</div>
+              {!selMode && <div className="flex gap-1 mt-1.5">
+                <button onClick={()=>dl(im)} className="flex-1 text-[11px] py-1 rounded-lg bg-brand/10 text-brand-dark hover:bg-brand/20 font-medium">⬇ Tải</button>
+                {canEdit(im) && <button onClick={()=>setEdit(im)} className="text-[11px] px-2 py-1 rounded-lg bg-slate-100 text-slate-600">Sửa</button>}
+                {canEdit(im) && <button onClick={()=>remove1(im)} className="text-[11px] px-2 py-1 rounded-lg bg-rose-50 text-rose-600">Xoá</button>}
+              </div>}
+            </div>
+          </div>; })}
+      </div>}
+    <LibImgEdit img={edit} onClose={()=>setEdit(null)}/>
+    {preview && <div className="fixed inset-0 z-[55] bg-black/80 flex items-center justify-center p-4" onClick={()=>setPreview(null)}>
+      <div className="max-w-2xl w-full" onClick={e=>e.stopPropagation()}>
+        <img src={preview.media_url} className="w-full max-h-[74vh] object-contain rounded-xl"/>
+        <div className="mt-2 flex items-center justify-between gap-2">
+          <div className="text-white text-sm min-w-0"><div className="truncate">{preview.caption||'—'}</div><div className="text-white/50 text-xs">{mucDichLabel(preview.muc_dich)} · bởi {preview.uploaded_by_name}</div></div>
+          <div className="flex gap-2 shrink-0"><Btn variant="brand" onClick={()=>dl(preview)}>⬇ Tải ảnh</Btn><Btn variant="ghost" onClick={()=>setPreview(null)}>Đóng</Btn></div>
+        </div>
+      </div>
+    </div>}
+  </div>;
+}
+function LibImgEdit({img, onClose}){
+  const { db, patchLibImg, notify } = useApp();
+  const [f,setF]=useState(null);
+  useEffect(()=>{ setF(img?{caption:img.caption||'', muc_dich:img.muc_dich||'CA_HAI', topic_id:img.topic_id||'', tags:(img.tags||[]).join(', '), active:img.active!==false}:null); }, [img]);
+  if(!img||!f) return null;
+  const save=async()=>{ const ok=await patchLibImg(img.id, { caption:f.caption.trim(), muc_dich:f.muc_dich, topic_id:f.topic_id||null, tags:f.tags.split(',').map(s=>s.trim()).filter(Boolean), active:f.active }); if(ok){ notify('Đã lưu'); onClose(); } };
+  return <Modal open={!!img} onClose={onClose} title="Sửa ảnh">
+    <div className="rounded-xl overflow-hidden aspect-video bg-slate-100 mb-3"><img src={img.media_url} className="w-full h-full object-contain"/></div>
+    <Field label="Mô tả"><Input value={f.caption} onChange={e=>setF({...f,caption:e.target.value})} placeholder="VD: Keo ColorMatch nền gạch trắng"/></Field>
+    <div className="grid grid-cols-2 gap-2">
+      <Field label="Mục đích"><Select value={f.muc_dich} onChange={e=>setF({...f,muc_dich:e.target.value})}>{MUC_DICH_LIB.map(m=><option key={m.v} value={m.v}>{m.ten}</option>)}</Select></Field>
+      <Field label="Gắn chủ đề"><Select value={f.topic_id} onChange={e=>setF({...f,topic_id:e.target.value})}><option value="">—</option>{db.content_topics.map(t=><option key={t.id} value={t.id}>{t.chu_de}</option>)}</Select></Field>
+    </div>
+    <Field label="Tags (phẩy)"><Input value={f.tags} onChange={e=>setF({...f,tags:e.target.value})} placeholder="gạch trắng, nhà tắm…"/></Field>
+    <label className="flex items-center gap-2 text-sm mb-3 cursor-pointer"><input type="checkbox" checked={f.active} onChange={e=>setF({...f,active:e.target.checked})} className="w-4 h-4 accent-brand"/>Hiện với Sales</label>
+    <div className="flex gap-2"><Btn variant="ghost" onClick={onClose}>Huỷ</Btn><Btn variant="brand" className="flex-1" onClick={save}>Lưu</Btn></div>
+  </Modal>;
+}
+// Nút mở nhanh thư viện ảnh (để Sales chọn/tải ảnh khi tạo POST/CMT)
+function ImageLibModalBtn(){
+  const [open,setOpen]=useState(false);
+  return <>
+    <button onClick={()=>setOpen(true)} className="text-xs font-semibold text-brand-dark bg-brand/10 hover:bg-brand/20 px-2.5 py-1.5 rounded-lg whitespace-nowrap">🖼 Ảnh từ thư viện</button>
+    <Modal open={open} onClose={()=>setOpen(false)} title="🖼 Thư viện ảnh seeding" wide><ImageLibrary/></Modal>
+  </>;
+}
 function Library(){
   const { db, upsertGroup, upsertTopic, upsertCmt, deleteGroup, deleteTopic, deleteCmt, setPostTypePref, notify, audit } = useApp();
   const [tab, setTab] = useState('groups');
@@ -1404,17 +1523,19 @@ function Library(){
     if(await fn(item.id)) notify('Đã xoá');
   };
 
+  const plainTab = tab==='groups'||tab==='topics'||tab==='cmts';
   const tabs = [
     {key:'groups', label:'Group mục tiêu', count:db.groups.length},
     {key:'topics', label:'Chủ đề/Nội dung POST', count:db.content_topics.length},
     {key:'cmts', label:'Gợi ý CMT', count:db.cmt_suggestions.length},
+    {key:'images', label:'🖼 Thư viện ảnh', count:(db.media_library||[]).length},
     {key:'guides', label:'Hướng dẫn'},
   ];
 
   return <div className="space-y-4">
     <div className="flex items-center justify-between flex-wrap gap-2">
       <h2 className="font-display text-lg font-bold text-ink">📚 Thư viện chung</h2>
-      {tab!=='guides' && <div className="flex gap-2">
+      {plainTab && <div className="flex gap-2">
         <Btn variant={selMode?'ghost':'ghost'} onClick={()=>{ setSelMode(m=>!m); setSel(new Set()); }}>{selMode?'✕ Xong':'☑ Chọn'}</Btn>
         <ImportBtn tab={tab}/>
         <Btn variant="brand" onClick={()=>openNew(tab)}>＋ Thêm</Btn>
@@ -1422,7 +1543,9 @@ function Library(){
     </div>
     <Tabs active={tab} onChange={setTab} tabs={tabs}/>
 
-    {selMode && tab!=='guides' && <div className="flex items-center justify-between gap-2 bg-white rounded-xl border border-line shadow-card px-3 py-2 sticky top-2 z-20">
+    {tab==='images' && <ImageLibrary/>}
+
+    {selMode && plainTab && <div className="flex items-center justify-between gap-2 bg-white rounded-xl border border-line shadow-card px-3 py-2 sticky top-2 z-20">
       <label className="flex items-center gap-2 text-sm font-medium text-ink cursor-pointer select-none">
         <input type="checkbox" checked={allSel} onChange={toggleAll} className="w-4 h-4 accent-brand"/>
         Chọn tất cả <span className="text-ink-muted">({sel.size}/{curItems.length})</span>

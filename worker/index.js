@@ -58,6 +58,8 @@ async function ensureSchema(env){
     `CREATE TABLE IF NOT EXISTS post_type_prefs (loai TEXT PRIMARY KEY, an INTEGER DEFAULT 0, uu_tien INTEGER DEFAULT 0, thu_tu INTEGER)`,
     // Lịch đăng POST: mỗi ngày đủ điều kiện 1 suất, xoay vòng Sales + chủ đề gợi ý
     `CREATE TABLE IF NOT EXISTS post_slots (id TEXT PRIMARY KEY, ngay TEXT UNIQUE, sales_id TEXT, topic_id TEXT, post_id TEXT, status TEXT, created_at TEXT)`,
+    // Thư viện ảnh dùng chung (MKT + Sales cùng tải) để seeding POST/CMT
+    `CREATE TABLE IF NOT EXISTS media_library (id TEXT PRIMARY KEY, media_url TEXT, caption TEXT, muc_dich TEXT, topic_id TEXT, tags TEXT, uploaded_by TEXT, uploaded_by_name TEXT, active INTEGER DEFAULT 1, uploaded_at TEXT)`,
   ];
   await env.DB.batch(stmts.map(s=>env.DB.prepare(s)));
   // thêm cột đơn giá quay công trình cho DB cũ (bỏ qua nếu đã có)
@@ -266,12 +268,14 @@ async function bootstrap(env, u){
   (await env.DB.prepare(`SELECT * FROM post_type_prefs`).all()).results.forEach(r=>{ post_type_prefs[r.loai]={ an:uBool(r.an), uu_tien:uBool(r.uu_tien), thu_tu:r.thu_tu==null?null:Number(r.thu_tu) }; });
   const slotSince = ymdPlus(vnDayInfo().ymd, -14).ymd;
   const post_slots = (await env.DB.prepare(`SELECT * FROM post_slots WHERE ngay>=? ORDER BY ngay ASC`).bind(slotSince).all()).results;
+  const media_library = (await env.DB.prepare(`SELECT * FROM media_library ORDER BY uploaded_at DESC`).all()).results
+    .map(r=>({ ...r, active:uBool(r.active), tags: JSON.parse(r.tags||'[]') }));
 
   return {
     me: rowUser(u),
     users, groups, content_topics:topics, cmt_suggestions:cmtsug,
     post_seedings: posts, cmt_seedings: cmtsFull,
-    filming_templates, project_filmings, guides, post_type_prefs, post_slots,
+    filming_templates, project_filmings, guides, post_type_prefs, post_slots, media_library,
     pricing: pricingRow, payouts: [], audit,
   };
 }
@@ -507,6 +511,41 @@ async function handleApi(request, env){
     const tid = body.topic_id!==undefined ? (body.topic_id||null) : s.topic_id;
     await env.DB.prepare(`UPDATE post_slots SET sales_id=?, topic_id=? WHERE id=?`).bind(sid, tid, m[1]).run();
     await logAudit(env,me,'đổi phân công suất đăng','post_slots',m[1]);
+    return json({ db: await bootstrap(env, me) });
+  }
+
+  // ===== THƯ VIỆN ẢNH dùng chung (MKT + Sales cùng tải) =====
+  if(path==='/library' && method==='POST'){
+    if(!(body.media_url||'').trim()) return json({error:'Thiếu ảnh'},400);
+    const id=uid('lib'); const tags=Array.isArray(body.tags)?body.tags:[];
+    await env.DB.prepare(`INSERT INTO media_library (id,media_url,caption,muc_dich,topic_id,tags,uploaded_by,uploaded_by_name,active,uploaded_at) VALUES (?,?,?,?,?,?,?,?,1,?)`)
+      .bind(id,(body.media_url||'').trim(),(body.caption||'').trim(),body.muc_dich||'CA_HAI',body.topic_id||null,JSON.stringify(tags),me.id,me.ho_ten,nowISO()).run();
+    await logAudit(env,me,'tải ảnh thư viện','media_library',id);
+    return json({ db: await bootstrap(env, me) });
+  }
+  if(path==='/library/bulkdelete' && method==='POST'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    const ids=Array.isArray(body.ids)?body.ids:[]; let n=0;
+    for(const id of ids){ const r=await env.DB.prepare(`SELECT media_url FROM media_library WHERE id=?`).bind(id).first(); if(r){ await deleteMediaObject(env,r.media_url); await env.DB.prepare(`DELETE FROM media_library WHERE id=?`).bind(id).run(); n++; } }
+    await logAudit(env,me,'xoá ảnh thư viện hàng loạt','media_library',n+' ảnh');
+    return json({ db: await bootstrap(env, me) });
+  }
+  if((m=path.match(/^\/library\/(.+)$/)) && method==='PATCH'){
+    const id=m[1]; const r=await env.DB.prepare(`SELECT * FROM media_library WHERE id=?`).bind(id).first();
+    if(!r) return json({error:'Không tìm thấy'},404);
+    if(!isStaff(me) && r.uploaded_by!==me.id) return json({error:'Chỉ sửa ảnh của bạn'},403);
+    const caption=body.caption!=null?String(body.caption):r.caption;
+    const muc_dich=body.muc_dich!=null?body.muc_dich:r.muc_dich;
+    const topic_id=body.topic_id!==undefined?(body.topic_id||null):r.topic_id;
+    const tags=body.tags!=null?JSON.stringify(Array.isArray(body.tags)?body.tags:[]):r.tags;
+    const active=body.active!=null?(body.active?1:0):r.active;
+    await env.DB.prepare(`UPDATE media_library SET caption=?, muc_dich=?, topic_id=?, tags=?, active=? WHERE id=?`).bind(caption,muc_dich,topic_id,tags,active,id).run();
+    return json({ db: await bootstrap(env, me) });
+  }
+  if((m=path.match(/^\/library\/(.+)$/)) && method==='DELETE'){
+    const id=m[1]; const r=await env.DB.prepare(`SELECT * FROM media_library WHERE id=?`).bind(id).first();
+    if(r){ if(!isStaff(me) && r.uploaded_by!==me.id) return json({error:'Chỉ xoá ảnh của bạn'},403);
+      await deleteMediaObject(env,r.media_url); await env.DB.prepare(`DELETE FROM media_library WHERE id=?`).bind(id).run(); await logAudit(env,me,'xoá ảnh thư viện','media_library',id); }
     return json({ db: await bootstrap(env, me) });
   }
   if((m=path.match(/^\/posts\/(.+)\/review$/)) && method==='POST'){
