@@ -86,6 +86,8 @@ async function ensureSchema(env){
     // CONTENT OS · P5 — Kho footage tái sử dụng + shot list bám theo kịch bản
     `CREATE TABLE IF NOT EXISTS footage (id TEXT PRIMARY KEY, ten TEXT, mo_ta TEXT, media_url TEXT, media_type TEXT, tags TEXT, san_pham_id TEXT, kenh_id TEXT, dia_diem TEXT, ngay_quay TEXT, nguoi_quay TEXT, active INTEGER DEFAULT 1, created_at TEXT, created_by TEXT, created_by_name TEXT)`,
     `CREATE TABLE IF NOT EXISTS shot_list (id TEXT PRIMARY KEY, script_id TEXT, thu_tu INTEGER, ten_canh TEXT, mo_ta TEXT, goc_may TEXT, thoi_luong INTEGER, footage_id TEXT, trang_thai TEXT, ghi_chu TEXT, created_at TEXT, updated_at TEXT)`,
+    // CONTENT OS · TREND — nghiên cứu & triển khai. KHÔNG scrape (ToS): người tự ghi nhận + đánh giá.
+    `CREATE TABLE IF NOT EXISTS trends (id TEXT PRIMARY KEY, ten TEXT, nguon TEXT, link TEXT, mo_ta TEXT, phat_hien_ngay TEXT, han_dung TEXT, pillar_id TEXT, san_pham_id TEXT, danh_gia TEXT, rui_ro TEXT, trang_thai TEXT, ly_do TEXT, nguoi_de_xuat TEXT, nguoi_duyet_ten TEXT, content_item_id TEXT, script_id TEXT, created_at TEXT, decided_at TEXT)`,
     // CONTENT OS · P10 — Thư viện học. ĐỀ XUẤT do máy rút ra nhưng PHẢI người duyệt mới thành quy tắc.
     `CREATE TABLE IF NOT EXISTS bai_hoc (id TEXT PRIMARY KEY, loai TEXT, tieu_de TEXT, noi_dung TEXT, bang_chung TEXT, so_mau INTEGER DEFAULT 0, nguon_tu_dong INTEGER DEFAULT 0, trang_thai TEXT, nguoi_duyet_ten TEXT, ghi_chu TEXT, created_at TEXT, decided_at TEXT)`,
   ];
@@ -307,6 +309,17 @@ async function ensurePostSlots(env){
 }
 
 // Content OS · P3 — chèn 1 content_item từ body (dùng chung cho tạo & import)
+// TREND — Checklist đánh giá do NGƯỜI tick. Cố ý KHÔNG có mục "dự đoán % viral":
+// app không đoán trend sẽ nổ hay không, chỉ giúp kiểm tra có nên làm và có kịp không.
+const TREND_CHECK = [
+  {k:'hop_pillar',  label:'Gắn được vào trụ cột nội dung / định vị thương hiệu', bat_buoc:true},
+  {k:'co_goc_sp',   label:'Có sản phẩm hoặc góc nhìn thật để gắn vào', bat_buoc:true},
+  {k:'khong_claim', label:'Không buộc phải nói quá / chạm claim cấm', bat_buoc:true},
+  {k:'kip_thoi',    label:'Còn kịp sản xuất trước khi trend nguội', bat_buoc:true},
+  {k:'an_toan',     label:'Không nhạy cảm, không rủi ro hình ảnh thương hiệu', bat_buoc:true},
+  {k:'lam_khac',    label:'Làm được khác biệt, không bắt chước y hệt', bat_buoc:false},
+];
+const TREND_ST = { MOI:'Mới ghi nhận', DANH_GIA:'Đang đánh giá', DUYET:'Duyệt triển khai', TU_CHOI:'Bỏ qua', DA_TRIEN_KHAI:'Đã triển khai' };
 // P10 — Ngưỡng bằng chứng: DƯỚI ngưỡng này thì KHÔNG rút ra kết luận nào.
 // Ranh giới: chỉ tổng hợp cái đã quan sát được; KHÔNG dự đoán viral/%view bằng AI.
 const MIN_MAU_BANG_CHUNG = 5;
@@ -437,6 +450,9 @@ async function bootstrap(env, u){
   const footage = canContent ? (await env.DB.prepare(`SELECT * FROM footage ORDER BY created_at DESC`).all()).results
     .map(r=>({ ...r, active:uBool(r.active), tags: JSON.parse(r.tags||'[]') })) : [];
   const shot_list = canContent ? (await env.DB.prepare(`SELECT * FROM shot_list ORDER BY thu_tu ASC, created_at ASC`).all()).results : [];
+  // TREND — nghiên cứu & triển khai
+  const trends = canContent ? (await env.DB.prepare(`SELECT * FROM trends ORDER BY created_at DESC`).all()).results
+    .map(r=>({ ...r, danh_gia: JSON.parse(r.danh_gia||'{}') })) : [];
   // P10 — thư viện học
   const bai_hoc = canContent ? (await env.DB.prepare(`SELECT * FROM bai_hoc ORDER BY created_at DESC`).all()).results
     .map(r=>({ ...r, bang_chung: JSON.parse(r.bang_chung||'{}') })) : [];
@@ -449,7 +465,7 @@ async function bootstrap(env, u){
     san_pham, claim_cam, pillars, content_strategy,
     frameworks, kenh, content_items, scripts, approvals, air_posts, air_checklist:AIR_CHECKLIST,
     ket_qua, don_cho_gan, muc_tin_cay:MUC_TIN_CAY, nguon_kq:NGUON_KQ,
-    footage, shot_list, bai_hoc, min_mau:MIN_MAU_BANG_CHUNG,
+    footage, shot_list, bai_hoc, min_mau:MIN_MAU_BANG_CHUNG, trends, trend_check:TREND_CHECK,
     pricing: pricingRow, payouts: [], audit,
   };
 }
@@ -1377,6 +1393,73 @@ async function handleApi(request, env){
     if(!isStaff(me)) return json({error:'Không có quyền'},403);
     const r = await cleanupOldMedia(env);
     return json({ db: await bootstrap(env, me), cleaned:r });
+  }
+
+  // ===== CONTENT OS · TREND — nghiên cứu & triển khai =====
+  if(path==='/trends' && method==='POST'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    if(!(body.ten||'').trim()) return json({error:'Nhập tên trend'},400);
+    const id=uid('tr');
+    await env.DB.prepare(`INSERT INTO trends (id,ten,nguon,link,mo_ta,phat_hien_ngay,han_dung,pillar_id,san_pham_id,danh_gia,rui_ro,trang_thai,ly_do,nguoi_de_xuat,created_at) VALUES (?,?,?,?,?,?,?,?,?,'{}',?,'MOI','',?,?)`)
+      .bind(id,(body.ten||'').trim(),(body.nguon||'TIKTOK').trim(),(body.link||'').trim(),(body.mo_ta||'').trim(),
+        (body.phat_hien_ngay||'').trim(),(body.han_dung||'').trim(), body.pillar_id||null, body.san_pham_id||null,
+        (body.rui_ro||'').trim(), me.ho_ten, nowISO()).run();
+    await logAudit(env,me,'ghi nhận trend','trends',id,(body.ten||'').trim());
+    return json({ db: await bootstrap(env, me), id });
+  }
+  if((m=path.match(/^\/trends\/(.+)\/decide$/)) && method==='POST'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    const id=m[1]; const r=await env.DB.prepare(`SELECT * FROM trends WHERE id=?`).bind(id).first();
+    if(!r) return json({error:'Không tìm thấy'},404);
+    if(r.trang_thai==='DA_TRIEN_KHAI') return json({error:'Trend này đã triển khai'},409);
+    const duyet = body.result==='DUYET';
+    if(duyet){
+      // Chỉ cho duyệt khi đã tick ĐỦ mục bắt buộc — tránh chạy theo trend rồi vỡ claim/hình ảnh
+      const dg=JSON.parse(r.danh_gia||'{}');
+      const thieu=TREND_CHECK.filter(c=>c.bat_buoc && !dg[c.k]).map(c=>c.label);
+      if(thieu.length) return json({error:'Chưa đánh giá đủ mục bắt buộc', thieu},422);
+    } else if(!String(body.ly_do||'').trim()) return json({error:'Bỏ qua phải nêu lý do'},400);
+    await env.DB.prepare(`UPDATE trends SET trang_thai=?, ly_do=?, nguoi_duyet_ten=?, decided_at=? WHERE id=?`)
+      .bind(duyet?'DUYET':'TU_CHOI', String(body.ly_do||'').trim(), me.ho_ten, nowISO(), id).run();
+    await logAudit(env,me,(duyet?'duyệt':'bỏ qua')+' trend','trends',id,r.ten||'');
+    return json({ db: await bootstrap(env, me) });
+  }
+  // Triển khai: trend đã duyệt → tạo thẳng 1 mục trong kế hoạch nội dung
+  if((m=path.match(/^\/trends\/(.+)\/trien-khai$/)) && method==='POST'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    const id=m[1]; const r=await env.DB.prepare(`SELECT * FROM trends WHERE id=?`).bind(id).first();
+    if(!r) return json({error:'Không tìm thấy'},404);
+    if(r.trang_thai!=='DUYET') return json({error:'Chỉ triển khai trend ĐÃ DUYỆT'},409);
+    const ciId = await insertContentItem(env, me, {
+      loai: body.loai||'SOCIAL', tieu_de: (body.tieu_de||('[Trend] '+r.ten)).trim(),
+      loai_muc_tieu: body.loai_muc_tieu||'THUONG_HIEU', pillar_id: r.pillar_id||null,
+      framework_id: body.framework_id||null, san_pham_id: r.san_pham_id||null, kenh_id: body.kenh_id||null,
+      thang: (body.thang||'').trim(), trang_thai:'Y_TUONG',
+      chi_tiet: { tu_trend: r.ten, link_trend: r.link||'', han_dung: r.han_dung||'' },
+    });
+    await env.DB.prepare(`UPDATE trends SET trang_thai='DA_TRIEN_KHAI', content_item_id=?, decided_at=? WHERE id=?`).bind(ciId,nowISO(),id).run();
+    await logAudit(env,me,'triển khai trend','trends',id,r.ten||'');
+    return json({ db: await bootstrap(env, me), content_item_id: ciId });
+  }
+  if((m=path.match(/^\/trends\/(.+)$/)) && method==='PATCH'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    const id=m[1]; const r=await env.DB.prepare(`SELECT * FROM trends WHERE id=?`).bind(id).first();
+    if(!r) return json({error:'Không tìm thấy'},404);
+    const g=(k,d)=> body[k]!=null?String(body[k]).trim():d;
+    const dg = body.danh_gia!=null ? JSON.stringify(body.danh_gia) : r.danh_gia;
+    // đang đánh giá dở thì chuyển sang trạng thái DANH_GIA cho đúng thực tế
+    let st = body.trang_thai!=null ? String(body.trang_thai).trim() : r.trang_thai;
+    if(body.danh_gia!=null && st==='MOI') st='DANH_GIA';
+    await env.DB.prepare(`UPDATE trends SET ten=?, nguon=?, link=?, mo_ta=?, phat_hien_ngay=?, han_dung=?, pillar_id=?, san_pham_id=?, danh_gia=?, rui_ro=?, trang_thai=? WHERE id=?`)
+      .bind(g('ten',r.ten),g('nguon',r.nguon),g('link',r.link),g('mo_ta',r.mo_ta),g('phat_hien_ngay',r.phat_hien_ngay),g('han_dung',r.han_dung),
+        body.pillar_id!==undefined?(body.pillar_id||null):r.pillar_id, body.san_pham_id!==undefined?(body.san_pham_id||null):r.san_pham_id,
+        dg, g('rui_ro',r.rui_ro), st, id).run();
+    return json({ db: await bootstrap(env, me) });
+  }
+  if((m=path.match(/^\/trends\/(.+)$/)) && method==='DELETE'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    await env.DB.prepare(`DELETE FROM trends WHERE id=?`).bind(m[1]).run();
+    return json({ db: await bootstrap(env, me) });
   }
 
   // ===== CONTENT OS · P10 — Thư viện học (máy rút đề xuất, NGƯỜI quyết) =====

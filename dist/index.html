@@ -140,6 +140,17 @@ const AIR_CHECKLIST_FE = [
   {k:'hashtag_cta',    label:'Hashtag & CTA đầy đủ', bat_buoc:false},
   {k:'hen_gio',        label:'Đã hẹn giờ / canh khung giờ đăng', bat_buoc:false},
 ];
+const TREND_CHECK_FE = [
+  {k:'hop_pillar',  label:'Gắn được vào trụ cột nội dung / định vị thương hiệu', bat_buoc:true},
+  {k:'co_goc_sp',   label:'Có sản phẩm hoặc góc nhìn thật để gắn vào', bat_buoc:true},
+  {k:'khong_claim', label:'Không buộc phải nói quá / chạm claim cấm', bat_buoc:true},
+  {k:'kip_thoi',    label:'Còn kịp sản xuất trước khi trend nguội', bat_buoc:true},
+  {k:'an_toan',     label:'Không nhạy cảm, không rủi ro hình ảnh thương hiệu', bat_buoc:true},
+  {k:'lam_khac',    label:'Làm được khác biệt, không bắt chước y hệt', bat_buoc:false},
+];
+const TREND_ST_FE = { MOI:'Mới ghi nhận', DANH_GIA:'Đang đánh giá', DUYET:'Duyệt triển khai', TU_CHOI:'Bỏ qua', DA_TRIEN_KHAI:'Đã triển khai' };
+const TREND_ST_STYLE = { MOI:'bg-slate-100 text-slate-600', DANH_GIA:'bg-amber-100 text-amber-700', DUYET:'bg-brand/15 text-brand-dark', TU_CHOI:'bg-slate-100 text-slate-400', DA_TRIEN_KHAI:'bg-emerald-100 text-emerald-700' };
+const TREND_NGUON = ['TIKTOK','FACEBOOK','YOUTUBE','SHOPEE','KHAC'];
 const MUC_TIN_CAY_FE = { TRUC_TIEP:'Trực tiếp', GIAN_TIEP:'Gián tiếp', KHONG_QUY_DON:'Không quy đơn' };
 const MUC_STYLE = { TRUC_TIEP:'bg-emerald-100 text-emerald-700', GIAN_TIEP:'bg-amber-100 text-amber-700', KHONG_QUY_DON:'bg-slate-100 text-slate-600' };
 const NGUON_KQ_FE = [{v:'TIKTOK_SHOP',label:'TikTok Shop'},{v:'SHOPEE',label:'Shopee'},{v:'API_KENH',label:'API kênh (view/tương tác)'},{v:'NHAP_TAY',label:'Nhập tay'}];
@@ -373,7 +384,7 @@ function seedDB(){
     frameworks: ['Chuẩn bán hàng','PAS','Phản biện comment','Test chất lượng','Hành trình thi công','Size / Combo','FOMO','Review KOC','"đừng..." Trend','Q&A khách hàng','So sánh kinh tế','Hướng dẫn thi công'].map((ten,i)=>({id:uid('fw'),ten,mo_ta:'',thu_tu:i+1,active:true,created_at:now()})),
     kenh: [['Fanpage Kingsmen','FANPAGE','Kingsmen'],['TikTok Kingsmen','TIKTOK','Kingsmen'],['YouTube Short Kingsmen','YOUTUBE','Kingsmen'],['Fanpage VKXD','FANPAGE','VKXD'],['TikTok VKXD','TIKTOK','VKXD'],['Shopee VKXD','SHOPEE','VKXD'],['Zalo OA','ZALO_OA','Kingsmen'],['CHÍNH - Vật liệu mới FINEX','TIKTOK','FINEX'],['AFF - Sơn sàn hiệu ứng','TIKTOK','FINEX'],['BC - Vật liệu hoàn thiện','TIKTOK','Kingsmen']].map(([ten,loai,th])=>({id:uid('kn'),ten,loai,thuong_hieu:th,active:true,created_at:now()})),
     content_items: [],
-    scripts: [], approvals: [], air_posts: [], air_checklist: AIR_CHECKLIST_FE, ket_qua: [], don_cho_gan: [], footage: [], shot_list: [], bai_hoc: [], min_mau: MIN_MAU,
+    scripts: [], approvals: [], air_posts: [], air_checklist: AIR_CHECKLIST_FE, ket_qua: [], don_cho_gan: [], footage: [], shot_list: [], bai_hoc: [], min_mau: MIN_MAU, trends: [], trend_check: TREND_CHECK_FE,
     payouts: [],
     audit: [],
   };
@@ -414,7 +425,7 @@ function migrate(db){
   db.kenh ||= [];
   db.content_items ||= [];
   db.scripts ||= []; db.approvals ||= []; db.air_posts ||= []; db.air_checklist ||= AIR_CHECKLIST_FE;
-  db.ket_qua ||= []; db.don_cho_gan ||= []; db.footage ||= []; db.shot_list ||= []; db.bai_hoc ||= []; db.min_mau ||= MIN_MAU;
+  db.ket_qua ||= []; db.don_cho_gan ||= []; db.footage ||= []; db.shot_list ||= []; db.bai_hoc ||= []; db.min_mau ||= MIN_MAU; db.trends ||= []; db.trend_check ||= TREND_CHECK_FE;
   db.post_seedings.forEach(p=>{ p.react ??= 0; p.so_cmt_seeding ??= 0; p.so_cmt_tu_nhien ??= 0; p.thanh_tien ??= 0; });
   db.cmt_seedings.forEach(c=>{ c.proofs ||= []; c.so_cmt_seeding ??= 0; c.react ??= 0; c.so_cmt_tu_nhien ??= 0; c.thanh_tien ??= 0; });
   db.groups.forEach(g=>{ g.uu_tien ??= false; });
@@ -628,6 +639,25 @@ function AppProvider({children}){
         if(result!=='DUYET' && !String(ghi_chu||'').trim()) return {ok:false,msg:'Từ chối phải nêu lý do'};
         Object.assign(b,{trang_thai:result==='DUYET'?'DA_DUYET':'TU_CHOI',nguoi_duyet_ten:meRef.current.ho_ten,ghi_chu:ghi_chu||'',decided_at:now()}); commit(); return {ok:true}; },
       deleteBaiHoc: async id=>{ S.bai_hoc=(S.bai_hoc||[]).filter(x=>x.id!==id); commit(); return true; },
+      addTrend: async o=>{ S.trends ||= []; if(!(o.ten||'').trim()) return {ok:false,msg:'Nhập tên trend'};
+        const id=uid('tr'); S.trends.unshift({ id, ...o, ten:o.ten.trim(), danh_gia:{}, trang_thai:'MOI', ly_do:'', nguoi_de_xuat:meRef.current.ho_ten, created_at:now() }); commit(); return {ok:true,id}; },
+      patchTrend: async (id,patch)=>{ const x=(S.trends||[]).find(y=>y.id===id); if(!x) return false;
+        if(patch.danh_gia && x.trang_thai==='MOI') patch.trang_thai='DANH_GIA'; Object.assign(x,patch); commit(); return true; },
+      decideTrend: async (id,result,ly_do)=>{ const x=(S.trends||[]).find(y=>y.id===id); if(!x) return {ok:false,msg:'Không tìm thấy'};
+        if(x.trang_thai==='DA_TRIEN_KHAI') return {ok:false,msg:'Trend này đã triển khai'};
+        if(result==='DUYET'){ const thieu=(S.trend_check||TREND_CHECK_FE).filter(c=>c.bat_buoc&&!(x.danh_gia||{})[c.k]).map(c=>c.label);
+          if(thieu.length) return {ok:false,thieu,msg:'Chưa đánh giá đủ mục bắt buộc'}; }
+        else if(!String(ly_do||'').trim()) return {ok:false,msg:'Bỏ qua phải nêu lý do'};
+        Object.assign(x,{trang_thai:result==='DUYET'?'DUYET':'TU_CHOI',ly_do:ly_do||'',nguoi_duyet_ten:meRef.current.ho_ten,decided_at:now()}); commit(); return {ok:true}; },
+      trienKhaiTrend: async (id,o)=>{ const x=(S.trends||[]).find(y=>y.id===id); if(!x) return {ok:false,msg:'Không tìm thấy'};
+        if(x.trang_thai!=='DUYET') return {ok:false,msg:'Chỉ triển khai trend ĐÃ DUYỆT'};
+        S.content_items ||= []; const cid=uid('ci');
+        S.content_items.unshift({ id:cid, loai:(o&&o.loai)||'SOCIAL', tieu_de:(o&&o.tieu_de)||('[Trend] '+x.ten), loai_muc_tieu:(o&&o.loai_muc_tieu)||'THUONG_HIEU',
+          pillar_id:x.pillar_id||null, framework_id:(o&&o.framework_id)||null, san_pham_id:x.san_pham_id||null, kenh_id:(o&&o.kenh_id)||null,
+          thang:(o&&o.thang)||'', trang_thai:'Y_TUONG', pic:{}, links:{}, chi_tiet:{tu_trend:x.ten,link_trend:x.link||'',han_dung:x.han_dung||''},
+          created_at:now(), created_by_name:meRef.current.ho_ten, updated_at:now() });
+        Object.assign(x,{trang_thai:'DA_TRIEN_KHAI',content_item_id:cid,decided_at:now()}); commit(); return {ok:true,content_item_id:cid}; },
+      deleteTrend: async id=>{ S.trends=(S.trends||[]).filter(x=>x.id!==id); commit(); return true; },
       skipDon: async (id,ly_do)=>{ const d=(S.don_cho_gan||[]).find(x=>x.id===id); if(!d||d.trang_thai!=='CHO_GAN') return false;
         Object.assign(d,{trang_thai:'BO_QUA',decided_at:now(),decided_by_name:meRef.current.ho_ten}); commit(); return true; },
       decideApproval: async (id,result,ghi_chu)=>{ const ap=(S.approvals||[]).find(a=>a.id===id); if(!ap) return false;
@@ -796,6 +826,13 @@ function AppProvider({children}){
     decideBaiHoc: async (id,result,ghi_chu) => { try { const r=await call('/baihoc/'+id+'/decide',{method:'POST',body:{result,ghi_chu}}); if(r&&r.db) setDb(r.db); return {ok:true}; }
       catch(e){ return {ok:false,msg:e.message}; } },
     deleteBaiHoc: id => mut('/baihoc/'+id, {method:'DELETE'}),
+    addTrend: async o => { try { const r=await call('/trends',{method:'POST',body:o}); if(r&&r.db) setDb(r.db); return {ok:true,id:r.id}; } catch(e){ return {ok:false,msg:e.message}; } },
+    patchTrend: (id,patch) => mut('/trends/'+id, {method:'PATCH', body:patch}),
+    decideTrend: async (id,result,ly_do) => { try { const r=await call('/trends/'+id+'/decide',{method:'POST',body:{result,ly_do}}); if(r&&r.db) setDb(r.db); return {ok:true}; }
+      catch(e){ return {ok:false, thieu:e.thieu, msg:e.message}; } },
+    trienKhaiTrend: async (id,o) => { try { const r=await call('/trends/'+id+'/trien-khai',{method:'POST',body:o||{}}); if(r&&r.db) setDb(r.db); return {ok:true,content_item_id:r.content_item_id}; }
+      catch(e){ return {ok:false,msg:e.message}; } },
+    deleteTrend: id => mut('/trends/'+id, {method:'DELETE'}),
     createCmtSeed: c => mut('/cmtseed', {method:'POST', body:c}),
     reviewCmtSeed: (id, result, reason) => mut(`/cmtseed/${id}/review`, {method:'POST', body:{result, reason}}),
     markPaid: (sales_id, ky) => mut('/markpaid', {method:'POST', body:{sales_id, ky}}),
@@ -1007,6 +1044,7 @@ const NAV_GROUPS = {
       {key:'footage', label:'Kho footage', short:'Footage', icon:'🎞'},
       {key:'ketqua', label:'Kết quả', short:'Kết quả', icon:'📈'},
       {key:'cdash', label:'Dashboard nội dung', short:'Dashboard', icon:'📊'},
+      {key:'trend', label:'Trend', short:'Trend', icon:'🔥'},
       {key:'hoc', label:'Thư viện học', short:'Học', icon:'🎓'},
       {key:'products', label:'Sản phẩm & Claim', short:'Sản phẩm', icon:'🧪'},
     ]},
@@ -1045,6 +1083,7 @@ const NAV_GROUPS = {
       {key:'footage', label:'Kho footage', short:'Footage', icon:'🎞'},
       {key:'ketqua', label:'Kết quả', short:'Kết quả', icon:'📈'},
       {key:'cdash', label:'Dashboard nội dung', short:'Dashboard', icon:'📊'},
+      {key:'trend', label:'Trend', short:'Trend', icon:'🔥'},
       {key:'hoc', label:'Thư viện học', short:'Học', icon:'🎓'},
       {key:'products', label:'Sản phẩm & Claim', short:'Sản phẩm', icon:'🧪'},
     ]},
@@ -1090,7 +1129,7 @@ function ProfileModal({open, onClose}){
   </Modal>;
 }
 // Module đang NÂNG CẤP — chỉ tài khoản dev preview (is_dev) mới thấy
-const BETA_KEYS = new Set(['strategy','plan','products','studio','approve','air','ketqua','footage','cdash','hoc']);
+const BETA_KEYS = new Set(['strategy','plan','products','studio','approve','air','ketqua','footage','cdash','hoc','trend']);
 function Shell(){
   const { me, logout, db } = useApp();
   // Lọc module đang nâng cấp → bỏ nhóm rỗng
@@ -1136,6 +1175,7 @@ function Shell(){
       case 'footage': return <FootageLib/>;
       case 'ketqua': return <KetQua/>;
       case 'cdash': return <ContentDashboard/>;
+      case 'trend': return <TrendModule/>;
       case 'hoc': return <ThuVienHoc/>;
       case 'schedule': return <PostSchedule/>;
       case 'pay_report': return <MktPayReport/>;
@@ -2542,6 +2582,185 @@ function AirEditor({post, onClose}){
 }
 
 /* ============================================================
+   CONTENT OS · TREND — nghiên cứu & triển khai
+   Ranh giới: KHÔNG scrape (ToS) · KHÔNG dự đoán viral. Người ghi nhận, người đánh giá.
+============================================================ */
+function TrendModule(){
+  const { db, addTrend, patchTrend, decideTrend, trienKhaiTrend, deleteTrend, notify } = useApp();
+  const TR=db.trends||[]; const CHK=db.trend_check||TREND_CHECK_FE;
+  const [tab,setTab]=useState('dang_lam'); const [add,setAdd]=useState(false); const [open,setOpen]=useState(null);
+  const homNay=new Date().toISOString().slice(0,10);
+  const conHan=t=>!t.han_dung || t.han_dung>=homNay;
+  const dangLam=TR.filter(t=>['MOI','DANH_GIA','DUYET'].includes(t.trang_thai));
+  const xong=TR.filter(t=>['DA_TRIEN_KHAI','TU_CHOI'].includes(t.trang_thai));
+  const list = tab==='dang_lam' ? dangLam : xong;
+  const sapHet=dangLam.filter(t=>t.han_dung && conHan(t) && (new Date(t.han_dung)-new Date(homNay))/864e5 <= 7);
+  const hetHan=dangLam.filter(t=>t.han_dung && !conHan(t));
+  const cur = open ? TR.find(t=>t.id===open) : null;
+  if(cur) return <TrendDetail trend={cur} onClose={()=>setOpen(null)}/>;
+  return <div className="space-y-4">
+    <div className="flex items-center justify-between flex-wrap gap-2">
+      <h2 className="font-display text-lg font-bold text-ink">🔥 Trend</h2>
+      <Btn variant="brand" onClick={()=>setAdd(true)}>＋ Ghi nhận trend</Btn>
+    </div>
+    <div className="bg-white rounded-2xl border border-line shadow-card p-3 text-[11px] text-slate-500 leading-relaxed">
+      Bạn <b>tự phát hiện và ghi nhận</b> trend (app không tự quét — nền tảng không cho phép), rồi đánh giá theo checklist trước khi làm.
+      App <b>không đoán trend sẽ nổ hay không</b> — chỉ giúp kiểm tra <b>có nên làm</b>, <b>có kịp không</b>, và <b>có an toàn không</b>.
+    </div>
+    {hetHan.length>0 && <div className="rounded-2xl border border-rose-200 bg-rose-50 p-3 text-[11px] text-rose-700">
+      ⏰ <b>{hetHan.length} trend đã quá hạn</b> mà chưa triển khai — trend nguội thì làm nữa cũng ít tác dụng, nên bỏ qua để tập trung cái còn kịp.
+    </div>}
+    {sapHet.length>0 && <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3 text-[11px] text-amber-800">
+      ⚡ <b>{sapHet.length} trend sắp hết hạn</b> (còn ≤7 ngày) — quyết sớm kẻo lỡ nhịp.
+    </div>}
+    <div className="flex gap-1 bg-slate-100 rounded-xl p-1 w-fit">
+      <button onClick={()=>setTab('dang_lam')} className={"px-3 py-1 rounded-lg text-xs font-semibold "+(tab==='dang_lam'?'bg-white text-ink shadow-sm':'text-slate-500')}>Đang xử lý ({dangLam.length})</button>
+      <button onClick={()=>setTab('xong')} className={"px-3 py-1 rounded-lg text-xs font-semibold "+(tab==='xong'?'bg-white text-ink shadow-sm':'text-slate-500')}>Đã xong ({xong.length})</button>
+    </div>
+    {list.length===0 ? <Empty>{tab==='dang_lam'?'Chưa có trend nào đang xử lý.':'Chưa có trend nào đã xong.'}</Empty> :
+      <div className="grid sm:grid-cols-2 gap-3">{list.map(t=>{
+        const dg=t.danh_gia||{}; const dat=CHK.filter(c=>c.bat_buoc&&dg[c.k]).length; const tong=CHK.filter(c=>c.bat_buoc).length;
+        return <div key={t.id} className="bg-white rounded-2xl border border-line shadow-card p-3">
+          <div className="flex items-start gap-2 flex-wrap">
+            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-600">{t.nguon}</span>
+            <span className={"text-[10px] px-1.5 py-0.5 rounded-full font-semibold ml-auto "+(TREND_ST_STYLE[t.trang_thai]||'')}>{TREND_ST_FE[t.trang_thai]}</span>
+          </div>
+          <div className="font-display font-bold text-ink text-sm mt-2">{t.ten}</div>
+          {t.mo_ta && <div className="text-xs text-slate-500 mt-0.5 line-clamp-2">{t.mo_ta}</div>}
+          <div className="flex items-center gap-2 mt-2 flex-wrap">
+            {t.han_dung && <span className={"text-[10px] px-1.5 py-0.5 rounded-full "+(conHan(t)?'bg-slate-100 text-slate-500':'bg-rose-100 text-rose-600 font-semibold')}>
+              {conHan(t)?'Hạn '+t.han_dung:'Quá hạn '+t.han_dung}</span>}
+            {['MOI','DANH_GIA'].includes(t.trang_thai) && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500">Đánh giá {dat}/{tong}</span>}
+          </div>
+          <div className="flex items-center justify-between mt-3 pt-2 border-t border-line/60">
+            <span className="text-[10px] text-slate-400">{t.nguoi_de_xuat||''}</span>
+            <button onClick={()=>setOpen(t.id)} className="text-xs text-brand-dark font-semibold hover:underline">Mở →</button>
+          </div>
+        </div>; })}
+      </div>}
+    {add && <TrendForm onClose={()=>setAdd(false)}/>}
+  </div>;
+}
+function TrendForm({onClose}){
+  const { db, addTrend, notify } = useApp();
+  const [f,setF]=useState({ten:'',nguon:'TIKTOK',link:'',mo_ta:'',phat_hien_ngay:new Date().toISOString().slice(0,10),han_dung:'',pillar_id:'',san_pham_id:'',rui_ro:''});
+  const [busy,setBusy]=useState(false);
+  const save=async()=>{ if(!f.ten.trim()) return notify('Nhập tên trend','warn');
+    setBusy(true); const r=await addTrend({...f,pillar_id:f.pillar_id||null,san_pham_id:f.san_pham_id||null}); setBusy(false);
+    if(r&&r.ok){ notify('Đã ghi nhận trend'); onClose(); } else notify((r&&r.msg)||'Lỗi','err'); };
+  return <Modal open={true} onClose={onClose} title="Ghi nhận trend" wide>
+    <Field label="Tên trend" required><Input value={f.ten} onChange={e=>setF({...f,ten:e.target.value})} placeholder='VD: Trend "đừng mua nếu chưa biết…"'/></Field>
+    <div className="grid sm:grid-cols-2 gap-2">
+      <Field label="Nguồn"><Select value={f.nguon} onChange={e=>setF({...f,nguon:e.target.value})}>{TREND_NGUON.map(n=><option key={n} value={n}>{n}</option>)}</Select></Field>
+      <Field label="Link tham khảo"><Input value={f.link} onChange={e=>setF({...f,link:e.target.value})} placeholder="https://…"/></Field>
+    </div>
+    <Field label="Mô tả — trend này là gì, vì sao đáng chú ý" hint="Tự ghi bằng quan sát của bạn; app không đọc nội dung từ link">
+      <Textarea rows="3" value={f.mo_ta} onChange={e=>setF({...f,mo_ta:e.target.value})}/></Field>
+    <div className="grid sm:grid-cols-2 gap-2">
+      <Field label="Phát hiện ngày"><Input type="date" value={f.phat_hien_ngay} onChange={e=>setF({...f,phat_hien_ngay:e.target.value})}/></Field>
+      <Field label="Hạn dùng (trend nguội sau)" hint="Để app nhắc trước khi lỡ nhịp"><Input type="date" value={f.han_dung} onChange={e=>setF({...f,han_dung:e.target.value})}/></Field>
+    </div>
+    <div className="grid sm:grid-cols-2 gap-2">
+      <Field label="Gắn trụ cột"><Select value={f.pillar_id} onChange={e=>setF({...f,pillar_id:e.target.value})}><option value="">—</option>{(db.pillars||[]).map(p=><option key={p.id} value={p.id}>{p.ten}</option>)}</Select></Field>
+      <Field label="Gắn sản phẩm"><Select value={f.san_pham_id} onChange={e=>setF({...f,san_pham_id:e.target.value})}><option value="">—</option>{(db.san_pham||[]).map(p=><option key={p.id} value={p.id}>{p.ten}</option>)}</Select></Field>
+    </div>
+    <Field label="Rủi ro cần lưu ý"><Input value={f.rui_ro} onChange={e=>setF({...f,rui_ro:e.target.value})} placeholder="VD: dễ bị hiểu là nói xấu đối thủ"/></Field>
+    <div className="flex gap-2 mt-3"><Btn variant="ghost" onClick={onClose} disabled={busy}>Huỷ</Btn><Btn variant="brand" className="flex-1" onClick={save} disabled={busy}>{busy?'…':'Lưu'}</Btn></div>
+  </Modal>;
+}
+function TrendDetail({trend,onClose}){
+  const { db, patchTrend, decideTrend, trienKhaiTrend, deleteTrend, notify } = useApp();
+  const CHK=db.trend_check||TREND_CHECK_FE;
+  const [dg,setDg]=useState(trend.danh_gia||{});
+  const [reject,setReject]=useState(false); const [ly,setLy]=useState(''); const [tk,setTk]=useState(false); const [busy,setBusy]=useState(false);
+  const thieu=CHK.filter(c=>c.bat_buoc&&!dg[c.k]);
+  const t=(db.trends||[]).find(x=>x.id===trend.id)||trend;
+  const tick=async(k,v)=>{ const n={...dg,[k]:v}; setDg(n); await patchTrend(t.id,{danh_gia:n}); };
+  const duyet=async()=>{ setBusy(true); const r=await decideTrend(t.id,'DUYET',''); setBusy(false);
+    if(r&&r.ok) notify('Đã duyệt — giờ có thể triển khai thành nội dung');
+    else if(r&&r.thieu) notify('Còn thiếu: '+r.thieu.join(' · '),'err'); else notify((r&&r.msg)||'Lỗi','err'); };
+  const boQua=async()=>{ if(!ly.trim()) return notify('Nhập lý do','warn');
+    const r=await decideTrend(t.id,'TU_CHOI',ly.trim()); if(r&&r.ok){ notify('Đã bỏ qua'); setReject(false); } else notify((r&&r.msg)||'Lỗi','err'); };
+  return <div className="space-y-4">
+    <div className="flex items-center gap-2">
+      <button onClick={onClose} className="text-sm text-slate-500 hover:underline">← Danh sách</button>
+      <h2 className="font-display text-lg font-bold text-ink flex-1 truncate">{t.ten}</h2>
+      <span className={"text-[11px] px-2 py-0.5 rounded-full font-semibold "+(TREND_ST_STYLE[t.trang_thai]||'')}>{TREND_ST_FE[t.trang_thai]}</span>
+    </div>
+    <div className="bg-white rounded-2xl border border-line shadow-card p-4 space-y-1">
+      <div className="flex flex-wrap gap-2 text-[11px]">
+        <span className="px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-600">{t.nguon}</span>
+        {t.phat_hien_ngay && <span className="text-slate-400">Phát hiện {t.phat_hien_ngay}</span>}
+        {t.han_dung && <span className="text-slate-400">· Hạn {t.han_dung}</span>}
+      </div>
+      {t.link && <a href={t.link} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-500 hover:underline break-all block">{t.link}</a>}
+      {t.mo_ta && <div className="text-sm text-ink mt-1 whitespace-pre-wrap">{t.mo_ta}</div>}
+      {t.rui_ro && <div className="text-[11px] text-amber-700 mt-1">⚠ Rủi ro: {t.rui_ro}</div>}
+      {t.ly_do && <div className="text-[11px] text-rose-600 mt-1">Lý do bỏ qua: “{t.ly_do}”</div>}
+    </div>
+
+    {['MOI','DANH_GIA'].includes(t.trang_thai) && <div className="bg-white rounded-2xl border border-line shadow-card p-4">
+      <div className="flex items-center justify-between mb-2">
+        <div className="text-sm font-semibold text-ink">Đánh giá trước khi làm</div>
+        <span className={"text-[11px] px-2 py-0.5 rounded-full font-semibold "+(thieu.length?'bg-amber-100 text-amber-700':'bg-emerald-100 text-emerald-700')}>
+          {thieu.length?thieu.length+' mục còn thiếu':'Đủ điều kiện ✓'}</span>
+      </div>
+      <div className="space-y-1">{CHK.map(c=>
+        <label key={c.k} className="flex items-start gap-2 rounded-xl p-2 hover:bg-slate-50 cursor-pointer">
+          <input type="checkbox" checked={!!dg[c.k]} onChange={e=>tick(c.k,e.target.checked)} className="mt-0.5 w-4 h-4 accent-brand shrink-0"/>
+          <span className="text-sm text-ink flex-1">{c.label}</span>
+          {c.bat_buoc && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-rose-50 text-rose-500 shrink-0">bắt buộc</span>}
+        </label>)}
+      </div>
+      <div className="text-[10px] text-slate-400 mt-2">Cố ý <b>không có mục chấm điểm khả năng viral</b> — không ai đoán được, và đoán sai sẽ dẫn tới quyết định sai.</div>
+      <div className="flex gap-2 mt-3">
+        <Btn variant="ghost" onClick={()=>{ setReject(true); setLy(''); }}>Bỏ qua trend</Btn>
+        <Btn variant="brand" className="flex-1" onClick={duyet} disabled={busy||thieu.length>0}>{thieu.length?'Tick đủ mục bắt buộc để duyệt':'✓ Duyệt triển khai'}</Btn>
+      </div>
+    </div>}
+
+    {t.trang_thai==='DUYET' && <div className="bg-white rounded-2xl border border-line shadow-card p-4">
+      <div className="text-sm font-semibold text-ink mb-1">Triển khai thành nội dung</div>
+      <div className="text-[11px] text-slate-500 mb-2">Tạo một mục trong <b>Kế hoạch nội dung</b>, kế thừa trụ cột & sản phẩm của trend, và <b>ghi lại nguồn gốc từ trend nào</b> để sau này truy vết được kết quả.</div>
+      <Btn variant="brand" onClick={()=>setTk(true)}>🚀 Đưa vào kế hoạch nội dung</Btn>
+    </div>}
+
+    {t.trang_thai==='DA_TRIEN_KHAI' && <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-3 text-[11px] text-emerald-800">
+      ✓ Đã tạo mục trong Kế hoạch nội dung. Mở <b>Content → Kế hoạch</b> để soạn kịch bản và đi tiếp quy trình duyệt → đăng → đo.
+    </div>}
+
+    <div className="flex justify-end">
+      <button onClick={()=>{ if(confirm('Xoá trend này?')) deleteTrend(t.id).then(ok=>{ if(ok){ notify('Đã xoá'); onClose(); } }); }} className="text-xs text-rose-400 hover:underline">Xoá trend</button>
+    </div>
+
+    {reject && <Modal open={true} onClose={()=>setReject(false)} title="Bỏ qua trend — nêu lý do">
+      <p className="text-xs text-slate-500 mb-2">Ghi lại để lần sau gặp trend tương tự không mất công đánh giá lại.</p>
+      <Textarea rows="3" value={ly} onChange={e=>setLy(e.target.value)} placeholder="VD: không gắn được sản phẩm nào, rủi ro hiểu nhầm…"/>
+      <div className="flex gap-2 mt-3"><Btn variant="ghost" onClick={()=>setReject(false)}>Huỷ</Btn><Btn variant="brand" className="flex-1" onClick={boQua}>Bỏ qua</Btn></div>
+    </Modal>}
+    {tk && <TrendTrienKhai trend={t} onClose={()=>setTk(false)} onDone={onClose}/>}
+  </div>;
+}
+function TrendTrienKhai({trend,onClose,onDone}){
+  const { db, trienKhaiTrend, notify } = useApp();
+  const [f,setF]=useState({tieu_de:'[Trend] '+trend.ten, loai:'SOCIAL', loai_muc_tieu:'THUONG_HIEU', kenh_id:'', framework_id:'', thang:(trend.han_dung||'').slice(0,7)});
+  const [busy,setBusy]=useState(false);
+  const go=async()=>{ setBusy(true); const r=await trienKhaiTrend(trend.id,{...f,kenh_id:f.kenh_id||null,framework_id:f.framework_id||null}); setBusy(false);
+    if(r&&r.ok){ notify('Đã đưa vào Kế hoạch nội dung'); onClose(); onDone&&onDone(); } else notify((r&&r.msg)||'Lỗi','err'); };
+  return <Modal open={true} onClose={onClose} title="Đưa trend vào kế hoạch nội dung" wide>
+    <Field label="Tiêu đề nội dung"><Input value={f.tieu_de} onChange={e=>setF({...f,tieu_de:e.target.value})}/></Field>
+    <div className="grid sm:grid-cols-2 gap-2">
+      <Field label="Loại"><Select value={f.loai} onChange={e=>setF({...f,loai:e.target.value})}><option value="SOCIAL">SOCIAL</option><option value="ECOM">ECOM</option></Select></Field>
+      <Field label="Mục tiêu"><Select value={f.loai_muc_tieu} onChange={e=>setF({...f,loai_muc_tieu:e.target.value})}>{LOAI_MUC_TIEU_KPI.map(o=><option key={o.v} value={o.v}>{o.label}</option>)}</Select></Field>
+      <Field label="Kênh"><Select value={f.kenh_id} onChange={e=>setF({...f,kenh_id:e.target.value})}><option value="">—</option>{(db.kenh||[]).map(k=><option key={k.id} value={k.id}>{k.ten}</option>)}</Select></Field>
+      <Field label="Framework"><Select value={f.framework_id} onChange={e=>setF({...f,framework_id:e.target.value})}><option value="">—</option>{(db.frameworks||[]).map(x=><option key={x.id} value={x.id}>{x.ten}</option>)}</Select></Field>
+    </div>
+    <Field label="Tháng (YYYY-MM)"><Input value={f.thang} onChange={e=>setF({...f,thang:e.target.value})} placeholder="2026-08"/></Field>
+    <div className="flex gap-2 mt-3"><Btn variant="ghost" onClick={onClose} disabled={busy}>Huỷ</Btn><Btn variant="brand" className="flex-1" onClick={go} disabled={busy}>{busy?'…':'Tạo nội dung'}</Btn></div>
+  </Modal>;
+}
+
+/* ============================================================
    CONTENT OS · P10 — THƯ VIỆN HỌC (máy rút đề xuất · NGƯỜI quyết)
    Ranh giới: KHÔNG dự đoán viral. Chỉ tổng hợp cái đã quan sát, đủ mẫu mới kết luận.
 ============================================================ */
@@ -2635,8 +2854,126 @@ function BaiHocForm({onClose}){
    Nguyên tắc: KHÔNG cộng dồn 3 mức tin cậy · KHÔNG xếp hạng khi chưa đủ mẫu.
 ============================================================ */
 const MIN_MAU = 5;   // dưới ngưỡng này thì hiện số nhưng KHÔNG xếp hạng (tránh oan cho người ít việc)
+// Kế hoạch vs Thực hiện — đối chiếu cái ĐỊNH LÀM với cái ĐÃ LÀM, và chỉ ra nghẽn ở khâu nào
+function KeHoachVsThucHien(){
+  const { db } = useApp();
+  const CI=db.content_items||[], AIR=db.air_posts||[], PIL=db.pillars||[], KENH=db.kenh||[];
+  const thangList=[...new Set(CI.map(c=>c.thang).filter(Boolean))].sort().reverse();
+  const [thang,setThang]=useState('');
+  const inT=c=>!thang || (c.thang||'')===thang;
+  const keHoach=CI.filter(inT);
+  // "đã đăng" = có bài đăng DA_DANG trỏ về nội dung/kịch bản đó
+  const scrOf={}; (db.scripts||[]).forEach(s=>scrOf[s.id]=s);
+  const daDangIds=new Set();
+  AIR.filter(a=>a.trang_thai==='DA_DANG').forEach(a=>{
+    if(a.content_item_id) daDangIds.add(a.content_item_id);
+    const sc=a.script_id?scrOf[a.script_id]:null;
+    if(sc&&sc.content_item_id) daDangIds.add(sc.content_item_id);
+  });
+  const daDang=keHoach.filter(c=>daDangIds.has(c.id)).length;
+  const pct=keHoach.length?Math.round(daDang/keHoach.length*100):0;
+
+  // Nghẽn ở khâu nào: đếm theo trạng thái pipeline
+  const theoTrangThai={};
+  keHoach.forEach(c=>{ const k=c.trang_thai||'(chưa đặt)'; theoTrangThai[k]=(theoTrangThai[k]||0)+1; });
+
+  // Pillar: tỷ trọng MỤC TIÊU (ty_trong) vs tỷ trọng THỰC TẾ trong kế hoạch
+  const pilRows=PIL.filter(p=>p.active!==false).map(p=>{
+    const n=keHoach.filter(c=>c.pillar_id===p.id).length;
+    const thucTe=keHoach.length?(n/keHoach.length*100):0;
+    const mucTieu=Number(p.ty_trong)||0;
+    return { ...p, n, thucTe, mucTieu, lech: thucTe-mucTieu };
+  });
+  const chuaGanPillar=keHoach.filter(c=>!c.pillar_id).length;
+
+  // Kênh
+  const kenhRows=KENH.filter(k=>k.active!==false).map(k=>{
+    const kh=keHoach.filter(c=>c.kenh_id===k.id).length;
+    const dd=keHoach.filter(c=>c.kenh_id===k.id&&daDangIds.has(c.id)).length;
+    return { ...k, kh, dd };
+  }).filter(k=>k.kh>0);
+
+  const Bar=({a,b,warn})=> <div className="h-1.5 rounded-full bg-slate-100 overflow-hidden">
+    <div className="h-full rounded-full" style={{width:Math.min(100,b?Math.round(a/b*100):0)+'%', background:warn?'#f59e0b':'#0a92b4'}}></div></div>;
+
+  return <div className="space-y-4">
+    <div className="flex items-center justify-between flex-wrap gap-2">
+      <div className="text-sm font-semibold text-ink">Kế hoạch vs Thực hiện</div>
+      <Select value={thang} onChange={e=>setThang(e.target.value)} className="w-auto"><option value="">Tất cả tháng</option>{thangList.map(t=><option key={t} value={t}>{t}</option>)}</Select>
+    </div>
+
+    {keHoach.length===0 ? <Empty>Chưa có nội dung nào trong kế hoạch{thang?(' tháng '+thang):''}.</Empty> : <>
+      <div className="grid sm:grid-cols-3 gap-3">
+        <div className="bg-white rounded-2xl border border-line shadow-card p-3">
+          <div className="text-[11px] text-ink-muted uppercase tracking-wide">Đã lên kế hoạch</div>
+          <div className="text-2xl font-display font-bold text-ink">{keHoach.length}</div>
+        </div>
+        <div className="bg-white rounded-2xl border border-line shadow-card p-3">
+          <div className="text-[11px] text-ink-muted uppercase tracking-wide">Đã đăng thật</div>
+          <div className="text-2xl font-display font-bold text-ink">{daDang}</div>
+        </div>
+        <div className={"rounded-2xl border shadow-card p-3 "+(pct>=80?'bg-emerald-50 border-emerald-200':pct>=50?'bg-amber-50 border-amber-200':'bg-rose-50 border-rose-200')}>
+          <div className="text-[11px] text-ink-muted uppercase tracking-wide">Tỷ lệ hoàn thành</div>
+          <div className="text-2xl font-display font-bold text-ink">{pct}%</div>
+          <div className="text-[10px] text-ink-muted mt-0.5">{keHoach.length-daDang} mục chưa lên sóng</div>
+        </div>
+      </div>
+
+      {/* Nghẽn ở khâu nào */}
+      <div className="bg-white rounded-2xl border border-line shadow-card p-4">
+        <div className="text-sm font-semibold text-ink mb-1">Đang nghẽn ở khâu nào</div>
+        <div className="text-[11px] text-slate-500 mb-2">Nhìn chỗ dồn nhiều nhất để biết nên gỡ ở đâu, thay vì chỉ thấy “chậm tiến độ”.</div>
+        <div className="space-y-1.5">{Object.keys(theoTrangThai).sort((a,b)=>theoTrangThai[b]-theoTrangThai[a]).map(k=>
+          <div key={k} className="flex items-center gap-2">
+            <span className="text-xs text-ink w-32 shrink-0 truncate">{(PIPELINE.find(p=>p.v===k)||{}).label||k}</span>
+            <div className="flex-1"><Bar a={theoTrangThai[k]} b={keHoach.length}/></div>
+            <span className="text-xs font-semibold text-ink w-8 text-right">{theoTrangThai[k]}</span>
+          </div>)}
+        </div>
+      </div>
+
+      {/* Pillar: mục tiêu vs thực tế */}
+      <div className="bg-white rounded-2xl border border-line shadow-card p-4">
+        <div className="text-sm font-semibold text-ink mb-1">Phân bổ trụ cột — mục tiêu vs thực tế</div>
+        <div className="text-[11px] text-slate-500 mb-2">Lệch quá <b>15%</b> nghĩa là đang làm khác chiến lược đã đặt ra.</div>
+        {pilRows.length===0 ? <Empty>Chưa có trụ cột.</Empty> :
+          <div className="space-y-2">{pilRows.map(p=>{ const lech=Math.abs(p.lech)>15;
+            return <div key={p.id}>
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-semibold text-ink">{p.ten}</span>
+                <span className={lech?'text-amber-600 font-semibold':'text-slate-500'}>
+                  {Math.round(p.thucTe)}% thực tế / {p.mucTieu}% mục tiêu {lech?(p.lech>0?'· cao hơn':'· thấp hơn'):''}
+                </span>
+              </div>
+              <div className="mt-1"><Bar a={p.thucTe} b={100} warn={lech}/></div>
+            </div>; })}
+          </div>}
+        {chuaGanPillar>0 && <div className="text-[11px] text-amber-600 mt-2">⚠ {chuaGanPillar} nội dung chưa gắn trụ cột — chưa tính vào tỷ lệ trên.</div>}
+      </div>
+
+      {/* Kênh */}
+      {kenhRows.length>0 && <div className="bg-white rounded-2xl border border-line shadow-card p-4">
+        <div className="text-sm font-semibold text-ink mb-2">Theo kênh</div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs min-w-[380px]">
+            <thead><tr className="text-left text-ink-muted border-b border-line"><th className="py-1.5 pr-2">Kênh</th><th className="py-1.5 px-2">Kế hoạch</th><th className="py-1.5 px-2">Đã đăng</th><th className="py-1.5 px-2">Hoàn thành</th></tr></thead>
+            <tbody>{kenhRows.map(k=>
+              <tr key={k.id} className="border-b border-line/50">
+                <td className="py-1.5 pr-2 font-semibold text-ink">{k.ten}</td>
+                <td className="py-1.5 px-2">{k.kh}</td>
+                <td className="py-1.5 px-2">{k.dd}</td>
+                <td className="py-1.5 px-2">{k.kh?Math.round(k.dd/k.kh*100)+'%':'—'}</td>
+              </tr>)}
+            </tbody>
+          </table>
+        </div>
+      </div>}
+    </>}
+  </div>;
+}
 function ContentDashboard(){
   const { db } = useApp();
+  const [view,setView]=useState('kpi');
   const [ky,setKy]=useState('');
   const SCR=db.scripts||[], AIR=db.air_posts||[], KQ=db.ket_qua||[], AP=db.approvals||[], CI=db.content_items||[];
   const kyList=[...new Set(KQ.map(k=>k.ky).filter(Boolean))].sort().reverse();
@@ -2696,8 +3033,15 @@ function ContentDashboard(){
   return <div className="space-y-4">
     <div className="flex items-center justify-between flex-wrap gap-2">
       <h2 className="font-display text-lg font-bold text-ink">📊 Dashboard nội dung</h2>
-      <Select value={ky} onChange={e=>setKy(e.target.value)} className="w-auto"><option value="">Tất cả kỳ</option>{kyList.map(k=><option key={k} value={k}>{k}</option>)}</Select>
+      {view==='kpi' && <Select value={ky} onChange={e=>setKy(e.target.value)} className="w-auto"><option value="">Tất cả kỳ</option>{kyList.map(k=><option key={k} value={k}>{k}</option>)}</Select>}
     </div>
+
+    <div className="flex gap-1 bg-slate-100 rounded-xl p-1 w-fit">
+      {[['kpi','KPI & hiệu suất'],['kh','Kế hoạch vs Thực hiện']].map(([k,l])=>
+        <button key={k} onClick={()=>setView(k)} className={"px-3 py-1 rounded-lg text-xs font-semibold whitespace-nowrap "+(view===k?'bg-white text-ink shadow-sm':'text-slate-500')}>{l}</button>)}
+    </div>
+
+    {view==='kh' ? <KeHoachVsThucHien/> : <>
 
     <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3 text-[11px] text-amber-800 leading-relaxed">
       <b>Cách đọc bảng này:</b> 4 hệ KPI đo 4 mục tiêu khác nhau nên <b>không so trực tiếp với nhau</b>;
@@ -2792,6 +3136,7 @@ function ContentDashboard(){
           </div>)}
         </div>}
     </div>
+    </>}
   </div>;
 }
 
