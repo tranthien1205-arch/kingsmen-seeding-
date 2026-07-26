@@ -234,7 +234,12 @@ Bảng `bai_hoc` (loai, tieu_de, noi_dung, bang_chung JSON, so_mau, nguon_tu_don
 - (Không còn cần `pillars.json`/`frameworks.json` riêng — đã có trong 2 file Excel.)
 
 ## 9. RÀNG BUỘC ĐÃ BIẾT (đừng hứa quá)
-- KHÔNG auto-post (TikTok Content Posting API cần audit → SELF_ONLY). Đăng thủ công theo checklist.
+- **Auto-post: TUỲ NỀN TẢNG** (cập nhật — user yêu cầu nâng cấp). `KENH_TU_DONG` khai báo rõ: Facebook Page / YouTube / Zalo OA **đăng tự động được** (cần token + app review); **TikTok = false** vì chưa qua audit thì bài ra SELF_ONLY → auto-post vô nghĩa; Shopee/Website = đăng tay.
+  - **Token KHÔNG lưu D1** (không mã hoá, rò rỉ = mất quyền đăng Page thật) → đọc từ **secret Worker** theo quy ước `TOKEN_<api_ma>` qua `layToken()`.
+  - Cron `*/15 * * * *` chạy `chayLichDang()`. **Handler `scheduled` PHẢI tách theo `controller.cron`** — nếu không, việc hằng ngày (dọn media, ghi nhật ký) sẽ chạy mỗi 15 phút và làm rác nhật ký.
+  - Trạng thái: `CHUAN_BI → DA_LEN_LICH → (DA_DANG | LOI | DEN_GIO)`. **Không tự động được hoặc lỗi → `DEN_GIO`, KHÔNG BAO GIỜ tự đánh dấu đã đăng.** Thử tối đa `MAX_LAN_THU=3` rồi chuyển đăng tay. Bài `DEN_GIO`/`LOI` vào nhắc việc.
+  - Bật tự động bị **chặn ngay lúc lên lịch** nếu kênh chưa đủ điều kiện (422 kèm lý do) — không để đến giờ mới vỡ. **Đăng tự động vẫn phải xong checklist**, không có ngoại lệ.
+  - UI: `KenhManager` (nav `kenh`, nhóm Hệ thống) cấu hình kênh; `LichDangBox` trong trình soạn bài đăng. (21 test, gồm cả đường thất bại)
 - Không scrape Creative Center / không đọc nội dung từ link Facebook (ToS).
 - Đo lường: chỉ API kênh sở hữu + nhập tay; 3 mức tin cậy, KHÔNG cộng dồn thành "doanh thu từ content".
 - Đơn Shopee mơ hồ (1 voucher nhiều video) → hàng đợi gán tay, KHÔNG chia đều.
@@ -264,7 +269,7 @@ Tokens Tailwind (inline config trong `seeding-app.html`): `ink #0b3543` (soft #1
   **Chảy ngược:** `gomSeedingTheoNoiDung()` gom số bài / bài đạt / react / cmt về từng `content_item`; hiện ở cột **Seeding** trong Kế hoạch nội dung. **CHỦ Ý chỉ đếm, KHÔNG quy ra doanh thu** — seeding không quy đơn được (§9), có test chặn hồi quy. (18 test)
 - ▶️ **Kế tiếp:** gỡ `BETA_KEYS` khi user duyệt xong; thêm `TRUONG_MKT`/`GIAM_DOC`; nâng P4 lên gợi ý AI khi có `ANTHROPIC_API_KEY`. Còn lại (giá trị thấp): `media_library` ↔ `footage`.
 - **P8** Nhập kết quả 3 mức tin cậy (25 test) · **P5** Kho footage & shot list (22 test) · **P9** Dashboard 4 hệ KPI + hiệu suất người (9 test) · **P10** Thư viện học + vòng lặp tự học (19 test).
-- 📌 **Tổng test đang xanh:** import 8 · Creative Studio 16 · Duyệt 22 · Đăng bài 21 · Kết quả 25 · Footage 22 · Thư viện học 19 · công cụ 13 · chống trùng seeding 13 = **211**.
+- 📌 **Tổng test đang xanh:** import 8 · Creative Studio 16 · Duyệt 22 · Đăng bài 21 · Kết quả 25 · Footage 22 · Thư viện học 19 · công cụ 13 · chống trùng seeding 13 = **232**.
 - ✅ **ĐÃ XONG TOÀN BỘ P1→P10.** Còn lại là các mảnh nhỏ: vai trò `TRUONG_MKT`/`GIAM_DOC` riêng, `can()` tập trung (P0), và nâng P4 lên gợi ý AI khi có `ANTHROPIC_API_KEY`.
 
 ### ⚙️ Quy trình deploy (CẬP NHẬT)

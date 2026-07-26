@@ -109,6 +109,15 @@ async function ensureSchema(env){
   try { await env.DB.prepare(`ALTER TABLE pricing ADD COLUMN sched_days TEXT DEFAULT '0,2,4,6'`).run(); } catch(e){}
   // P4 — brand voice (tông giọng thương hiệu) dùng cho Creative Studio
   try { await env.DB.prepare(`ALTER TABLE content_strategy ADD COLUMN brand_voice TEXT DEFAULT ''`).run(); } catch(e){}
+  // LỊCH ĐĂNG TỰ ĐỘNG
+  try { await env.DB.prepare(`ALTER TABLE air_posts ADD COLUMN lich_dang TEXT`).run(); } catch(e){}
+  try { await env.DB.prepare(`ALTER TABLE air_posts ADD COLUMN tu_dong INTEGER DEFAULT 0`).run(); } catch(e){}
+  try { await env.DB.prepare(`ALTER TABLE air_posts ADD COLUMN lan_thu INTEGER DEFAULT 0`).run(); } catch(e){}
+  try { await env.DB.prepare(`ALTER TABLE air_posts ADD COLUMN loi TEXT`).run(); } catch(e){}
+  // Kênh: bật tự động + định danh trên nền tảng. TOKEN KHÔNG lưu ở DB (xem §bảo mật dưới).
+  try { await env.DB.prepare(`ALTER TABLE kenh ADD COLUMN tu_dong_dang INTEGER DEFAULT 0`).run(); } catch(e){}
+  try { await env.DB.prepare(`ALTER TABLE kenh ADD COLUMN api_ma TEXT`).run(); } catch(e){}
+  try { await env.DB.prepare(`ALTER TABLE kenh ADD COLUMN api_object_id TEXT`).run(); } catch(e){}
   // NỐI SEEDING ↔ CONTENT OS: chủ đề seeding biết mình sinh ra từ nội dung nào
   try { await env.DB.prepare(`ALTER TABLE content_topics ADD COLUMN content_item_id TEXT`).run(); } catch(e){}
   // P6 — đếm số lần bị trả lại (chỉ số Process cho P9)
@@ -363,8 +372,11 @@ function tinhViecKet({scripts,approvals,air_posts,ket_qua,trends,don_cho_gan}){
     .filter(t=>t.con<=NGUONG_KET.trend_sap_het);
   const donKet=(don_cho_gan||[]).filter(d=>d.trang_thai==='CHO_GAN' && soNgay(d.created_at)>=NGUONG_KET.don_cho_gan)
     .map(d=>({id:d.id, ma:d.ma_doi_soat||'', ngay:soNgay(d.created_at)}));
-  return { sua_lai:suaLai, cho_duyet:choDuyet, chua_nhap_kq:chuaNhapKQ, trend_gap:trendGap, don_ket:donKet,
-    tong: suaLai.length+choDuyet.length+chuaNhapKQ.length+trendGap.length+donKet.length, nguong:NGUONG_KET };
+  // Bài đã tới giờ mà chưa lên sóng (không tự động được hoặc đăng lỗi) — phải nhắc ngay, không để trôi
+  const denGio=(air_posts||[]).filter(a=>a.trang_thai==='DEN_GIO'||a.trang_thai==='LOI')
+    .map(a=>({id:a.id, ten:a.tieu_de||'(không tên)', loi:a.loi||'', lich:a.lich_dang||''}));
+  return { sua_lai:suaLai, cho_duyet:choDuyet, chua_nhap_kq:chuaNhapKQ, trend_gap:trendGap, don_ket:donKet, den_gio:denGio,
+    tong: suaLai.length+choDuyet.length+chuaNhapKQ.length+trendGap.length+donKet.length+denGio.length, nguong:NGUONG_KET };
 }
 // P10 — Ngưỡng bằng chứng: DƯỚI ngưỡng này thì KHÔNG rút ra kết luận nào.
 // Ranh giới: chỉ tổng hợp cái đã quan sát được; KHÔNG dự đoán viral/%view bằng AI.
@@ -391,7 +403,77 @@ const AIR_CHECKLIST = [
   {k:'hashtag_cta',    label:'Hashtag & CTA đầy đủ', bat_buoc:false},
   {k:'hen_gio',        label:'Đã hẹn giờ / canh khung giờ đăng', bat_buoc:false},
 ];
-const AIR_ST = { CHUAN_BI:'CHUAN_BI', DA_DANG:'DA_DANG' };
+const AIR_ST = { CHUAN_BI:'CHUAN_BI', DA_LEN_LICH:'DA_LEN_LICH', DEN_GIO:'DEN_GIO', DA_DANG:'DA_DANG', LOI:'LOI' };
+// Nền tảng nào ĐĂNG TỰ ĐỘNG ĐƯỢC. Ghi rõ điều kiện để không hứa quá.
+// TikTok cố ý = false: Content Posting API chưa qua audit thì bài ra SELF_ONLY (chỉ mình thấy) → auto-post vô nghĩa.
+const KENH_TU_DONG = {
+  FANPAGE:  { duoc:true,  ten:'Facebook Page', dieu_kien:'Cần Page access token + quyền pages_manage_posts (app phải qua Meta review)' },
+  YOUTUBE:  { duoc:true,  ten:'YouTube',       dieu_kien:'Cần OAuth token có scope youtube.upload' },
+  ZALO_OA:  { duoc:true,  ten:'Zalo OA',       dieu_kien:'Cần OA access token' },
+  TIKTOK:   { duoc:false, ten:'TikTok',        dieu_kien:'Chưa qua audit thì bài đăng chỉ mình bạn thấy (SELF_ONLY) → phải đăng tay' },
+  SHOPEE:   { duoc:false, ten:'Shopee',        dieu_kien:'Không có API đăng bài công khai → đăng tay' },
+  WEBSITE:  { duoc:false, ten:'Website',       dieu_kien:'Tuỳ hệ quản trị website → đăng tay' },
+};
+// Token đọc từ SECRET của Worker theo quy ước TOKEN_<api_ma>, KHÔNG lưu trong D1.
+// Lý do: D1 không mã hoá; token rò rỉ là chiếm quyền đăng bài trên Page thật.
+function layToken(env, kenh){
+  const ma=String((kenh&&kenh.api_ma)||'').trim().toUpperCase().replace(/[^A-Z0-9_]/g,'');
+  if(!ma) return null;
+  return env['TOKEN_'+ma] || null;
+}
+// Đăng thật lên nền tảng. Trả {ok, id} hoặc {ok:false, loi}. KHÔNG BAO GIỜ trả ok khi không chắc.
+async function dangLenNenTang(env, kenh, post){
+  const cap=KENH_TU_DONG[String(kenh.loai||'').toUpperCase()];
+  if(!cap || !cap.duoc) return {ok:false, loi:'Nền tảng này không đăng tự động được — '+((cap&&cap.dieu_kien)||'')};
+  const token=layToken(env, kenh);
+  if(!token) return {ok:false, loi:'Chưa cắm token cho kênh này (secret TOKEN_'+((kenh.api_ma)||'?')+')'};
+  const objId=String(kenh.api_object_id||'').trim();
+  if(!objId) return {ok:false, loi:'Chưa khai báo ID đối tượng trên nền tảng (VD: Page ID)'};
+  try{
+    if(String(kenh.loai).toUpperCase()==='FANPAGE'){
+      const noi_dung=[post.tieu_de, post.ghi_chu].filter(Boolean).join('\n\n');
+      const body=new URLSearchParams();
+      body.set('message', noi_dung || post.tieu_de || '');
+      if(post.link_bai) body.set('link', post.link_bai);
+      body.set('access_token', token);
+      const res=await fetch('https://graph.facebook.com/v21.0/'+encodeURIComponent(objId)+'/feed',{method:'POST',body});
+      const j=await res.json().catch(()=>({}));
+      if(!res.ok || !j.id) return {ok:false, loi:'Facebook từ chối: '+((j.error&&j.error.message)||('HTTP '+res.status))};
+      return {ok:true, id:j.id};
+    }
+    // Các nền tảng còn lại: chưa hiện thực → nói thẳng, KHÔNG giả vờ thành công
+    return {ok:false, loi:'Chưa hiện thực bộ đăng cho '+cap.ten+' — hiện phải đăng tay'};
+  }catch(e){ return {ok:false, loi:'Lỗi gọi API: '+(e.message||e)}; }
+}
+// Cron: quét bài đến giờ. Đăng được thì đăng, không thì chuyển ĐẾN GIỜ để nhắc đăng tay.
+const MAX_LAN_THU = 3;
+async function chayLichDang(env){
+  try{
+    await ensureSchema(env);
+    const now=nowISO();
+    const dueRows=(await env.DB.prepare(
+      `SELECT * FROM air_posts WHERE lich_dang IS NOT NULL AND lich_dang<>'' AND lich_dang<=? AND trang_thai IN ('DA_LEN_LICH','LOI') AND COALESCE(lan_thu,0)<?`
+    ).bind(now, MAX_LAN_THU).all()).results;
+    for(const p of dueRows){
+      const kenh=p.kenh_id ? await env.DB.prepare(`SELECT * FROM kenh WHERE id=?`).bind(p.kenh_id).first() : null;
+      const batTuDong = p.tu_dong && kenh && uBool(kenh.tu_dong_dang);
+      if(!batTuDong){
+        // Không tự động được → KHÔNG im lặng: chuyển ĐẾN GIỜ để hiện trong nhắc việc
+        await env.DB.prepare(`UPDATE air_posts SET trang_thai='DEN_GIO', updated_at=? WHERE id=?`).bind(nowISO(),p.id).run();
+        continue;
+      }
+      const r=await dangLenNenTang(env, kenh, p);
+      if(r.ok){
+        await env.DB.prepare(`UPDATE air_posts SET trang_thai='DA_DANG', posted_at=?, updated_at=?, loi=NULL WHERE id=?`).bind(nowISO(),nowISO(),p.id).run();
+      } else {
+        const lan=Number(p.lan_thu||0)+1;
+        const het = lan>=MAX_LAN_THU;
+        await env.DB.prepare(`UPDATE air_posts SET trang_thai=?, lan_thu=?, loi=?, updated_at=? WHERE id=?`)
+          .bind(het?'DEN_GIO':'LOI', lan, (r.loi||'')+(het?' — đã thử '+lan+' lần, chuyển sang đăng tay':''), nowISO(), p.id).run();
+      }
+    }
+  }catch(e){}
+}
 // P6 — 2 cổng duyệt song song. Ai được quyết cổng nào.
 // (Khi thêm vai trò TRUONG_MKT ở P0, chỉ cần bổ sung vào nhánh NOI_DUNG.)
 const APPROVAL_GATES = ['NOI_DUNG','CLAIM'];
@@ -477,7 +559,7 @@ async function bootstrap(env, u){
     .map(r=>({ ...r, active:uBool(r.active), ty_trong:r.ty_trong==null?0:Number(r.ty_trong) }));
   const content_strategy = (await env.DB.prepare(`SELECT * FROM content_strategy WHERE id=1`).first()) || { okr:'', big_idea:'', purpose:'', audience:'', swot:'', brand_voice:'' };
   const frameworks = (await env.DB.prepare(`SELECT * FROM frameworks ORDER BY thu_tu ASC, created_at ASC`).all()).results.map(r=>({ ...r, active:uBool(r.active) }));
-  const kenh = (await env.DB.prepare(`SELECT * FROM kenh ORDER BY created_at ASC`).all()).results.map(r=>({ ...r, active:uBool(r.active) }));
+  const kenh = (await env.DB.prepare(`SELECT * FROM kenh ORDER BY created_at ASC`).all()).results.map(r=>({ ...r, active:uBool(r.active), tu_dong_dang:uBool(r.tu_dong_dang) }));
   const content_items = (await env.DB.prepare(`SELECT * FROM content_items ORDER BY created_at DESC`).all()).results
     .map(r=>({ ...r, pic: JSON.parse(r.pic||'{}'), chi_tiet: JSON.parse(r.chi_tiet||'{}'), links: JSON.parse(r.links||'{}') }));
   // P4 — kịch bản (chỉ staff xem; Sales không cần)
@@ -511,6 +593,8 @@ async function bootstrap(env, u){
     san_pham, claim_cam, pillars, content_strategy,
     frameworks, kenh, content_items, scripts, approvals, air_posts, air_checklist:AIR_CHECKLIST,
     ket_qua, don_cho_gan, muc_tin_cay:MUC_TIN_CAY, nguon_kq:NGUON_KQ,
+    kenh_tu_dong: KENH_TU_DONG,
+    kenh_san_sang: staff ? Object.fromEntries((kenh||[]).map(k=>[k.id, !!layToken(env,k) && !!String(k.api_object_id||'').trim()])) : {},
     footage, shot_list, bai_hoc, min_mau:MIN_MAU_BANG_CHUNG, trends, trend_check:TREND_CHECK,
     viec_ket: canContent ? tinhViecKet({scripts,approvals,air_posts,ket_qua,trends,don_cho_gan}) : null,
     seeding_theo_noi_dung: staff ? gomSeedingTheoNoiDung(topics, posts, cmts) : {},
@@ -912,7 +996,12 @@ async function handleApi(request, env){
   if((m=path.match(/^\/kenh\/(.+)$/)) && method==='PATCH'){
     if(!isStaff(me)) return json({error:'Không có quyền'},403);
     const id=m[1]; const r=await env.DB.prepare(`SELECT * FROM kenh WHERE id=?`).bind(id).first(); if(!r) return json({error:'Không tìm thấy'},404);
-    await env.DB.prepare(`UPDATE kenh SET ten=?, loai=?, thuong_hieu=?, active=? WHERE id=?`).bind(body.ten!=null?String(body.ten).trim():r.ten,body.loai!=null?String(body.loai).trim():r.loai,body.thuong_hieu!=null?String(body.thuong_hieu).trim():r.thuong_hieu,body.active!=null?bool(body.active):r.active,id).run();
+    await env.DB.prepare(`UPDATE kenh SET ten=?, loai=?, thuong_hieu=?, active=?, tu_dong_dang=?, api_ma=?, api_object_id=? WHERE id=?`)
+      .bind(body.ten!=null?String(body.ten).trim():r.ten, body.loai!=null?String(body.loai).trim():r.loai,
+        body.thuong_hieu!=null?String(body.thuong_hieu).trim():r.thuong_hieu, body.active!=null?bool(body.active):r.active,
+        body.tu_dong_dang!=null?bool(body.tu_dong_dang):r.tu_dong_dang,
+        body.api_ma!=null?String(body.api_ma).trim().toUpperCase().replace(/[^A-Z0-9_]/g,''):r.api_ma,
+        body.api_object_id!=null?String(body.api_object_id).trim():r.api_object_id, id).run();
     return json({ db: await bootstrap(env, me) });
   }
   if((m=path.match(/^\/kenh\/(.+)$/)) && method==='DELETE'){
@@ -1095,6 +1184,45 @@ async function handleApi(request, env){
     if(!String(r.ma_theo_doi||'').trim()) return json({error:'Cần mã theo dõi để quy đơn ở bước đo lường'},400);
     await env.DB.prepare(`UPDATE air_posts SET trang_thai=?, posted_at=?, updated_at=? WHERE id=?`).bind(AIR_ST.DA_DANG,nowISO(),nowISO(),id).run();
     await logAudit(env,me,'đánh dấu đã đăng','air_posts',id,r.tieu_de||'');
+    return json({ db: await bootstrap(env, me) });
+  }
+  // Lên lịch đăng
+  if((m=path.match(/^\/air\/(.+)\/schedule$/)) && method==='POST'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    const id=m[1]; const r=await env.DB.prepare(`SELECT * FROM air_posts WHERE id=?`).bind(id).first();
+    if(!r) return json({error:'Không tìm thấy'},404);
+    if(r.trang_thai===AIR_ST.DA_DANG) return json({error:'Bài đã đăng rồi'},409);
+    const lich=String(body.lich_dang||'').trim();
+    if(!lich) return json({error:'Chọn thời điểm đăng'},400);
+    if(isNaN(new Date(lich).getTime())) return json({error:'Thời điểm không hợp lệ'},400);
+    if(new Date(lich).getTime() <= Date.now()) return json({error:'Thời điểm phải ở tương lai'},400);
+    const tuDong = bool(body.tu_dong);
+    // Bật tự động thì phải kiểm tra kênh có làm được không — nói TRƯỚC, không để đến giờ mới vỡ
+    if(tuDong){
+      const kenh = r.kenh_id ? await env.DB.prepare(`SELECT * FROM kenh WHERE id=?`).bind(r.kenh_id).first() : null;
+      if(!kenh) return json({error:'Bài chưa gắn kênh — không tự đăng được'},400);
+      const cap=KENH_TU_DONG[String(kenh.loai||'').toUpperCase()];
+      if(!cap || !cap.duoc) return json({error:'Kênh loại '+(kenh.loai||'?')+' không đăng tự động được: '+((cap&&cap.dieu_kien)||'')},422);
+      if(!uBool(kenh.tu_dong_dang)) return json({error:'Kênh này chưa bật tự động đăng (mở ở Kênh & Framework)'},422);
+      if(!layToken(env,kenh)) return json({error:'Chưa cắm token cho kênh (secret TOKEN_'+(kenh.api_ma||'?')+')'},422);
+      if(!String(kenh.api_object_id||'').trim()) return json({error:'Kênh chưa khai ID đối tượng (VD: Page ID)'},422);
+    }
+    // Đăng tự động thì checklist vẫn phải xong — không vì tự động mà bỏ qua kiểm tra
+    const cl=JSON.parse(r.checklist||'{}');
+    const thieu=AIR_CHECKLIST.filter(c=>c.bat_buoc && !cl[c.k]).map(c=>c.label);
+    if(thieu.length) return json({error:'Chưa xong checklist bắt buộc', thieu},422);
+    if(!String(r.ma_theo_doi||'').trim()) return json({error:'Cần mã theo dõi trước khi lên lịch'},400);
+    await env.DB.prepare(`UPDATE air_posts SET lich_dang=?, tu_dong=?, trang_thai='DA_LEN_LICH', lan_thu=0, loi=NULL, updated_at=? WHERE id=?`)
+      .bind(lich, tuDong?1:0, nowISO(), id).run();
+    await logAudit(env,me,'lên lịch đăng','air_posts',id,lich+(tuDong?' (tự động)':' (nhắc đăng tay)'));
+    return json({ db: await bootstrap(env, me) });
+  }
+  if((m=path.match(/^\/air\/(.+)\/unschedule$/)) && method==='POST'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    const id=m[1]; const r=await env.DB.prepare(`SELECT * FROM air_posts WHERE id=?`).bind(id).first();
+    if(!r) return json({error:'Không tìm thấy'},404);
+    if(r.trang_thai===AIR_ST.DA_DANG) return json({error:'Bài đã đăng rồi'},409);
+    await env.DB.prepare(`UPDATE air_posts SET lich_dang=NULL, tu_dong=0, trang_thai='CHUAN_BI', lan_thu=0, loi=NULL, updated_at=? WHERE id=?`).bind(nowISO(),id).run();
     return json({ db: await bootstrap(env, me) });
   }
   if((m=path.match(/^\/air\/(.+)$/)) && method==='PATCH'){
@@ -1749,8 +1877,16 @@ async function cleanupOldMedia(env){
 export default {
   // Cron: dọn media công trình chưa duyệt quá 30 ngày
   async scheduled(controller, env, ctx){
-    ctx.waitUntil(cleanupOldMedia(env));
-    ctx.waitUntil(ghiNhatKyViecKet(env));
+    // Hai lịch cron khác nhau vào chung handler → phải tách, nếu không việc hằng ngày
+    // sẽ chạy mỗi 15 phút và làm rác nhật ký.
+    const cron = (controller && controller.cron) || '';
+    if(cron.startsWith('*/15')){
+      ctx.waitUntil(chayLichDang(env));           // quét bài tới giờ đăng
+    } else {
+      ctx.waitUntil(cleanupOldMedia(env));        // dọn media quá hạn
+      ctx.waitUntil(ghiNhatKyViecKet(env));       // chụp tình trạng việc kẹt
+      ctx.waitUntil(chayLichDang(env));           // chạy kèm cho chắc, phòng lịch 15' lỗi
+    }
   },
   async fetch(request, env, ctx){
     const url = new URL(request.url);

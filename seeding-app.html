@@ -156,7 +156,9 @@ function tinhViecKetFE(db){
   const don_ket=(db.don_cho_gan||[]).filter(d=>d.trang_thai==='CHO_GAN'&&soNgayFE(d.created_at)>=NGUONG_KET_FE.don_cho_gan)
     .map(d=>({id:d.id,ma:d.ma_doi_soat||'',ngay:soNgayFE(d.created_at)}));
   return { sua_lai, cho_duyet, chua_nhap_kq, trend_gap, don_ket,
-    tong:sua_lai.length+cho_duyet.length+chua_nhap_kq.length+trend_gap.length+don_ket.length, nguong:NGUONG_KET_FE };
+    den_gio:(db.air_posts||[]).filter(a=>a.trang_thai==='DEN_GIO'||a.trang_thai==='LOI').map(a=>({id:a.id,ten:a.tieu_de||'(không tên)',loi:a.loi||'',lich:a.lich_dang||''})),
+    tong:sua_lai.length+cho_duyet.length+chua_nhap_kq.length+trend_gap.length+don_ket.length
+        +(db.air_posts||[]).filter(a=>a.trang_thai==='DEN_GIO'||a.trang_thai==='LOI').length, nguong:NGUONG_KET_FE };
 }
 const TREND_CHECK_FE = [
   {k:'hop_pillar',  label:'Gắn được vào trụ cột nội dung / định vị thương hiệu', bat_buoc:true},
@@ -172,6 +174,16 @@ const TREND_NGUON = ['TIKTOK','FACEBOOK','YOUTUBE','SHOPEE','KHAC'];
 const MUC_TIN_CAY_FE = { TRUC_TIEP:'Trực tiếp', GIAN_TIEP:'Gián tiếp', KHONG_QUY_DON:'Không quy đơn' };
 const MUC_STYLE = { TRUC_TIEP:'bg-emerald-100 text-emerald-700', GIAN_TIEP:'bg-amber-100 text-amber-700', KHONG_QUY_DON:'bg-slate-100 text-slate-600' };
 const NGUON_KQ_FE = [{v:'TIKTOK_SHOP',label:'TikTok Shop'},{v:'SHOPEE',label:'Shopee'},{v:'API_KENH',label:'API kênh (view/tương tác)'},{v:'NHAP_TAY',label:'Nhập tay'}];
+const KENH_TU_DONG_FE = {
+  FANPAGE:{duoc:true,ten:'Facebook Page',dieu_kien:'Cần Page access token + quyền pages_manage_posts (app phải qua Meta review)'},
+  YOUTUBE:{duoc:true,ten:'YouTube',dieu_kien:'Cần OAuth token có scope youtube.upload'},
+  ZALO_OA:{duoc:true,ten:'Zalo OA',dieu_kien:'Cần OA access token'},
+  TIKTOK:{duoc:false,ten:'TikTok',dieu_kien:'Chưa qua audit thì bài đăng chỉ mình bạn thấy (SELF_ONLY) → phải đăng tay'},
+  SHOPEE:{duoc:false,ten:'Shopee',dieu_kien:'Không có API đăng bài công khai → đăng tay'},
+  WEBSITE:{duoc:false,ten:'Website',dieu_kien:'Tuỳ hệ quản trị website → đăng tay'},
+};
+const AIR_ST_LABEL = { CHUAN_BI:'Chuẩn bị', DA_LEN_LICH:'Đã lên lịch', DEN_GIO:'Đến giờ — chưa đăng', DA_DANG:'Đã đăng', LOI:'Lỗi đăng' };
+const AIR_ST_STYLE = { CHUAN_BI:'bg-amber-100 text-amber-700', DA_LEN_LICH:'bg-blue-100 text-blue-700', DEN_GIO:'bg-rose-100 text-rose-700', DA_DANG:'bg-emerald-100 text-emerald-700', LOI:'bg-rose-100 text-rose-700' };
 const LOAI_MA = [{v:'VOUCHER',label:'Mã voucher'},{v:'UTM',label:'Link UTM'},{v:'MA_DON',label:'Mã đơn riêng'},{v:'KHAC',label:'Khác'}];
 const ST = { NHAP:'NHAP', CHO_DUYET:'CHO_DUYET', DAT:'DAT', KHONG_DAT:'KHONG_DAT', DA_CHI:'DA_CHI' };
 const ST_LABEL = { NHAP:'Nháp', CHO_DUYET:'Chờ duyệt', DAT:'Đạt', KHONG_DAT:'Không đạt', DA_CHI:'Đã chi' };
@@ -402,7 +414,7 @@ function seedDB(){
     frameworks: ['Chuẩn bán hàng','PAS','Phản biện comment','Test chất lượng','Hành trình thi công','Size / Combo','FOMO','Review KOC','"đừng..." Trend','Q&A khách hàng','So sánh kinh tế','Hướng dẫn thi công'].map((ten,i)=>({id:uid('fw'),ten,mo_ta:'',thu_tu:i+1,active:true,created_at:now()})),
     kenh: [['Fanpage Kingsmen','FANPAGE','Kingsmen'],['TikTok Kingsmen','TIKTOK','Kingsmen'],['YouTube Short Kingsmen','YOUTUBE','Kingsmen'],['Fanpage VKXD','FANPAGE','VKXD'],['TikTok VKXD','TIKTOK','VKXD'],['Shopee VKXD','SHOPEE','VKXD'],['Zalo OA','ZALO_OA','Kingsmen'],['CHÍNH - Vật liệu mới FINEX','TIKTOK','FINEX'],['AFF - Sơn sàn hiệu ứng','TIKTOK','FINEX'],['BC - Vật liệu hoàn thiện','TIKTOK','Kingsmen']].map(([ten,loai,th])=>({id:uid('kn'),ten,loai,thuong_hieu:th,active:true,created_at:now()})),
     content_items: [],
-    scripts: [], approvals: [], air_posts: [], air_checklist: AIR_CHECKLIST_FE, ket_qua: [], don_cho_gan: [], footage: [], shot_list: [], bai_hoc: [], min_mau: MIN_MAU, trends: [], trend_check: TREND_CHECK_FE, viec_ket: null, seeding_theo_noi_dung: {},
+    scripts: [], approvals: [], air_posts: [], air_checklist: AIR_CHECKLIST_FE, ket_qua: [], don_cho_gan: [], footage: [], shot_list: [], bai_hoc: [], min_mau: MIN_MAU, trends: [], trend_check: TREND_CHECK_FE, viec_ket: null, seeding_theo_noi_dung: {}, kenh_tu_dong: KENH_TU_DONG_FE, kenh_san_sang: {},
     payouts: [],
     audit: [],
   };
@@ -443,7 +455,7 @@ function migrate(db){
   db.kenh ||= [];
   db.content_items ||= [];
   db.scripts ||= []; db.approvals ||= []; db.air_posts ||= []; db.air_checklist ||= AIR_CHECKLIST_FE;
-  db.ket_qua ||= []; db.don_cho_gan ||= []; db.footage ||= []; db.shot_list ||= []; db.bai_hoc ||= []; db.min_mau ||= MIN_MAU; db.trends ||= []; db.trend_check ||= TREND_CHECK_FE; db.viec_ket ||= null; db.seeding_theo_noi_dung ||= {};
+  db.ket_qua ||= []; db.don_cho_gan ||= []; db.footage ||= []; db.shot_list ||= []; db.bai_hoc ||= []; db.min_mau ||= MIN_MAU; db.trends ||= []; db.trend_check ||= TREND_CHECK_FE; db.viec_ket ||= null; db.seeding_theo_noi_dung ||= {}; db.kenh_tu_dong ||= KENH_TU_DONG_FE; db.kenh_san_sang ||= {};
   db.post_seedings.forEach(p=>{ p.react ??= 0; p.so_cmt_seeding ??= 0; p.so_cmt_tu_nhien ??= 0; p.thanh_tien ??= 0; });
   db.cmt_seedings.forEach(c=>{ c.proofs ||= []; c.so_cmt_seeding ??= 0; c.react ??= 0; c.so_cmt_tu_nhien ??= 0; c.thanh_tien ??= 0; });
   db.groups.forEach(g=>{ g.uu_tien ??= false; });
@@ -584,6 +596,24 @@ function AppProvider({children}){
         if(!String(a.ma_theo_doi||'').trim()) return {ok:false,msg:'Cần mã theo dõi để quy đơn'};
         a.trang_thai='DA_DANG'; a.posted_at=now(); a.updated_at=now(); commit(); return {ok:true}; },
       deleteAir: async id=>{ S.air_posts=(S.air_posts||[]).filter(x=>x.id!==id); commit(); return true; },
+      scheduleAir: async (id,o)=>{ const a=(S.air_posts||[]).find(x=>x.id===id); if(!a) return {ok:false,msg:'Không tìm thấy'};
+        if(a.trang_thai==='DA_DANG') return {ok:false,msg:'Bài đã đăng rồi'};
+        const lich=String((o&&o.lich_dang)||'').trim();
+        if(!lich) return {ok:false,msg:'Chọn thời điểm đăng'};
+        if(isNaN(new Date(lich).getTime())) return {ok:false,msg:'Thời điểm không hợp lệ'};
+        if(new Date(lich).getTime()<=Date.now()) return {ok:false,msg:'Thời điểm phải ở tương lai'};
+        const thieu=(S.air_checklist||AIR_CHECKLIST_FE).filter(c=>c.bat_buoc&&!(a.checklist||{})[c.k]).map(c=>c.label);
+        if(thieu.length) return {ok:false,thieu,msg:'Chưa xong checklist bắt buộc'};
+        if(!String(a.ma_theo_doi||'').trim()) return {ok:false,msg:'Cần mã theo dõi trước khi lên lịch'};
+        if(o&&o.tu_dong){ const k=(S.kenh||[]).find(x=>x.id===a.kenh_id);
+          if(!k) return {ok:false,msg:'Bài chưa gắn kênh'};
+          const cap=(S.kenh_tu_dong||KENH_TU_DONG_FE)[String(k.loai||'').toUpperCase()];
+          if(!cap||!cap.duoc) return {ok:false,msg:'Kênh loại '+(k.loai||'?')+' không đăng tự động được'};
+          if(!k.tu_dong_dang) return {ok:false,msg:'Kênh này chưa bật tự động đăng'}; }
+        Object.assign(a,{lich_dang:lich,tu_dong:(o&&o.tu_dong)?1:0,trang_thai:'DA_LEN_LICH',lan_thu:0,loi:null,updated_at:now()});
+        commit(); return {ok:true}; },
+      unscheduleAir: async id=>{ const a=(S.air_posts||[]).find(x=>x.id===id); if(!a||a.trang_thai==='DA_DANG') return false;
+        Object.assign(a,{lich_dang:null,tu_dong:0,trang_thai:'CHUAN_BI',lan_thu:0,loi:null,updated_at:now()}); commit(); return true; },
       createKetQua: async o=>{ S.ket_qua ||= []; const muc=String(o.muc_tin_cay||'').toUpperCase();
         if(!MUC_TIN_CAY_FE[muc]) return {ok:false,msg:'Mức tin cậy không hợp lệ'};
         const dt=Number(o.doanh_thu)||0, sd=Number(o.so_don)||0;
@@ -831,6 +861,9 @@ function AppProvider({children}){
     publishAir: async id => { try { const r=await call('/air/'+id+'/publish',{method:'POST'}); if(r&&r.db) setDb(r.db); return {ok:true}; }
       catch(e){ return {ok:false, thieu:e.thieu, msg:e.message}; } },
     deleteAir: id => mut('/air/'+id, {method:'DELETE'}),
+    scheduleAir: async (id,o) => { try { const r=await call('/air/'+id+'/schedule',{method:'POST',body:o}); if(r&&r.db) setDb(r.db); return {ok:true}; }
+      catch(e){ return {ok:false, thieu:e.thieu, msg:e.message}; } },
+    unscheduleAir: id => mut('/air/'+id+'/unschedule', {method:'POST'}),
     createKetQua: async o => { try { const r=await call('/ketqua',{method:'POST',body:o}); if(r&&r.db) setDb(r.db); return {ok:true}; }
       catch(e){ return {ok:false, msg:e.message}; } },
     deleteKetQua: id => mut('/ketqua/'+id, {method:'DELETE'}),
@@ -1091,6 +1124,7 @@ const NAV_GROUPS = {
       {key:'pay_report', label:'Thanh toán', icon:'📄'},
     ]},
     {key:'g_sys', label:'Hệ thống', icon:'⚙️', items:[
+      {key:'kenh', label:'Kênh & tự động đăng', short:'Kênh', icon:'📡'},
       {key:'users', label:'Tài khoản', icon:'👥'},
     ]},
   ],
@@ -1129,6 +1163,7 @@ const NAV_GROUPS = {
       {key:'payroll', label:'Bảng lương', icon:'🧾'},
     ]},
     {key:'g_sys', label:'Hệ thống', icon:'⚙️', items:[
+      {key:'kenh', label:'Kênh & tự động đăng', short:'Kênh', icon:'📡'},
       {key:'users', label:'Người dùng', icon:'👥'},
       {key:'audit', label:'Nhật ký', icon:'🕑'},
     ]},
@@ -1159,7 +1194,7 @@ function ProfileModal({open, onClose}){
   </Modal>;
 }
 // Module đang NÂNG CẤP — chỉ tài khoản dev preview (is_dev) mới thấy
-const BETA_KEYS = new Set(['strategy','plan','products','studio','approve','air','ketqua','footage','cdash','hoc','trend']);
+const BETA_KEYS = new Set(['strategy','plan','products','studio','approve','air','ketqua','footage','cdash','hoc','trend','kenh']);
 function Shell(){
   const { me, logout, db } = useApp();
   // Lọc module đang nâng cấp → bỏ nhóm rỗng
@@ -1203,6 +1238,7 @@ function Shell(){
       case 'approve': return <ApprovalQueue/>;
       case 'air': return <AirPosts/>;
       case 'footage': return <FootageLib/>;
+      case 'kenh': return <KenhManager/>;
       case 'ketqua': return <KetQua/>;
       case 'cdash': return <ContentDashboard/>;
       case 'trend': return <TrendModule/>;
@@ -2615,7 +2651,7 @@ function AirPosts(){
     ...(db.scripts||[]).filter(s=>s.trang_thai==='DUYET'&&!used.has(s.id)).map(s=>({...s,_loai:'SCRIPT'})),
     ...(db.content_items||[]).filter(c=>c.trang_thai==='DUYET'&&!used.has(c.id)).map(c=>({...c,_loai:'CONTENT'})),
   ];
-  const list=posts.filter(p=>p.trang_thai===tab);
+  const list=posts.filter(p=>tab==='DEN_GIO'?(p.trang_thai==='DEN_GIO'||p.trang_thai==='LOI'):p.trang_thai===tab);
   const add=async(o)=>{ const r=await createAir(o._loai==='SCRIPT'?{script_id:o.id}:{content_item_id:o.id});
     if(r&&r.ok){ notify('Đã đưa vào khâu đăng'); setPick(false); setOpen(r.id); } else notify((r&&r.msg)||'Lỗi','err'); };
   const cur = open ? posts.find(p=>p.id===open) : null;
@@ -2630,9 +2666,9 @@ function AirPosts(){
       Mỗi <b>mã chỉ thuộc 1 bài</b>, nhờ vậy bước đo lường sau này quy đơn được chính xác thay vì chia đều theo phỏng đoán.
     </div>
     <div className="flex gap-1 bg-slate-100 rounded-xl p-1 w-fit">
-      {[['CHUAN_BI','Đang chuẩn bị'],['DA_DANG','Đã đăng']].map(([k,l])=>
+      {[['CHUAN_BI','Đang chuẩn bị'],['DA_LEN_LICH','Đã lên lịch'],['DEN_GIO','Cần xử lý'],['DA_DANG','Đã đăng']].map(([k,l])=>
         <button key={k} onClick={()=>setTab(k)} className={"px-3 py-1 rounded-lg text-xs font-semibold "+(tab===k?'bg-white text-ink shadow-sm':'text-slate-500')}>
-          {l} ({posts.filter(p=>p.trang_thai===k).length})</button>)}
+          {l} ({posts.filter(p=>k==='DEN_GIO'?(p.trang_thai==='DEN_GIO'||p.trang_thai==='LOI'):p.trang_thai===k).length})</button>)}
     </div>
     {list.length===0 ? <Empty>{tab==='CHUAN_BI'?'Chưa có bài nào đang chuẩn bị.':'Chưa có bài nào được đánh dấu đã đăng.'}</Empty> :
       <div className="grid sm:grid-cols-2 gap-3">{list.map(p=>{
@@ -2641,13 +2677,14 @@ function AirPosts(){
         return <div key={p.id} className="bg-white rounded-2xl border border-line shadow-card p-3">
           <div className="flex items-start justify-between gap-2">
             <div className="font-display font-bold text-ink text-sm flex-1 min-w-0">{p.tieu_de||'(không tên)'}</div>
-            <span className={"text-[10px] px-1.5 py-0.5 rounded-full font-semibold shrink-0 "+(p.trang_thai==='DA_DANG'?'bg-emerald-100 text-emerald-700':'bg-amber-100 text-amber-700')}>{p.trang_thai==='DA_DANG'?'Đã đăng':'Chuẩn bị'}</span>
+            <span className={"text-[10px] px-1.5 py-0.5 rounded-full font-semibold shrink-0 "+(AIR_ST_STYLE[p.trang_thai]||'bg-slate-100 text-slate-600')}>{AIR_ST_LABEL[p.trang_thai]||p.trang_thai}</span>
           </div>
           <div className="flex flex-wrap gap-1 mt-2">
             <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-600">{kenhTen(p.kenh_id)}</span>
             {p.ma_theo_doi ? <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-brand/10 text-brand-dark font-mono">{p.ma_theo_doi}</span>
               : <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-rose-50 text-rose-500">chưa có mã</span>}
             <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500">✓ {done}/{total}</span>
+            {p.lich_dang && p.trang_thai!=='DA_DANG' && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-600">{p.tu_dong?'🤖 tự động':'🔔 nhắc'} {fmtDate(p.lich_dang)}</span>}
           </div>
           <div className="flex items-center justify-between mt-3 pt-2 border-t border-line/60">
             <span className="text-[10px] text-slate-400">{p.nguoi_dang_ten||''}</span>
@@ -2720,6 +2757,8 @@ function AirEditor({post, onClose}){
         </label>)}
       </div>
     </div>
+
+    {!posted && <LichDangBox post={post} onSaveFirst={save}/>}
 
     {!posted && <div className="flex flex-wrap gap-2">
       <Btn variant="ghost" onClick={save} disabled={busy}>💾 Lưu nháp</Btn>
@@ -3031,6 +3070,7 @@ function ViecKet(){
       <Nhom icon="🛂" ten="Cổng duyệt còn tồn" items={v.cho_duyet} mo_ta={'Chờ quá '+N.cho_duyet+' ngày'} render={x=>(x.cong==='CLAIM'?'Claim (Kỹ thuật)':'Nội dung')+' — '+x.ngay+' ngày'}/>
       <Nhom icon="📈" ten="Bài đã đăng chưa nhập kết quả" items={v.chua_nhap_kq} mo_ta={'Đăng quá '+N.chua_nhap_kq+' ngày — để lâu sẽ khó đối soát'} render={x=>x.ten+' — '+x.ngay+' ngày'}/>
       <Nhom icon="🔥" ten="Trend sắp/đã hết hạn" items={v.trend_gap} mo_ta="Quyết sớm kẻo lỡ nhịp" render={x=>x.ten+(x.con<0?(' — quá hạn '+(-x.con)+' ngày'):(' — còn '+x.con+' ngày'))}/>
+      <Nhom icon="🚀" ten="Bài tới giờ mà chưa lên sóng" items={v.den_gio||[]} mo_ta="Đăng tay ngay hoặc sửa lỗi rồi lên lịch lại" render={x=>x.ten+(x.loi?(' — '+x.loi):'')}/>
       <Nhom icon="🕗" ten="Đơn chờ gán tay" items={v.don_ket} mo_ta={'Tồn quá '+N.don_cho_gan+' ngày — chưa gán thì chưa quy đơn được'} render={x=>(x.ma||'không mã')+' — '+x.ngay+' ngày'}/>
     </div>}
   </div>;
@@ -3510,6 +3550,143 @@ function ShotListTab({onBack}){
 /* ============================================================
    CONTENT OS · P8 — KẾT QUẢ (3 mức tin cậy, KHÔNG cộng dồn) + gán tay
 ============================================================ */
+// Lên lịch đăng. Nói rõ kênh nào tự đăng được, kênh nào chỉ nhắc — không hứa suông.
+function LichDangBox({post,onSaveFirst}){
+  const { db, scheduleAir, unscheduleAir, notify } = useApp();
+  const cur=(db.air_posts||[]).find(a=>a.id===post.id)||post;
+  const kenh=(db.kenh||[]).find(k=>k.id===cur.kenh_id);
+  const cap=(db.kenh_tu_dong||KENH_TU_DONG_FE)[String(kenh&&kenh.loai||'').toUpperCase()];
+  const sanSang=(db.kenh_san_sang||{})[cur.kenh_id];
+  const tuDongDuoc = !!(cap&&cap.duoc) && !!(kenh&&kenh.tu_dong_dang) && !!sanSang;
+  const [lich,setLich]=useState((cur.lich_dang||'').slice(0,16));
+  const [tuDong,setTuDong]=useState(!!cur.tu_dong);
+  const [busy,setBusy]=useState(false);
+  const daLen=['DA_LEN_LICH','DEN_GIO','LOI'].includes(cur.trang_thai);
+  const len=async()=>{ if(!lich) return notify('Chọn thời điểm đăng','warn');
+    setBusy(true); await onSaveFirst();
+    const r=await scheduleAir(cur.id,{lich_dang:new Date(lich).toISOString(), tu_dong:tuDong});
+    setBusy(false);
+    if(r&&r.ok) notify(tuDong?'Đã lên lịch — hệ thống sẽ tự đăng':'Đã lên lịch — tới giờ sẽ nhắc bạn đăng');
+    else if(r&&r.thieu) notify('Còn thiếu: '+r.thieu.join(' · '),'err');
+    else notify((r&&r.msg)||'Lỗi','err'); };
+  const huy=async()=>{ const ok=await unscheduleAir(cur.id); if(ok) notify('Đã huỷ lịch'); };
+  return <div className="bg-white rounded-2xl border border-line shadow-card p-4 space-y-2">
+    <div className="flex items-center justify-between flex-wrap gap-2">
+      <div className="text-sm font-semibold text-ink">⏰ Lịch đăng</div>
+      {daLen && <span className={"text-[11px] px-2 py-0.5 rounded-full font-semibold "+(AIR_ST_STYLE[cur.trang_thai]||'')}>{AIR_ST_LABEL[cur.trang_thai]}</span>}
+    </div>
+    {cur.loi && <div className="rounded-xl bg-rose-50 border border-rose-200 p-2 text-[11px] text-rose-700">
+      ⚠ {cur.loi}{Number(cur.lan_thu)>0?(' (đã thử '+cur.lan_thu+' lần)'):''}
+    </div>}
+    <div className="grid sm:grid-cols-2 gap-2">
+      <Field label="Đăng lúc"><Input type="datetime-local" value={lich} onChange={e=>setLich(e.target.value)}/></Field>
+      <Field label="Cách đăng">
+        <Select value={tuDong?'auto':'nhac'} onChange={e=>setTuDong(e.target.value==='auto')} disabled={!tuDongDuoc}>
+          <option value="nhac">🔔 Tới giờ nhắc tôi đăng tay</option>
+          {tuDongDuoc && <option value="auto">🤖 Hệ thống tự đăng</option>}
+        </Select>
+      </Field>
+    </div>
+    {!kenh ? <div className="text-[11px] text-amber-600">Chưa gắn kênh — chọn kênh ở trên để dùng lịch đăng.</div>
+      : !cap ? null
+      : !cap.duoc ? <div className="text-[11px] text-slate-500">
+          <b>{cap.ten}</b> không đăng tự động được: {cap.dieu_kien}. Lịch này sẽ <b>nhắc bạn đăng tay</b> đúng giờ.
+        </div>
+      : !tuDongDuoc ? <div className="text-[11px] text-amber-700">
+          <b>{cap.ten}</b> đăng tự động được, nhưng kênh <b>chưa cấu hình xong</b>: {cap.dieu_kien}.
+          Cần bật “tự động đăng” cho kênh + khai ID đối tượng + cắm token (secret <code>TOKEN_…</code>). Hiện tại lịch sẽ <b>nhắc đăng tay</b>.
+        </div>
+      : <div className="text-[11px] text-emerald-700">✓ Kênh <b>{cap.ten}</b> đã sẵn sàng — chọn “tự đăng” là hệ thống đăng giúp.</div>}
+    <div className="flex gap-2">
+      {daLen && <Btn variant="ghost" onClick={huy} disabled={busy}>Huỷ lịch</Btn>}
+      <Btn variant="brand" className="flex-1" onClick={len} disabled={busy}>{busy?'…':(daLen?'Cập nhật lịch':'⏰ Lên lịch')}</Btn>
+    </div>
+    <p className="text-[10px] text-slate-400">Hệ thống quét mỗi 15 phút nên giờ đăng có thể lệch tối đa ~15 phút. Đăng tự động <b>vẫn phải xong checklist</b> — không có ngoại lệ.</p>
+  </div>;
+}
+// Quản lý kênh + cấu hình tự động đăng. Token KHÔNG nhập ở đây (xem giải thích trong màn).
+function KenhManager(){
+  const { db, upsertKenh, deleteKenh, notify } = useApp();
+  const CAP=db.kenh_tu_dong||KENH_TU_DONG_FE; const SS=db.kenh_san_sang||{};
+  const [edit,setEdit]=useState(null);
+  const kenhs=db.kenh||[];
+  return <div className="space-y-4">
+    <div className="flex items-center justify-between flex-wrap gap-2">
+      <h2 className="font-display text-lg font-bold text-ink">📡 Kênh &amp; tự động đăng</h2>
+      <Btn variant="brand" onClick={()=>setEdit({ten:'',loai:'FANPAGE',thuong_hieu:''})}>＋ Thêm kênh</Btn>
+    </div>
+    <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3 text-[11px] text-amber-800 leading-relaxed">
+      <b>Về token:</b> token đăng bài <b>không nhập ở đây</b> và không lưu trong cơ sở dữ liệu — vì D1 không mã hoá,
+      token rò rỉ đồng nghĩa người khác đăng bài được lên Page thật của bạn. Token phải cắm bằng
+      <b> secret của Cloudflare Worker</b> theo tên <code>TOKEN_&lt;mã API&gt;</code> (VD kênh có mã <code>FBPAGE</code> → secret <code>TOKEN_FBPAGE</code>).
+    </div>
+    {kenhs.length===0 ? <Empty>Chưa có kênh nào.</Empty> :
+      <div className="space-y-2">{kenhs.map(k=>{ const cap=CAP[String(k.loai||'').toUpperCase()]; const ss=SS[k.id];
+        return <div key={k.id} className={"bg-white rounded-2xl border shadow-card p-3 "+(k.active===false?'border-slate-200 opacity-60':'border-line')}>
+          <div className="flex items-start gap-2 flex-wrap">
+            <div className="flex-1 min-w-0">
+              <div className="font-display font-bold text-ink text-sm">{k.ten}</div>
+              <div className="text-[11px] text-slate-500">{k.loai}{k.thuong_hieu?(' · '+k.thuong_hieu):''}</div>
+            </div>
+            {cap && (cap.duoc
+              ? (k.tu_dong_dang
+                  ? (ss ? <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-semibold">🤖 tự đăng: sẵn sàng</span>
+                        : <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 font-semibold">⚠ bật rồi nhưng thiếu token/ID</span>)
+                  : <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500">tự đăng: đang tắt</span>)
+              : <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500">chỉ đăng tay</span>)}
+          </div>
+          {cap && !cap.duoc && <div className="text-[11px] text-slate-500 mt-1">{cap.dieu_kien}</div>}
+          {cap && cap.duoc && k.tu_dong_dang && <div className="text-[11px] text-slate-500 mt-1">
+            Mã API: <code>{k.api_ma||'—'}</code> · ID đối tượng: <code>{k.api_object_id||'—'}</code> · Secret cần có: <code>TOKEN_{k.api_ma||'?'}</code>
+          </div>}
+          <div className="flex justify-end gap-2 mt-2 pt-2 border-t border-line/60">
+            <button onClick={()=>setEdit(k)} className="text-xs text-blue-500 hover:underline">Sửa</button>
+            <button onClick={()=>{ if(confirm('Xoá kênh "'+k.ten+'"?')) deleteKenh(k.id).then(ok=>ok&&notify('Đã xoá')); }} className="text-xs text-rose-400 hover:underline">Xoá</button>
+          </div>
+        </div>; })}
+      </div>}
+    {edit && <KenhForm init={edit} onClose={()=>setEdit(null)}/>}
+  </div>;
+}
+function KenhForm({init,onClose}){
+  const { db, upsertKenh, notify } = useApp();
+  const CAP=db.kenh_tu_dong||KENH_TU_DONG_FE;
+  const [f,setF]=useState({ten:init.ten||'',loai:init.loai||'FANPAGE',thuong_hieu:init.thuong_hieu||'',
+    active:init.active!==false, tu_dong_dang:!!init.tu_dong_dang, api_ma:init.api_ma||'', api_object_id:init.api_object_id||''});
+  const cap=CAP[String(f.loai||'').toUpperCase()];
+  const save=async()=>{ if(!f.ten.trim()) return notify('Nhập tên kênh','warn');
+    if(f.tu_dong_dang && !f.api_ma.trim()) return notify('Nhập mã API để biết cần secret nào','warn');
+    const ok=await upsertKenh({...(init.id?{id:init.id}:{}), ...f, ten:f.ten.trim(), api_ma:f.api_ma.trim().toUpperCase().replace(/[^A-Z0-9_]/g,'')});
+    if(ok){ notify(init.id?'Đã lưu':'Đã thêm kênh'); onClose(); } };
+  return <Modal open={true} onClose={onClose} title={init.id?'Sửa kênh':'Thêm kênh'} wide>
+    <div className="grid sm:grid-cols-2 gap-2">
+      <Field label="Tên kênh" required><Input value={f.ten} onChange={e=>setF({...f,ten:e.target.value})}/></Field>
+      <Field label="Loại"><Select value={f.loai} onChange={e=>setF({...f,loai:e.target.value})}>{KENH_LOAI.map(x=><option key={x} value={x}>{x}</option>)}</Select></Field>
+      <Field label="Thương hiệu"><Input value={f.thuong_hieu} onChange={e=>setF({...f,thuong_hieu:e.target.value})}/></Field>
+      <Field label="Đang dùng"><Select value={f.active?'1':'0'} onChange={e=>setF({...f,active:e.target.value==='1'})}><option value="1">Có</option><option value="0">Tạm ẩn</option></Select></Field>
+    </div>
+    <div className="rounded-xl border border-line p-3 mt-2">
+      <div className="text-[11px] font-semibold text-ink-muted uppercase tracking-wide mb-1">Tự động đăng</div>
+      {!cap || !cap.duoc
+        ? <div className="text-[11px] text-slate-500">Loại <b>{f.loai}</b> không đăng tự động được: {(cap&&cap.dieu_kien)||'chưa hỗ trợ'}. Lịch đăng sẽ nhắc đăng tay.</div>
+        : <>
+            <label className="flex items-center gap-2 cursor-pointer mb-2">
+              <input type="checkbox" checked={f.tu_dong_dang} onChange={e=>setF({...f,tu_dong_dang:e.target.checked})} className="w-4 h-4 accent-brand"/>
+              <span className="text-sm text-ink">Cho phép hệ thống tự đăng lên kênh này</span>
+            </label>
+            <div className="text-[11px] text-slate-500 mb-2">{cap.dieu_kien}</div>
+            {f.tu_dong_dang && <div className="grid sm:grid-cols-2 gap-2">
+              <Field label="Mã API" hint="Chữ HOA/số/gạch dưới — dùng để đặt tên secret"><Input value={f.api_ma} onChange={e=>setF({...f,api_ma:e.target.value})} placeholder="FBPAGE"/></Field>
+              <Field label="ID đối tượng" hint="VD: Facebook Page ID"><Input value={f.api_object_id} onChange={e=>setF({...f,api_object_id:e.target.value})}/></Field>
+            </div>}
+            {f.tu_dong_dang && f.api_ma && <div className="text-[11px] text-amber-700 mt-2">
+              Sau khi lưu, cắm token bằng lệnh: <code className="bg-slate-100 px-1 rounded">wrangler secret put TOKEN_{f.api_ma.toUpperCase().replace(/[^A-Z0-9_]/g,'')}</code>
+            </div>}
+          </>}
+    </div>
+    <div className="flex gap-2 mt-3"><Btn variant="ghost" onClick={onClose}>Huỷ</Btn><Btn variant="brand" className="flex-1" onClick={save}>Lưu</Btn></div>
+  </Modal>;
+}
 function KetQua(){
   const { db, createKetQua, deleteKetQua, importKetQua, assignDon, skipDon, notify } = useApp();
   const KQ=db.ket_qua||[], DCG=db.don_cho_gan||[], AIR=db.air_posts||[];
