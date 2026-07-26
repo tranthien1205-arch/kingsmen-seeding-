@@ -974,6 +974,7 @@ const NAV_GROUPS = {
       {key:'air', label:'Đăng bài', short:'Đăng', icon:'🚀'},
       {key:'footage', label:'Kho footage', short:'Footage', icon:'🎞'},
       {key:'ketqua', label:'Kết quả', short:'Kết quả', icon:'📈'},
+      {key:'cdash', label:'Dashboard nội dung', short:'Dashboard', icon:'📊'},
       {key:'products', label:'Sản phẩm & Claim', short:'Sản phẩm', icon:'🧪'},
     ]},
     {key:'g_seeding', label:'Seeding', icon:'💬', items:[
@@ -1010,6 +1011,7 @@ const NAV_GROUPS = {
       {key:'air', label:'Đăng bài', short:'Đăng', icon:'🚀'},
       {key:'footage', label:'Kho footage', short:'Footage', icon:'🎞'},
       {key:'ketqua', label:'Kết quả', short:'Kết quả', icon:'📈'},
+      {key:'cdash', label:'Dashboard nội dung', short:'Dashboard', icon:'📊'},
       {key:'products', label:'Sản phẩm & Claim', short:'Sản phẩm', icon:'🧪'},
     ]},
     {key:'g_seeding', label:'Seeding', icon:'💬', items:[
@@ -1054,7 +1056,7 @@ function ProfileModal({open, onClose}){
   </Modal>;
 }
 // Module đang NÂNG CẤP — chỉ tài khoản dev preview (is_dev) mới thấy
-const BETA_KEYS = new Set(['strategy','plan','products','studio','approve','air','ketqua','footage']);
+const BETA_KEYS = new Set(['strategy','plan','products','studio','approve','air','ketqua','footage','cdash']);
 function Shell(){
   const { me, logout, db } = useApp();
   // Lọc module đang nâng cấp → bỏ nhóm rỗng
@@ -1099,6 +1101,7 @@ function Shell(){
       case 'air': return <AirPosts/>;
       case 'footage': return <FootageLib/>;
       case 'ketqua': return <KetQua/>;
+      case 'cdash': return <ContentDashboard/>;
       case 'schedule': return <PostSchedule/>;
       case 'pay_report': return <MktPayReport/>;
       case 'users': return <UserManagement/>;
@@ -2488,6 +2491,171 @@ function AirEditor({post, onClose}){
       <Btn variant="brand" className="flex-1 min-w-[160px]" onClick={publish} disabled={busy}>{busy?'…':'✓ Đánh dấu ĐÃ ĐĂNG'}</Btn>
     </div>}
     {posted && <div className="text-[11px] text-slate-400">Đã đăng lúc {fmtDate(post.posted_at)} — khoá chỉnh sửa để giữ nguyên dữ liệu quy đơn.</div>}
+  </div>;
+}
+
+/* ============================================================
+   CONTENT OS · P9 — DASHBOARD 4 HỆ KPI + HIỆU SUẤT NGƯỜI (Process ≠ Outcome)
+   Nguyên tắc: KHÔNG cộng dồn 3 mức tin cậy · KHÔNG xếp hạng khi chưa đủ mẫu.
+============================================================ */
+const MIN_MAU = 5;   // dưới ngưỡng này thì hiện số nhưng KHÔNG xếp hạng (tránh oan cho người ít việc)
+function ContentDashboard(){
+  const { db } = useApp();
+  const [ky,setKy]=useState('');
+  const SCR=db.scripts||[], AIR=db.air_posts||[], KQ=db.ket_qua||[], AP=db.approvals||[], CI=db.content_items||[];
+  const kyList=[...new Set(KQ.map(k=>k.ky).filter(Boolean))].sort().reverse();
+  const kqIn = KQ.filter(k=>!ky || (k.ky||'')===ky);
+
+  // ---- map bài đăng → kịch bản/nội dung → hệ KPI + người tạo ----
+  const airMeta = {};
+  AIR.forEach(a=>{
+    const src = a.script_id ? SCR.find(s=>s.id===a.script_id) : CI.find(c=>c.id===a.content_item_id);
+    const ci  = a.content_item_id ? CI.find(c=>c.id===a.content_item_id) : null;
+    airMeta[a.id] = {
+      he: (ci&&ci.loai_muc_tieu) || (src&&src.loai_muc_tieu) || '',
+      nguoi: (src&&src.created_by_name) || a.nguoi_dang_ten || '',
+    };
+  });
+  const sum=(arr,f)=>arr.reduce((s,x)=>s+(Number(x[f])||0),0);
+
+  // ---- 4 hệ KPI: đếm TÁCH BẠCH, không gộp ----
+  const heRows = LOAI_MUC_TIEU_KPI.map(o=>{
+    const airs = AIR.filter(a=>(airMeta[a.id]||{}).he===o.v);
+    const ids = new Set(airs.map(a=>a.id));
+    const kqs = kqIn.filter(k=>ids.has(k.air_post_id));
+    return { ...o, soBai:airs.length, daDang:airs.filter(a=>a.trang_thai==='DA_DANG').length,
+      tt:kqs.filter(k=>k.muc_tin_cay==='TRUC_TIEP'), gt:kqs.filter(k=>k.muc_tin_cay==='GIAN_TIEP'), kqd:kqs.filter(k=>k.muc_tin_cay==='KHONG_QUY_DON') };
+  });
+  const chuaGanHe = AIR.filter(a=>!(airMeta[a.id]||{}).he).length;
+
+  // ---- Hiệu suất NGƯỜI: Process (cách làm) tách khỏi Outcome (kết quả) ----
+  const submitted = {};   // người → số lần gửi duyệt (đếm theo đối tượng, không theo cổng)
+  AP.forEach(a=>{ if(a.cong!=='NOI_DUNG') return; const n=a.nguoi_gui_ten||''; if(!n) return; (submitted[n] ||= []).push(a); });
+  const people = [...new Set([...SCR.map(s=>s.created_by_name), ...Object.keys(submitted)].filter(Boolean))];
+  const rows = people.map(n=>{
+    const mine = SCR.filter(s=>s.created_by_name===n);
+    const sent = mine.filter(s=>(submitted[n]||[]).some(a=>a.doi_tuong_id===s.id));
+    const duyet = mine.filter(s=>s.trang_thai==='DUYET');
+    const lan1 = duyet.filter(s=>Number(s.so_lan_tra||0)===0).length;
+    const traTong = mine.reduce((t,s)=>t+Number(s.so_lan_tra||0),0);
+    const canhBao = mine.filter(s=>(s.claim_flags||[]).length>0).length;
+    const myAir = AIR.filter(a=>(airMeta[a.id]||{}).nguoi===n);
+    const ids=new Set(myAir.map(a=>a.id));
+    const kqs = kqIn.filter(k=>ids.has(k.air_post_id));
+    return { n, soKB:mine.length, soGui:sent.length, duyet:duyet.length, lan1, traTong, canhBao,
+      daDang:myAir.filter(a=>a.trang_thai==='DA_DANG').length,
+      tt:sum(kqs.filter(k=>k.muc_tin_cay==='TRUC_TIEP'),'doanh_thu'),
+      gt:sum(kqs.filter(k=>k.muc_tin_cay==='GIAN_TIEP'),'doanh_thu'),
+      view:sum(kqs.filter(k=>k.muc_tin_cay==='KHONG_QUY_DON'),'luot_xem'),
+      duMau: mine.length>=MIN_MAU };
+  }).sort((a,b)=>b.soKB-a.soKB);
+
+  // ---- Kỹ thuật: đo bằng số claim CHẶN ĐƯỢC, không phải số bài làm ----
+  const ktRows = (()=>{ const m={};
+    AP.filter(a=>a.cong==='CLAIM' && a.trang_thai==='TRA_LAI').forEach(a=>{ const n=a.nguoi_duyet_ten||''; if(n) m[n]=(m[n]||0)+1; });
+    AP.filter(a=>a.cong==='CLAIM' && a.trang_thai==='DAT').forEach(a=>{ const n=a.nguoi_duyet_ten||''; if(n) m[n]=m[n]||0; });
+    return Object.keys(m).map(n=>({n, chan:m[n]})).sort((a,b)=>b.chan-a.chan); })();
+
+  const Pct=({a,b})=> b>0 ? <span className="font-semibold text-ink">{Math.round(a/b*100)}%</span> : <span className="text-slate-300">—</span>;
+  return <div className="space-y-4">
+    <div className="flex items-center justify-between flex-wrap gap-2">
+      <h2 className="font-display text-lg font-bold text-ink">📊 Dashboard nội dung</h2>
+      <Select value={ky} onChange={e=>setKy(e.target.value)} className="w-auto"><option value="">Tất cả kỳ</option>{kyList.map(k=><option key={k} value={k}>{k}</option>)}</Select>
+    </div>
+
+    <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3 text-[11px] text-amber-800 leading-relaxed">
+      <b>Cách đọc bảng này:</b> 4 hệ KPI đo 4 mục tiêu khác nhau nên <b>không so trực tiếp với nhau</b>;
+      3 mức tin cậy <b>không được cộng dồn</b> thành “doanh thu từ content”;
+      người có dưới <b>{MIN_MAU}</b> kịch bản thì <b>không xếp hạng</b> (chưa đủ mẫu để kết luận).
+    </div>
+
+    {/* 4 hệ KPI — mỗi hệ 1 dòng, 3 cột tin cậy tách bạch */}
+    <div className="bg-white rounded-2xl border border-line shadow-card p-4">
+      <div className="text-sm font-semibold text-ink mb-2">4 hệ KPI (đo riêng, không gộp)</div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-xs min-w-[560px]">
+          <thead><tr className="text-left text-ink-muted border-b border-line">
+            <th className="py-1.5 pr-2">Hệ mục tiêu</th><th className="py-1.5 px-2">Bài</th><th className="py-1.5 px-2">Đã đăng</th>
+            <th className="py-1.5 px-2 text-emerald-700">Trực tiếp</th><th className="py-1.5 px-2 text-amber-700">Gián tiếp</th><th className="py-1.5 px-2 text-slate-500">Không quy đơn</th>
+          </tr></thead>
+          <tbody>{heRows.map(h=>
+            <tr key={h.v} className="border-b border-line/50">
+              <td className="py-1.5 pr-2 font-semibold text-ink">{h.label}</td>
+              <td className="py-1.5 px-2">{h.soBai}</td>
+              <td className="py-1.5 px-2">{h.daDang}</td>
+              <td className="py-1.5 px-2 text-emerald-700">{h.tt.length?sum(h.tt,'doanh_thu').toLocaleString('vi-VN')+'đ':'—'}</td>
+              <td className="py-1.5 px-2 text-amber-700">{h.gt.length?sum(h.gt,'doanh_thu').toLocaleString('vi-VN')+'đ':'—'}</td>
+              <td className="py-1.5 px-2 text-slate-500">{h.kqd.length?sum(h.kqd,'luot_xem').toLocaleString('vi-VN')+' xem':'—'}</td>
+            </tr>)}
+          </tbody>
+        </table>
+      </div>
+      {chuaGanHe>0 && <div className="text-[11px] text-amber-600 mt-2">⚠ {chuaGanHe} bài chưa gắn hệ mục tiêu → không vào hệ nào. Bổ sung ở Kế hoạch nội dung để số liệu đủ.</div>}
+      <div className="text-[10px] text-slate-400 mt-2">Cột trống nghĩa là <b>chưa có dữ liệu</b> — không phải bằng 0.</div>
+    </div>
+
+    {/* Hiệu suất người — Process */}
+    <div className="bg-white rounded-2xl border border-line shadow-card p-4">
+      <div className="text-sm font-semibold text-ink">Hiệu suất người — <span className="text-brand-dark">Cách làm (Process)</span></div>
+      <div className="text-[11px] text-slate-500 mb-2">Đo <b>cách làm việc</b>, không phụ thuộc may rủi thị trường. Đây là phần công bằng nhất để nhận xét.</div>
+      {rows.length===0 ? <Empty>Chưa có dữ liệu.</Empty> :
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs min-w-[560px]">
+            <thead><tr className="text-left text-ink-muted border-b border-line">
+              <th className="py-1.5 pr-2">Người</th><th className="py-1.5 px-2">Kịch bản</th><th className="py-1.5 px-2">Đã duyệt</th>
+              <th className="py-1.5 px-2">Qua lần 1</th><th className="py-1.5 px-2">Bị trả</th><th className="py-1.5 px-2">Bài có cảnh báo claim</th>
+            </tr></thead>
+            <tbody>{rows.map(r=>
+              <tr key={r.n} className="border-b border-line/50">
+                <td className="py-1.5 pr-2 font-semibold text-ink">{r.n}{!r.duMau && <span className="ml-1 text-[9px] px-1 py-0.5 rounded bg-slate-100 text-slate-400">chưa đủ mẫu</span>}</td>
+                <td className="py-1.5 px-2">{r.soKB}</td>
+                <td className="py-1.5 px-2">{r.duyet}</td>
+                <td className="py-1.5 px-2">{r.duMau ? <Pct a={r.lan1} b={r.duyet}/> : <span className="text-slate-300">—</span>}</td>
+                <td className="py-1.5 px-2">{r.traTong>0?<span className="text-rose-600">{r.traTong}</span>:'0'}</td>
+                <td className="py-1.5 px-2">{r.canhBao>0?<span className="text-amber-600">{r.canhBao}</span>:'0'}</td>
+              </tr>)}
+            </tbody>
+          </table>
+        </div>}
+      <div className="text-[10px] text-slate-400 mt-2">“Qua lần 1” chỉ hiện khi người đó có ≥{MIN_MAU} kịch bản — ít mẫu thì tỷ lệ % dễ gây hiểu sai.</div>
+    </div>
+
+    {/* Hiệu suất người — Outcome */}
+    <div className="bg-white rounded-2xl border border-line shadow-card p-4">
+      <div className="text-sm font-semibold text-ink">Hiệu suất người — <span className="text-brand-dark">Kết quả (Outcome)</span></div>
+      <div className="text-[11px] text-slate-500 mb-2">Kết quả chịu ảnh hưởng của thị trường, ngân sách, mùa vụ… nên <b>đọc kèm cột mức tin cậy</b>, đừng dùng một mình để đánh giá con người.</div>
+      {rows.length===0 ? <Empty>Chưa có dữ liệu.</Empty> :
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs min-w-[520px]">
+            <thead><tr className="text-left text-ink-muted border-b border-line">
+              <th className="py-1.5 pr-2">Người</th><th className="py-1.5 px-2">Đã đăng</th>
+              <th className="py-1.5 px-2 text-emerald-700">Trực tiếp</th><th className="py-1.5 px-2 text-amber-700">Gián tiếp</th><th className="py-1.5 px-2 text-slate-500">Lượt xem</th>
+            </tr></thead>
+            <tbody>{rows.map(r=>
+              <tr key={r.n} className="border-b border-line/50">
+                <td className="py-1.5 pr-2 font-semibold text-ink">{r.n}</td>
+                <td className="py-1.5 px-2">{r.daDang}</td>
+                <td className="py-1.5 px-2 text-emerald-700">{r.tt>0?r.tt.toLocaleString('vi-VN')+'đ':'—'}</td>
+                <td className="py-1.5 px-2 text-amber-700">{r.gt>0?r.gt.toLocaleString('vi-VN')+'đ':'—'}</td>
+                <td className="py-1.5 px-2 text-slate-500">{r.view>0?r.view.toLocaleString('vi-VN'):'—'}</td>
+              </tr>)}
+            </tbody>
+          </table>
+        </div>}
+    </div>
+
+    {/* Kỹ thuật */}
+    <div className="bg-white rounded-2xl border border-line shadow-card p-4">
+      <div className="text-sm font-semibold text-ink">Kỹ thuật — <span className="text-brand-dark">claim chặn được</span></div>
+      <div className="text-[11px] text-slate-500 mb-2">Vai trò gác claim được đo bằng <b>số lần chặn nội dung sai</b> — công sức phòng ngừa, không phải số bài làm ra.</div>
+      {ktRows.length===0 ? <Empty>Chưa có lượt duyệt claim nào.</Empty> :
+        <div className="space-y-1">{ktRows.map(k=>
+          <div key={k.n} className="flex items-center justify-between rounded-xl border border-line p-2">
+            <span className="text-sm font-semibold text-ink">{k.n}</span>
+            <span className="text-xs">{k.chan>0?<span className="text-rose-600 font-semibold">{k.chan} lần chặn</span>:<span className="text-slate-400">chưa chặn lần nào</span>}</span>
+          </div>)}
+        </div>}
+    </div>
   </div>;
 }
 
