@@ -1514,6 +1514,7 @@ function ContentPlan(){
   const frameworks = (db.frameworks||[]).filter(f=>f.active!==false);
   const kenhs = (db.kenh||[]).filter(k=>k.active!==false);
   const [view,setView]=useState('kanban');
+  const [calMonth,setCalMonth]=useState(todayYMD().slice(0,7));
   const [fLoai,setFLoai]=useState(''); const [fKenh,setFKenh]=useState(''); const [fThang,setFThang]=useState(''); const [fPillar,setFPillar]=useState('');
   const [edit,setEdit]=useState(null); const [imp,setImp]=useState(false);
   const nameOf=(arr,id)=>{ const x=(arr||[]).find(o=>o.id===id); return x?(x.ten||x.chu_de):''; };
@@ -1547,6 +1548,35 @@ function ContentPlan(){
       </div>
     </div>;
   };
+  const monthShift=(ym,d)=>{ const [y,mo]=ym.split('-').map(Number); const dt=new Date(y,(mo-1)+d,1); return dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0'); };
+  const DOWv={0:'CN',1:'T2',2:'T3',3:'T4',4:'T5',5:'T6',6:'T7'};
+  const ContentCalendar=()=>{
+    const base=items.filter(it=> (!fLoai||it.loai===fLoai)&&(!fKenh||it.kenh_id===fKenh)&&(!fPillar||it.pillar_id===fPillar));
+    const inMonth=base.filter(it=>{ const d=(it.chi_tiet&&it.chi_tiet.ngay_dang)||''; return d? d.slice(0,7)===calMonth : it.thang===calMonth; });
+    const byDay={}; const noDay=[];
+    inMonth.forEach(it=>{ const d=it.chi_tiet&&it.chi_tiet.ngay_dang; if(d) (byDay[d]=byDay[d]||[]).push(it); else noDay.push(it); });
+    const days=Object.keys(byDay).sort();
+    return <div className="space-y-3">
+      <div className="flex items-center justify-between bg-white rounded-xl border border-line p-2">
+        <button onClick={()=>setCalMonth(monthShift(calMonth,-1))} className="w-9 h-9 rounded-lg hover:bg-slate-100 text-lg">‹</button>
+        <div className="font-display font-bold text-ink">Tháng {calMonth.split('-')[1]}/{calMonth.split('-')[0]} <span className="text-xs font-normal text-slate-400">· {inMonth.length} mục</span></div>
+        <button onClick={()=>setCalMonth(monthShift(calMonth,1))} className="w-9 h-9 rounded-lg hover:bg-slate-100 text-lg">›</button>
+      </div>
+      {inMonth.length===0 ? <Empty>Chưa có nội dung trong tháng này. Đặt "Ngày đăng dự kiến" khi tạo/sửa để lên lịch.</Empty> : <>
+        {days.map(d=>{ const dow=new Date(d+'T00:00:00').getDay();
+          return <div key={d} className="bg-white rounded-2xl border border-line shadow-card overflow-hidden">
+            <div className="px-3 py-2 bg-slate-50 border-b text-sm font-semibold text-ink flex items-center gap-2">
+              <span className="w-9 h-9 rounded-lg bg-brand/10 text-brand-dark flex flex-col items-center justify-center leading-none"><b className="text-sm">{d.slice(8)}</b><span className="text-[8px]">{DOWv[dow]}</span></span>
+              <span>{byDay[d].length} nội dung</span></div>
+            <div className="p-2 space-y-2">{byDay[d].map(it=><Card key={it.id} it={it}/>)}</div>
+          </div>; })}
+        {noDay.length>0 && <div className="bg-white rounded-2xl border border-amber-200 overflow-hidden">
+          <div className="px-3 py-2 bg-amber-50 border-b text-sm font-semibold text-amber-700">⏳ Chưa xếp ngày đăng ({noDay.length}) — bấm "Sửa" để đặt ngày</div>
+          <div className="p-2 space-y-2">{noDay.map(it=><Card key={it.id} it={it}/>)}</div>
+        </div>}
+      </>}
+    </div>;
+  };
   return <div className="space-y-4">
     <div className="flex items-center justify-between flex-wrap gap-2">
       <h2 className="font-display text-lg font-bold text-ink">🗓️ Kế hoạch nội dung</h2>
@@ -1554,6 +1584,7 @@ function ContentPlan(){
         <div className="flex rounded-lg overflow-hidden border border-line">
           <button onClick={()=>setView('kanban')} className={"px-3 py-1.5 text-xs font-semibold "+(view==='kanban'?'bg-brand text-white':'bg-white text-slate-500')}>Kanban</button>
           <button onClick={()=>setView('list')} className={"px-3 py-1.5 text-xs font-semibold "+(view==='list'?'bg-brand text-white':'bg-white text-slate-500')}>Danh sách</button>
+          <button onClick={()=>setView('calendar')} className={"px-3 py-1.5 text-xs font-semibold "+(view==='calendar'?'bg-brand text-white':'bg-white text-slate-500')}>Lịch</button>
         </div>
         <Btn variant="ghost" onClick={()=>setImp(true)}>⬆ Import</Btn>
         <Btn variant="brand" onClick={()=>setEdit({...blank})}>＋ Thêm nội dung</Btn>
@@ -1569,7 +1600,8 @@ function ContentPlan(){
     {showLech && <div className="bg-amber-50 border border-amber-300 rounded-2xl p-3 text-xs text-amber-800">
       ⚠️ <b>Lệch tỷ lệ pillar &gt;15%:</b> {lech.map((x,i)=><span key={x.p.id}>{i>0?' · ':''}{x.p.ten} thực tế {Math.round(x.actual)}% (mục tiêu {x.p.ty_trong}%)</span>)}. Cân nhắc phân bổ lại nội dung theo trụ cột.
     </div>}
-    {filtered.length===0 ? <Empty>Chưa có nội dung. Bấm "Thêm nội dung" hoặc "Import" 2 file kế hoạch.</Empty> :
+    {view==='calendar' ? <ContentCalendar/> :
+     filtered.length===0 ? <Empty>Chưa có nội dung. Bấm "Thêm nội dung" hoặc "Import" 2 file kế hoạch.</Empty> :
      view==='kanban' ?
       <div className="flex gap-2 overflow-x-auto pb-2 -mx-3 px-3 sm:mx-0 sm:px-0 snap-x">
         {PIPELINE.map(st=>{ const col=filtered.filter(it=>it.trang_thai===st.k);
@@ -1614,19 +1646,26 @@ function ContentItemModal({edit, onClose}){
       <Field label="Mục tiêu (hệ KPI)" required><Select value={f.loai_muc_tieu} onChange={e=>set('loai_muc_tieu',e.target.value)}>{LOAI_MUC_TIEU_KPI.map(x=><option key={x.v} value={x.v}>{x.label}</option>)}</Select></Field>
     </div>
     <Field label="Tiêu đề / tên nội dung" required><Input value={f.tieu_de} onChange={e=>set('tieu_de',e.target.value)}/></Field>
-    <div className="grid grid-cols-2 gap-2">
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
       <Field label="Pillar (trụ cột)" required><Select value={f.pillar_id} onChange={e=>set('pillar_id',e.target.value)}><option value="">— chọn —</option>{(db.pillars||[]).map(p=><option key={p.id} value={p.id}>{p.ten}</option>)}</Select></Field>
       <Field label="Nhóm kịch bản (framework)" required><Select value={f.framework_id} onChange={e=>set('framework_id',e.target.value)}><option value="">— chọn —</option>{(db.frameworks||[]).map(x=><option key={x.id} value={x.id}>{x.ten}</option>)}</Select></Field>
       <Field label="Sản phẩm" hint="nên có để AI trích spec đúng"><Select value={f.san_pham_id} onChange={e=>set('san_pham_id',e.target.value)}><option value="">— chọn —</option>{(db.san_pham||[]).map(x=><option key={x.id} value={x.id}>{x.ten}</option>)}</Select></Field>
       <Field label="Kênh" required><Select value={f.kenh_id} onChange={e=>set('kenh_id',e.target.value)}><option value="">— chọn —</option>{(db.kenh||[]).map(x=><option key={x.id} value={x.id}>{x.ten}</option>)}</Select></Field>
-      <Field label="Tháng"><Input type="month" value={f.thang} onChange={e=>set('thang',e.target.value)}/></Field>
+      <Field label="Ngày đăng dự kiến" hint="để lên Lịch"><Input type="date" value={f.chi_tiet.ngay_dang||''} onChange={e=>setSub('chi_tiet','ngay_dang',e.target.value)}/></Field>
       <Field label="Giai đoạn"><Select value={f.trang_thai} onChange={e=>set('trang_thai',e.target.value)}>{PIPELINE.map(s=><option key={s.k} value={s.k}>{s.label}</option>)}</Select></Field>
-      <Field label="Người phụ trách"><Select value={(f.pic&&f.pic.chinh)||''} onChange={e=>setSub('pic','chinh',e.target.value)}><option value="">—</option>{users.map(u=><option key={u.id} value={u.id}>{u.ho_ten}</option>)}</Select></Field>
+      <Field label="Người phụ trách chính"><Select value={(f.pic&&f.pic.chinh)||''} onChange={e=>setSub('pic','chinh',e.target.value)}><option value="">—</option>{users.map(u=><option key={u.id} value={u.id}>{u.ho_ten}</option>)}</Select></Field>
       {f.loai==='SOCIAL' && <Field label="Format"><Input value={f.chi_tiet.format||''} onChange={e=>setSub('chi_tiet','format',e.target.value)} placeholder="Video / Multi-photos…"/></Field>}
       {f.loai==='ECOM' && <Field label="Loại video"><Input value={f.chi_tiet.loai_video||''} onChange={e=>setSub('chi_tiet','loai_video',e.target.value)} placeholder="Gắn giỏ hàng…"/></Field>}
     </div>
+    <details className="mb-3 rounded-xl border border-line bg-slate-50 p-2.5">
+      <summary className="text-[13px] font-semibold text-ink cursor-pointer select-none">👥 Người phụ trách theo giai đoạn <span className="text-[11px] font-normal text-ink-muted">— để đo hiệu suất từng khâu (tuỳ chọn)</span></summary>
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mt-2">
+        {[['ke_hoach','Kế hoạch'],['brief','Brief'],['quay','Quay'],['dung','Dựng'],['dang','Đăng'],['tracking','Tracking']].map(([k,lb])=>
+          <Field key={k} label={lb}><Select value={f.pic[k]||''} onChange={e=>setSub('pic',k,e.target.value)}><option value="">—</option>{users.map(u=><option key={u.id} value={u.id}>{u.ho_ten}</option>)}</Select></Field>)}
+      </div>
+    </details>
     <Field label="Nội dung / brief / concept"><Textarea rows="2" value={f.chi_tiet.noi_dung||''} onChange={e=>setSub('chi_tiet','noi_dung',e.target.value)}/></Field>
-    <div className="grid grid-cols-2 gap-2">
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
       <Field label="Link final (video/thiết kế)"><Input value={f.links.final||''} onChange={e=>setSub('links','final',e.target.value)}/></Field>
       <Field label="Link đã đăng"><Input value={f.links.post||''} onChange={e=>setSub('links','post',e.target.value)}/></Field>
     </div>
