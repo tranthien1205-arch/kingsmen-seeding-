@@ -8,6 +8,7 @@
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 <script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600;700;800;900&family=Maven+Pro:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script>
@@ -1672,38 +1673,138 @@ function ContentItemModal({edit, onClose}){
     <div className="flex gap-2 mt-2"><Btn variant="ghost" onClick={onClose}>Huỷ</Btn><Btn variant="brand" className="flex-1" onClick={save}>{edit.id?'Lưu':'Thêm'}</Btn></div>
   </Modal>;
 }
+// Auto-map cột file → trường app (ưu tiên theo thứ tự từ khoá; cột đã dùng không tái sử dụng)
+const IMPORT_FIELD_HINTS={
+  tieu_de:['tên nội dung','nội dung chi tiết','content angle','tiêu đề','tên bài','title','kịch bản'],
+  framework:['nhóm kịch bản','cấu trúc','framework','định dạng','format'],
+  kenh:['kênh','shop','channel'],
+  san_pham:['sản phẩm','product'],
+  pillar:['content pillar','pillar','trụ cột'],
+  ngay_dang:['ngày đăng','lịch đăng','ngày giao','lịch air','ngày quay','ngày'],
+};
+const impNorm=s=>String(s==null?'':s).trim().toLowerCase().replace(/\s+/g,' ');
+function impAutoMap(header){
+  const H=(header||[]).map(impNorm); const map={}; const used=new Set();
+  for(const field in IMPORT_FIELD_HINTS){ let bi=-1;
+    outer: for(const h of IMPORT_FIELD_HINTS[field]){ for(let i=0;i<H.length;i++){ if(used.has(i)||!H[i])continue; if(H[i].includes(h)){ bi=i; break outer; } } }
+    map[field]=bi; if(bi>=0)used.add(bi);
+  }
+  return map;
+}
+function impDetectHeader(rows){ let hi=0,best=0; for(let i=0;i<Math.min(15,(rows||[]).length);i++){ const c=(rows[i]||[]).filter(x=>String(x==null?'':x).trim()).length; if(c>best){best=c;hi=i;} } return hi; }
+function impToMonth(v){ if(v==null||v==='')return ''; if(v instanceof Date){ return v.getFullYear()+'-'+String(v.getMonth()+1).padStart(2,'0'); } const s=String(v); const m=s.match(/(\d{4})[-/](\d{1,2})/); if(m) return m[1]+'-'+m[2].padStart(2,'0'); const d=new Date(s); if(!isNaN(d.getTime())) return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); return ''; }
+const IMPORT_FIELDS=[
+  {k:'tieu_de',label:'Tiêu đề / Kịch bản',req:true},
+  {k:'framework',label:'Framework (nhóm kịch bản)'},
+  {k:'pillar',label:'Pillar (trụ cột)'},
+  {k:'kenh',label:'Kênh'},
+  {k:'san_pham',label:'Sản phẩm'},
+  {k:'ngay_dang',label:'Ngày đăng → Tháng'},
+];
 function ContentImportModal({onClose}){
   const { db, importContentItems, notify } = useApp();
-  const [txt,setTxt]=useState(''); const [busy,setBusy]=useState(false); const fileRef=useRef();
+  const [busy,setBusy]=useState(false); const fileRef=useRef();
+  const [txt,setTxt]=useState('');                 // CSV / dán tay
+  const [wb,setWb]=useState(null);                 // workbook .xlsx (SheetJS)
+  const [sheet,setSheet]=useState('');             // sheet đang chọn
+  const [rows,setRows]=useState([]);               // rows sheet_to_json header:1
+  const [hi,setHi]=useState(0);                    // dòng tiêu đề
+  const [map,setMap]=useState({});                 // field -> col index
+  const [def,setDef]=useState({loai:'SOCIAL',loai_muc_tieu:'BAN_HANG',kenh_id:'',thang:''});
   const HEAD=['Tiêu đề','Loại (ECOM/SOCIAL)','Mục tiêu','Pillar','Framework','Kênh','Sản phẩm','Tháng (YYYY-MM)'];
   const dlTpl=()=>download('mau_ke_hoach_noi_dung.csv', toCSV([HEAD,['Review ColorMatch nền gạch trắng','SOCIAL','Thương hiệu','Branding','Review KOC','Fanpage Kingsmen','','2026-07']]));
-  const onFile=e=>{ const fl=e.target.files&&e.target.files[0]; e.target.value=''; if(!fl) return; const r=new FileReader(); r.onload=ev=>setTxt(String(ev.target.result||'')); r.readAsText(fl,'utf-8'); };
-  const findId=(arr,name,key)=>{ if(!name) return null; const n=name.trim().toLowerCase(); const x=(arr||[]).find(o=>String(o[key]||'').trim().toLowerCase()===n); return x?x.id:null; };
-  const kpiVal=(name)=>{ if(!name) return 'BAN_HANG'; const n=name.trim().toLowerCase(); const x=LOAI_MUC_TIEU_KPI.find(o=>o.label.toLowerCase()===n||o.v.toLowerCase()===n); return x?x.v:'BAN_HANG'; };
-  const doImport=async()=>{ const rows=parseTable(txt); if(!rows.length) return notify('Chưa có dữ liệu','warn');
-    if((rows[0][0]||'').toLowerCase()==='tiêu đề') rows.shift();
-    const items=rows.filter(c=>(c[0]||'').trim()).map(c=>({
+  const findId=(arr,name,key)=>{ if(!name) return null; const n=String(name).trim().toLowerCase(); if(!n) return null; let x=(arr||[]).find(o=>String(o[key]||'').trim().toLowerCase()===n); if(!x) x=(arr||[]).find(o=>{const v=String(o[key]||'').trim().toLowerCase(); return v&&(n.includes(v)||v.includes(n));}); return x?x.id:null; };
+  const kpiVal=(name)=>{ if(!name) return 'BAN_HANG'; const n=String(name).trim().toLowerCase(); const x=LOAI_MUC_TIEU_KPI.find(o=>o.label.toLowerCase()===n||o.v.toLowerCase()===n); return x?x.v:'BAN_HANG'; };
+  const resetXlsx=()=>{ setWb(null); setSheet(''); setRows([]); setHi(0); setMap({}); };
+  const pickSheet=(w,sn)=>{ setSheet(sn); const rr=XLSX.utils.sheet_to_json(w.Sheets[sn],{header:1,blankrows:false}); setRows(rr); const h=impDetectHeader(rr); setHi(h); setMap(impAutoMap(rr[h]||[])); };
+  const changeHeader=(idx)=>{ setHi(idx); setMap(impAutoMap(rows[idx]||[])); };
+  const onFile=e=>{ const fl=e.target.files&&e.target.files[0]; e.target.value=''; if(!fl) return;
+    if(/\.(xlsx|xls)$/i.test(fl.name)){
+      if(typeof XLSX==='undefined') return notify('Thư viện đọc Excel chưa tải xong, thử lại sau vài giây','warn');
+      const r=new FileReader();
+      r.onload=ev=>{ try{ const w=XLSX.read(ev.target.result,{type:'array',cellDates:true}); setTxt(''); setWb(w); pickSheet(w, w.SheetNames[0]); }catch(err){ notify('Không đọc được file: '+err.message,'err'); } };
+      r.readAsArrayBuffer(fl);
+    } else { resetXlsx(); const r=new FileReader(); r.onload=ev=>setTxt(String(ev.target.result||'')); r.readAsText(fl,'utf-8'); }
+  };
+
+  const header = rows[hi]||[];
+  const colOpts = header.map((c,i)=>({i, name:String(c==null?'':c).trim()||('Cột '+(i+1))}));
+  const buildXlsx=()=>{ const body=rows.slice(hi+1); const cell=(r,ci)=> (ci>=0? String(r[ci]==null?'':r[ci]).trim():'');
+    return body.map(r=>({
+      tieu_de: cell(r,map.tieu_de),
+      loai: def.loai,
+      loai_muc_tieu: def.loai_muc_tieu,
+      pillar_id: findId(db.pillars, cell(r,map.pillar), 'ten'),
+      framework_id: findId(db.frameworks, cell(r,map.framework), 'ten'),
+      kenh_id: findId(db.kenh, cell(r,map.kenh), 'ten') || def.kenh_id || null,
+      san_pham_id: findId(db.san_pham, cell(r,map.san_pham), 'ten'),
+      thang: (map.ngay_dang>=0? impToMonth(r[map.ngay_dang]):'') || def.thang || '',
+      trang_thai:'Y_TUONG',
+    })).filter(x=>x.tieu_de);
+  };
+  const buildCsv=()=>{ const rr=parseTable(txt); if(!rr.length) return []; if((rr[0][0]||'').toLowerCase()==='tiêu đề') rr.shift();
+    return rr.filter(c=>(c[0]||'').trim()).map(c=>({
       tieu_de:(c[0]||'').trim(), loai:(c[1]||'').trim().toUpperCase()==='ECOM'?'ECOM':'SOCIAL', loai_muc_tieu:kpiVal(c[2]),
       pillar_id:findId(db.pillars,c[3],'ten'), framework_id:findId(db.frameworks,c[4],'ten'), kenh_id:findId(db.kenh,c[5],'ten'),
       san_pham_id:findId(db.san_pham,c[6],'ten'), thang:(c[7]||'').trim(), trang_thai:'Y_TUONG',
     }));
+  };
+  const items = wb ? buildXlsx() : (txt.trim()? buildCsv() : []);
+  const doImport=async()=>{ if(!items.length) return notify('Chưa có dữ liệu hợp lệ (thiếu Tiêu đề)','warn');
     setBusy(true); const n=await importContentItems(items); setBusy(false);
     notify('Đã import '+n+' nội dung'); onClose();
   };
+  const xlsxReady = typeof XLSX!=='undefined';
+
   return <Modal open={true} onClose={onClose} title="Import kế hoạch nội dung" wide>
-    <ol className="text-sm text-slate-600 list-decimal ml-4 space-y-1 mb-3">
-      <li>Bấm <b>Tải file mẫu</b> → mở Excel/Sheets, điền theo cột (tên Pillar/Framework/Kênh phải khớp danh sách trong app).</li>
-      <li>Lưu <b>.csv</b> → <b>Chọn file</b> → xem trước → <b>Import</b>. Hoặc copy từ Excel dán thẳng.</li>
-    </ol>
     <div className="flex flex-wrap gap-2 mb-3">
-      <Btn variant="ghost" onClick={dlTpl}>⬇ Tải file mẫu</Btn>
-      <Btn variant="ghost" onClick={()=>fileRef.current&&fileRef.current.click()}>📄 Chọn file (.csv)</Btn>
-      <input ref={fileRef} type="file" accept=".csv,.tsv,.txt" className="hidden" onChange={onFile}/>
+      <Btn variant="ghost" onClick={()=>fileRef.current&&fileRef.current.click()}>📄 Chọn file (.xlsx / .csv)</Btn>
+      <Btn variant="ghost" onClick={dlTpl}>⬇ Tải file mẫu (.csv)</Btn>
+      {wb && <Btn variant="ghost" onClick={resetXlsx}>✕ Bỏ file Excel</Btn>}
+      <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv,.tsv,.txt" className="hidden" onChange={onFile}/>
     </div>
-    <div className="text-xs font-mono bg-slate-100 rounded-lg p-2 mb-1 overflow-x-auto whitespace-nowrap">{HEAD.join(' | ')}</div>
-    <p className="text-[11px] text-slate-400 mb-2">Loại: ECOM/SOCIAL · Mục tiêu: Bán hàng/Thương hiệu/Kỹ thuật/Kênh đại lý · Pillar/Framework/Kênh/Sản phẩm khớp theo tên (không khớp thì để trống, sửa sau).</p>
-    <Textarea rows="6" value={txt} onChange={e=>setTxt(e.target.value)} placeholder="Nội dung file hiện ở đây, hoặc dán từ Excel…"/>
-    <div className="flex gap-2 mt-3"><Btn variant="ghost" onClick={onClose} disabled={busy}>Huỷ</Btn><Btn variant="brand" className="flex-1" onClick={doImport} disabled={busy}>{busy?'Đang import…':'Import'}</Btn></div>
+    {!xlsxReady && <div className="text-[11px] text-amber-600 mb-2">Đang tải thư viện đọc Excel… nếu chọn .xlsx báo lỗi, chờ vài giây rồi thử lại.</div>}
+
+    {wb ? <div className="space-y-3">
+      <div className="grid sm:grid-cols-2 gap-2">
+        <Field label="Sheet"><Select value={sheet} onChange={e=>pickSheet(wb,e.target.value)}>{wb.SheetNames.map(n=><option key={n} value={n}>{n}</option>)}</Select></Field>
+        <Field label="Dòng tiêu đề"><Select value={hi} onChange={e=>changeHeader(Number(e.target.value))}>{rows.slice(0,15).map((r,i)=><option key={i} value={i}>Dòng {i+1} — {(r||[]).map(x=>String(x==null?'':x).trim()).filter(Boolean).slice(0,3).join(' / ').slice(0,40)}</option>)}</Select></Field>
+      </div>
+      <div className="rounded-xl border border-line p-3">
+        <div className="text-[11px] font-semibold text-ink-muted uppercase tracking-wide mb-2">Ghép cột (tự động gợi ý — chỉnh nếu sai)</div>
+        <div className="grid sm:grid-cols-2 gap-2">
+          {IMPORT_FIELDS.map(f=><Field key={f.k} label={f.label+(f.req?' *':'')}>
+            <Select value={map[f.k]==null?-1:map[f.k]} onChange={e=>setMap({...map,[f.k]:Number(e.target.value)})}>
+              <option value={-1}>— Bỏ qua —</option>
+              {colOpts.map(o=><option key={o.i} value={o.i}>{o.name}</option>)}
+            </Select>
+          </Field>)}
+        </div>
+      </div>
+      <div className="rounded-xl border border-line p-3">
+        <div className="text-[11px] font-semibold text-ink-muted uppercase tracking-wide mb-2">Mặc định cho cả lần import</div>
+        <div className="grid sm:grid-cols-2 gap-2">
+          <Field label="Loại"><Select value={def.loai} onChange={e=>setDef({...def,loai:e.target.value})}><option value="SOCIAL">SOCIAL</option><option value="ECOM">ECOM</option></Select></Field>
+          <Field label="Mục tiêu (KPI)"><Select value={def.loai_muc_tieu} onChange={e=>setDef({...def,loai_muc_tieu:e.target.value})}>{LOAI_MUC_TIEU_KPI.map(o=><option key={o.v} value={o.v}>{o.label}</option>)}</Select></Field>
+          <Field label="Kênh mặc định (nếu file không có)"><Select value={def.kenh_id} onChange={e=>setDef({...def,kenh_id:e.target.value})}><option value="">— Không —</option>{(db.kenh||[]).map(k=><option key={k.id} value={k.id}>{k.ten}</option>)}</Select></Field>
+          <Field label="Tháng mặc định (YYYY-MM)"><Input value={def.thang} onChange={e=>setDef({...def,thang:e.target.value})} placeholder="2026-07"/></Field>
+        </div>
+      </div>
+      {(map.tieu_de==null||map.tieu_de<0) ? <div className="text-[11px] text-rose-500">⚠ Chọn cột <b>Tiêu đề</b> để import.</div>
+        : <div className="text-xs text-slate-600">Xem trước: <b className="text-brand-dark">{items.length}</b> nội dung hợp lệ. {items[0] && <span className="text-slate-400">VD: “{items[0].tieu_de.slice(0,60)}”</span>}</div>}
+    </div>
+    : <div>
+      <ol className="text-sm text-slate-600 list-decimal ml-4 space-y-1 mb-3">
+        <li>Chọn thẳng file <b>.xlsx</b> kế hoạch (ECOM / Social) — app tự đọc sheet, dò dòng tiêu đề &amp; ghép cột.</li>
+        <li>Hoặc tải <b>file mẫu .csv</b>, điền rồi chọn lại. Cũng có thể copy từ Excel dán vào ô dưới.</li>
+      </ol>
+      <div className="text-xs font-mono bg-slate-100 rounded-lg p-2 mb-1 overflow-x-auto whitespace-nowrap">{HEAD.join(' | ')}</div>
+      <p className="text-[11px] text-slate-400 mb-2">Loại: ECOM/SOCIAL · Mục tiêu: Bán hàng/Thương hiệu/Kỹ thuật/Kênh đại lý · Pillar/Framework/Kênh/Sản phẩm khớp theo tên (không khớp thì để trống, sửa sau).</p>
+      <Textarea rows="6" value={txt} onChange={e=>setTxt(e.target.value)} placeholder="Dán từ Excel vào đây…"/>
+      {txt.trim() && <div className="text-xs text-slate-600 mt-1">Xem trước: <b className="text-brand-dark">{items.length}</b> nội dung hợp lệ.</div>}
+    </div>}
+
+    <div className="flex gap-2 mt-3"><Btn variant="ghost" onClick={onClose} disabled={busy}>Huỷ</Btn><Btn variant="brand" className="flex-1" onClick={doImport} disabled={busy||!items.length}>{busy?'Đang import…':'Import '+(items.length?('('+items.length+')'):'')}</Btn></div>
   </Modal>;
 }
 
