@@ -451,6 +451,69 @@ async function dangLenNenTang(env, kenh, post){
     return {ok:false, loi:'Chưa hiện thực bộ đăng cho '+cap.ten+' — hiện phải đăng tay'};
   }catch(e){ return {ok:false, loi:'Lỗi gọi API: '+(e.message||e)}; }
 }
+// ===== AI dựng workflow n8n =====
+// Kiểm tra workflow do AI sinh ra có dùng được không. KHÔNG BAO GIỜ trả JSON hỏng cho người dùng.
+function kiemTraWorkflow(wf){
+  const loi=[];
+  if(!wf || typeof wf!=='object') return ['Không phải object'];
+  if(!Array.isArray(wf.nodes) || !wf.nodes.length) loi.push('Thiếu mảng nodes');
+  if(!wf.connections || typeof wf.connections!=='object') loi.push('Thiếu connections');
+  if(loi.length) return loi;
+  const ten=new Set(); 
+  wf.nodes.forEach((n,i)=>{
+    if(!n || typeof n!=='object'){ loi.push('Node #'+i+' không hợp lệ'); return; }
+    if(!n.name) loi.push('Node #'+i+' thiếu name');
+    if(!n.type) loi.push('Node "'+(n.name||i)+'" thiếu type');
+    if(!Array.isArray(n.position)||n.position.length!==2) loi.push('Node "'+(n.name||i)+'" thiếu position');
+    if(ten.has(n.name)) loi.push('Trùng tên node: '+n.name);
+    ten.add(n.name);
+  });
+  // mọi liên kết phải trỏ tới node có thật — đây là lỗi hay gặp nhất khi AI sinh
+  for(const src of Object.keys(wf.connections)){
+    if(!ten.has(src)) loi.push('Liên kết từ node không tồn tại: '+src);
+    const mains=(wf.connections[src]||{}).main||[];
+    mains.forEach(br=>(br||[]).forEach(c=>{ if(!c||!ten.has(c.node)) loi.push('Liên kết tới node không tồn tại: '+((c&&c.node)||'?')); }));
+  }
+  if(!wf.nodes.some(n=>String(n.type).includes('webhook'))) loi.push('Không có node Webhook để app gọi vào');
+  const s2=JSON.stringify(wf);
+  if(!/callback_url/.test(s2)) loi.push('Không thấy gọi callback_url — app sẽ không biết kết quả');
+  return loi;
+}
+async function aiSinhWorkflow(env, {mo_ta, kenh_loai, token, app_base}){
+  const key=env.ANTHROPIC_API_KEY;
+  if(!key) return {ok:false, thieu_key:true, loi:'Chưa cắm ANTHROPIC_API_KEY'};
+  const sys='Bạn tạo workflow n8n (JSON) để đăng bài mạng xã hội. '+
+    'CHỈ trả về JSON thuần của workflow, không giải thích, không markdown fence. '+
+    'Bắt buộc: (1) node n8n-nodes-base.webhook httpMethod POST responseMode responseNode; '+
+    '(2) node n8n-nodes-base.code kiểm header x-app-token bằng TOKEN rồi làm phẳng body thành caption/media_url/tieu_de/object_id/callback_url/callback_token; '+
+    '(3) node n8n-nodes-base.respondToWebhook trả {received:true}; '+
+    '(4) các node đăng theo từng nền tảng; '+
+    '(5) node n8n-nodes-base.httpRequest POST tới callback_url, header X-N8N-Token, body {"ok":true,"link":...}; '+
+    'và một nhánh báo {"ok":false,"loi":...} khi lỗi. '+
+    'Mọi node phải có name duy nhất, type, typeVersion, position [x,y]. '+
+    'connections chỉ được trỏ tới name có thật. '+
+    'Dùng node thật khi có: n8n-nodes-base.facebookGraphApi cho Facebook, n8n-nodes-base.youTube cho YouTube; '+
+    'nền tảng không có node sẵn (TikTok) thì dùng n8n-nodes-base.httpRequest kèm ghi chú.';
+  const usr='Kênh cần đăng: '+((kenh_loai||[]).join(', ')||'TIKTOK, FANPAGE, YOUTUBE')+'\n'+
+    'TOKEN dùng chung: '+(token||'DAN_N8N_TOKEN_VAO_DAY')+'\n'+
+    'App base URL: '+(app_base||'')+'\n'+
+    'Yêu cầu thêm của người dùng: '+((mo_ta||'').trim()||'(không có)');
+  try{
+    const res=await fetch('https://api.anthropic.com/v1/messages',{ method:'POST',
+      headers:{ 'content-type':'application/json', 'x-api-key':key, 'anthropic-version':'2023-06-01' },
+      body: JSON.stringify({ model: env.ANTHROPIC_MODEL||'claude-sonnet-4-5', max_tokens:8000, system:sys, messages:[{role:'user',content:usr}] }) });
+    const j=await res.json().catch(()=>({}));
+    if(!res.ok) return {ok:false, loi:'AI trả lỗi: '+((j.error&&j.error.message)||('HTTP '+res.status))};
+    let txt=((j.content||[]).map(c=>c.text||'').join('')||'').trim();
+    txt=txt.replace(/^```(?:json)?\s*/i,'').replace(/```\s*$/,'').trim();
+    const i=txt.indexOf('{'), k=txt.lastIndexOf('}');
+    if(i<0||k<0) return {ok:false, loi:'AI không trả về JSON'};
+    let wf; try{ wf=JSON.parse(txt.slice(i,k+1)); }catch(e){ return {ok:false, loi:'JSON từ AI hỏng: '+e.message}; }
+    const loi=kiemTraWorkflow(wf);
+    if(loi.length) return {ok:false, loi:'Workflow AI sinh chưa dùng được: '+loi.slice(0,4).join(' · '), chi_tiet:loi};
+    return {ok:true, workflow:wf};
+  }catch(e){ return {ok:false, loi:'Không gọi được AI: '+(e.message||e)}; }
+}
 // Đăng qua n8n: app CHỈ gửi yêu cầu, n8n mới là bên đăng thật.
 // n8n đã qua audit của các nền tảng nên đăng được cả TikTok — thứ API trực tiếp không làm được.
 async function guiN8N(env, kenh, post){
@@ -643,6 +706,7 @@ async function bootstrap(env, u){
         ? (!!env.N8N_WEBHOOK_URL && !!env.N8N_TOKEN)
         : (!!layToken(env,k) && !!String(k.api_object_id||'').trim())])) : {},
     n8n_san_sang: staff ? (!!env.N8N_WEBHOOK_URL && !!env.N8N_TOKEN) : false,
+    ai_san_sang: staff ? !!env.ANTHROPIC_API_KEY : false,
     footage, shot_list, bai_hoc, min_mau:MIN_MAU_BANG_CHUNG, trends, trend_check:TREND_CHECK,
     viec_ket: canContent ? tinhViecKet({scripts,approvals,air_posts,ket_qua,trends,don_cho_gan}) : null,
     seeding_theo_noi_dung: staff ? gomSeedingTheoNoiDung(topics, posts, cmts) : {},
@@ -1650,6 +1714,14 @@ async function handleApi(request, env){
     if(!isStaff(me)) return json({error:'Không có quyền'},403);
     const r = await cleanupOldMedia(env);
     return json({ db: await bootstrap(env, me), cleaned:r });
+  }
+
+  if(path==='/n8n/sinh-workflow' && method==='POST'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    const r=await aiSinhWorkflow(env,{ mo_ta:body.mo_ta, kenh_loai:body.kenh_loai, token:body.token, app_base:env.APP_BASE_URL||'' });
+    if(r.ok) return json({ ok:true, workflow:r.workflow });
+    // Không có key hoặc AI sinh hỏng → BÁO THẲNG để frontend dùng bản dựng sẵn, không im lặng
+    return json({ ok:false, thieu_key:!!r.thieu_key, loi:r.loi, chi_tiet:r.chi_tiet||[] }, 200);
   }
 
   // ===== NỐI SEEDING ↔ CONTENT OS: đẩy nội dung ĐÃ DUYỆT sang thư viện seeding =====

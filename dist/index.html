@@ -708,6 +708,7 @@ function AppProvider({children}){
           created_at:now(), created_by_name:meRef.current.ho_ten, updated_at:now() });
         Object.assign(x,{trang_thai:'DA_TRIEN_KHAI',content_item_id:cid,decided_at:now()}); commit(); return {ok:true,content_item_id:cid}; },
       deleteTrend: async id=>{ S.trends=(S.trends||[]).filter(x=>x.id!==id); commit(); return true; },
+      sinhWorkflowAI: async o=>({ok:false, thieu_key:true, loi:'Chế độ offline không gọi AI được'}),
       daySangSeeding: async (id,o)=>{ const ci=(S.content_items||[]).find(x=>x.id===id); if(!ci) return {ok:false,msg:'Không tìm thấy nội dung'};
         if(ci.trang_thai!=='DUYET') return {ok:false,msg:'Chỉ đẩy nội dung ĐÃ DUYỆT sang seeding'};
         if((S.content_topics||[]).some(x=>x.content_item_id===id)) return {ok:false,msg:'Nội dung này đã có trong thư viện seeding'};
@@ -896,6 +897,8 @@ function AppProvider({children}){
     trienKhaiTrend: async (id,o) => { try { const r=await call('/trends/'+id+'/trien-khai',{method:'POST',body:o||{}}); if(r&&r.db) setDb(r.db); return {ok:true,content_item_id:r.content_item_id}; }
       catch(e){ return {ok:false,msg:e.message}; } },
     deleteTrend: id => mut('/trends/'+id, {method:'DELETE'}),
+    sinhWorkflowAI: async o => { try { return await call('/n8n/sinh-workflow',{method:'POST',body:o}); }
+      catch(e){ return {ok:false, loi:e.message}; } },
     daySangSeeding: async (id,o) => { try { const r=await call('/content/'+id+'/day-seeding',{method:'POST',body:o||{}}); if(r&&r.db) setDb(r.db); return {ok:true,topic_id:r.topic_id}; }
       catch(e){ return {ok:false,msg:e.message}; } },
     createCmtSeed: c => mut('/cmtseed', {method:'POST', body:c}),
@@ -3662,12 +3665,27 @@ function n8nWorkflow({token='DAN_N8N_TOKEN_VAO_DAY', path='kingsmen-dang-bai', k
         combinator:'and' }, outputKey:l })) },
       options:{ fallbackOutput:'extra', renameFallbackOutput:'KHÁC' } },
     type:'n8n-nodes-base.switch', typeVersion:3, position:P(-180,420), id:'sw', name:'4. Rẽ theo kênh' });
-  loai.forEach((l,i)=>{ const nm='ĐĂNG '+l+' (thay bằng node thật)';
-    nodes.push({ parameters:{}, type:'n8n-nodes-base.noOp', typeVersion:1, position:P(120,240+i*160), id:'post_'+l, name:nm });
-    link('4. Rẽ theo kênh',nm,i); link(nm,'5. Báo kết quả về app'); });
-  const nmO='ĐĂNG kênh khác (thay bằng node thật)';
-  nodes.push({ parameters:{}, type:'n8n-nodes-base.noOp', typeVersion:1, position:P(120,240+loai.length*160), id:'post_other', name:nmO });
-  link('4. Rẽ theo kênh',nmO,loai.length); link(nmO,'5. Báo kết quả về app');
+  // Nền tảng nào n8n có node sẵn thì dựng node THẬT — import xong chỉ gắn credential là chạy.
+  const nodeDang=(l,pos,id)=>{
+    if(l==='FANPAGE') return { parameters:{ hostUrl:'graph.facebook.com', httpRequestMethod:'POST',
+        graphApiVersion:'v21.0', node:'={{ $json.object_id }}', edge:'feed',
+        options:{ queryParametersUi:{ parameter:[
+          {name:'message', value:'={{ $json.caption }}'},
+          {name:'link', value:'={{ $json.media_url }}'} ] } } },
+      type:'n8n-nodes-base.facebookGraphApi', typeVersion:1, position:pos, id, name:'ĐĂNG FANPAGE' };
+    if(l==='YOUTUBE') return { parameters:{ resource:'video', operation:'upload',
+        title:'={{ $json.tieu_de }}', regionCode:'VN', categoryId:'22',
+        options:{ description:'={{ $json.caption }}', privacyStatus:'public' } },
+      type:'n8n-nodes-base.youTube', typeVersion:1, position:pos, id, name:'ĐĂNG YOUTUBE' };
+    // Không có node sẵn (TikTok, Zalo OA…) → HTTP Request để tự điền endpoint
+    return { parameters:{ method:'POST', url:'', sendBody:true, specifyBody:'json',
+        jsonBody:'={{ JSON.stringify({ caption: $json.caption, media_url: $json.media_url }) }}', options:{} },
+      type:'n8n-nodes-base.httpRequest', typeVersion:4.2, position:pos, id, name:'ĐĂNG '+l+' (điền endpoint)' };
+  };
+  loai.forEach((l,i)=>{ const nd=nodeDang(l,P(120,240+i*160),'post_'+l);
+    nodes.push(nd); link('4. Rẽ theo kênh',nd.name,i); link(nd.name,'5. Báo kết quả về app'); });
+  const ndO=nodeDang('KHÁC',P(120,240+loai.length*160),'post_other');
+  nodes.push(ndO); link('4. Rẽ theo kênh',ndO.name,loai.length); link(ndO.name,'5. Báo kết quả về app');
   nodes.push({ parameters:{ method:'POST', url:"={{ $('2. Kiểm tra token & chuẩn hoá').first().json.callback_url }}",
       sendHeaders:true, headerParameters:{ parameters:[{name:'X-N8N-Token', value:"={{ $('2. Kiểm tra token & chuẩn hoá').first().json.callback_token }}"}] },
       sendBody:true, specifyBody:'json',
@@ -3676,7 +3694,8 @@ function n8nWorkflow({token='DAN_N8N_TOKEN_VAO_DAY', path='kingsmen-dang-bai', k
   nodes.push({ parameters:{ content:
 '## Cách dùng (3 bước)\n\n'+
 '**1.** Mở node **2. Kiểm tra token & chuẩn hoá** → sửa `TOKEN` cho khớp secret `N8N_TOKEN` đã cắm ở app.\n\n'+
-'**2.** Thay mỗi node **ĐĂNG ...** màu xám bằng node đăng thật của nền tảng, gắn credential của bạn.\n'+
+'**2.** Node **ĐĂNG FANPAGE / ĐĂNG YOUTUBE** đã dựng sẵn — chỉ cần **gắn credential** của bạn vào.\n'+
+'Node **ĐĂNG ... (điền endpoint)** là nền tảng chưa có node sẵn (TikTok, Zalo OA) → tự điền URL API.\n'+
 'Dữ liệu có sẵn: `{{ $json.caption }}`, `{{ $json.media_url }}`, `{{ $json.tieu_de }}`, `{{ $json.object_id }}`.\n\n'+
 '**3.** Bấm **Active**, copy URL node Webhook rồi cắm vào app:\n`wrangler secret put N8N_WEBHOOK_URL`\n\n---\n'+
 '⚠️ Đăng **thất bại** thì nhớ gọi callback với `{ ok:false, loi:"lý do" }` để app nhắc đăng tay — không thì app đợi 60 phút rồi tự chuyển sang "cần đăng tay".',
@@ -3689,13 +3708,21 @@ function n8nWorkflow({token='DAN_N8N_TOKEN_VAO_DAY', path='kingsmen-dang-bai', k
 }
 // Hướng dẫn dựng workflow n8n — kèm đúng payload app gửi, để không phải đoán
 function HuongDanN8N(){
-  const { db, notify } = useApp();
+  const { db, notify, sinhWorkflowAI } = useApp();
   const [mo,setMo]=useState(false);
   const [tok,setTok]=useState('');
   const ok=db.n8n_san_sang;
   const loaiKenh=[...new Set((db.kenh||[]).filter(k=>k.active!==false).map(k=>String(k.loai||'').toUpperCase()).filter(Boolean))];
   const wfJson=()=>JSON.stringify(n8nWorkflow({token:tok.trim()||'DAN_N8N_TOKEN_VAO_DAY', kenhLoai:loaiKenh}),null,2);
+  const [moTa,setMoTa]=useState(''); const [aiBusy,setAiBusy]=useState(false); const [aiLoi,setAiLoi]=useState('');
   const taiWf=()=>{ download('n8n-kingsmen-dang-bai.json', wfJson(), 'application/json'); notify('Đã tải — vào n8n bấm Import from File'); };
+  const nhoAI=async()=>{ setAiBusy(true); setAiLoi('');
+    const r=await sinhWorkflowAI({mo_ta:moTa, kenh_loai:loaiKenh, token:tok.trim()||'DAN_N8N_TOKEN_VAO_DAY'});
+    setAiBusy(false);
+    if(r && r.ok && r.workflow){ download('n8n-kingsmen-ai.json', JSON.stringify(r.workflow,null,2), 'application/json');
+      notify('AI đã dựng xong — vào n8n bấm Import from File'); return; }
+    setAiLoi(r && r.thieu_key ? 'Chưa cắm ANTHROPIC_API_KEY nên AI chưa dùng được' : ((r&&r.loi)||'AI dựng không thành công'));
+    download('n8n-kingsmen-dang-bai.json', wfJson(), 'application/json'); };
   const copyWf=async()=>{ try{ await navigator.clipboard.writeText(wfJson()); notify('Đã copy — vào n8n bấm Ctrl+V ngay trên canvas'); }
     catch(e){ notify('Trình duyệt chặn copy — dùng nút Tải file','warn'); } };
   const mau=JSON.stringify({
@@ -3716,10 +3743,16 @@ function HuongDanN8N(){
         <div className="mb-2">Tải file workflow rồi vào n8n bấm <b>Import from File</b>. Toàn bộ khung đã dựng sẵn, bạn chỉ cắm node đăng + credential.</div>
         <Field label="Token dùng chung (N8N_TOKEN)" hint="Nhập để app nhúng sẵn vào workflow — khỏi sửa tay">
           <Input value={tok} onChange={e=>setTok(e.target.value)} placeholder="tự đặt một chuỗi bí mật"/></Field>
+        <Field label="Mô tả thêm cho AI (không bắt buộc)" hint="VD: đăng Fanpage kèm ảnh, TikTok dùng Buffer, có báo Slack khi lỗi">
+          <Textarea rows="2" value={moTa} onChange={e=>setMoTa(e.target.value)} placeholder="Để trống cũng được — AI vẫn dựng theo các kênh bạn đang có"/></Field>
         <div className="flex flex-wrap gap-2 mt-2">
-          <Btn variant="brand" onClick={taiWf}>⬇ Tải workflow n8n</Btn>
+          <Btn variant="brand" onClick={nhoAI} disabled={aiBusy}>{aiBusy?'AI đang dựng…':'✨ Nhờ AI dựng file'}</Btn>
+          <Btn variant="ghost" onClick={taiWf}>⬇ Tải bản dựng sẵn</Btn>
           <Btn variant="ghost" onClick={copyWf}>📋 Copy JSON</Btn>
         </div>
+        {aiLoi && <div className="mt-2 rounded-lg bg-rose-50 border border-rose-200 p-2 text-[11px] text-rose-700">
+          {aiLoi} — <b>đã dùng bản dựng sẵn thay thế</b>, bạn tải bằng nút bên cạnh là chạy được ngay.
+        </div>}
         <p className="text-[10px] text-ink-muted mt-1">Sinh theo đúng các loại kênh bạn đang có ({loaiKenh.join(', ')||'chưa có kênh'}).</p>
       </div>
       <div className="pt-1"><b>Hoặc dựng tay —</b> <b>1.</b> Trong n8n tạo workflow bắt đầu bằng node <b>Webhook</b> (POST). Copy URL của nó.</div>
