@@ -38,6 +38,7 @@
   body{ background:#f6f7f9; }
   ::-webkit-scrollbar{ width:8px; height:8px } ::-webkit-scrollbar-thumb{ background:#cbd5e1; border-radius:8px }
   .no-spin::-webkit-outer-spin-button,.no-spin::-webkit-inner-spin-button{ -webkit-appearance:none; margin:0 }
+  .no-scrollbar{ -ms-overflow-style:none; scrollbar-width:none } .no-scrollbar::-webkit-scrollbar{ display:none }
   @keyframes fadeIn{ from{ opacity:0 } to{ opacity:1 } }
   @media (prefers-reduced-motion:reduce){ .animate-\[fadeIn_\.2s_ease\]{ animation:none !important } }
 </style>
@@ -786,15 +787,15 @@ const NAV = {
     {key:'new_post', label:'Tạo POST', icon:'📝'},
     {key:'new_cmt', label:'Tạo CMT', icon:'💬'},
     {key:'filming', label:'Quay CT', icon:'🎥'},
-    {key:'imglib', label:'Thư viện ảnh', icon:'🖼'},
+    {key:'imglib', label:'Thư viện ảnh', short:'Ảnh', icon:'🖼'},
     {key:'income', label:'Thu nhập', icon:'💰'},
   ],
   [ROLES.MARKETING]: [
     {key:'dash', label:'Dashboard', icon:'📊'},
     {key:'strategy', label:'Chiến lược', icon:'🎯'},
-    {key:'plan', label:'Kế hoạch nội dung', icon:'🗓️'},
+    {key:'plan', label:'Kế hoạch nội dung', short:'Kế hoạch', icon:'🗓️'},
     {key:'library', label:'Thư viện', icon:'📚'},
-    {key:'products', label:'Sản phẩm & Claim', icon:'🧪'},
+    {key:'products', label:'Sản phẩm & Claim', short:'Sản phẩm', icon:'🧪'},
     {key:'filming', label:'Quay CT', icon:'🎬'},
     {key:'queue', label:'Nghiệm thu', icon:'✅'},
     {key:'schedule', label:'Lịch đăng', icon:'📅'},
@@ -802,15 +803,15 @@ const NAV = {
     {key:'pay_report', label:'Thanh toán', icon:'📄'},
   ],
   [ROLES.KY_THUAT]: [
-    {key:'products', label:'Sản phẩm & Claim', icon:'🧪'},
-    {key:'library', label:'Thư viện (xem)', icon:'📚'},
+    {key:'products', label:'Sản phẩm & Claim', short:'Sản phẩm', icon:'🧪'},
+    {key:'library', label:'Thư viện (xem)', short:'Thư viện', icon:'📚'},
   ],
   [ROLES.ADMIN]: [
     {key:'users', label:'Người dùng', icon:'👥'},
     {key:'strategy', label:'Chiến lược', icon:'🎯'},
-    {key:'plan', label:'Kế hoạch nội dung', icon:'🗓️'},
+    {key:'plan', label:'Kế hoạch nội dung', short:'Kế hoạch', icon:'🗓️'},
     {key:'library', label:'Thư viện', icon:'📚'},
-    {key:'products', label:'Sản phẩm & Claim', icon:'🧪'},
+    {key:'products', label:'Sản phẩm & Claim', short:'Sản phẩm', icon:'🧪'},
     {key:'filming', label:'Quay CT', icon:'🎬'},
     {key:'schedule', label:'Lịch đăng', icon:'📅'},
     {key:'pricing', label:'Đơn giá', icon:'⚙️'},
@@ -849,6 +850,8 @@ function Shell(){
   const nav = (NAV[me.vai_tro]||[]).filter(item => me.is_dev || !BETA_KEYS.has(item.key));
   const [page, setPage] = useState((nav[0]||{}).key||'home');
   const [profileOpen, setProfileOpen] = useState(false);
+  const botNavRef = useRef(null);
+  useEffect(()=>{ const el=botNavRef.current&&botNavRef.current.querySelector('[data-navkey="'+page+'"]'); if(el&&el.scrollIntoView) el.scrollIntoView({inline:'center', block:'nearest'}); }, [page]);
 
   // badge số việc chờ duyệt cho Marketing
   const pendingCount = db.post_seedings.filter(p=>p.trang_thai===ST.CHO_DUYET).length
@@ -920,15 +923,17 @@ function Shell(){
       <main className="p-3 sm:p-2 max-w-5xl mx-auto">{render()}</main>
     </div>
 
-    {/* Bottom nav mobile */}
-    <nav className="sm:hidden fixed bottom-0 inset-x-0 z-20 bg-white/95 backdrop-blur border-t border-line flex">
-      {nav.map(n=><button key={n.key} onClick={()=>setPage(n.key)}
-        className={"flex-1 flex flex-col items-center py-2 text-[11px] font-medium "+(page===n.key?'text-brand-dark':'text-ink-muted')}>
+    {/* Bottom nav mobile — cuộn ngang, mỗi mục 1 dòng, tự cuộn mục đang mở vào giữa */}
+    <nav ref={botNavRef} className="sm:hidden fixed bottom-0 inset-x-0 z-20 bg-white/97 backdrop-blur border-t border-line flex overflow-x-auto no-scrollbar px-1"
+      style={{paddingBottom:'env(safe-area-inset-bottom)'}}>
+      {nav.map(n=>{ const on=page===n.key; return <button key={n.key} data-navkey={n.key} onClick={()=>setPage(n.key)}
+        className={"shrink-0 basis-[62px] flex flex-col items-center pt-1.5 pb-1 relative "+(on?'text-brand-dark':'text-ink-muted')}>
+        {on && <span className="absolute top-0 inset-x-3 h-0.5 rounded-full bg-brand"></span>}
         <span className="text-lg leading-none relative">{n.icon}
           {badgeFor(n.key)>0 && <span className="absolute -top-1 -right-2 bg-rose-500 text-white text-[9px] px-1 rounded-full">{badgeFor(n.key)}</span>}
         </span>
-        <span className="mt-0.5">{n.label}</span>
-      </button>)}
+        <span className={"mt-0.5 text-[10px] leading-tight whitespace-nowrap max-w-[58px] truncate "+(on?'font-bold':'font-medium')}>{n.short||n.label}</span>
+      </button>; })}
     </nav>
 
     <ProfileModal open={profileOpen} onClose={()=>setProfileOpen(false)}/>
