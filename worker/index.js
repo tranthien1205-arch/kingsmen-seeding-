@@ -63,6 +63,9 @@ async function ensureSchema(env){
     // CONTENT OS · P1 — Dữ liệu nền: sản phẩm (spec thật) + cụm từ claim bị cấm
     `CREATE TABLE IF NOT EXISTS san_pham (id TEXT PRIMARY KEY, ma TEXT, ten TEXT, dong TEXT, thong_so TEXT, tieu_chuan TEXT, huong_dan TEXT, anh TEXT, active INTEGER DEFAULT 1, created_at TEXT)`,
     `CREATE TABLE IF NOT EXISTS claim_cam (id TEXT PRIMARY KEY, cum_tu TEXT, ly_do TEXT, muc_do TEXT, active INTEGER DEFAULT 1, created_at TEXT)`,
+    // CONTENT OS · P2 — Chiến lược & Pillar (trụ cột nội dung + OKR/Big Idea)
+    `CREATE TABLE IF NOT EXISTS pillars (id TEXT PRIMARY KEY, ten TEXT, objective TEXT, point_of_difference TEXT, request TEXT, ty_trong REAL, thu_tu INTEGER, active INTEGER DEFAULT 1, created_at TEXT)`,
+    `CREATE TABLE IF NOT EXISTS content_strategy (id INTEGER PRIMARY KEY, okr TEXT, big_idea TEXT, purpose TEXT, audience TEXT, swot TEXT, updated_at TEXT)`,
   ];
   await env.DB.batch(stmts.map(s=>env.DB.prepare(s)));
   // thêm cột đơn giá quay công trình cho DB cũ (bỏ qua nếu đã có)
@@ -120,6 +123,27 @@ async function ensureSchema(env){
   for(const [k,txt,vid] of guideSeed){
     const ex = await env.DB.prepare(`SELECT key FROM guides WHERE key=?`).bind(k).first();
     if(!ex) await env.DB.prepare(`INSERT INTO guides (key,noi_dung,video_url,updated_at) VALUES (?,?,?,?)`).bind(k,txt,vid,nowISO()).run();
+  }
+
+  // CONTENT OS · P2 — seed trụ cột nội dung THẬT của Kingsmen (từ file kế hoạch social)
+  const anyPillar = await env.DB.prepare(`SELECT id FROM pillars LIMIT 1`).first();
+  if(!anyPillar){
+    const P = [
+      ['Branding','Giới thiệu thương hiệu Kingsmen: nguồn gốc xuất xứ, vật liệu công nghệ mới, đội ngũ chuyên gia.','Nguồn gốc thương hiệu · Công nghệ mới · Đội ngũ chuyên gia','Mỗi tuần 1–2 bài branding (tùy thị trường).',50],
+      ['Information','Cung cấp thông tin, kiến thức hữu ích về thị trường keo ron gạch và ngành hoàn thiện.','Kiến thức chuyên môn, đáng tin','Xen kẽ bài kiến thức mỗi tuần.',30],
+      ['Problems','Giải quyết vấn đề, nỗi đau của tệp khách hàng đang gặp phải.','Chạm đúng nỗi đau thực tế','Bài giải pháp theo pain-point.',15],
+      ['Interaction','Nội dung tương tác, chương trình ưu đãi thu hút khách hàng tương tác trực tiếp.','Ưu đãi · minigame · tương tác','Theo dịp/khuyến mãi.',5],
+    ];
+    let so=1;
+    for(const [ten,obj,pod,req,ty] of P){
+      await env.DB.prepare(`INSERT INTO pillars (id,ten,objective,point_of_difference,request,ty_trong,thu_tu,active,created_at) VALUES (?,?,?,?,?,?,?,1,?)`)
+        .bind(uid('pil'),ten,obj,pod,req,ty,so++,nowISO()).run();
+    }
+  }
+  const anyStrat = await env.DB.prepare(`SELECT id FROM content_strategy WHERE id=1`).first();
+  if(!anyStrat){
+    await env.DB.prepare(`INSERT INTO content_strategy (id,okr,big_idea,purpose,audience,swot,updated_at) VALUES (1,?,?,?,?,?,?)`)
+      .bind('Xây dựng nhận diện thương hiệu Kingsmen; tăng tiếp xúc & niềm tin với khách hàng.','Your satisfaction – Our quality – Persistence over time','Tăng độ nhận diện thương hiệu; tiếp xúc khách hàng, tạo niềm tin; thúc đẩy chuyển đổi.','','',nowISO()).run();
   }
 
   SCHEMA_READY = true;
@@ -279,13 +303,16 @@ async function bootstrap(env, u){
     .map(r=>({ ...r, active:uBool(r.active), thong_so: JSON.parse(r.thong_so||'[]') }));
   const claim_cam = (await env.DB.prepare(`SELECT * FROM claim_cam ORDER BY created_at DESC`).all()).results
     .map(r=>({ ...r, active:uBool(r.active) }));
+  const pillars = (await env.DB.prepare(`SELECT * FROM pillars ORDER BY thu_tu ASC, created_at ASC`).all()).results
+    .map(r=>({ ...r, active:uBool(r.active), ty_trong:r.ty_trong==null?0:Number(r.ty_trong) }));
+  const content_strategy = (await env.DB.prepare(`SELECT * FROM content_strategy WHERE id=1`).first()) || { okr:'', big_idea:'', purpose:'', audience:'', swot:'' };
 
   return {
     me: rowUser(u),
     users, groups, content_topics:topics, cmt_suggestions:cmtsug,
     post_seedings: posts, cmt_seedings: cmtsFull,
     filming_templates, project_filmings, guides, post_type_prefs, post_slots, media_library,
-    san_pham, claim_cam,
+    san_pham, claim_cam, pillars, content_strategy,
     pricing: pricingRow, payouts: [], audit,
   };
 }
@@ -612,6 +639,42 @@ async function handleApi(request, env){
     const r=await env.DB.prepare(`SELECT cum_tu FROM claim_cam WHERE id=?`).bind(m[1]).first();
     await env.DB.prepare(`DELETE FROM claim_cam WHERE id=?`).bind(m[1]).run();
     await logAudit(env,me,'xoá claim cấm','claim_cam',m[1],r&&r.cum_tu);
+    return json({ db: await bootstrap(env, me) });
+  }
+
+  // ===== CONTENT OS · P2 — Pillar (trụ cột nội dung) + Chiến lược =====
+  if(path==='/pillars' && method==='POST'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    const id=uid('pil');
+    const n = Number((await env.DB.prepare(`SELECT COUNT(*) c FROM pillars`).first())?.c||0);
+    await env.DB.prepare(`INSERT INTO pillars (id,ten,objective,point_of_difference,request,ty_trong,thu_tu,active,created_at) VALUES (?,?,?,?,?,?,?,1,?)`)
+      .bind(id,(body.ten||'').trim(),(body.objective||'').trim(),(body.point_of_difference||'').trim(),(body.request||'').trim(),Number(body.ty_trong)||0,n+1,nowISO()).run();
+    await logAudit(env,me,'thêm pillar','pillars',id,(body.ten||'').trim());
+    return json({ db: await bootstrap(env, me) });
+  }
+  if((m=path.match(/^\/pillars\/(.+)$/)) && method==='PATCH'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    const id=m[1]; const r=await env.DB.prepare(`SELECT * FROM pillars WHERE id=?`).bind(id).first();
+    if(!r) return json({error:'Không tìm thấy'},404);
+    const g=(k,d)=> body[k]!=null?String(body[k]).trim():d;
+    await env.DB.prepare(`UPDATE pillars SET ten=?, objective=?, point_of_difference=?, request=?, ty_trong=?, active=? WHERE id=?`)
+      .bind(g('ten',r.ten),g('objective',r.objective),g('point_of_difference',r.point_of_difference),g('request',r.request),body.ty_trong!=null?Number(body.ty_trong)||0:r.ty_trong,body.active!=null?bool(body.active):r.active,id).run();
+    await logAudit(env,me,'sửa pillar','pillars',id);
+    return json({ db: await bootstrap(env, me) });
+  }
+  if((m=path.match(/^\/pillars\/(.+)$/)) && method==='DELETE'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    await env.DB.prepare(`DELETE FROM pillars WHERE id=?`).bind(m[1]).run();
+    await logAudit(env,me,'xoá pillar','pillars',m[1]);
+    return json({ db: await bootstrap(env, me) });
+  }
+  if(path==='/strategy' && method==='PATCH'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    const r=await env.DB.prepare(`SELECT * FROM content_strategy WHERE id=1`).first()||{};
+    const g=(k)=> body[k]!=null?String(body[k]):(r[k]||'');
+    await env.DB.prepare(`UPDATE content_strategy SET okr=?, big_idea=?, purpose=?, audience=?, swot=?, updated_at=? WHERE id=1`)
+      .bind(g('okr'),g('big_idea'),g('purpose'),g('audience'),g('swot'),nowISO()).run();
+    await logAudit(env,me,'sửa chiến lược','content_strategy','1');
     return json({ db: await bootstrap(env, me) });
   }
   if((m=path.match(/^\/posts\/(.+)\/review$/)) && method==='POST'){
