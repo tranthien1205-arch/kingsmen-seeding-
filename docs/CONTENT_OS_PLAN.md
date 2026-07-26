@@ -147,7 +147,11 @@ Thiết kế `content_items` bao cả 2 loại:
 **Lát cắt (1) ✅ ĐÃ LÀM & DEPLOY (rule-based, chưa cần API key):** bảng `scripts` (content_item_id, framework_id, san_pham_id, kenh_id, tieu_de, hook, sections[JSON], cta, brand_voice, claim_flags[JSON], trang_thai, version) + `script_versions` (snapshot mỗi lần lưu) + cột `content_strategy.brand_voice`. Endpoints `POST/PATCH/DELETE /scripts` + `GET /scripts/:id/versions` (staff-only; Sales không thấy `scripts` trong bootstrap). **Guardrail claim ở BACKEND** (`scanScriptClaims` quét toàn văn qua `scriptText`): mức `CHAN` → **422, không lưu**; `CANH_BAO` → lưu nhưng ghi `claim_flags`. UI `CreativeStudio` (nav `studio`, MKT/ADMIN, dev preview): danh sách thẻ + trình soạn (hook / các phần / CTA sửa tay), **`generateScript` rule-based cho cả 12 framework thật** — chỉ chèn `thong_so`/`tieu_chuan`/`huong_dan` THẬT của sản phẩm, thiếu dữ liệu thì để `[điền …]`, **không tự sinh số liệu**; cảnh báo claim hiện ngay khi gõ + khoá nút Lưu khi còn cụm CHẶN; xem lịch sử phiên bản. Test: 16/16 integration + 6/6 kiểm tra bộ sinh.
 **Lát cắt (2) ⏳ (chờ `ANTHROPIC_API_KEY`):** thay/bổ sung bộ sinh bằng gọi Anthropic từ Worker; Hook Optimizer 5 variant + lý do (**KHÔNG dự đoán %view**). Giữ nguyên guardrail claim + nguyên tắc không bịa số liệu. Fallback về rule-based khi thiếu key.
 
-### ⏳ P5 — Kho footage & shot list (mobile-first, R2)
+### ✅ P5 — Kho footage & shot list (mobile-first, R2)
+Bảng `footage` (tái sử dụng nhiều kịch bản; tags, sản phẩm, địa điểm, người quay) + `shot_list` (cảnh bám kịch bản).
+- `POST /shotlist/from-script/:id` sinh cảnh từ kịch bản: **hook → từng phần thân → CTA**. Đã có cảnh → 409 (không nhân đôi); kịch bản rỗng → 400.
+- Gắn footage vào cảnh → tự `DA_QUAY`; gỡ → `CHUA_QUAY`. **Xoá footage sẽ tự gỡ liên kết ở mọi cảnh** (không để cảnh trỏ vào file đã mất) + xoá object R2.
+- UI `FootageLib` (nav `footage`): lưới xem trước ảnh/video, tìm theo tên/mô tả/thẻ, lọc theo thẻ; tab `ShotListTab` gắn footage cho từng cảnh, đếm tiến độ. Test **22/22**.
 ### ◐ P6 — Hàng đợi duyệt (2 cổng song song: nội dung / claim)
 **Lát cắt (1) ✅ ĐÃ LÀM & DEPLOY:** bảng `approvals` (doi_tuong SCRIPT|CONTENT, doi_tuong_id, **cong** NOI_DUNG|CLAIM, trang_thai CHO|DAT|TRA_LAI|HUY, nguoi_gui, nguoi_duyet, ghi_chu) + cột `so_lan_tra` cho `scripts`/`content_items` (**chỉ số Process cho P9**).
 - Endpoints: `POST /approvals/submit` (mở đúng 2 cổng; **chặn gửi nếu còn cụm claim CHAN** → 422; đang chờ mà gửi lại → 409; gửi lại sau khi bị trả thì **reset** 2 cổng chứ không cộng dồn) · `POST /approvals/:id/decide`.
@@ -170,9 +174,25 @@ Công cụ `tools/loc-video.html` — **bản v4.0** (user cung cấp, 415 KB) �
 - Route công khai `GET /api/nhac` → `[]` (công cụ hỏi folder nhạc cục bộ; bản web không có nên trả rỗng thay vì 401/404). Đặt **trước cổng đăng nhập** vì iframe không gửi token; không lộ dữ liệu gì.
 - ⚠️ Cần Chrome/Edge desktop mới chọn được folder; nếu iframe chặn thì dùng **Mở tab mới**.
 - Test: **13/13** (phục vụ file, đúng bản v4.0, ffmpeg vendor cùng origin + đúng global `FFmpegWASM`, `/api/nhac`, app chính không ảnh hưởng).
-### ⏳ P8 — Nhập kết quả (3 luồng, 3 mức tin cậy: TikTok Shop TRUC_TIEP / Shopee GIAN_TIEP + hàng đợi gán tay / chỉ số KHONG_QUY_DON)
-### ⏳ P9 — Dashboard 4 hệ KPI riêng + 3 cột tin cậy (KHÔNG cộng dồn) + **Hiệu suất người phụ trách** (§6 Trụ A) → thêm GIAM_DOC
-### ⏳ P10 — Thư viện học + **Vòng lặp AI tự học** (§6 Trụ B): kết quả chảy ngược framework×hook → nạp lại Studio (RAG)
+### ✅ P8 — Nhập kết quả (3 mức tin cậy)
+Bảng `ket_qua` + `don_cho_gan`. Hằng số `MUC_TIN_CAY` / `NGUON_MUC_MAC_DINH` (TikTok Shop→TRUC_TIEP, Shopee→GIAN_TIEP).
+- **Ranh giới:** mức `KHONG_QUY_DON` **không được gắn doanh thu/số đơn** → 422. Chỉ ghi view/tương tác/click.
+- `POST /ketqua/import`: **chỉ quy đơn khi mã khớp ĐÚNG 1 bài**. Không mã / không khớp / khớp nhiều bài → `don_cho_gan` kèm lý do. **KHÔNG chia đều** (§9).
+- Gán tay (`/donchogan/:id/assign`) luôn ghi mức **GIAN_TIEP** và chỉ 1 bài. `/skip` để bỏ qua.
+- UI `KetQua`: 3 thẻ mức tin cậy **tách bạch** + banner cảnh báo không cộng dồn, tab hàng đợi gán tay, import đối soát. Test **25/25**.
+### ✅ P9 — Dashboard 4 hệ KPI + hiệu suất người
+`ContentDashboard` (nav `cdash`) — **tính hoàn toàn ở frontend từ bootstrap**, không thêm bảng, không suy đoán.
+- 4 hệ KPI đo riêng, mỗi hệ 3 cột tin cậy tách bạch. **Không có phép cộng nào giữa 3 mức** (đã có test chặn hồi quy).
+- Ô trống ghi rõ "chưa có dữ liệu" (≠ 0); cảnh báo số bài **chưa gắn hệ mục tiêu**.
+- Hiệu suất người tách **Process** (kịch bản, qua duyệt lần 1, số lần bị trả, bài có cảnh báo claim) khỏi **Outcome** (3 mức tin cậy).
+- `MIN_MAU = 5`: dưới ngưỡng **không tính %**, gắn nhãn "chưa đủ mẫu". Kỹ thuật đo bằng **số claim chặn được**. Test **9/9** ràng buộc số liệu.
+- ⏳ Vai trò `GIAM_DOC` riêng chưa thêm (hiện Admin/Marketing xem được).
+### ✅ P10 — Thư viện học + vòng lặp tự học
+Bảng `bai_hoc` (loai, tieu_de, noi_dung, bang_chung JSON, so_mau, nguon_tu_dong, trang_thai DE_XUAT/DA_DUYET/TU_CHOI).
+- `POST /baihoc/quet` rút đề xuất **từ dữ liệu thật**: (1) framework có **≥ `MIN_MAU_BANG_CHUNG` (5)** bài đã đo → tổng hợp doanh thu/đơn/view kèm câu ghi rõ *"số ĐÃ XẢY RA, không phải dự đoán"*; (2) lý do Kỹ thuật trả lại **lặp ≥2 lần** → đề xuất bổ sung claim cấm. **Dưới ngưỡng thì im lặng**, không kết luận. Quét lại không tạo trùng.
+- **NGƯỜI QUYẾT:** `/baihoc/:id/decide` — đề xuất **không tự thành quy tắc**; từ chối bắt buộc nêu lý do; quyết lại → 409.
+- **Vòng lặp khép kín:** bài học `DA_DUYET` hiện lại trong **Creative Studio** khi soạn (lọc theo framework đang chọn), kèm nhắc "không phải dự đoán bài này sẽ chạy tốt".
+- UI `ThuVienHoc` (nav `hoc`): 3 tab theo trạng thái, nút Quét dữ liệu, ghi bài học tay. Test **19/19**.
 
 ---
 
@@ -234,8 +254,10 @@ Tokens Tailwind (inline config trong `seeding-app.html`): `ink #0b3543` (soft #1
 - (Trước đó, Domain A: seeding/quay/lịch/thư viện ảnh/vinh danh/chống trùng… đã deploy.)
 - **P7 Đăng & checklist** — bảng `air_posts` + UNIQUE mã theo dõi (1 mã = 1 bài); chỉ đăng nội dung đã duyệt; checklist bắt buộc + link + mã mới cho đánh dấu Đã đăng; đã đăng thì khoá sửa (21 test).
 - **Công cụ Lọc & dựng video v4.0** gắn vào Creative Studio dạng tab (phục vụ tĩnh `/tools/loc-video.html` + vendor ffmpeg cùng origin + route công khai `/api/nhac`) (13 test).
-- ▶️ **Kế tiếp:** **P8 — Nhập kết quả** (3 luồng, 3 mức tin cậy; dùng `ma_theo_doi` từ P7 để quy đơn) hoặc P5 (Kho footage). Khi có `ANTHROPIC_API_KEY` → nâng P4 lên gợi ý AI (giữ guardrail + không bịa số liệu).
-- 📌 **Tổng test đang xanh:** import 8 · Creative Studio 16 · Duyệt 2 cổng 22 · Đăng bài 21 · công cụ 13 · chống trùng seeding 13 = **93**.
+- ▶️ **Kế tiếp:** gỡ `BETA_KEYS` khi user duyệt xong để cả team dùng; thêm `TRUONG_MKT`/`GIAM_DOC`; nâng P4 lên gợi ý AI khi có `ANTHROPIC_API_KEY`.
+- **P8** Nhập kết quả 3 mức tin cậy (25 test) · **P5** Kho footage & shot list (22 test) · **P9** Dashboard 4 hệ KPI + hiệu suất người (9 test) · **P10** Thư viện học + vòng lặp tự học (19 test).
+- 📌 **Tổng test đang xanh:** import 8 · Creative Studio 16 · Duyệt 22 · Đăng bài 21 · Kết quả 25 · Footage 22 · Thư viện học 19 · công cụ 13 · chống trùng seeding 13 = **159**.
+- ✅ **ĐÃ XONG TOÀN BỘ P1→P10.** Còn lại là các mảnh nhỏ: vai trò `TRUONG_MKT`/`GIAM_DOC` riêng, `can()` tập trung (P0), và nâng P4 lên gợi ý AI khi có `ANTHROPIC_API_KEY`.
 
 ### ⚙️ Quy trình deploy (CẬP NHẬT)
 `cp seeding-app.html dist/index.html` **và** `rm -rf dist/tools && mkdir -p dist/tools && cp -r tools/. dist/tools/` (giữ cả `tools/vendor/ffmpeg/`) → validate (`node --check worker/index.js` + Babel transform) → `rm -rf node_modules` → commit → push.

@@ -86,6 +86,8 @@ async function ensureSchema(env){
     // CONTENT OS · P5 — Kho footage tái sử dụng + shot list bám theo kịch bản
     `CREATE TABLE IF NOT EXISTS footage (id TEXT PRIMARY KEY, ten TEXT, mo_ta TEXT, media_url TEXT, media_type TEXT, tags TEXT, san_pham_id TEXT, kenh_id TEXT, dia_diem TEXT, ngay_quay TEXT, nguoi_quay TEXT, active INTEGER DEFAULT 1, created_at TEXT, created_by TEXT, created_by_name TEXT)`,
     `CREATE TABLE IF NOT EXISTS shot_list (id TEXT PRIMARY KEY, script_id TEXT, thu_tu INTEGER, ten_canh TEXT, mo_ta TEXT, goc_may TEXT, thoi_luong INTEGER, footage_id TEXT, trang_thai TEXT, ghi_chu TEXT, created_at TEXT, updated_at TEXT)`,
+    // CONTENT OS · P10 — Thư viện học. ĐỀ XUẤT do máy rút ra nhưng PHẢI người duyệt mới thành quy tắc.
+    `CREATE TABLE IF NOT EXISTS bai_hoc (id TEXT PRIMARY KEY, loai TEXT, tieu_de TEXT, noi_dung TEXT, bang_chung TEXT, so_mau INTEGER DEFAULT 0, nguon_tu_dong INTEGER DEFAULT 0, trang_thai TEXT, nguoi_duyet_ten TEXT, ghi_chu TEXT, created_at TEXT, decided_at TEXT)`,
   ];
   await env.DB.batch(stmts.map(s=>env.DB.prepare(s)));
   // thêm cột đơn giá quay công trình cho DB cũ (bỏ qua nếu đã có)
@@ -305,6 +307,9 @@ async function ensurePostSlots(env){
 }
 
 // Content OS · P3 — chèn 1 content_item từ body (dùng chung cho tạo & import)
+// P10 — Ngưỡng bằng chứng: DƯỚI ngưỡng này thì KHÔNG rút ra kết luận nào.
+// Ranh giới: chỉ tổng hợp cái đã quan sát được; KHÔNG dự đoán viral/%view bằng AI.
+const MIN_MAU_BANG_CHUNG = 5;
 // P8 — 3 MỨC TIN CẬY. Ranh giới đạo đức số liệu: 3 mức này KHÔNG BAO GIỜ được cộng dồn
 // thành một con số "doanh thu từ content" — luôn báo cáo tách 3 cột riêng.
 const MUC_TIN_CAY = {
@@ -432,6 +437,9 @@ async function bootstrap(env, u){
   const footage = canContent ? (await env.DB.prepare(`SELECT * FROM footage ORDER BY created_at DESC`).all()).results
     .map(r=>({ ...r, active:uBool(r.active), tags: JSON.parse(r.tags||'[]') })) : [];
   const shot_list = canContent ? (await env.DB.prepare(`SELECT * FROM shot_list ORDER BY thu_tu ASC, created_at ASC`).all()).results : [];
+  // P10 — thư viện học
+  const bai_hoc = canContent ? (await env.DB.prepare(`SELECT * FROM bai_hoc ORDER BY created_at DESC`).all()).results
+    .map(r=>({ ...r, bang_chung: JSON.parse(r.bang_chung||'{}') })) : [];
 
   return {
     me: rowUser(u),
@@ -441,7 +449,7 @@ async function bootstrap(env, u){
     san_pham, claim_cam, pillars, content_strategy,
     frameworks, kenh, content_items, scripts, approvals, air_posts, air_checklist:AIR_CHECKLIST,
     ket_qua, don_cho_gan, muc_tin_cay:MUC_TIN_CAY, nguon_kq:NGUON_KQ,
-    footage, shot_list,
+    footage, shot_list, bai_hoc, min_mau:MIN_MAU_BANG_CHUNG,
     pricing: pricingRow, payouts: [], audit,
   };
 }
@@ -1369,6 +1377,80 @@ async function handleApi(request, env){
     if(!isStaff(me)) return json({error:'Không có quyền'},403);
     const r = await cleanupOldMedia(env);
     return json({ db: await bootstrap(env, me), cleaned:r });
+  }
+
+  // ===== CONTENT OS · P10 — Thư viện học (máy rút đề xuất, NGƯỜI quyết) =====
+  if(path==='/baihoc/quet' && method==='POST'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    const scripts=(await env.DB.prepare(`SELECT * FROM scripts`).all()).results;
+    const airs=(await env.DB.prepare(`SELECT * FROM air_posts`).all()).results;
+    const kq=(await env.DB.prepare(`SELECT * FROM ket_qua`).all()).results;
+    const fws=(await env.DB.prepare(`SELECT * FROM frameworks`).all()).results;
+    const aps=(await env.DB.prepare(`SELECT * FROM approvals WHERE cong='CLAIM' AND trang_thai='TRA_LAI'`).all()).results;
+    const daCo=(await env.DB.prepare(`SELECT tieu_de FROM bai_hoc`).all()).results.map(x=>x.tieu_de);
+    const scrById={}; scripts.forEach(s=>scrById[s.id]=s);
+    let them=0;
+    const push=async(loai,tieu_de,noi_dung,bang_chung,so_mau)=>{
+      if(daCo.includes(tieu_de)) return;            // không tạo trùng đề xuất
+      await env.DB.prepare(`INSERT INTO bai_hoc (id,loai,tieu_de,noi_dung,bang_chung,so_mau,nguon_tu_dong,trang_thai,ghi_chu,created_at) VALUES (?,?,?,?,?,?,1,'DE_XUAT','',?)`)
+        .bind(uid('bh'),loai,tieu_de,noi_dung,JSON.stringify(bang_chung||{}),so_mau||0,nowISO()).run();
+      daCo.push(tieu_de); them++;
+    };
+    // (1) Framework: chỉ kết luận khi ĐỦ MẪU. Tổng hợp cái đã xảy ra, KHÔNG dự đoán.
+    const perFw={};
+    airs.forEach(a=>{ const sc=a.script_id?scrById[a.script_id]:null; const fid=sc&&sc.framework_id; if(!fid) return;
+      (perFw[fid] ||= {bai:0, dt:0, don:0, view:0});
+      perFw[fid].bai++;
+      kq.filter(k=>k.air_post_id===a.id).forEach(k=>{
+        if(k.muc_tin_cay==='KHONG_QUY_DON') perFw[fid].view += Number(k.luot_xem)||0;
+        else { perFw[fid].dt += Number(k.doanh_thu)||0; perFw[fid].don += Number(k.so_don)||0; }
+      });
+    });
+    for(const fid of Object.keys(perFw)){
+      const st=perFw[fid]; if(st.bai < MIN_MAU_BANG_CHUNG) continue;      // chưa đủ mẫu → im lặng
+      const fw=fws.find(f=>f.id===fid); if(!fw) continue;
+      const tb=Math.round(st.dt/st.bai);
+      await push('FRAMEWORK', 'Framework "'+fw.ten+'": '+st.bai+' bài đã đo',
+        'Quan sát trên '+st.bai+' bài đã đăng: doanh thu quy đơn được '+st.dt.toLocaleString('vi-VN')+'đ ('+st.don+' đơn), trung bình '+tb.toLocaleString('vi-VN')+'đ/bài; '+st.view.toLocaleString('vi-VN')+' lượt xem (không quy đơn). Đây là số ĐÃ XẢY RA, không phải dự đoán cho bài sau.',
+        {framework_id:fid, ...st, trung_binh:tb}, st.bai);
+    }
+    // (2) Claim: cụm từ bị Kỹ thuật trả lại lặp lại nhiều lần → đề xuất bổ sung danh sách cấm
+    const lyDo={};
+    aps.forEach(a=>{ const t=String(a.ghi_chu||'').trim().toLowerCase(); if(t.length>=6) lyDo[t]=(lyDo[t]||0)+1; });
+    for(const t of Object.keys(lyDo)){
+      if(lyDo[t] < 2) continue;                                          // lặp ít nhất 2 lần mới coi là mẫu hình
+      await push('CLAIM', 'Lỗi claim lặp lại: '+t.slice(0,60),
+        'Kỹ thuật đã trả lại '+lyDo[t]+' lần với cùng lý do này. Cân nhắc bổ sung cụm từ liên quan vào danh sách claim cấm, hoặc ghi vào brand voice để người viết tránh từ đầu.',
+        {so_lan:lyDo[t], ly_do:t}, lyDo[t]);
+    }
+    await logAudit(env,me,'quét thư viện học','bai_hoc','',them+' đề xuất mới');
+    return json({ db: await bootstrap(env, me), them });
+  }
+  if(path==='/baihoc' && method==='POST'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    if(!(body.tieu_de||'').trim()) return json({error:'Nhập tiêu đề bài học'},400);
+    const id=uid('bh');
+    await env.DB.prepare(`INSERT INTO bai_hoc (id,loai,tieu_de,noi_dung,bang_chung,so_mau,nguon_tu_dong,trang_thai,ghi_chu,created_at) VALUES (?,?,?,?,'{}',0,0,'DE_XUAT','',?)`)
+      .bind(id,(body.loai||'KHAC').trim(),(body.tieu_de||'').trim(),(body.noi_dung||'').trim(),nowISO()).run();
+    return json({ db: await bootstrap(env, me), id });
+  }
+  // NGƯỜI quyết: đề xuất chỉ thành quy tắc khi được duyệt
+  if((m=path.match(/^\/baihoc\/(.+)\/decide$/)) && method==='POST'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    const id=m[1]; const r=await env.DB.prepare(`SELECT * FROM bai_hoc WHERE id=?`).bind(id).first();
+    if(!r) return json({error:'Không tìm thấy'},404);
+    if(r.trang_thai!=='DE_XUAT') return json({error:'Bài học này đã được quyết'},409);
+    const duyet = body.result==='DUYET';
+    if(!duyet && !String(body.ghi_chu||'').trim()) return json({error:'Từ chối phải nêu lý do'},400);
+    await env.DB.prepare(`UPDATE bai_hoc SET trang_thai=?, nguoi_duyet_ten=?, ghi_chu=?, decided_at=? WHERE id=?`)
+      .bind(duyet?'DA_DUYET':'TU_CHOI', me.ho_ten, String(body.ghi_chu||'').trim(), nowISO(), id).run();
+    await logAudit(env,me,(duyet?'duyệt':'từ chối')+' bài học','bai_hoc',id,r.tieu_de||'');
+    return json({ db: await bootstrap(env, me) });
+  }
+  if((m=path.match(/^\/baihoc\/(.+)$/)) && method==='DELETE'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    await env.DB.prepare(`DELETE FROM bai_hoc WHERE id=?`).bind(m[1]).run();
+    return json({ db: await bootstrap(env, me) });
   }
 
   // ===== CONTENT OS · P5 — Kho footage + shot list =====

@@ -373,7 +373,7 @@ function seedDB(){
     frameworks: ['Chuẩn bán hàng','PAS','Phản biện comment','Test chất lượng','Hành trình thi công','Size / Combo','FOMO','Review KOC','"đừng..." Trend','Q&A khách hàng','So sánh kinh tế','Hướng dẫn thi công'].map((ten,i)=>({id:uid('fw'),ten,mo_ta:'',thu_tu:i+1,active:true,created_at:now()})),
     kenh: [['Fanpage Kingsmen','FANPAGE','Kingsmen'],['TikTok Kingsmen','TIKTOK','Kingsmen'],['YouTube Short Kingsmen','YOUTUBE','Kingsmen'],['Fanpage VKXD','FANPAGE','VKXD'],['TikTok VKXD','TIKTOK','VKXD'],['Shopee VKXD','SHOPEE','VKXD'],['Zalo OA','ZALO_OA','Kingsmen'],['CHÍNH - Vật liệu mới FINEX','TIKTOK','FINEX'],['AFF - Sơn sàn hiệu ứng','TIKTOK','FINEX'],['BC - Vật liệu hoàn thiện','TIKTOK','Kingsmen']].map(([ten,loai,th])=>({id:uid('kn'),ten,loai,thuong_hieu:th,active:true,created_at:now()})),
     content_items: [],
-    scripts: [], approvals: [], air_posts: [], air_checklist: AIR_CHECKLIST_FE, ket_qua: [], don_cho_gan: [], footage: [], shot_list: [],
+    scripts: [], approvals: [], air_posts: [], air_checklist: AIR_CHECKLIST_FE, ket_qua: [], don_cho_gan: [], footage: [], shot_list: [], bai_hoc: [], min_mau: MIN_MAU,
     payouts: [],
     audit: [],
   };
@@ -414,7 +414,7 @@ function migrate(db){
   db.kenh ||= [];
   db.content_items ||= [];
   db.scripts ||= []; db.approvals ||= []; db.air_posts ||= []; db.air_checklist ||= AIR_CHECKLIST_FE;
-  db.ket_qua ||= []; db.don_cho_gan ||= []; db.footage ||= []; db.shot_list ||= [];
+  db.ket_qua ||= []; db.don_cho_gan ||= []; db.footage ||= []; db.shot_list ||= []; db.bai_hoc ||= []; db.min_mau ||= MIN_MAU;
   db.post_seedings.forEach(p=>{ p.react ??= 0; p.so_cmt_seeding ??= 0; p.so_cmt_tu_nhien ??= 0; p.thanh_tien ??= 0; });
   db.cmt_seedings.forEach(c=>{ c.proofs ||= []; c.so_cmt_seeding ??= 0; c.react ??= 0; c.so_cmt_tu_nhien ??= 0; c.thanh_tien ??= 0; });
   db.groups.forEach(g=>{ g.uu_tien ??= false; });
@@ -602,6 +602,32 @@ function AppProvider({children}){
         if(patch.footage_id!==undefined && patch.trang_thai==null) patch.trang_thai = patch.footage_id?'DA_QUAY':'CHUA_QUAY';
         Object.assign(sl,patch,{updated_at:now()}); commit(); return true; },
       deleteShot: async id=>{ S.shot_list=(S.shot_list||[]).filter(x=>x.id!==id); commit(); return true; },
+      quetBaiHoc: async ()=>{ S.bai_hoc ||= []; const daCo=(S.bai_hoc||[]).map(b=>b.tieu_de); let them=0;
+        const per={};
+        (S.air_posts||[]).forEach(a=>{ const sc=(S.scripts||[]).find(x=>x.id===a.script_id); const fid=sc&&sc.framework_id; if(!fid) return;
+          (per[fid] ||= {bai:0,dt:0,don:0,view:0}); per[fid].bai++;
+          (S.ket_qua||[]).filter(k=>k.air_post_id===a.id).forEach(k=>{ if(k.muc_tin_cay==='KHONG_QUY_DON') per[fid].view+=Number(k.luot_xem)||0;
+            else { per[fid].dt+=Number(k.doanh_thu)||0; per[fid].don+=Number(k.so_don)||0; } }); });
+        Object.keys(per).forEach(fid=>{ const st=per[fid]; if(st.bai<MIN_MAU) return;
+          const fw=(S.frameworks||[]).find(f=>f.id===fid); if(!fw) return;
+          const t='Framework "'+fw.ten+'": '+st.bai+' bài đã đo'; if(daCo.includes(t)) return;
+          const tb=Math.round(st.dt/st.bai);
+          S.bai_hoc.unshift({ id:uid('bh'), loai:'FRAMEWORK', tieu_de:t, so_mau:st.bai, nguon_tu_dong:1, trang_thai:'DE_XUAT', bang_chung:{framework_id:fid,...st,trung_binh:tb}, created_at:now(),
+            noi_dung:'Quan sát trên '+st.bai+' bài đã đăng: doanh thu quy đơn được '+st.dt.toLocaleString('vi-VN')+'đ ('+st.don+' đơn), trung bình '+tb.toLocaleString('vi-VN')+'đ/bài; '+st.view.toLocaleString('vi-VN')+' lượt xem (không quy đơn). Đây là số ĐÃ XẢY RA, không phải dự đoán cho bài sau.' });
+          daCo.push(t); them++; });
+        const ly={}; (S.approvals||[]).filter(a=>a.cong==='CLAIM'&&a.trang_thai==='TRA_LAI').forEach(a=>{ const t=String(a.ghi_chu||'').trim().toLowerCase(); if(t.length>=6) ly[t]=(ly[t]||0)+1; });
+        Object.keys(ly).forEach(t=>{ if(ly[t]<2) return; const ti='Lỗi claim lặp lại: '+t.slice(0,60); if(daCo.includes(ti)) return;
+          S.bai_hoc.unshift({ id:uid('bh'), loai:'CLAIM', tieu_de:ti, so_mau:ly[t], nguon_tu_dong:1, trang_thai:'DE_XUAT', bang_chung:{so_lan:ly[t],ly_do:t}, created_at:now(),
+            noi_dung:'Kỹ thuật đã trả lại '+ly[t]+' lần với cùng lý do này. Cân nhắc bổ sung cụm từ liên quan vào danh sách claim cấm, hoặc ghi vào brand voice để người viết tránh từ đầu.' });
+          daCo.push(ti); them++; });
+        commit(); return {ok:true,them}; },
+      addBaiHoc: async o=>{ S.bai_hoc ||= []; if(!(o.tieu_de||'').trim()) return false;
+        S.bai_hoc.unshift({ id:uid('bh'), loai:o.loai||'KHAC', tieu_de:o.tieu_de.trim(), noi_dung:o.noi_dung||'', bang_chung:{}, so_mau:0, nguon_tu_dong:0, trang_thai:'DE_XUAT', created_at:now() }); commit(); return true; },
+      decideBaiHoc: async (id,result,ghi_chu)=>{ const b=(S.bai_hoc||[]).find(x=>x.id===id); if(!b) return {ok:false,msg:'Không tìm thấy'};
+        if(b.trang_thai!=='DE_XUAT') return {ok:false,msg:'Bài học này đã được quyết'};
+        if(result!=='DUYET' && !String(ghi_chu||'').trim()) return {ok:false,msg:'Từ chối phải nêu lý do'};
+        Object.assign(b,{trang_thai:result==='DUYET'?'DA_DUYET':'TU_CHOI',nguoi_duyet_ten:meRef.current.ho_ten,ghi_chu:ghi_chu||'',decided_at:now()}); commit(); return {ok:true}; },
+      deleteBaiHoc: async id=>{ S.bai_hoc=(S.bai_hoc||[]).filter(x=>x.id!==id); commit(); return true; },
       skipDon: async (id,ly_do)=>{ const d=(S.don_cho_gan||[]).find(x=>x.id===id); if(!d||d.trang_thai!=='CHO_GAN') return false;
         Object.assign(d,{trang_thai:'BO_QUA',decided_at:now(),decided_by_name:meRef.current.ho_ten}); commit(); return true; },
       decideApproval: async (id,result,ghi_chu)=>{ const ap=(S.approvals||[]).find(a=>a.id===id); if(!ap) return false;
@@ -764,6 +790,12 @@ function AppProvider({children}){
     addShot: (script_id,o) => mut('/shotlist', {method:'POST', body:{script_id,...o}}),
     patchShot: (id,patch) => mut('/shotlist/'+id, {method:'PATCH', body:patch}),
     deleteShot: id => mut('/shotlist/'+id, {method:'DELETE'}),
+    quetBaiHoc: async () => { try { const r=await call('/baihoc/quet',{method:'POST'}); if(r&&r.db) setDb(r.db); return {ok:true,them:r.them}; }
+      catch(e){ return {ok:false,msg:e.message}; } },
+    addBaiHoc: o => mut('/baihoc', {method:'POST', body:o}),
+    decideBaiHoc: async (id,result,ghi_chu) => { try { const r=await call('/baihoc/'+id+'/decide',{method:'POST',body:{result,ghi_chu}}); if(r&&r.db) setDb(r.db); return {ok:true}; }
+      catch(e){ return {ok:false,msg:e.message}; } },
+    deleteBaiHoc: id => mut('/baihoc/'+id, {method:'DELETE'}),
     createCmtSeed: c => mut('/cmtseed', {method:'POST', body:c}),
     reviewCmtSeed: (id, result, reason) => mut(`/cmtseed/${id}/review`, {method:'POST', body:{result, reason}}),
     markPaid: (sales_id, ky) => mut('/markpaid', {method:'POST', body:{sales_id, ky}}),
@@ -975,6 +1007,7 @@ const NAV_GROUPS = {
       {key:'footage', label:'Kho footage', short:'Footage', icon:'🎞'},
       {key:'ketqua', label:'Kết quả', short:'Kết quả', icon:'📈'},
       {key:'cdash', label:'Dashboard nội dung', short:'Dashboard', icon:'📊'},
+      {key:'hoc', label:'Thư viện học', short:'Học', icon:'🎓'},
       {key:'products', label:'Sản phẩm & Claim', short:'Sản phẩm', icon:'🧪'},
     ]},
     {key:'g_seeding', label:'Seeding', icon:'💬', items:[
@@ -1012,6 +1045,7 @@ const NAV_GROUPS = {
       {key:'footage', label:'Kho footage', short:'Footage', icon:'🎞'},
       {key:'ketqua', label:'Kết quả', short:'Kết quả', icon:'📈'},
       {key:'cdash', label:'Dashboard nội dung', short:'Dashboard', icon:'📊'},
+      {key:'hoc', label:'Thư viện học', short:'Học', icon:'🎓'},
       {key:'products', label:'Sản phẩm & Claim', short:'Sản phẩm', icon:'🧪'},
     ]},
     {key:'g_seeding', label:'Seeding', icon:'💬', items:[
@@ -1056,7 +1090,7 @@ function ProfileModal({open, onClose}){
   </Modal>;
 }
 // Module đang NÂNG CẤP — chỉ tài khoản dev preview (is_dev) mới thấy
-const BETA_KEYS = new Set(['strategy','plan','products','studio','approve','air','ketqua','footage','cdash']);
+const BETA_KEYS = new Set(['strategy','plan','products','studio','approve','air','ketqua','footage','cdash','hoc']);
 function Shell(){
   const { me, logout, db } = useApp();
   // Lọc module đang nâng cấp → bỏ nhóm rỗng
@@ -1102,6 +1136,7 @@ function Shell(){
       case 'footage': return <FootageLib/>;
       case 'ketqua': return <KetQua/>;
       case 'cdash': return <ContentDashboard/>;
+      case 'hoc': return <ThuVienHoc/>;
       case 'schedule': return <PostSchedule/>;
       case 'pay_report': return <MktPayReport/>;
       case 'users': return <UserManagement/>;
@@ -2158,6 +2193,10 @@ function ScriptEditor({init, onClose}){
   const product = (db.san_pham||[]).find(p=>p.id===f.san_pham_id);
   const framework = (db.frameworks||[]).find(x=>x.id===f.framework_id);
   const audience = (db.content_strategy||{}).audience||'';
+  // P10 — chỉ lấy bài học ĐÃ DUYỆT; framework nào thì hiện bài học của framework đó + bài học chung
+  const baiHocLienQuan = (db.bai_hoc||[]).filter(b=>b.trang_thai==='DA_DUYET')
+    .filter(b=> b.loai!=='FRAMEWORK' || !f.framework_id || ((b.bang_chung||{}).framework_id===f.framework_id))
+    .slice(0,4);
   const flags = scanClaims(scriptTextFE(f), db.claim_cam);
   const blocked = flags.filter(x=>x.muc_do==='CHAN');
   const warns = flags.filter(x=>x.muc_do!=='CHAN');
@@ -2196,6 +2235,14 @@ function ScriptEditor({init, onClose}){
         <Field label="Kênh"><Select value={f.kenh_id} onChange={e=>setF({...f,kenh_id:e.target.value})}><option value="">— Không —</option>{(db.kenh||[]).filter(x=>x.active!==false).map(x=><option key={x.id} value={x.id}>{x.ten}</option>)}</Select></Field>
       </div>
       <Field label="Góc nhìn / thông điệp (angle)" hint="VD: chống ố vàng cho nền nhà tắm"><Input value={angle} onChange={e=>setAngle(e.target.value)} placeholder="Nhập angle để sinh sát hơn…"/></Field>
+      {/* P10 — vòng lặp học: bài học ĐÃ DUYỆT chảy ngược về đây khi soạn */}
+      {baiHocLienQuan.length>0 && <div className="rounded-xl bg-brand-bg border border-brand/30 p-2">
+        <div className="text-[11px] font-semibold text-brand-dark mb-1">🎓 Bài học đã duyệt từ dữ liệu thật:</div>
+        <ul className="space-y-1">{baiHocLienQuan.map(b=>
+          <li key={b.id} className="text-[11px] text-ink-soft leading-snug">• <b>{b.tieu_de}</b>{b.noi_dung?' — '+b.noi_dung:''}</li>)}
+        </ul>
+        <div className="text-[10px] text-ink-muted mt-1">Đây là số đã quan sát được, không phải dự đoán bài này sẽ chạy tốt.</div>
+      </div>}
       {product && <div className="rounded-xl bg-emerald-50/60 border border-emerald-100 p-2">
         <div className="text-[11px] font-semibold text-emerald-800 mb-1">✓ Chỉ dùng dữ kiện thật của “{product.ten}”:</div>
         <div className="flex flex-wrap gap-1">
@@ -2492,6 +2539,95 @@ function AirEditor({post, onClose}){
     </div>}
     {posted && <div className="text-[11px] text-slate-400">Đã đăng lúc {fmtDate(post.posted_at)} — khoá chỉnh sửa để giữ nguyên dữ liệu quy đơn.</div>}
   </div>;
+}
+
+/* ============================================================
+   CONTENT OS · P10 — THƯ VIỆN HỌC (máy rút đề xuất · NGƯỜI quyết)
+   Ranh giới: KHÔNG dự đoán viral. Chỉ tổng hợp cái đã quan sát, đủ mẫu mới kết luận.
+============================================================ */
+const BH_LOAI = { FRAMEWORK:'Framework', CLAIM:'Claim', BRAND_VOICE:'Brand voice', KHAC:'Khác' };
+const BH_ST = { DE_XUAT:'Đề xuất', DA_DUYET:'Đã duyệt', TU_CHOI:'Từ chối' };
+const BH_ST_STYLE = { DE_XUAT:'bg-amber-100 text-amber-700', DA_DUYET:'bg-emerald-100 text-emerald-700', TU_CHOI:'bg-slate-100 text-slate-400' };
+function ThuVienHoc(){
+  const { db, quetBaiHoc, addBaiHoc, decideBaiHoc, deleteBaiHoc, notify } = useApp();
+  const BH=db.bai_hoc||[]; const minMau=db.min_mau||MIN_MAU;
+  const [tab,setTab]=useState('DE_XUAT');
+  const [busy,setBusy]=useState(false); const [reject,setReject]=useState(null); const [ly,setLy]=useState(''); const [add,setAdd]=useState(null);
+  const list=BH.filter(b=>b.trang_thai===tab);
+  const quet=async()=>{ setBusy(true); const r=await quetBaiHoc(); setBusy(false);
+    if(r&&r.ok) notify(r.them>0?('Tìm được '+r.them+' đề xuất mới'):'Chưa có đề xuất mới — cần thêm dữ liệu thật');
+    else notify((r&&r.msg)||'Lỗi','err'); };
+  const duyet=async(b)=>{ const r=await decideBaiHoc(b.id,'DUYET',''); if(r&&r.ok) notify('Đã duyệt — bài học này giờ hiện trong Creative Studio'); else notify((r&&r.msg)||'Lỗi','err'); };
+  const tuChoi=async()=>{ if(!ly.trim()) return notify('Nhập lý do từ chối','warn');
+    const r=await decideBaiHoc(reject.id,'TU_CHOI',ly.trim()); if(r&&r.ok){ notify('Đã từ chối'); setReject(null); } else notify((r&&r.msg)||'Lỗi','err'); };
+  return <div className="space-y-4">
+    <div className="flex items-center justify-between flex-wrap gap-2">
+      <h2 className="font-display text-lg font-bold text-ink">🎓 Thư viện học</h2>
+      <div className="flex gap-2">
+        <Btn variant="ghost" onClick={()=>setAdd({loai:'KHAC'})}>＋ Ghi bài học</Btn>
+        <Btn variant="brand" onClick={quet} disabled={busy}>{busy?'Đang quét…':'🔍 Quét dữ liệu'}</Btn>
+      </div>
+    </div>
+
+    <div className="rounded-2xl border border-brand/30 bg-brand-bg p-3 text-[11px] text-ink-soft leading-relaxed">
+      <b>Vòng lặp học:</b> Kết quả thật → máy rút <b>đề xuất</b> → <b>bạn duyệt</b> → bài học đã duyệt hiện lại trong Creative Studio khi soạn kịch bản.
+      <div className="mt-1 text-ink-muted">
+        Máy <b>chỉ tổng hợp cái đã xảy ra</b>, không dự đoán bài sau sẽ viral hay không. Chưa đủ <b>{minMau}</b> mẫu thì <b>không rút kết luận nào</b> —
+        và <b>đề xuất không tự thành quy tắc</b>, phải có người duyệt.
+      </div>
+    </div>
+
+    <div className="flex gap-1 bg-slate-100 rounded-xl p-1 w-fit">
+      {Object.keys(BH_ST).map(k=>
+        <button key={k} onClick={()=>setTab(k)} className={"px-3 py-1 rounded-lg text-xs font-semibold "+(tab===k?'bg-white text-ink shadow-sm':'text-slate-500')}>
+          {BH_ST[k]} ({BH.filter(b=>b.trang_thai===k).length})</button>)}
+    </div>
+
+    {list.length===0 ? <Empty>{tab==='DE_XUAT'?'Chưa có đề xuất. Bấm “Quét dữ liệu” sau khi đã có kết quả thật.':'Chưa có mục nào.'}</Empty> :
+      <div className="space-y-2">{list.map(b=>
+        <div key={b.id} className="bg-white rounded-2xl border border-line shadow-card p-3">
+          <div className="flex items-start gap-2 flex-wrap">
+            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-brand/10 text-brand-dark font-semibold">{BH_LOAI[b.loai]||b.loai}</span>
+            {Number(b.so_mau)>0 && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-600">{b.so_mau} mẫu</span>}
+            {Number(b.nguon_tu_dong)===1 && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500">máy rút</span>}
+            <span className={"text-[10px] px-1.5 py-0.5 rounded-full font-semibold ml-auto "+(BH_ST_STYLE[b.trang_thai]||'')}>{BH_ST[b.trang_thai]}</span>
+          </div>
+          <div className="font-display font-bold text-ink text-sm mt-2">{b.tieu_de}</div>
+          {b.noi_dung && <div className="text-xs text-slate-600 mt-1 leading-relaxed">{b.noi_dung}</div>}
+          {b.ghi_chu && <div className="text-[11px] text-rose-600 mt-1">Lý do: “{b.ghi_chu}”</div>}
+          {b.nguoi_duyet_ten && <div className="text-[10px] text-slate-400 mt-1">{b.nguoi_duyet_ten} · {fmtDate(b.decided_at)}</div>}
+          {b.trang_thai==='DE_XUAT'
+            ? <div className="flex gap-2 mt-3">
+                <Btn variant="ghost" onClick={()=>{ setReject(b); setLy(''); }}>Từ chối</Btn>
+                <Btn variant="brand" className="flex-1" onClick={()=>duyet(b)}>✓ Duyệt thành bài học</Btn>
+              </div>
+            : <div className="flex justify-end mt-2">
+                <button onClick={()=>{ if(confirm('Xoá bài học này?')) deleteBaiHoc(b.id).then(ok=>ok&&notify('Đã xoá')); }} className="text-xs text-rose-400 hover:underline">Xoá</button>
+              </div>}
+        </div>)}
+      </div>}
+
+    {reject && <Modal open={true} onClose={()=>setReject(null)} title="Từ chối đề xuất">
+      <p className="text-xs text-slate-500 mb-2">Ghi lý do để lần quét sau bạn (hoặc người khác) biết vì sao đã bỏ.</p>
+      <Textarea rows="3" value={ly} onChange={e=>setLy(e.target.value)} placeholder="VD: mẫu chưa đại diện, do đợt khuyến mãi…"/>
+      <div className="flex gap-2 mt-3"><Btn variant="ghost" onClick={()=>setReject(null)}>Huỷ</Btn><Btn variant="brand" className="flex-1" onClick={tuChoi}>Từ chối</Btn></div>
+    </Modal>}
+    {add && <Modal open={true} onClose={()=>setAdd(null)} title="Ghi bài học (tự rút)">
+      <BaiHocForm onClose={()=>setAdd(null)}/>
+    </Modal>}
+  </div>;
+}
+function BaiHocForm({onClose}){
+  const { addBaiHoc, notify } = useApp();
+  const [f,setF]=useState({loai:'KHAC',tieu_de:'',noi_dung:''});
+  const save=async()=>{ if(!f.tieu_de.trim()) return notify('Nhập tiêu đề','warn');
+    const ok=await addBaiHoc(f); if(ok){ notify('Đã ghi — vẫn cần duyệt để thành bài học'); onClose(); } };
+  return <>
+    <Field label="Loại"><Select value={f.loai} onChange={e=>setF({...f,loai:e.target.value})}>{Object.keys(BH_LOAI).map(k=><option key={k} value={k}>{BH_LOAI[k]}</option>)}</Select></Field>
+    <Field label="Tiêu đề" required><Input value={f.tieu_de} onChange={e=>setF({...f,tieu_de:e.target.value})} placeholder="VD: Hook hỏi ngược hiệu quả với tệp thầu thợ"/></Field>
+    <Field label="Nội dung / bằng chứng"><Textarea rows="4" value={f.noi_dung} onChange={e=>setF({...f,noi_dung:e.target.value})} placeholder="Ghi rõ quan sát dựa trên bài nào, số liệu nào…"/></Field>
+    <div className="flex gap-2 mt-2"><Btn variant="ghost" onClick={onClose}>Huỷ</Btn><Btn variant="brand" className="flex-1" onClick={save}>Lưu</Btn></div>
+  </>;
 }
 
 /* ============================================================
