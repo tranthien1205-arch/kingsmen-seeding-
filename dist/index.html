@@ -129,6 +129,18 @@ function generateScript({framework, product, angle, audience}){
   return { hook: fill(tpl.hook), sections: tpl.secs.map(([label,text])=>({label, text:fill(text)})), cta: fill(tpl.cta) };
 }
 
+// P7 — checklist đăng thủ công (bản dự phòng khi backend chưa trả; khớp AIR_CHECKLIST ở worker)
+const AIR_CHECKLIST_FE = [
+  {k:'noi_dung_duyet', label:'Nội dung đã qua 2 cổng duyệt', bat_buoc:true},
+  {k:'dung_kenh',      label:'Đúng kênh & đúng định dạng của kênh', bat_buoc:true},
+  {k:'ma_gan',         label:'Đã gắn mã theo dõi / voucher vào bài', bat_buoc:true},
+  {k:'link_sp',        label:'Link sản phẩm / giỏ hàng đúng', bat_buoc:true},
+  {k:'caption_claim',  label:'Caption đã rà lại cụm từ cấm', bat_buoc:true},
+  {k:'media_ty_le',    label:'Ảnh/video đúng tỉ lệ, không vỡ nét', bat_buoc:false},
+  {k:'hashtag_cta',    label:'Hashtag & CTA đầy đủ', bat_buoc:false},
+  {k:'hen_gio',        label:'Đã hẹn giờ / canh khung giờ đăng', bat_buoc:false},
+];
+const LOAI_MA = [{v:'VOUCHER',label:'Mã voucher'},{v:'UTM',label:'Link UTM'},{v:'MA_DON',label:'Mã đơn riêng'},{v:'KHAC',label:'Khác'}];
 const ST = { NHAP:'NHAP', CHO_DUYET:'CHO_DUYET', DAT:'DAT', KHONG_DAT:'KHONG_DAT', DA_CHI:'DA_CHI' };
 const ST_LABEL = { NHAP:'Nháp', CHO_DUYET:'Chờ duyệt', DAT:'Đạt', KHONG_DAT:'Không đạt', DA_CHI:'Đã chi' };
 const ST_STYLE = {
@@ -358,6 +370,7 @@ function seedDB(){
     frameworks: ['Chuẩn bán hàng','PAS','Phản biện comment','Test chất lượng','Hành trình thi công','Size / Combo','FOMO','Review KOC','"đừng..." Trend','Q&A khách hàng','So sánh kinh tế','Hướng dẫn thi công'].map((ten,i)=>({id:uid('fw'),ten,mo_ta:'',thu_tu:i+1,active:true,created_at:now()})),
     kenh: [['Fanpage Kingsmen','FANPAGE','Kingsmen'],['TikTok Kingsmen','TIKTOK','Kingsmen'],['YouTube Short Kingsmen','YOUTUBE','Kingsmen'],['Fanpage VKXD','FANPAGE','VKXD'],['TikTok VKXD','TIKTOK','VKXD'],['Shopee VKXD','SHOPEE','VKXD'],['Zalo OA','ZALO_OA','Kingsmen'],['CHÍNH - Vật liệu mới FINEX','TIKTOK','FINEX'],['AFF - Sơn sàn hiệu ứng','TIKTOK','FINEX'],['BC - Vật liệu hoàn thiện','TIKTOK','Kingsmen']].map(([ten,loai,th])=>({id:uid('kn'),ten,loai,thuong_hieu:th,active:true,created_at:now()})),
     content_items: [],
+    scripts: [], approvals: [], air_posts: [], air_checklist: AIR_CHECKLIST_FE,
     payouts: [],
     audit: [],
   };
@@ -397,6 +410,7 @@ function migrate(db){
   db.frameworks ||= [];
   db.kenh ||= [];
   db.content_items ||= [];
+  db.scripts ||= []; db.approvals ||= []; db.air_posts ||= []; db.air_checklist ||= AIR_CHECKLIST_FE;
   db.post_seedings.forEach(p=>{ p.react ??= 0; p.so_cmt_seeding ??= 0; p.so_cmt_tu_nhien ??= 0; p.thanh_tien ??= 0; });
   db.cmt_seedings.forEach(c=>{ c.proofs ||= []; c.so_cmt_seeding ??= 0; c.react ??= 0; c.so_cmt_tu_nhien ??= 0; c.thanh_tien ??= 0; });
   db.groups.forEach(g=>{ g.uu_tien ??= false; });
@@ -521,6 +535,22 @@ function AppProvider({children}){
         S.approvals=(S.approvals||[]).filter(a=>!(a.doi_tuong===doi_tuong&&a.doi_tuong_id===doi_tuong_id));
         ['NOI_DUNG','CLAIM'].forEach(cong=>S.approvals.unshift({ id:uid('ap'), doi_tuong, doi_tuong_id, cong, trang_thai:'CHO', nguoi_gui:meRef.current.id, nguoi_gui_ten:meRef.current.ho_ten, ghi_chu:'', created_at:now() }));
         o.trang_thai='CHO_DUYET'; commit(); return {ok:true}; },
+      createAir: async o=>{ S.air_posts ||= []; const src=(o.script_id?(S.scripts||[]):(S.content_items||[])).find(x=>x.id===(o.script_id||o.content_item_id));
+        if(!src) return {ok:false,msg:'Không tìm thấy'}; if(src.trang_thai!=='DUYET') return {ok:false,msg:'Chỉ đăng nội dung ĐÃ DUYỆT'};
+        const ma=String(o.ma_theo_doi||'').trim(); if(ma && (S.air_posts||[]).some(a=>a.ma_theo_doi===ma)) return {ok:false,msg:'Mã theo dõi đã dùng cho bài khác'};
+        const id=uid('air'); S.air_posts.unshift({ id, content_item_id:o.content_item_id||null, script_id:o.script_id||null, kenh_id:o.kenh_id||src.kenh_id||null, tieu_de:o.tieu_de||src.tieu_de||'', ngay_dang:o.ngay_dang||'', link_bai:o.link_bai||'', ma_theo_doi:ma, loai_ma:o.loai_ma||'VOUCHER', checklist:o.checklist||{}, ghi_chu:'', trang_thai:'CHUAN_BI', nguoi_dang:meRef.current.id, nguoi_dang_ten:meRef.current.ho_ten, created_at:now(), updated_at:now() });
+        commit(); return {ok:true, id}; },
+      patchAir: async (id,patch)=>{ const a=(S.air_posts||[]).find(x=>x.id===id); if(!a) return {ok:false,msg:'Không tìm thấy'};
+        if(patch.ma_theo_doi!=null){ const ma=String(patch.ma_theo_doi).trim(); if(ma && (S.air_posts||[]).some(x=>x.ma_theo_doi===ma && x.id!==id)) return {ok:false,msg:'Mã theo dõi đã dùng cho bài khác'}; }
+        Object.assign(a, patch, {updated_at:now()}); commit(); return {ok:true}; },
+      publishAir: async id=>{ const a=(S.air_posts||[]).find(x=>x.id===id); if(!a) return {ok:false,msg:'Không tìm thấy'};
+        if(a.trang_thai==='DA_DANG') return {ok:false,msg:'Bài này đã đăng'};
+        const thieu=(S.air_checklist||[]).filter(c=>c.bat_buoc && !(a.checklist||{})[c.k]).map(c=>c.label);
+        if(thieu.length) return {ok:false, thieu, msg:'Chưa xong checklist bắt buộc'};
+        if(!String(a.link_bai||'').trim()) return {ok:false,msg:'Cần dán link bài đã đăng'};
+        if(!String(a.ma_theo_doi||'').trim()) return {ok:false,msg:'Cần mã theo dõi để quy đơn'};
+        a.trang_thai='DA_DANG'; a.posted_at=now(); a.updated_at=now(); commit(); return {ok:true}; },
+      deleteAir: async id=>{ S.air_posts=(S.air_posts||[]).filter(x=>x.id!==id); commit(); return true; },
       decideApproval: async (id,result,ghi_chu)=>{ const ap=(S.approvals||[]).find(a=>a.id===id); if(!ap) return false;
         const arr = ap.doi_tuong==='SCRIPT'?S.scripts:S.content_items; const o=(arr||[]).find(x=>x.id===ap.doi_tuong_id);
         Object.assign(ap,{ trang_thai:result==='DAT'?'DAT':'TRA_LAI', nguoi_duyet:meRef.current.id, nguoi_duyet_ten:meRef.current.ho_ten, ghi_chu:ghi_chu||'', decided_at:now() });
@@ -578,7 +608,7 @@ function AppProvider({children}){
       body: opts.body ? JSON.stringify(opts.body) : undefined,
     });
     const data = await res.json().catch(()=>({}));
-    if(!res.ok){ const err=new Error(data.error || ('Lỗi '+res.status)); err.blocked=data.blocked; err.status=res.status; throw err; }
+    if(!res.ok){ const err=new Error(data.error || ('Lỗi '+res.status)); err.blocked=data.blocked; err.thieu=data.thieu; err.status=res.status; throw err; }
     return data;
   };
 
@@ -657,6 +687,13 @@ function AppProvider({children}){
     submitApproval: async (doi_tuong,doi_tuong_id) => { try { const r=await call('/approvals/submit',{method:'POST',body:{doi_tuong,doi_tuong_id}}); if(r&&r.db) setDb(r.db); return {ok:true}; }
       catch(e){ return {ok:false, blocked:e.blocked, msg:e.message}; } },
     decideApproval: (id,result,ghi_chu) => mut('/approvals/'+id+'/decide', {method:'POST', body:{result, ghi_chu}}),
+    createAir: async o => { try { const r=await call('/air',{method:'POST',body:o}); if(r&&r.db) setDb(r.db); return {ok:true, id:r.id}; }
+      catch(e){ return {ok:false, msg:e.message}; } },
+    patchAir: async (id,patch) => { try { const r=await call('/air/'+id,{method:'PATCH',body:patch}); if(r&&r.db) setDb(r.db); return {ok:true}; }
+      catch(e){ return {ok:false, msg:e.message}; } },
+    publishAir: async id => { try { const r=await call('/air/'+id+'/publish',{method:'POST'}); if(r&&r.db) setDb(r.db); return {ok:true}; }
+      catch(e){ return {ok:false, thieu:e.thieu, msg:e.message}; } },
+    deleteAir: id => mut('/air/'+id, {method:'DELETE'}),
     createCmtSeed: c => mut('/cmtseed', {method:'POST', body:c}),
     reviewCmtSeed: (id, result, reason) => mut(`/cmtseed/${id}/review`, {method:'POST', body:{result, reason}}),
     markPaid: (sales_id, ky) => mut('/markpaid', {method:'POST', body:{sales_id, ky}}),
@@ -864,6 +901,7 @@ const NAV_GROUPS = {
       {key:'plan', label:'Kế hoạch nội dung', short:'Kế hoạch', icon:'🗓️'},
       {key:'studio', label:'Creative Studio', short:'Kịch bản', icon:'✍️'},
       {key:'approve', label:'Hàng đợi duyệt', short:'Duyệt', icon:'🛂'},
+      {key:'air', label:'Đăng bài', short:'Đăng', icon:'🚀'},
       {key:'products', label:'Sản phẩm & Claim', short:'Sản phẩm', icon:'🧪'},
     ]},
     {key:'g_seeding', label:'Seeding', icon:'💬', items:[
@@ -897,6 +935,7 @@ const NAV_GROUPS = {
       {key:'plan', label:'Kế hoạch nội dung', short:'Kế hoạch', icon:'🗓️'},
       {key:'studio', label:'Creative Studio', short:'Kịch bản', icon:'✍️'},
       {key:'approve', label:'Hàng đợi duyệt', short:'Duyệt', icon:'🛂'},
+      {key:'air', label:'Đăng bài', short:'Đăng', icon:'🚀'},
       {key:'products', label:'Sản phẩm & Claim', short:'Sản phẩm', icon:'🧪'},
     ]},
     {key:'g_seeding', label:'Seeding', icon:'💬', items:[
@@ -941,7 +980,7 @@ function ProfileModal({open, onClose}){
   </Modal>;
 }
 // Module đang NÂNG CẤP — chỉ tài khoản dev preview (is_dev) mới thấy
-const BETA_KEYS = new Set(['strategy','plan','products','studio','approve']);
+const BETA_KEYS = new Set(['strategy','plan','products','studio','approve','air']);
 function Shell(){
   const { me, logout, db } = useApp();
   // Lọc module đang nâng cấp → bỏ nhóm rỗng
@@ -983,6 +1022,7 @@ function Shell(){
       case 'plan': return <ContentPlan/>;
       case 'studio': return <CreativeStudio/>;
       case 'approve': return <ApprovalQueue/>;
+      case 'air': return <AirPosts/>;
       case 'schedule': return <PostSchedule/>;
       case 'pay_report': return <MktPayReport/>;
       case 'users': return <UserManagement/>;
@@ -1944,19 +1984,56 @@ function ContentImportModal({onClose}){
 ============================================================ */
 const SCRIPT_ST = { NHAP:'Nháp', CHO_DUYET:'Chờ duyệt', DUYET:'Đã duyệt' };
 const SCRIPT_ST_STYLE = { NHAP:'bg-slate-100 text-slate-600', CHO_DUYET:'bg-amber-100 text-amber-700', DUYET:'bg-emerald-100 text-emerald-700' };
+// Công cụ Lọc video chạy cục bộ trên máy (File System Access API + AI chạy trong trình duyệt).
+// Phục vụ từ /tools/loc-video.html — không nhúng thẳng vào app để không phình bộ mã và không đụng CSS.
+const LOC_VIDEO_URL = '/tools/loc-video.html';
+function LocVideoTool(){
+  const [full,setFull]=useState(false);
+  return <div className="space-y-3">
+    <div className="bg-white rounded-2xl border border-line shadow-card p-3">
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <div className="text-[11px] text-slate-500 flex-1 min-w-[220px]">
+          Công cụ chạy <b>ngay trên máy bạn</b> — video không tải lên server. Cần <b>Chrome/Edge trên máy tính</b> để chọn được folder.
+        </div>
+        <div className="flex gap-2 shrink-0">
+          <Btn variant="ghost" onClick={()=>setFull(v=>!v)}>{full?'⤡ Thu nhỏ':'⤢ Toàn màn hình'}</Btn>
+          <Btn variant="ghost" onClick={()=>window.open(LOC_VIDEO_URL,'_blank')}>↗ Mở tab mới</Btn>
+        </div>
+      </div>
+    </div>
+    <div className={full?'fixed inset-0 z-40 bg-white':'rounded-2xl overflow-hidden border border-line shadow-card'}>
+      {full && <button onClick={()=>setFull(false)} className="absolute top-2 right-2 z-10 bg-ink text-white text-xs px-3 py-1.5 rounded-lg shadow-lift">✕ Đóng</button>}
+      <iframe src={LOC_VIDEO_URL} title="Lọc video" className={full?'w-full h-full border-0':'w-full border-0'} style={full?undefined:{height:'75vh'}} allow="camera; microphone"/>
+    </div>
+    <p className="text-[11px] text-slate-400">Nếu nút chọn folder không mở được trong khung này, bấm <b>Mở tab mới</b> — một số trình duyệt chỉ cho chọn folder ở tab riêng.</p>
+  </div>;
+}
 function CreativeStudio(){
   const { db, notify } = useApp();
   const scripts = (db.scripts||[]);
   const [edit,setEdit]=useState(null);           // script đang soạn (null = danh sách)
   const [q,setQ]=useState('');
+  const [tab,setTab]=useState('kich_ban');
   const nameById=(arr,id)=>{ const x=(arr||[]).find(o=>o.id===id); return x?x.ten:''; };
   const filtered = scripts.filter(s=>!q || (s.tieu_de||'').toLowerCase().includes(q.toLowerCase()) || (s.hook||'').toLowerCase().includes(q.toLowerCase()));
   if(edit) return <ScriptEditor init={edit} onClose={()=>setEdit(null)}/>;
+  const TabBar = <div className="flex gap-1 bg-slate-100 rounded-xl p-1 w-fit">
+    {[['kich_ban','✍️ Kịch bản'],['loc_video','🎬 Lọc video']].map(([k,l])=>
+      <button key={k} onClick={()=>setTab(k)} className={"px-3 py-1 rounded-lg text-xs font-semibold whitespace-nowrap "+(tab===k?'bg-white text-ink shadow-sm':'text-slate-500')}>{l}</button>)}
+  </div>;
+  if(tab==='loc_video') return <div className="space-y-4">
+    <div className="flex items-center justify-between flex-wrap gap-2">
+      <h2 className="font-display text-lg font-bold text-ink">🎬 Lọc video — chọn source tốt nhất</h2>
+    </div>
+    {TabBar}
+    <LocVideoTool/>
+  </div>;
   return <div className="space-y-4">
     <div className="flex items-center justify-between flex-wrap gap-2">
       <h2 className="font-display text-lg font-bold text-ink">✍️ Creative Studio — Kịch bản</h2>
       <Btn variant="brand" onClick={()=>setEdit({})}>＋ Kịch bản mới</Btn>
     </div>
+    {TabBar}
     <div className="bg-white rounded-2xl border border-line shadow-card p-3">
       <div className="text-[11px] text-slate-500 leading-relaxed">
         Sinh nháp theo <b>framework thật</b> + <b>thông số sản phẩm thật</b> — công cụ <b>chỉ chèn dữ liệu bạn đã nhập</b>, không tự bịa số liệu.
@@ -2204,6 +2281,136 @@ function ApprovalQueue(){
       <Textarea rows="3" value={ly} onChange={e=>setLy(e.target.value)} placeholder="VD: Thiếu căn cứ thông số, câu chốt thổi phồng…"/>
       <div className="flex gap-2 mt-3"><Btn variant="ghost" onClick={()=>setReject(null)} disabled={busy}>Huỷ</Btn><Btn variant="brand" className="flex-1" onClick={doReject} disabled={busy}>{busy?'…':'Trả lại'}</Btn></div>
     </Modal>}
+  </div>;
+}
+
+/* ============================================================
+   CONTENT OS · P7 — ĐĂNG & CHECKLIST (thủ công) + khoá mã theo dõi
+============================================================ */
+function AirPosts(){
+  const { db, createAir, deleteAir, notify } = useApp();
+  const posts = db.air_posts||[];
+  const [tab,setTab]=useState('CHUAN_BI');
+  const [pick,setPick]=useState(false);       // modal chọn nội dung đã duyệt
+  const [open,setOpen]=useState(null);        // bài đang mở
+  const kenhTen=id=>((db.kenh||[]).find(k=>k.id===id)||{}).ten||'—';
+  // nguồn: kịch bản + nội dung ĐÃ DUYỆT mà chưa có bài đăng
+  const used=new Set(posts.map(p=>p.script_id||p.content_item_id));
+  const ready=[
+    ...(db.scripts||[]).filter(s=>s.trang_thai==='DUYET'&&!used.has(s.id)).map(s=>({...s,_loai:'SCRIPT'})),
+    ...(db.content_items||[]).filter(c=>c.trang_thai==='DUYET'&&!used.has(c.id)).map(c=>({...c,_loai:'CONTENT'})),
+  ];
+  const list=posts.filter(p=>p.trang_thai===tab);
+  const add=async(o)=>{ const r=await createAir(o._loai==='SCRIPT'?{script_id:o.id}:{content_item_id:o.id});
+    if(r&&r.ok){ notify('Đã đưa vào khâu đăng'); setPick(false); setOpen(r.id); } else notify((r&&r.msg)||'Lỗi','err'); };
+  const cur = open ? posts.find(p=>p.id===open) : null;
+  if(cur) return <AirEditor post={cur} onClose={()=>setOpen(null)}/>;
+  return <div className="space-y-4">
+    <div className="flex items-center justify-between flex-wrap gap-2">
+      <h2 className="font-display text-lg font-bold text-ink">🚀 Đăng bài</h2>
+      <Btn variant="brand" onClick={()=>setPick(true)}>＋ Đưa nội dung vào đăng</Btn>
+    </div>
+    <div className="bg-white rounded-2xl border border-line shadow-card p-3 text-[11px] text-slate-500">
+      App <b>không tự đăng</b> (nền tảng không cho phép) — bạn đăng tay theo checklist, rồi dán link + <b>mã theo dõi</b>.
+      Mỗi <b>mã chỉ thuộc 1 bài</b>, nhờ vậy bước đo lường sau này quy đơn được chính xác thay vì chia đều theo phỏng đoán.
+    </div>
+    <div className="flex gap-1 bg-slate-100 rounded-xl p-1 w-fit">
+      {[['CHUAN_BI','Đang chuẩn bị'],['DA_DANG','Đã đăng']].map(([k,l])=>
+        <button key={k} onClick={()=>setTab(k)} className={"px-3 py-1 rounded-lg text-xs font-semibold "+(tab===k?'bg-white text-ink shadow-sm':'text-slate-500')}>
+          {l} ({posts.filter(p=>p.trang_thai===k).length})</button>)}
+    </div>
+    {list.length===0 ? <Empty>{tab==='CHUAN_BI'?'Chưa có bài nào đang chuẩn bị.':'Chưa có bài nào được đánh dấu đã đăng.'}</Empty> :
+      <div className="grid sm:grid-cols-2 gap-3">{list.map(p=>{
+        const done=(db.air_checklist||[]).filter(c=>(p.checklist||{})[c.k]).length;
+        const total=(db.air_checklist||[]).length;
+        return <div key={p.id} className="bg-white rounded-2xl border border-line shadow-card p-3">
+          <div className="flex items-start justify-between gap-2">
+            <div className="font-display font-bold text-ink text-sm flex-1 min-w-0">{p.tieu_de||'(không tên)'}</div>
+            <span className={"text-[10px] px-1.5 py-0.5 rounded-full font-semibold shrink-0 "+(p.trang_thai==='DA_DANG'?'bg-emerald-100 text-emerald-700':'bg-amber-100 text-amber-700')}>{p.trang_thai==='DA_DANG'?'Đã đăng':'Chuẩn bị'}</span>
+          </div>
+          <div className="flex flex-wrap gap-1 mt-2">
+            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-600">{kenhTen(p.kenh_id)}</span>
+            {p.ma_theo_doi ? <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-brand/10 text-brand-dark font-mono">{p.ma_theo_doi}</span>
+              : <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-rose-50 text-rose-500">chưa có mã</span>}
+            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500">✓ {done}/{total}</span>
+          </div>
+          <div className="flex items-center justify-between mt-3 pt-2 border-t border-line/60">
+            <span className="text-[10px] text-slate-400">{p.nguoi_dang_ten||''}</span>
+            <div className="flex gap-2">
+              {p.trang_thai!=='DA_DANG' && <button onClick={()=>{ if(confirm('Xoá bài đăng này?')) deleteAir(p.id).then(ok=>ok&&notify('Đã xoá')); }} className="text-xs text-rose-400 hover:underline">Xoá</button>}
+              <button onClick={()=>setOpen(p.id)} className="text-xs text-brand-dark font-semibold hover:underline">Mở →</button>
+            </div>
+          </div>
+        </div>; })}
+      </div>}
+    {pick && <Modal open={true} onClose={()=>setPick(false)} title="Chọn nội dung ĐÃ DUYỆT để đăng" wide>
+      {ready.length===0 ? <Empty>Chưa có nội dung nào đã duyệt (hoặc đã đưa vào đăng hết). Duyệt xong ở Hàng đợi duyệt sẽ hiện ở đây.</Empty> :
+        <div className="space-y-2">{ready.map(o=>
+          <button key={o.id} onClick={()=>add(o)} className="w-full text-left rounded-xl border border-line p-2 hover:border-brand transition">
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-600">{o._loai==='SCRIPT'?'Kịch bản':'Nội dung'}</span>
+              <span className="text-sm font-semibold text-ink flex-1 truncate">{o.tieu_de||o.hook||'(không tên)'}</span>
+            </div>
+          </button>)}
+        </div>}
+    </Modal>}
+  </div>;
+}
+function AirEditor({post, onClose}){
+  const { db, patchAir, publishAir, notify } = useApp();
+  const CL = db.air_checklist||AIR_CHECKLIST_FE;
+  const [f,setF]=useState({ kenh_id:post.kenh_id||'', tieu_de:post.tieu_de||'', ngay_dang:post.ngay_dang||'', link_bai:post.link_bai||'', ma_theo_doi:post.ma_theo_doi||'', loai_ma:post.loai_ma||'VOUCHER', ghi_chu:post.ghi_chu||'' });
+  const [cl,setCl]=useState(post.checklist||{});
+  const [busy,setBusy]=useState(false);
+  const posted = post.trang_thai==='DA_DANG';
+  const missing = CL.filter(c=>c.bat_buoc && !cl[c.k]);
+  const save=async()=>{ setBusy(true); const r=await patchAir(post.id,{...f, checklist:cl}); setBusy(false);
+    if(r&&r.ok) notify('Đã lưu'); else notify((r&&r.msg)||'Lỗi','err'); return r&&r.ok; };
+  const publish=async()=>{ const okSave=await save(); if(!okSave) return;
+    setBusy(true); const r=await publishAir(post.id); setBusy(false);
+    if(r&&r.ok) notify('Đã đánh dấu ĐÃ ĐĂNG');
+    else if(r&&r.thieu) notify('Còn thiếu: '+r.thieu.join(' · '),'err');
+    else notify((r&&r.msg)||'Lỗi','err'); };
+  return <div className="space-y-4">
+    <div className="flex items-center gap-2">
+      <button onClick={onClose} className="text-sm text-slate-500 hover:underline">← Danh sách</button>
+      <h2 className="font-display text-lg font-bold text-ink flex-1 truncate">{f.tieu_de||'Bài đăng'}</h2>
+      {posted && <span className="text-[11px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-semibold">✓ Đã đăng</span>}
+    </div>
+
+    <div className="bg-white rounded-2xl border border-line shadow-card p-4 space-y-2">
+      <div className="grid sm:grid-cols-2 gap-2">
+        <Field label="Tiêu đề"><Input value={f.tieu_de} onChange={e=>setF({...f,tieu_de:e.target.value})} disabled={posted}/></Field>
+        <Field label="Kênh"><Select value={f.kenh_id} onChange={e=>setF({...f,kenh_id:e.target.value})} disabled={posted}><option value="">— Chọn —</option>{(db.kenh||[]).filter(k=>k.active!==false).map(k=><option key={k.id} value={k.id}>{k.ten}</option>)}</Select></Field>
+        <Field label="Ngày đăng"><Input type="date" value={f.ngay_dang} onChange={e=>setF({...f,ngay_dang:e.target.value})} disabled={posted}/></Field>
+        <Field label="Loại mã"><Select value={f.loai_ma} onChange={e=>setF({...f,loai_ma:e.target.value})} disabled={posted}>{LOAI_MA.map(o=><option key={o.v} value={o.v}>{o.label}</option>)}</Select></Field>
+      </div>
+      <Field label="Mã theo dõi" required hint="1 mã chỉ dùng cho 1 bài — để bước đo lường quy đơn chính xác">
+        <Input value={f.ma_theo_doi} onChange={e=>setF({...f,ma_theo_doi:e.target.value})} placeholder="VD: KM-T7-001" className="font-mono" disabled={posted}/></Field>
+      <Field label="Link bài đã đăng" required><Input value={f.link_bai} onChange={e=>setF({...f,link_bai:e.target.value})} placeholder="https://…" disabled={posted}/></Field>
+      <Field label="Ghi chú"><Textarea rows="2" value={f.ghi_chu} onChange={e=>setF({...f,ghi_chu:e.target.value})} disabled={posted}/></Field>
+    </div>
+
+    <div className="bg-white rounded-2xl border border-line shadow-card p-4">
+      <div className="flex items-center justify-between mb-2">
+        <div className="text-sm font-semibold text-ink">Checklist trước khi đăng</div>
+        <span className={"text-[11px] px-2 py-0.5 rounded-full font-semibold "+(missing.length?'bg-amber-100 text-amber-700':'bg-emerald-100 text-emerald-700')}>
+          {missing.length? missing.length+' mục bắt buộc còn thiếu' : 'Đủ mục bắt buộc ✓'}</span>
+      </div>
+      <div className="space-y-1">{CL.map(c=>
+        <label key={c.k} className={"flex items-start gap-2 rounded-xl p-2 "+(posted?'opacity-60':'hover:bg-slate-50 cursor-pointer')}>
+          <input type="checkbox" checked={!!cl[c.k]} disabled={posted} onChange={e=>setCl({...cl,[c.k]:e.target.checked})} className="mt-0.5 w-4 h-4 accent-brand shrink-0"/>
+          <span className="text-sm text-ink flex-1">{c.label}</span>
+          {c.bat_buoc && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-rose-50 text-rose-500 shrink-0">bắt buộc</span>}
+        </label>)}
+      </div>
+    </div>
+
+    {!posted && <div className="flex flex-wrap gap-2">
+      <Btn variant="ghost" onClick={save} disabled={busy}>💾 Lưu nháp</Btn>
+      <Btn variant="brand" className="flex-1 min-w-[160px]" onClick={publish} disabled={busy}>{busy?'…':'✓ Đánh dấu ĐÃ ĐĂNG'}</Btn>
+    </div>}
+    {posted && <div className="text-[11px] text-slate-400">Đã đăng lúc {fmtDate(post.posted_at)} — khoá chỉnh sửa để giữ nguyên dữ liệu quy đơn.</div>}
   </div>;
 }
 

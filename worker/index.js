@@ -75,6 +75,10 @@ async function ensureSchema(env){
     `CREATE TABLE IF NOT EXISTS script_versions (id TEXT PRIMARY KEY, script_id TEXT, version INTEGER, snapshot TEXT, created_at TEXT, created_by_name TEXT)`,
     // CONTENT OS · P6 — Hàng đợi duyệt 2 CỔNG SONG SONG: NOI_DUNG (Marketing) + CLAIM (Kỹ thuật)
     `CREATE TABLE IF NOT EXISTS approvals (id TEXT PRIMARY KEY, doi_tuong TEXT, doi_tuong_id TEXT, cong TEXT, trang_thai TEXT, nguoi_gui TEXT, nguoi_gui_ten TEXT, nguoi_duyet TEXT, nguoi_duyet_ten TEXT, ghi_chu TEXT, created_at TEXT, decided_at TEXT)`,
+    // CONTENT OS · P7 — Đăng thủ công theo checklist (KHÔNG auto-post) + khoá mã theo dõi (1 mã = 1 bài, khoá cho P8)
+    `CREATE TABLE IF NOT EXISTS air_posts (id TEXT PRIMARY KEY, content_item_id TEXT, script_id TEXT, kenh_id TEXT, tieu_de TEXT, ngay_dang TEXT, link_bai TEXT, ma_theo_doi TEXT, loai_ma TEXT, checklist TEXT, ghi_chu TEXT, trang_thai TEXT, nguoi_dang TEXT, nguoi_dang_ten TEXT, created_at TEXT, updated_at TEXT, posted_at TEXT)`,
+    // 1 mã theo dõi chỉ thuộc 1 bài → tránh "1 voucher nhiều video" làm P8 không quy đơn được
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_air_ma ON air_posts(ma_theo_doi) WHERE ma_theo_doi IS NOT NULL AND ma_theo_doi<>''`,
   ];
   await env.DB.batch(stmts.map(s=>env.DB.prepare(s)));
   // thêm cột đơn giá quay công trình cho DB cũ (bỏ qua nếu đã có)
@@ -294,6 +298,19 @@ async function ensurePostSlots(env){
 }
 
 // Content OS · P3 — chèn 1 content_item từ body (dùng chung cho tạo & import)
+// P7 — Checklist đăng thủ công. KHÔNG auto-post (TikTok Content Posting API cần audit → SELF_ONLY).
+// bat_buoc=true → phải tick hết mới cho đánh dấu "Đã đăng".
+const AIR_CHECKLIST = [
+  {k:'noi_dung_duyet', label:'Nội dung đã qua 2 cổng duyệt', bat_buoc:true},
+  {k:'dung_kenh',      label:'Đúng kênh & đúng định dạng của kênh', bat_buoc:true},
+  {k:'ma_gan',         label:'Đã gắn mã theo dõi / voucher vào bài', bat_buoc:true},
+  {k:'link_sp',        label:'Link sản phẩm / giỏ hàng đúng', bat_buoc:true},
+  {k:'caption_claim',  label:'Caption đã rà lại cụm từ cấm', bat_buoc:true},
+  {k:'media_ty_le',    label:'Ảnh/video đúng tỉ lệ, không vỡ nét', bat_buoc:false},
+  {k:'hashtag_cta',    label:'Hashtag & CTA đầy đủ', bat_buoc:false},
+  {k:'hen_gio',        label:'Đã hẹn giờ / canh khung giờ đăng', bat_buoc:false},
+];
+const AIR_ST = { CHUAN_BI:'CHUAN_BI', DA_DANG:'DA_DANG' };
 // P6 — 2 cổng duyệt song song. Ai được quyết cổng nào.
 // (Khi thêm vai trò TRUONG_MKT ở P0, chỉ cần bổ sung vào nhánh NOI_DUNG.)
 const APPROVAL_GATES = ['NOI_DUNG','CLAIM'];
@@ -388,6 +405,9 @@ async function bootstrap(env, u){
     .map(r=>({ ...r, sections: JSON.parse(r.sections||'[]'), claim_flags: JSON.parse(r.claim_flags||'[]') })) : [];
   // P6 — hàng đợi duyệt 2 cổng (Kỹ thuật cần thấy để duyệt cổng CLAIM)
   const approvals = canContent ? (await env.DB.prepare(`SELECT * FROM approvals ORDER BY created_at DESC`).all()).results : [];
+  // P7 — bài đăng (checklist thủ công + mã theo dõi)
+  const air_posts = canContent ? (await env.DB.prepare(`SELECT * FROM air_posts ORDER BY created_at DESC`).all()).results
+    .map(r=>({ ...r, checklist: JSON.parse(r.checklist||'{}') })) : [];
 
   return {
     me: rowUser(u),
@@ -395,7 +415,7 @@ async function bootstrap(env, u){
     post_seedings: posts, cmt_seedings: cmtsFull,
     filming_templates, project_filmings, guides, post_type_prefs, post_slots, media_library,
     san_pham, claim_cam, pillars, content_strategy,
-    frameworks, kenh, content_items, scripts, approvals,
+    frameworks, kenh, content_items, scripts, approvals, air_posts, air_checklist:AIR_CHECKLIST,
     pricing: pricingRow, payouts: [], audit,
   };
 }
@@ -441,6 +461,11 @@ async function handleApi(request, env){
     await env.DB.prepare(`INSERT INTO sessions (token,user_id,expires_at) VALUES (?,?,?)`).bind(token,u.id,exp).run();
     return json({ token, db: await bootstrap(env, u) });
   }
+
+  // Công cụ Lọc video (/tools/loc-video.html) hỏi danh sách nhạc nền từ folder cục bộ.
+  // Bản chạy trên web không có folder đó → trả mảng rỗng để công cụ hiện đúng trạng thái
+  // thay vì 401/404. Không có dữ liệu nào nên để công khai (công cụ chạy ngoài phiên đăng nhập).
+  if(path==='/nhac' && method==='GET') return json([]);
 
   // các route dưới đây cần đăng nhập
   const sess = await getSession(env, request);
@@ -930,6 +955,69 @@ async function handleApi(request, env){
         await env.DB.prepare(`UPDATE ${tbl} SET trang_thai='DUYET', updated_at=? WHERE id=?`).bind(nowISO(),ap.doi_tuong_id).run();
     }
     await logAudit(env,me,(pass?'duyệt ':'trả lại ')+'cổng '+ap.cong,tbl,ap.doi_tuong_id,String(body.ghi_chu||'').trim());
+    return json({ db: await bootstrap(env, me) });
+  }
+
+  // ===== CONTENT OS · P7 — Đăng thủ công theo checklist + khoá mã theo dõi =====
+  if(path==='/air' && method==='POST'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    // Chỉ đưa vào khâu đăng khi nội dung/kịch bản ĐÃ DUYỆT (2 cổng)
+    let tieu_de=(body.tieu_de||'').trim(), src=null;
+    if(body.script_id){
+      src=await env.DB.prepare(`SELECT * FROM scripts WHERE id=?`).bind(body.script_id).first();
+      if(!src) return json({error:'Không tìm thấy kịch bản'},404);
+    } else if(body.content_item_id){
+      src=await env.DB.prepare(`SELECT * FROM content_items WHERE id=?`).bind(body.content_item_id).first();
+      if(!src) return json({error:'Không tìm thấy nội dung'},404);
+    } else return json({error:'Cần chọn kịch bản hoặc nội dung'},400);
+    if(src.trang_thai!=='DUYET') return json({error:'Chỉ đăng nội dung ĐÃ DUYỆT (qua 2 cổng)'},409);
+    tieu_de = tieu_de || src.tieu_de || '';
+    const ma=String(body.ma_theo_doi||'').trim();
+    if(ma){
+      const dup=await env.DB.prepare(`SELECT id FROM air_posts WHERE ma_theo_doi=?`).bind(ma).first();
+      if(dup) return json({error:'Mã theo dõi đã dùng cho bài khác — 1 mã chỉ thuộc 1 bài'},409);
+    }
+    const id=uid('air');
+    await env.DB.prepare(`INSERT INTO air_posts (id,content_item_id,script_id,kenh_id,tieu_de,ngay_dang,link_bai,ma_theo_doi,loai_ma,checklist,ghi_chu,trang_thai,nguoi_dang,nguoi_dang_ten,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+      .bind(id, body.content_item_id||src.content_item_id||null, body.script_id||null, body.kenh_id||src.kenh_id||null, tieu_de,
+        (body.ngay_dang||'').trim(), (body.link_bai||'').trim(), ma, (body.loai_ma||'VOUCHER').trim(),
+        JSON.stringify(body.checklist||{}), (body.ghi_chu||'').trim(), AIR_ST.CHUAN_BI, me.id, me.ho_ten, nowISO(), nowISO()).run();
+    await logAudit(env,me,'tạo bài đăng','air_posts',id,tieu_de);
+    return json({ db: await bootstrap(env, me), id });
+  }
+  if((m=path.match(/^\/air\/(.+)\/publish$/)) && method==='POST'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    const id=m[1]; const r=await env.DB.prepare(`SELECT * FROM air_posts WHERE id=?`).bind(id).first();
+    if(!r) return json({error:'Không tìm thấy'},404);
+    if(r.trang_thai===AIR_ST.DA_DANG) return json({error:'Bài này đã đánh dấu đã đăng'},409);
+    const cl=JSON.parse(r.checklist||'{}');
+    const thieu=AIR_CHECKLIST.filter(c=>c.bat_buoc && !cl[c.k]).map(c=>c.label);
+    if(thieu.length) return json({error:'Chưa xong checklist bắt buộc', thieu},422);
+    if(!String(r.link_bai||'').trim()) return json({error:'Cần dán link bài đã đăng'},400);
+    if(!String(r.ma_theo_doi||'').trim()) return json({error:'Cần mã theo dõi để quy đơn ở bước đo lường'},400);
+    await env.DB.prepare(`UPDATE air_posts SET trang_thai=?, posted_at=?, updated_at=? WHERE id=?`).bind(AIR_ST.DA_DANG,nowISO(),nowISO(),id).run();
+    await logAudit(env,me,'đánh dấu đã đăng','air_posts',id,r.tieu_de||'');
+    return json({ db: await bootstrap(env, me) });
+  }
+  if((m=path.match(/^\/air\/(.+)$/)) && method==='PATCH'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    const id=m[1]; const r=await env.DB.prepare(`SELECT * FROM air_posts WHERE id=?`).bind(id).first();
+    if(!r) return json({error:'Không tìm thấy'},404);
+    const ma = body.ma_theo_doi!=null ? String(body.ma_theo_doi).trim() : r.ma_theo_doi;
+    if(ma && ma!==r.ma_theo_doi){
+      const dup=await env.DB.prepare(`SELECT id FROM air_posts WHERE ma_theo_doi=? AND id<>?`).bind(ma,id).first();
+      if(dup) return json({error:'Mã theo dõi đã dùng cho bài khác — 1 mã chỉ thuộc 1 bài'},409);
+    }
+    const g=(k,d)=> body[k]!=null?String(body[k]).trim():d;
+    await env.DB.prepare(`UPDATE air_posts SET kenh_id=?, tieu_de=?, ngay_dang=?, link_bai=?, ma_theo_doi=?, loai_ma=?, checklist=?, ghi_chu=?, updated_at=? WHERE id=?`)
+      .bind(body.kenh_id!==undefined?(body.kenh_id||null):r.kenh_id, g('tieu_de',r.tieu_de), g('ngay_dang',r.ngay_dang), g('link_bai',r.link_bai),
+        ma, g('loai_ma',r.loai_ma), body.checklist!=null?JSON.stringify(body.checklist):r.checklist, g('ghi_chu',r.ghi_chu), nowISO(), id).run();
+    return json({ db: await bootstrap(env, me) });
+  }
+  if((m=path.match(/^\/air\/(.+)$/)) && method==='DELETE'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    await env.DB.prepare(`DELETE FROM air_posts WHERE id=?`).bind(m[1]).run();
+    await logAudit(env,me,'xoá bài đăng','air_posts',m[1]);
     return json({ db: await bootstrap(env, me) });
   }
   if((m=path.match(/^\/posts\/(.+)\/review$/)) && method==='POST'){
