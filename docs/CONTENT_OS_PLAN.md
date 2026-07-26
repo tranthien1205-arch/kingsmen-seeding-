@@ -115,6 +115,14 @@ POST/CMT seeding, Quay công trình (3 mức chất lượng/source: Tạm ổn 
 ### ◐ P0 — Khung + 6 vai trò + `can()`
 Có 3 vai trò + KY_THUAT. ⏳ Còn: `can()` tập trung + 3 vai trò còn lại + sidebar theo quyền. Làm khi P3/P6/P9 cần.
 
+**⚠️ QUY ƯỚC TAB CẤU HÌNH (BẮT BUỘC GIỮ — user yêu cầu):** mỗi module có **tab con ⚙️ Cấu hình** để Admin/Marketing đổi ngưỡng **mà không cần sửa code + deploy**.
+- Bảng `module_config (id, cau_hinh JSON, updated_at, updated_by_name)`; `CONFIG_MAC_DINH` là nguồn sự thật khi chưa ai cấu hình; `docCauHinh()` merge mặc định + đã lưu.
+- Quyền: `canCauHinh(u)` = ADMIN || MARKETING. Kỹ thuật/Sales **không** sửa được. Mọi thay đổi **ghi audit**.
+- **Thêm cấu hình cho module mới = khai báo 1 mục trong `CONFIG_SCHEMA` (frontend) + `CONFIG_MAC_DINH` (worker)** — `ModuleShell` + `CauHinhModule` render tự động, không phải viết UI.
+- Đang cấu hình được: `air.checklist` · `trend.checklist` · `viec_ket` (5 ngưỡng ngày) · `dash.min_mau`/`lech_pillar` · `hoc.min_mau` · `lich.timeout_phut`/`max_lan_thu`.
+- **Chặn cấu hình vô lý ở backend:** số ngoài 0–3650 → 422; checklist rỗng / trùng mã / thiếu mã / **không còn mục bắt buộc nào** → 422 (giữ tính nghiêm của checklist).
+- Có nút **Khôi phục mặc định** cho từng module. (21 test)
+
 **⚠️ QUY ƯỚC MENU (BẮT BUỘC GIỮ — user yêu cầu, tránh dàn trải):** menu **2 cấp** qua `NAV_GROUPS` (KHÔNG dùng `NAV` phẳng nữa). Đúng **5 nhóm lớn dùng chung toàn app**: `Content` (✍️) · `Seeding` (💬) · `Quay CT` (🎬) · `Ngân sách` (💰) · `Hệ thống` (⚙️). **Mọi module mới phải nằm trong 1 trong 5 nhóm này** — không thêm mục cấp 1 mới. Module Content OS (P1–P10) vào nhóm **Content**.
 - Desktop: sidebar nhóm có tiêu đề nhỏ + danh sách module con.
 - Mobile: bottom bar **chỉ 5 nhóm, chia đều `flex-1`, KHÔNG cuộn ngang**; module con hiện ở **hàng tab phụ** trong header (tự ẩn khi nhóm chỉ có 1 module).
@@ -286,7 +294,7 @@ Tokens Tailwind (inline config trong `seeding-app.html`): `ink #0b3543` (soft #1
   **Chảy ngược:** `gomSeedingTheoNoiDung()` gom số bài / bài đạt / react / cmt về từng `content_item`; hiện ở cột **Seeding** trong Kế hoạch nội dung. **CHỦ Ý chỉ đếm, KHÔNG quy ra doanh thu** — seeding không quy đơn được (§9), có test chặn hồi quy. (18 test)
 - ▶️ **Kế tiếp:** gỡ `BETA_KEYS` khi user duyệt xong; thêm `TRUONG_MKT`/`GIAM_DOC`; nâng P4 lên gợi ý AI khi có `ANTHROPIC_API_KEY`. Còn lại (giá trị thấp): `media_library` ↔ `footage`.
 - **P8** Nhập kết quả 3 mức tin cậy (25 test) · **P5** Kho footage & shot list (22 test) · **P9** Dashboard 4 hệ KPI + hiệu suất người (9 test) · **P10** Thư viện học + vòng lặp tự học (19 test).
-- 📌 **Tổng test đang xanh:** import 8 · Creative Studio 16 · Duyệt 22 · Đăng bài 21 · Kết quả 25 · Footage 22 · Thư viện học 19 · công cụ 13 · chống trùng seeding 13 = **288**.
+- 📌 **Tổng test đang xanh:** import 8 · Creative Studio 16 · Duyệt 22 · Đăng bài 21 · Kết quả 25 · Footage 22 · Thư viện học 19 · công cụ 13 · chống trùng seeding 13 = **309**.
 - ✅ **ĐÃ XONG TOÀN BỘ P1→P10.** Còn lại là các mảnh nhỏ: vai trò `TRUONG_MKT`/`GIAM_DOC` riêng, `can()` tập trung (P0), và nâng P4 lên gợi ý AI khi có `ANTHROPIC_API_KEY`.
 
 ### ⚙️ Quy trình deploy (CẬP NHẬT)

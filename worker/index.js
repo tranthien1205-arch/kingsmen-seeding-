@@ -86,6 +86,8 @@ async function ensureSchema(env){
     // CONTENT OS · P5 — Kho footage tái sử dụng + shot list bám theo kịch bản
     `CREATE TABLE IF NOT EXISTS footage (id TEXT PRIMARY KEY, ten TEXT, mo_ta TEXT, media_url TEXT, media_type TEXT, tags TEXT, san_pham_id TEXT, kenh_id TEXT, dia_diem TEXT, ngay_quay TEXT, nguoi_quay TEXT, active INTEGER DEFAULT 1, created_at TEXT, created_by TEXT, created_by_name TEXT)`,
     `CREATE TABLE IF NOT EXISTS shot_list (id TEXT PRIMARY KEY, script_id TEXT, thu_tu INTEGER, ten_canh TEXT, mo_ta TEXT, goc_may TEXT, thoi_luong INTEGER, footage_id TEXT, trang_thai TEXT, ghi_chu TEXT, created_at TEXT, updated_at TEXT)`,
+    // CẤU HÌNH THEO MODULE — để admin/quản lý đổi ngưỡng mà KHÔNG phải sửa code + deploy
+    `CREATE TABLE IF NOT EXISTS module_config (id TEXT PRIMARY KEY, cau_hinh TEXT, updated_at TEXT, updated_by_name TEXT)`,
     // CONTENT OS · TREND — nghiên cứu & triển khai. KHÔNG scrape (ToS): người tự ghi nhận + đánh giá.
     `CREATE TABLE IF NOT EXISTS trends (id TEXT PRIMARY KEY, ten TEXT, nguon TEXT, link TEXT, mo_ta TEXT, phat_hien_ngay TEXT, han_dung TEXT, pillar_id TEXT, san_pham_id TEXT, danh_gia TEXT, rui_ro TEXT, trang_thai TEXT, ly_do TEXT, nguoi_de_xuat TEXT, nguoi_duyet_ten TEXT, content_item_id TEXT, script_id TEXT, created_at TEXT, decided_at TEXT)`,
     // CONTENT OS · P10 — Thư viện học. ĐỀ XUẤT do máy rút ra nhưng PHẢI người duyệt mới thành quy tắc.
@@ -362,7 +364,8 @@ function gomSeedingTheoNoiDung(topics, posts, cmts){
 const NGUONG_KET = { sua_lai:3, cho_duyet:2, chua_nhap_kq:14, trend_sap_het:7, don_cho_gan:3 };
 function soNgay(iso){ if(!iso) return 0; const d=(Date.now()-new Date(iso).getTime())/864e5; return d>0?Math.floor(d):0; }
 // Trả về các nhóm việc đang kẹt + lý do cụ thể, KHÔNG gộp thành một con số vô nghĩa
-function tinhViecKet({scripts,approvals,air_posts,ket_qua,trends,don_cho_gan}){
+function tinhViecKet({scripts,approvals,air_posts,ket_qua,trends,don_cho_gan,nguong}){
+  const NGUONG_KET = {...CONFIG_MAC_DINH.viec_ket, ...(nguong||{})};
   const homNay=new Date().toISOString().slice(0,10);
   const coKQ=new Set((ket_qua||[]).map(k=>k.air_post_id));
   const suaLai=(scripts||[]).filter(s=>s.trang_thai==='NHAP' && Number(s.so_lan_tra||0)>0 && soNgay(s.updated_at)>=NGUONG_KET.sua_lai)
@@ -381,6 +384,28 @@ function tinhViecKet({scripts,approvals,air_posts,ket_qua,trends,don_cho_gan}){
     .map(a=>({id:a.id, ten:a.tieu_de||'(không tên)', loi:a.loi||'', lich:a.lich_dang||''}));
   return { sua_lai:suaLai, cho_duyet:choDuyet, chua_nhap_kq:chuaNhapKQ, trend_gap:trendGap, don_ket:donKet, den_gio:denGio,
     tong: suaLai.length+choDuyet.length+chuaNhapKQ.length+trendGap.length+donKet.length+denGio.length, nguong:NGUONG_KET };
+}
+// ===== CẤU HÌNH THEO MODULE =====
+// Ai được sửa cấu hình: Admin và Marketing (quản lý). Kỹ thuật/Sales KHÔNG.
+function canCauHinh(u){ return !!u && (u.vai_tro===ROLES.ADMIN || u.vai_tro===ROLES.MARKETING); }
+// Giá trị mặc định — cũng là "nguồn sự thật" khi chưa ai cấu hình gì
+const CONFIG_MAC_DINH = {
+  air:     { checklist: null },                       // null = dùng AIR_CHECKLIST gốc
+  trend:   { checklist: null },
+  viec_ket:{ sua_lai:3, cho_duyet:2, chua_nhap_kq:14, trend_sap_het:7, don_cho_gan:3 },
+  hoc:     { min_mau:5 },
+  dash:    { min_mau:5, lech_pillar:15 },
+  ketqua:  { nguon_mac_dinh:{ TIKTOK_SHOP:'TRUC_TIEP', SHOPEE:'GIAN_TIEP', API_KENH:'KHONG_QUY_DON', NHAP_TAY:'KHONG_QUY_DON' } },
+  lich:    { timeout_phut:60, max_lan_thu:3 },
+};
+async function docCauHinh(env){
+  const out={};
+  for(const k of Object.keys(CONFIG_MAC_DINH)) out[k]={...CONFIG_MAC_DINH[k]};
+  try{
+    const rows=(await env.DB.prepare(`SELECT * FROM module_config`).all()).results;
+    rows.forEach(r=>{ try{ out[r.id]={...(out[r.id]||{}), ...JSON.parse(r.cau_hinh||'{}')}; }catch(e){} });
+  }catch(e){}
+  return out;
 }
 // P10 — Ngưỡng bằng chứng: DƯỚI ngưỡng này thì KHÔNG rút ra kết luận nào.
 // Ranh giới: chỉ tổng hợp cái đã quan sát được; KHÔNG dự đoán viral/%view bằng AI.
@@ -550,12 +575,15 @@ async function chayLichDang(env){
     await ensureSchema(env);
     const now=nowISO();
     // Bài đã gửi n8n mà quá lâu không báo về → chuyển đăng tay, KHÔNG treo vô hạn
-    const hetHan=new Date(Date.now()-N8N_TIMEOUT_PHUT*60000).toISOString();
+    const cfgL=(await docCauHinh(env)).lich||{};
+    const timeoutPhut=Number(cfgL.timeout_phut)||N8N_TIMEOUT_PHUT;
+    const maxThu=Number(cfgL.max_lan_thu)||MAX_LAN_THU;
+    const hetHan=new Date(Date.now()-timeoutPhut*60000).toISOString();
     await env.DB.prepare(`UPDATE air_posts SET trang_thai='DEN_GIO', loi=?, updated_at=? WHERE trang_thai='DANG_GUI' AND gui_luc IS NOT NULL AND gui_luc<?`)
-      .bind('Đã gửi n8n nhưng quá '+N8N_TIMEOUT_PHUT+' phút không thấy báo kết quả — kiểm tra workflow n8n hoặc đăng tay', nowISO(), hetHan).run();
+      .bind('Đã gửi n8n nhưng quá '+timeoutPhut+' phút không thấy báo kết quả — kiểm tra workflow n8n hoặc đăng tay', nowISO(), hetHan).run();
     const dueRows=(await env.DB.prepare(
       `SELECT * FROM air_posts WHERE lich_dang IS NOT NULL AND lich_dang<>'' AND lich_dang<=? AND trang_thai IN ('DA_LEN_LICH','LOI') AND COALESCE(lan_thu,0)<?`
-    ).bind(now, MAX_LAN_THU).all()).results;
+    ).bind(now, maxThu).all()).results;
     for(const p of dueRows){
       const kenh=p.kenh_id ? await env.DB.prepare(`SELECT * FROM kenh WHERE id=?`).bind(p.kenh_id).first() : null;
       const batTuDong = p.tu_dong && kenh && uBool(kenh.tu_dong_dang);
@@ -574,7 +602,7 @@ async function chayLichDang(env){
         await env.DB.prepare(`UPDATE air_posts SET trang_thai='DA_DANG', posted_at=?, updated_at=?, loi=NULL WHERE id=?`).bind(nowISO(),nowISO(),p.id).run();
       } else {
         const lan=Number(p.lan_thu||0)+1;
-        const het = lan>=MAX_LAN_THU;
+        const het = lan>=maxThu;
         await env.DB.prepare(`UPDATE air_posts SET trang_thai=?, lan_thu=?, loi=?, updated_at=? WHERE id=?`)
           .bind(het?'DEN_GIO':'LOI', lan, (r.loi||'')+(het?' — đã thử '+lan+' lần, chuyển sang đăng tay':''), nowISO(), p.id).run();
       }
@@ -675,6 +703,7 @@ async function bootstrap(env, u){
     .map(r=>({ ...r, sections: JSON.parse(r.sections||'[]'), claim_flags: JSON.parse(r.claim_flags||'[]') })) : [];
   // P6 — hàng đợi duyệt 2 cổng (Kỹ thuật cần thấy để duyệt cổng CLAIM)
   const approvals = canContent ? (await env.DB.prepare(`SELECT * FROM approvals ORDER BY created_at DESC`).all()).results : [];
+  const cfg = await docCauHinh(env);
   // P7 — bài đăng (checklist thủ công + mã theo dõi)
   const air_posts = canContent ? (await env.DB.prepare(`SELECT * FROM air_posts ORDER BY created_at DESC`).all()).results
     .map(r=>({ ...r, checklist: JSON.parse(r.checklist||'{}') })) : [];
@@ -698,7 +727,7 @@ async function bootstrap(env, u){
     post_seedings: posts, cmt_seedings: cmtsFull,
     filming_templates, project_filmings, guides, post_type_prefs, post_slots, media_library,
     san_pham, claim_cam, pillars, content_strategy,
-    frameworks, kenh, content_items, scripts, approvals, air_posts, air_checklist:AIR_CHECKLIST,
+    frameworks, kenh, content_items, scripts, approvals, air_posts, air_checklist:(cfg.air&&cfg.air.checklist)||AIR_CHECKLIST,
     ket_qua, don_cho_gan, muc_tin_cay:MUC_TIN_CAY, nguon_kq:NGUON_KQ,
     kenh_tu_dong: KENH_TU_DONG,
     kenh_san_sang: staff ? Object.fromEntries((kenh||[]).map(k=>[k.id,
@@ -707,8 +736,9 @@ async function bootstrap(env, u){
         : (!!layToken(env,k) && !!String(k.api_object_id||'').trim())])) : {},
     n8n_san_sang: staff ? (!!env.N8N_WEBHOOK_URL && !!env.N8N_TOKEN) : false,
     ai_san_sang: staff ? !!env.ANTHROPIC_API_KEY : false,
-    footage, shot_list, bai_hoc, min_mau:MIN_MAU_BANG_CHUNG, trends, trend_check:TREND_CHECK,
-    viec_ket: canContent ? tinhViecKet({scripts,approvals,air_posts,ket_qua,trends,don_cho_gan}) : null,
+    module_config: cfg, can_cau_hinh: canCauHinh(u),
+    footage, shot_list, bai_hoc, min_mau:(cfg.hoc&&cfg.hoc.min_mau)||MIN_MAU_BANG_CHUNG, trends, trend_check:(cfg.trend&&cfg.trend.checklist)||TREND_CHECK,
+    viec_ket: canContent ? tinhViecKet({scripts,approvals,air_posts,ket_qua,trends,don_cho_gan,nguong:cfg.viec_ket}) : null,
     seeding_theo_noi_dung: staff ? gomSeedingTheoNoiDung(topics, posts, cmts) : {},
     pricing: pricingRow, payouts: [], audit,
   };
@@ -1716,6 +1746,35 @@ async function handleApi(request, env){
     return json({ db: await bootstrap(env, me), cleaned:r });
   }
 
+  if((m=path.match(/^\/module-config\/(.+)$/)) && method==='PATCH'){
+    if(!canCauHinh(me)) return json({error:'Chỉ Admin hoặc Marketing được sửa cấu hình'},403);
+    const key=m[1];
+    if(!CONFIG_MAC_DINH[key]) return json({error:'Module không hợp lệ: '+key},400);
+    const hienTai=await env.DB.prepare(`SELECT * FROM module_config WHERE id=?`).bind(key).first();
+    const cu=hienTai?JSON.parse(hienTai.cau_hinh||'{}'):{};
+    const moi={...cu, ...(body.cau_hinh||{})};
+    // Chặn số vô lý — cấu hình sai còn nguy hơn không cho cấu hình
+    for(const [k,v] of Object.entries(moi)){
+      if(typeof v==='number' && (!isFinite(v) || v<0 || v>3650)) return json({error:'Giá trị "'+k+'" không hợp lệ (0–3650)'},422);
+    }
+    if(Array.isArray(moi.checklist)){
+      if(!moi.checklist.length) return json({error:'Checklist không được rỗng'},422);
+      const ks=moi.checklist.map(c=>c&&c.k);
+      if(ks.some(k2=>!k2)) return json({error:'Mỗi mục checklist phải có mã (k)'},422);
+      if(new Set(ks).size!==ks.length) return json({error:'Mã mục checklist bị trùng'},422);
+      if(!moi.checklist.some(c=>c.bat_buoc)) return json({error:'Phải có ít nhất 1 mục bắt buộc'},422);
+    }
+    if(hienTai) await env.DB.prepare(`UPDATE module_config SET cau_hinh=?, updated_at=?, updated_by_name=? WHERE id=?`).bind(JSON.stringify(moi),nowISO(),me.ho_ten,key).run();
+    else await env.DB.prepare(`INSERT INTO module_config (id,cau_hinh,updated_at,updated_by_name) VALUES (?,?,?,?)`).bind(key,JSON.stringify(moi),nowISO(),me.ho_ten).run();
+    await logAudit(env,me,'sửa cấu hình module','module_config',key,JSON.stringify(body.cau_hinh||{}).slice(0,200));
+    return json({ db: await bootstrap(env, me) });
+  }
+  if((m=path.match(/^\/module-config\/(.+)\/reset$/)) && method==='POST'){
+    if(!canCauHinh(me)) return json({error:'Chỉ Admin hoặc Marketing được sửa cấu hình'},403);
+    await env.DB.prepare(`DELETE FROM module_config WHERE id=?`).bind(m[1]).run();
+    await logAudit(env,me,'khôi phục cấu hình mặc định','module_config',m[1]);
+    return json({ db: await bootstrap(env, me) });
+  }
   if(path==='/n8n/sinh-workflow' && method==='POST'){
     if(!isStaff(me)) return json({error:'Không có quyền'},403);
     const r=await aiSinhWorkflow(env,{ mo_ta:body.mo_ta, kenh_loai:body.kenh_loai, token:body.token, app_base:env.APP_BASE_URL||'' });

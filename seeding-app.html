@@ -416,7 +416,7 @@ function seedDB(){
     frameworks: ['Chuẩn bán hàng','PAS','Phản biện comment','Test chất lượng','Hành trình thi công','Size / Combo','FOMO','Review KOC','"đừng..." Trend','Q&A khách hàng','So sánh kinh tế','Hướng dẫn thi công'].map((ten,i)=>({id:uid('fw'),ten,mo_ta:'',thu_tu:i+1,active:true,created_at:now()})),
     kenh: [['Fanpage Kingsmen','FANPAGE','Kingsmen'],['TikTok Kingsmen','TIKTOK','Kingsmen'],['YouTube Short Kingsmen','YOUTUBE','Kingsmen'],['Fanpage VKXD','FANPAGE','VKXD'],['TikTok VKXD','TIKTOK','VKXD'],['Shopee VKXD','SHOPEE','VKXD'],['Zalo OA','ZALO_OA','Kingsmen'],['CHÍNH - Vật liệu mới FINEX','TIKTOK','FINEX'],['AFF - Sơn sàn hiệu ứng','TIKTOK','FINEX'],['BC - Vật liệu hoàn thiện','TIKTOK','Kingsmen']].map(([ten,loai,th])=>({id:uid('kn'),ten,loai,thuong_hieu:th,active:true,created_at:now()})),
     content_items: [],
-    scripts: [], approvals: [], air_posts: [], air_checklist: AIR_CHECKLIST_FE, ket_qua: [], don_cho_gan: [], footage: [], shot_list: [], bai_hoc: [], min_mau: MIN_MAU, trends: [], trend_check: TREND_CHECK_FE, viec_ket: null, seeding_theo_noi_dung: {}, kenh_tu_dong: KENH_TU_DONG_FE, kenh_san_sang: {}, n8n_san_sang: false,
+    scripts: [], approvals: [], air_posts: [], air_checklist: AIR_CHECKLIST_FE, ket_qua: [], don_cho_gan: [], footage: [], shot_list: [], bai_hoc: [], min_mau: MIN_MAU, trends: [], trend_check: TREND_CHECK_FE, viec_ket: null, seeding_theo_noi_dung: {}, kenh_tu_dong: KENH_TU_DONG_FE, kenh_san_sang: {}, n8n_san_sang: false, module_config: {}, can_cau_hinh: true,
     payouts: [],
     audit: [],
   };
@@ -457,7 +457,7 @@ function migrate(db){
   db.kenh ||= [];
   db.content_items ||= [];
   db.scripts ||= []; db.approvals ||= []; db.air_posts ||= []; db.air_checklist ||= AIR_CHECKLIST_FE;
-  db.ket_qua ||= []; db.don_cho_gan ||= []; db.footage ||= []; db.shot_list ||= []; db.bai_hoc ||= []; db.min_mau ||= MIN_MAU; db.trends ||= []; db.trend_check ||= TREND_CHECK_FE; db.viec_ket ||= null; db.seeding_theo_noi_dung ||= {}; db.kenh_tu_dong ||= KENH_TU_DONG_FE; db.kenh_san_sang ||= {}; db.n8n_san_sang ||= false;
+  db.ket_qua ||= []; db.don_cho_gan ||= []; db.footage ||= []; db.shot_list ||= []; db.bai_hoc ||= []; db.min_mau ||= MIN_MAU; db.trends ||= []; db.trend_check ||= TREND_CHECK_FE; db.viec_ket ||= null; db.seeding_theo_noi_dung ||= {}; db.kenh_tu_dong ||= KENH_TU_DONG_FE; db.kenh_san_sang ||= {}; db.n8n_san_sang ||= false; db.module_config ||= {}; db.can_cau_hinh ??= true;
   db.post_seedings.forEach(p=>{ p.react ??= 0; p.so_cmt_seeding ??= 0; p.so_cmt_tu_nhien ??= 0; p.thanh_tien ??= 0; });
   db.cmt_seedings.forEach(c=>{ c.proofs ||= []; c.so_cmt_seeding ??= 0; c.react ??= 0; c.so_cmt_tu_nhien ??= 0; c.thanh_tien ??= 0; });
   db.groups.forEach(g=>{ g.uu_tien ??= false; });
@@ -708,6 +708,14 @@ function AppProvider({children}){
           created_at:now(), created_by_name:meRef.current.ho_ten, updated_at:now() });
         Object.assign(x,{trang_thai:'DA_TRIEN_KHAI',content_item_id:cid,decided_at:now()}); commit(); return {ok:true,content_item_id:cid}; },
       deleteTrend: async id=>{ S.trends=(S.trends||[]).filter(x=>x.id!==id); commit(); return true; },
+      setModuleConfig: async (key,cau_hinh)=>{ S.module_config ||= {}; S.module_config[key]={...(S.module_config[key]||{}),...cau_hinh};
+        if(key==='air'&&cau_hinh.checklist) S.air_checklist=cau_hinh.checklist;
+        if(key==='trend'&&cau_hinh.checklist) S.trend_check=cau_hinh.checklist;
+        if(key==='hoc'&&cau_hinh.min_mau) S.min_mau=cau_hinh.min_mau;
+        commit(); return {ok:true}; },
+      resetModuleConfig: async key=>{ if(S.module_config) delete S.module_config[key];
+        if(key==='air') S.air_checklist=AIR_CHECKLIST_FE; if(key==='trend') S.trend_check=TREND_CHECK_FE;
+        commit(); return true; },
       sinhWorkflowAI: async o=>({ok:false, thieu_key:true, loi:'Chế độ offline không gọi AI được'}),
       daySangSeeding: async (id,o)=>{ const ci=(S.content_items||[]).find(x=>x.id===id); if(!ci) return {ok:false,msg:'Không tìm thấy nội dung'};
         if(ci.trang_thai!=='DUYET') return {ok:false,msg:'Chỉ đẩy nội dung ĐÃ DUYỆT sang seeding'};
@@ -897,6 +905,9 @@ function AppProvider({children}){
     trienKhaiTrend: async (id,o) => { try { const r=await call('/trends/'+id+'/trien-khai',{method:'POST',body:o||{}}); if(r&&r.db) setDb(r.db); return {ok:true,content_item_id:r.content_item_id}; }
       catch(e){ return {ok:false,msg:e.message}; } },
     deleteTrend: id => mut('/trends/'+id, {method:'DELETE'}),
+    setModuleConfig: async (key,cau_hinh) => { try { const r=await call('/module-config/'+key,{method:'PATCH',body:{cau_hinh}}); if(r&&r.db) setDb(r.db); return {ok:true}; }
+      catch(e){ return {ok:false,msg:e.message}; } },
+    resetModuleConfig: key => mut('/module-config/'+key+'/reset', {method:'POST'}),
     sinhWorkflowAI: async o => { try { return await call('/n8n/sinh-workflow',{method:'POST',body:o}); }
       catch(e){ return {ok:false, loi:e.message}; } },
     daySangSeeding: async (id,o) => { try { const r=await call('/content/'+id+'/day-seeding',{method:'POST',body:o||{}}); if(r&&r.db) setDb(r.db); return {ok:true,topic_id:r.topic_id}; }
@@ -2661,11 +2672,8 @@ function AirPosts(){
     if(r&&r.ok){ notify('Đã đưa vào khâu đăng'); setPick(false); setOpen(r.id); } else notify((r&&r.msg)||'Lỗi','err'); };
   const cur = open ? posts.find(p=>p.id===open) : null;
   if(cur) return <AirEditor post={cur} onClose={()=>setOpen(null)}/>;
-  return <div className="space-y-4">
-    <div className="flex items-center justify-between flex-wrap gap-2">
-      <h2 className="font-display text-lg font-bold text-ink">🚀 Đăng bài</h2>
-      <Btn variant="brand" onClick={()=>setPick(true)}>＋ Đưa nội dung vào đăng</Btn>
-    </div>
+  return <ModuleShell moduleKey="air" title="🚀 Đăng bài" right={<Btn variant="brand" onClick={()=>setPick(true)}>＋ Đưa nội dung vào đăng</Btn>}>
+    <div className="space-y-4">
     <div className="bg-white rounded-2xl border border-line shadow-card p-3 text-[11px] text-slate-500">
       App <b>không tự đăng</b> (nền tảng không cho phép) — bạn đăng tay theo checklist, rồi dán link + <b>mã theo dõi</b>.
       Mỗi <b>mã chỉ thuộc 1 bài</b>, nhờ vậy bước đo lường sau này quy đơn được chính xác thay vì chia đều theo phỏng đoán.
@@ -2700,6 +2708,7 @@ function AirPosts(){
           </div>
         </div>; })}
       </div>}
+    </div>
     {pick && <Modal open={true} onClose={()=>setPick(false)} title="Chọn nội dung ĐÃ DUYỆT để đăng" wide>
       {ready.length===0 ? <Empty>Chưa có nội dung nào đã duyệt (hoặc đã đưa vào đăng hết). Duyệt xong ở Hàng đợi duyệt sẽ hiện ở đây.</Empty> :
         <div className="space-y-2">{ready.map(o=>
@@ -2711,7 +2720,7 @@ function AirPosts(){
           </button>)}
         </div>}
     </Modal>}
-  </div>;
+  </ModuleShell>;
 }
 function AirEditor({post, onClose}){
   const { db, patchAir, publishAir, notify } = useApp();
@@ -2809,11 +2818,8 @@ function TrendModule(){
   const hetHan=dangLam.filter(t=>t.han_dung && !conHan(t));
   const cur = open ? TR.find(t=>t.id===open) : null;
   if(cur) return <TrendDetail trend={cur} onClose={()=>setOpen(null)}/>;
-  return <div className="space-y-4">
-    <div className="flex items-center justify-between flex-wrap gap-2">
-      <h2 className="font-display text-lg font-bold text-ink">🔥 Trend</h2>
-      <Btn variant="brand" onClick={()=>setAdd(true)}>＋ Ghi nhận trend</Btn>
-    </div>
+  return <ModuleShell moduleKey="trend" title="🔥 Trend" right={<Btn variant="brand" onClick={()=>setAdd(true)}>＋ Ghi nhận trend</Btn>}>
+    <div className="space-y-4">
     <div className="bg-white rounded-2xl border border-line shadow-card p-3 text-[11px] text-slate-500 leading-relaxed">
       Bạn <b>tự phát hiện và ghi nhận</b> trend (app không tự quét — nền tảng không cho phép), rồi đánh giá theo checklist trước khi làm.
       App <b>không đoán trend sẽ nổ hay không</b> — chỉ giúp kiểm tra <b>có nên làm</b>, <b>có kịp không</b>, và <b>có an toàn không</b>.
@@ -2849,8 +2855,9 @@ function TrendModule(){
           </div>
         </div>; })}
       </div>}
+    </div>
     {add && <TrendForm onClose={()=>setAdd(false)}/>}
-  </div>;
+  </ModuleShell>;
 }
 function TrendForm({onClose}){
   const { db, addTrend, notify } = useApp();
@@ -2972,6 +2979,93 @@ function TrendTrienKhai({trend,onClose,onDone}){
 }
 
 /* ============================================================
+   KHUNG MODULE DÙNG CHUNG — mỗi module có tab nội dung + tab ⚙️ Cấu hình
+   Thêm cấu hình cho module mới: chỉ khai báo thêm 1 mục trong CONFIG_SCHEMA.
+============================================================ */
+const CONFIG_SCHEMA = {
+  air: { ten:'Đăng bài', truong:[
+    {k:'checklist', loai:'checklist', label:'Checklist trước khi đăng', hint:'Mục "bắt buộc" phải tick hết mới cho đánh dấu đã đăng'} ]},
+  trend: { ten:'Trend', truong:[
+    {k:'checklist', loai:'checklist', label:'Checklist đánh giá trend', hint:'Cố ý KHÔNG nên thêm mục dự đoán viral — không ai đoán được'} ]},
+  viec_ket: { ten:'Nhắc việc', truong:[
+    {k:'sua_lai', loai:'so', label:'Kịch bản bị trả — nhắc sau (ngày)'},
+    {k:'cho_duyet', loai:'so', label:'Cổng duyệt tồn — nhắc sau (ngày)'},
+    {k:'chua_nhap_kq', loai:'so', label:'Đã đăng chưa nhập kết quả — nhắc sau (ngày)'},
+    {k:'trend_sap_het', loai:'so', label:'Trend sắp hết hạn — báo trước (ngày)'},
+    {k:'don_cho_gan', loai:'so', label:'Đơn chờ gán tay — nhắc sau (ngày)'} ]},
+  dash: { ten:'Dashboard', truong:[
+    {k:'min_mau', loai:'so', label:'Số kịch bản tối thiểu mới xếp hạng người', hint:'Dưới ngưỡng này không tính %, tránh oan cho người mới'},
+    {k:'lech_pillar', loai:'so', label:'Lệch trụ cột bao nhiêu % thì cảnh báo'} ]},
+  hoc: { ten:'Thư viện học', truong:[
+    {k:'min_mau', loai:'so', label:'Số mẫu tối thiểu mới rút bài học', hint:'Dưới ngưỡng này hệ thống im lặng, không kết luận'} ]},
+  lich: { ten:'Lịch đăng', truong:[
+    {k:'timeout_phut', loai:'so', label:'Gửi n8n bao lâu không hồi đáp thì chuyển đăng tay (phút)'},
+    {k:'max_lan_thu', loai:'so', label:'Thử lại tối đa mấy lần'} ]},
+};
+function ModuleShell({moduleKey, title, right, children}){
+  const { db } = useApp();
+  const [tab,setTab]=useState('main');
+  const sch=CONFIG_SCHEMA[moduleKey];
+  const duocSua=db.can_cau_hinh!==false;
+  const coTab=!!sch;
+  return <div className="space-y-4">
+    <div className="flex items-center justify-between flex-wrap gap-2">
+      <h2 className="font-display text-lg font-bold text-ink">{title}</h2>
+      {tab==='main' && right}
+    </div>
+    {coTab && <div className="flex gap-1 bg-slate-100 rounded-xl p-1 w-fit">
+      <button onClick={()=>setTab('main')} className={"px-3 py-1 rounded-lg text-xs font-semibold "+(tab==='main'?'bg-white text-ink shadow-sm':'text-slate-500')}>Nội dung</button>
+      <button onClick={()=>setTab('cfg')} className={"px-3 py-1 rounded-lg text-xs font-semibold "+(tab==='cfg'?'bg-white text-ink shadow-sm':'text-slate-500')}>⚙️ Cấu hình</button>
+    </div>}
+    {tab==='cfg' ? (duocSua ? <CauHinhModule moduleKey={moduleKey}/>
+      : <div className="rounded-2xl border border-line bg-white p-4 text-sm text-slate-500">Chỉ <b>Admin</b> hoặc <b>Marketing</b> được sửa cấu hình. Bạn xem được nhưng không sửa.</div>)
+      : children}
+  </div>;
+}
+function CauHinhModule({moduleKey}){
+  const { db, setModuleConfig, resetModuleConfig, notify } = useApp();
+  const sch=CONFIG_SCHEMA[moduleKey]; if(!sch) return null;
+  const goc=(db.module_config||{})[moduleKey]||{};
+  const macDinhCL = moduleKey==='air' ? (db.air_checklist||[]) : moduleKey==='trend' ? (db.trend_check||[]) : [];
+  const [f,setF]=useState(()=>{ const o={}; sch.truong.forEach(t=>{ o[t.k]= t.loai==='checklist' ? (goc[t.k]||macDinhCL).map(x=>({...x})) : (goc[t.k]??''); }); return o; });
+  const [busy,setBusy]=useState(false);
+  const luu=async()=>{ setBusy(true);
+    const payload={}; sch.truong.forEach(t=>{ if(t.loai==='so'){ const n=Number(f[t.k]); if(isFinite(n)) payload[t.k]=n; } else payload[t.k]=f[t.k]; });
+    const r=await setModuleConfig(moduleKey,payload); setBusy(false);
+    if(r&&r.ok) notify('Đã lưu cấu hình — áp dụng ngay, không cần deploy'); else notify((r&&r.msg)||'Lỗi','err'); };
+  const khoiPhuc=async()=>{ if(!confirm('Khôi phục cấu hình mặc định cho '+sch.ten+'?')) return;
+    const ok=await resetModuleConfig(moduleKey); if(ok){ notify('Đã khôi phục mặc định'); } };
+  const setCL=(i,k,v)=>setF(o=>{ const l=o.checklist.slice(); l[i]={...l[i],[k]:v}; return {...o,checklist:l}; });
+  return <div className="space-y-3">
+    <div className="rounded-2xl border border-brand/30 bg-brand-bg p-3 text-[11px] text-ink-soft">
+      Đổi ở đây <b>áp dụng ngay cho cả hệ thống</b>, không cần lập trình viên deploy lại. Mọi thay đổi đều <b>ghi vào nhật ký</b> để truy được ai đổi, đổi lúc nào.
+    </div>
+    <div className="bg-white rounded-2xl border border-line shadow-card p-4 space-y-3">
+      {sch.truong.map(t=> t.loai==='so'
+        ? <Field key={t.k} label={t.label} hint={t.hint}><Input type="number" className="no-spin" value={f[t.k]} onChange={e=>setF({...f,[t.k]:e.target.value})}/></Field>
+        : <div key={t.k}>
+            <div className="text-[11px] font-semibold text-ink-muted uppercase tracking-wide mb-1">{t.label}</div>
+            {t.hint && <div className="text-[11px] text-slate-400 mb-2">{t.hint}</div>}
+            <div className="space-y-1">{(f.checklist||[]).map((c,i)=>
+              <div key={i} className="flex items-center gap-2 rounded-xl border border-line p-2">
+                <input value={c.k||''} onChange={e=>setCL(i,'k',e.target.value)} placeholder="mã" className="w-20 text-[11px] font-mono border border-line rounded px-1 py-0.5 shrink-0"/>
+                <input value={c.label||''} onChange={e=>setCL(i,'label',e.target.value)} placeholder="nội dung mục" className="flex-1 min-w-0 text-sm border border-line rounded px-2 py-1"/>
+                <label className="flex items-center gap-1 text-[11px] text-slate-600 shrink-0 cursor-pointer">
+                  <input type="checkbox" checked={!!c.bat_buoc} onChange={e=>setCL(i,'bat_buoc',e.target.checked)} className="w-3.5 h-3.5 accent-brand"/>bắt buộc</label>
+                <button onClick={()=>setF(o=>({...o,checklist:o.checklist.filter((_,j)=>j!==i)}))} className="text-rose-400 text-xs shrink-0">✕</button>
+              </div>)}
+            </div>
+            <button onClick={()=>setF(o=>({...o,checklist:[...(o.checklist||[]),{k:'',label:'',bat_buoc:false}]}))} className="text-xs text-brand-dark font-semibold hover:underline mt-1">＋ Thêm mục</button>
+          </div>)}
+      <div className="flex gap-2 pt-1">
+        <Btn variant="ghost" onClick={khoiPhuc} disabled={busy}>↺ Khôi phục mặc định</Btn>
+        <Btn variant="brand" className="flex-1" onClick={luu} disabled={busy}>{busy?'…':'Lưu cấu hình'}</Btn>
+      </div>
+    </div>
+  </div>;
+}
+
+/* ============================================================
    CONTENT OS · P10 — THƯ VIỆN HỌC (máy rút đề xuất · NGƯỜI quyết)
    Ranh giới: KHÔNG dự đoán viral. Chỉ tổng hợp cái đã quan sát, đủ mẫu mới kết luận.
 ============================================================ */
@@ -2990,14 +3084,11 @@ function ThuVienHoc(){
   const duyet=async(b)=>{ const r=await decideBaiHoc(b.id,'DUYET',''); if(r&&r.ok) notify('Đã duyệt — bài học này giờ hiện trong Creative Studio'); else notify((r&&r.msg)||'Lỗi','err'); };
   const tuChoi=async()=>{ if(!ly.trim()) return notify('Nhập lý do từ chối','warn');
     const r=await decideBaiHoc(reject.id,'TU_CHOI',ly.trim()); if(r&&r.ok){ notify('Đã từ chối'); setReject(null); } else notify((r&&r.msg)||'Lỗi','err'); };
-  return <div className="space-y-4">
-    <div className="flex items-center justify-between flex-wrap gap-2">
-      <h2 className="font-display text-lg font-bold text-ink">🎓 Thư viện học</h2>
-      <div className="flex gap-2">
-        <Btn variant="ghost" onClick={()=>setAdd({loai:'KHAC'})}>＋ Ghi bài học</Btn>
-        <Btn variant="brand" onClick={quet} disabled={busy}>{busy?'Đang quét…':'🔍 Quét dữ liệu'}</Btn>
-      </div>
-    </div>
+  return <ModuleShell moduleKey="hoc" title="🎓 Thư viện học" right={<div className="flex gap-2">
+      <Btn variant="ghost" onClick={()=>setAdd({loai:'KHAC'})}>＋ Ghi bài học</Btn>
+      <Btn variant="brand" onClick={quet} disabled={busy}>{busy?'Đang quét…':'🔍 Quét dữ liệu'}</Btn>
+    </div>}>
+    <div className="space-y-4">
 
     <div className="rounded-2xl border border-brand/30 bg-brand-bg p-3 text-[11px] text-ink-soft leading-relaxed">
       <b>Vòng lặp học:</b> Kết quả thật → máy rút <b>đề xuất</b> → <b>bạn duyệt</b> → bài học đã duyệt hiện lại trong Creative Studio khi soạn kịch bản.
@@ -3042,10 +3133,11 @@ function ThuVienHoc(){
       <Textarea rows="3" value={ly} onChange={e=>setLy(e.target.value)} placeholder="VD: mẫu chưa đại diện, do đợt khuyến mãi…"/>
       <div className="flex gap-2 mt-3"><Btn variant="ghost" onClick={()=>setReject(null)}>Huỷ</Btn><Btn variant="brand" className="flex-1" onClick={tuChoi}>Từ chối</Btn></div>
     </Modal>}
+    </div>
     {add && <Modal open={true} onClose={()=>setAdd(null)} title="Ghi bài học (tự rút)">
       <BaiHocForm onClose={()=>setAdd(null)}/>
     </Modal>}
-  </div>;
+  </ModuleShell>;
 }
 function BaiHocForm({onClose}){
   const { addBaiHoc, notify } = useApp();
@@ -3182,9 +3274,9 @@ function KeHoachVsThucHien(){
       {/* Pillar: mục tiêu vs thực tế */}
       <div className="bg-white rounded-2xl border border-line shadow-card p-4">
         <div className="text-sm font-semibold text-ink mb-1">Phân bổ trụ cột — mục tiêu vs thực tế</div>
-        <div className="text-[11px] text-slate-500 mb-2">Lệch quá <b>15%</b> nghĩa là đang làm khác chiến lược đã đặt ra.</div>
+        <div className="text-[11px] text-slate-500 mb-2">Lệch quá <b>{lechNguong}%</b> nghĩa là đang làm khác chiến lược đã đặt ra.</div>
         {pilRows.length===0 ? <Empty>Chưa có trụ cột.</Empty> :
-          <div className="space-y-2">{pilRows.map(p=>{ const lech=Math.abs(p.lech)>15;
+          <div className="space-y-2">{pilRows.map(p=>{ const lech=Math.abs(p.lech)>lechNguong;
             return <div key={p.id}>
               <div className="flex items-center justify-between text-xs">
                 <span className="font-semibold text-ink">{p.ten}</span>
@@ -3229,6 +3321,7 @@ function KeHoachVsThucHien(){
 }
 function ContentDashboard(){
   const { db } = useApp();
+  const MIN_MAU_CFG=Number(((db.module_config||{}).dash||{}).min_mau)||MIN_MAU;
   const [view,setView]=useState('kpi');
   const [ky,setKy]=useState('');
   const SCR=db.scripts||[], AIR=db.air_posts||[], KQ=db.ket_qua||[], AP=db.approvals||[], CI=db.content_items||[];
@@ -3276,7 +3369,7 @@ function ContentDashboard(){
       tt:sum(kqs.filter(k=>k.muc_tin_cay==='TRUC_TIEP'),'doanh_thu'),
       gt:sum(kqs.filter(k=>k.muc_tin_cay==='GIAN_TIEP'),'doanh_thu'),
       view:sum(kqs.filter(k=>k.muc_tin_cay==='KHONG_QUY_DON'),'luot_xem'),
-      duMau: mine.length>=MIN_MAU };
+      duMau: mine.length>=MIN_MAU_CFG };
   }).sort((a,b)=>b.soKB-a.soKB);
 
   // ---- Kỹ thuật: đo bằng số claim CHẶN ĐƯỢC, không phải số bài làm ----
@@ -3293,18 +3386,20 @@ function ContentDashboard(){
     </div>
 
     <div className="flex gap-1 bg-slate-100 rounded-xl p-1 w-fit">
-      {[['kpi','KPI & hiệu suất'],['kh','Kế hoạch vs Thực hiện']].map(([k,l])=>
+      {[['kpi','KPI & hiệu suất'],['kh','Kế hoạch vs Thực hiện'],['cfg','⚙️ Cấu hình']].map(([k,l])=>
         <button key={k} onClick={()=>setView(k)} className={"px-3 py-1 rounded-lg text-xs font-semibold whitespace-nowrap "+(view===k?'bg-white text-ink shadow-sm':'text-slate-500')}>{l}</button>)}
     </div>
 
     <ViecKet/>
 
-    {view==='kh' ? <KeHoachVsThucHien/> : <>
+    {view==='cfg' ? (db.can_cau_hinh!==false ? <CauHinhModule moduleKey="dash"/>
+      : <div className="rounded-2xl border border-line bg-white p-4 text-sm text-slate-500">Chỉ <b>Admin</b> hoặc <b>Marketing</b> được sửa cấu hình.</div>)
+     : view==='kh' ? <KeHoachVsThucHien/> : <>
 
     <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3 text-[11px] text-amber-800 leading-relaxed">
       <b>Cách đọc bảng này:</b> 4 hệ KPI đo 4 mục tiêu khác nhau nên <b>không so trực tiếp với nhau</b>;
       3 mức tin cậy <b>không được cộng dồn</b> thành “doanh thu từ content”;
-      người có dưới <b>{MIN_MAU}</b> kịch bản thì <b>không xếp hạng</b> (chưa đủ mẫu để kết luận).
+      người có dưới <b>{MIN_MAU_CFG}</b> kịch bản thì <b>không xếp hạng</b> (chưa đủ mẫu để kết luận).
     </div>
 
     {/* 4 hệ KPI — mỗi hệ 1 dòng, 3 cột tin cậy tách bạch */}
@@ -3355,7 +3450,7 @@ function ContentDashboard(){
             </tbody>
           </table>
         </div>}
-      <div className="text-[10px] text-slate-400 mt-2">“Qua lần 1” chỉ hiện khi người đó có ≥{MIN_MAU} kịch bản — ít mẫu thì tỷ lệ % dễ gây hiểu sai.</div>
+      <div className="text-[10px] text-slate-400 mt-2">“Qua lần 1” chỉ hiện khi người đó có ≥{MIN_MAU_CFG} kịch bản — ít mẫu thì tỷ lệ % dễ gây hiểu sai.</div>
     </div>
 
     {/* Hiệu suất người — Outcome */}
