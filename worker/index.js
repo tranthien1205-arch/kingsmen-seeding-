@@ -320,6 +320,28 @@ const TREND_CHECK = [
   {k:'lam_khac',    label:'Làm được khác biệt, không bắt chước y hệt', bat_buoc:false},
 ];
 const TREND_ST = { MOI:'Mới ghi nhận', DANH_GIA:'Đang đánh giá', DUYET:'Duyệt triển khai', TU_CHOI:'Bỏ qua', DA_TRIEN_KHAI:'Đã triển khai' };
+// NHẮC VIỆC — ngưỡng "để lâu quá" (ngày). Tính trực tiếp mỗi lần bootstrap nên KHÔNG BAO GIỜ LỆCH;
+// cron chỉ ghi nhật ký hằng ngày, không phải nguồn sự thật.
+const NGUONG_KET = { sua_lai:3, cho_duyet:2, chua_nhap_kq:14, trend_sap_het:7, don_cho_gan:3 };
+function soNgay(iso){ if(!iso) return 0; const d=(Date.now()-new Date(iso).getTime())/864e5; return d>0?Math.floor(d):0; }
+// Trả về các nhóm việc đang kẹt + lý do cụ thể, KHÔNG gộp thành một con số vô nghĩa
+function tinhViecKet({scripts,approvals,air_posts,ket_qua,trends,don_cho_gan}){
+  const homNay=new Date().toISOString().slice(0,10);
+  const coKQ=new Set((ket_qua||[]).map(k=>k.air_post_id));
+  const suaLai=(scripts||[]).filter(s=>s.trang_thai==='NHAP' && Number(s.so_lan_tra||0)>0 && soNgay(s.updated_at)>=NGUONG_KET.sua_lai)
+    .map(s=>({id:s.id, ten:s.tieu_de||s.hook||'(không tên)', ngay:soNgay(s.updated_at)}));
+  const choDuyet=(approvals||[]).filter(a=>a.trang_thai==='CHO' && soNgay(a.created_at)>=NGUONG_KET.cho_duyet)
+    .map(a=>({id:a.id, cong:a.cong, ngay:soNgay(a.created_at)}));
+  const chuaNhapKQ=(air_posts||[]).filter(a=>a.trang_thai==='DA_DANG' && !coKQ.has(a.id) && soNgay(a.posted_at)>=NGUONG_KET.chua_nhap_kq)
+    .map(a=>({id:a.id, ten:a.tieu_de||'(không tên)', ngay:soNgay(a.posted_at)}));
+  const trendGap=(trends||[]).filter(t=>['MOI','DANH_GIA','DUYET'].includes(t.trang_thai) && t.han_dung)
+    .map(t=>({id:t.id, ten:t.ten, con:Math.floor((new Date(t.han_dung)-new Date(homNay))/864e5)}))
+    .filter(t=>t.con<=NGUONG_KET.trend_sap_het);
+  const donKet=(don_cho_gan||[]).filter(d=>d.trang_thai==='CHO_GAN' && soNgay(d.created_at)>=NGUONG_KET.don_cho_gan)
+    .map(d=>({id:d.id, ma:d.ma_doi_soat||'', ngay:soNgay(d.created_at)}));
+  return { sua_lai:suaLai, cho_duyet:choDuyet, chua_nhap_kq:chuaNhapKQ, trend_gap:trendGap, don_ket:donKet,
+    tong: suaLai.length+choDuyet.length+chuaNhapKQ.length+trendGap.length+donKet.length, nguong:NGUONG_KET };
+}
 // P10 — Ngưỡng bằng chứng: DƯỚI ngưỡng này thì KHÔNG rút ra kết luận nào.
 // Ranh giới: chỉ tổng hợp cái đã quan sát được; KHÔNG dự đoán viral/%view bằng AI.
 const MIN_MAU_BANG_CHUNG = 5;
@@ -466,6 +488,7 @@ async function bootstrap(env, u){
     frameworks, kenh, content_items, scripts, approvals, air_posts, air_checklist:AIR_CHECKLIST,
     ket_qua, don_cho_gan, muc_tin_cay:MUC_TIN_CAY, nguon_kq:NGUON_KQ,
     footage, shot_list, bai_hoc, min_mau:MIN_MAU_BANG_CHUNG, trends, trend_check:TREND_CHECK,
+    viec_ket: canContent ? tinhViecKet({scripts,approvals,air_posts,ket_qua,trends,don_cho_gan}) : null,
     pricing: pricingRow, payouts: [], audit,
   };
 }
@@ -1631,6 +1654,32 @@ async function deleteMediaObject(env, media_url){
 }
 
 // Dọn media của công trình CHƯA ĐƯỢC DUYỆT quá 30 ngày (chạy theo cron)
+// Cron hằng ngày: chụp lại tình trạng việc kẹt vào nhật ký để có dấu vết theo thời gian.
+// Nguồn sự thật vẫn là bootstrap (tính tươi); đây chỉ là bản ghi lịch sử.
+async function ghiNhatKyViecKet(env){
+  try{
+    await ensureSchema(env);
+    const g=async(sql)=>(await env.DB.prepare(sql).all()).results;
+    const v=tinhViecKet({
+      scripts: await g(`SELECT id,tieu_de,hook,trang_thai,so_lan_tra,updated_at FROM scripts`),
+      approvals: await g(`SELECT id,cong,trang_thai,created_at FROM approvals`),
+      air_posts: await g(`SELECT id,tieu_de,trang_thai,posted_at FROM air_posts`),
+      ket_qua: await g(`SELECT air_post_id FROM ket_qua`),
+      trends: await g(`SELECT id,ten,trang_thai,han_dung FROM trends`),
+      don_cho_gan: await g(`SELECT id,ma_doi_soat,trang_thai,created_at FROM don_cho_gan`),
+    });
+    if(v.tong===0) return;
+    const mo=[
+      v.sua_lai.length?v.sua_lai.length+' kịch bản bị trả chưa sửa':'',
+      v.cho_duyet.length?v.cho_duyet.length+' cổng duyệt tồn':'',
+      v.chua_nhap_kq.length?v.chua_nhap_kq.length+' bài đã đăng chưa nhập kết quả':'',
+      v.trend_gap.length?v.trend_gap.length+' trend sắp/đã hết hạn':'',
+      v.don_ket.length?v.don_ket.length+' đơn chờ gán tay':'',
+    ].filter(Boolean).join(' · ');
+    await env.DB.prepare(`INSERT INTO audit (id,at,by_id,by_name,action,entity,entity_id,detail) VALUES (?,?,'','Hệ thống','nhắc việc','viec_ket',?,?)`)
+      .bind(uid('a'), nowISO(), String(v.tong), mo).run();
+  }catch(e){}
+}
 async function cleanupOldMedia(env){
   await ensureSchema(env);
   const cutoff = new Date(Date.now() - 30*24*60*60*1000).toISOString();
@@ -1651,6 +1700,7 @@ export default {
   // Cron: dọn media công trình chưa duyệt quá 30 ngày
   async scheduled(controller, env, ctx){
     ctx.waitUntil(cleanupOldMedia(env));
+    ctx.waitUntil(ghiNhatKyViecKet(env));
   },
   async fetch(request, env, ctx){
     const url = new URL(request.url);

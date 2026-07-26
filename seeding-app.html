@@ -140,6 +140,24 @@ const AIR_CHECKLIST_FE = [
   {k:'hashtag_cta',    label:'Hashtag & CTA đầy đủ', bat_buoc:false},
   {k:'hen_gio',        label:'Đã hẹn giờ / canh khung giờ đăng', bat_buoc:false},
 ];
+const NGUONG_KET_FE = { sua_lai:3, cho_duyet:2, chua_nhap_kq:14, trend_sap_het:7, don_cho_gan:3 };
+function soNgayFE(iso){ if(!iso) return 0; const d=(Date.now()-new Date(iso).getTime())/864e5; return d>0?Math.floor(d):0; }
+function tinhViecKetFE(db){
+  const homNay=new Date().toISOString().slice(0,10);
+  const coKQ=new Set((db.ket_qua||[]).map(k=>k.air_post_id));
+  const sua_lai=(db.scripts||[]).filter(s=>s.trang_thai==='NHAP'&&Number(s.so_lan_tra||0)>0&&soNgayFE(s.updated_at)>=NGUONG_KET_FE.sua_lai)
+    .map(s=>({id:s.id,ten:s.tieu_de||s.hook||'(không tên)',ngay:soNgayFE(s.updated_at)}));
+  const cho_duyet=(db.approvals||[]).filter(a=>a.trang_thai==='CHO'&&soNgayFE(a.created_at)>=NGUONG_KET_FE.cho_duyet)
+    .map(a=>({id:a.id,cong:a.cong,ngay:soNgayFE(a.created_at)}));
+  const chua_nhap_kq=(db.air_posts||[]).filter(a=>a.trang_thai==='DA_DANG'&&!coKQ.has(a.id)&&soNgayFE(a.posted_at)>=NGUONG_KET_FE.chua_nhap_kq)
+    .map(a=>({id:a.id,ten:a.tieu_de||'(không tên)',ngay:soNgayFE(a.posted_at)}));
+  const trend_gap=(db.trends||[]).filter(t=>['MOI','DANH_GIA','DUYET'].includes(t.trang_thai)&&t.han_dung)
+    .map(t=>({id:t.id,ten:t.ten,con:Math.floor((new Date(t.han_dung)-new Date(homNay))/864e5)})).filter(t=>t.con<=NGUONG_KET_FE.trend_sap_het);
+  const don_ket=(db.don_cho_gan||[]).filter(d=>d.trang_thai==='CHO_GAN'&&soNgayFE(d.created_at)>=NGUONG_KET_FE.don_cho_gan)
+    .map(d=>({id:d.id,ma:d.ma_doi_soat||'',ngay:soNgayFE(d.created_at)}));
+  return { sua_lai, cho_duyet, chua_nhap_kq, trend_gap, don_ket,
+    tong:sua_lai.length+cho_duyet.length+chua_nhap_kq.length+trend_gap.length+don_ket.length, nguong:NGUONG_KET_FE };
+}
 const TREND_CHECK_FE = [
   {k:'hop_pillar',  label:'Gắn được vào trụ cột nội dung / định vị thương hiệu', bat_buoc:true},
   {k:'co_goc_sp',   label:'Có sản phẩm hoặc góc nhìn thật để gắn vào', bat_buoc:true},
@@ -384,7 +402,7 @@ function seedDB(){
     frameworks: ['Chuẩn bán hàng','PAS','Phản biện comment','Test chất lượng','Hành trình thi công','Size / Combo','FOMO','Review KOC','"đừng..." Trend','Q&A khách hàng','So sánh kinh tế','Hướng dẫn thi công'].map((ten,i)=>({id:uid('fw'),ten,mo_ta:'',thu_tu:i+1,active:true,created_at:now()})),
     kenh: [['Fanpage Kingsmen','FANPAGE','Kingsmen'],['TikTok Kingsmen','TIKTOK','Kingsmen'],['YouTube Short Kingsmen','YOUTUBE','Kingsmen'],['Fanpage VKXD','FANPAGE','VKXD'],['TikTok VKXD','TIKTOK','VKXD'],['Shopee VKXD','SHOPEE','VKXD'],['Zalo OA','ZALO_OA','Kingsmen'],['CHÍNH - Vật liệu mới FINEX','TIKTOK','FINEX'],['AFF - Sơn sàn hiệu ứng','TIKTOK','FINEX'],['BC - Vật liệu hoàn thiện','TIKTOK','Kingsmen']].map(([ten,loai,th])=>({id:uid('kn'),ten,loai,thuong_hieu:th,active:true,created_at:now()})),
     content_items: [],
-    scripts: [], approvals: [], air_posts: [], air_checklist: AIR_CHECKLIST_FE, ket_qua: [], don_cho_gan: [], footage: [], shot_list: [], bai_hoc: [], min_mau: MIN_MAU, trends: [], trend_check: TREND_CHECK_FE,
+    scripts: [], approvals: [], air_posts: [], air_checklist: AIR_CHECKLIST_FE, ket_qua: [], don_cho_gan: [], footage: [], shot_list: [], bai_hoc: [], min_mau: MIN_MAU, trends: [], trend_check: TREND_CHECK_FE, viec_ket: null,
     payouts: [],
     audit: [],
   };
@@ -425,7 +443,7 @@ function migrate(db){
   db.kenh ||= [];
   db.content_items ||= [];
   db.scripts ||= []; db.approvals ||= []; db.air_posts ||= []; db.air_checklist ||= AIR_CHECKLIST_FE;
-  db.ket_qua ||= []; db.don_cho_gan ||= []; db.footage ||= []; db.shot_list ||= []; db.bai_hoc ||= []; db.min_mau ||= MIN_MAU; db.trends ||= []; db.trend_check ||= TREND_CHECK_FE;
+  db.ket_qua ||= []; db.don_cho_gan ||= []; db.footage ||= []; db.shot_list ||= []; db.bai_hoc ||= []; db.min_mau ||= MIN_MAU; db.trends ||= []; db.trend_check ||= TREND_CHECK_FE; db.viec_ket ||= null;
   db.post_seedings.forEach(p=>{ p.react ??= 0; p.so_cmt_seeding ??= 0; p.so_cmt_tu_nhien ??= 0; p.thanh_tien ??= 0; });
   db.cmt_seedings.forEach(c=>{ c.proofs ||= []; c.so_cmt_seeding ??= 0; c.react ??= 0; c.so_cmt_tu_nhien ??= 0; c.thanh_tien ??= 0; });
   db.groups.forEach(g=>{ g.uu_tien ??= false; });
@@ -2161,6 +2179,76 @@ function LocVideoTool(){
       <iframe src={LOC_VIDEO_URL} title="Lọc video" className={full?'w-full h-full border-0':'w-full border-0'} style={full?undefined:{height:'75vh'}} allow="camera; microphone"/>
     </div>
     <p className="text-[11px] text-slate-400">Nếu nút chọn folder không mở được trong khung này, bấm <b>Mở tab mới</b> — một số trình duyệt chỉ cho chọn folder ở tab riêng.</p>
+    <CauNoiFootage/>
+  </div>;
+}
+// Cầu nối: lọc xong ở công cụ → kéo thẳng file đã chọn vào kho footage (gắn thẻ chung 1 lần)
+function CauNoiFootage(){
+  const { db, createFootage, uploadMedia, notify } = useApp();
+  const [files,setFiles]=useState([]); const [meta,setMeta]=useState({tags:'',san_pham_id:'',dia_diem:'',ngay_quay:'',nguoi_quay:''});
+  const [busy,setBusy]=useState(false); const [tien,setTien]=useState({i:0,n:0}); const [keo,setKeo]=useState(false);
+  const inputRef=useRef();
+  const them=(fl)=>{ const arr=Array.from(fl||[]).filter(f=>/^(video|image)\//.test(f.type)); if(!arr.length) return;
+    setFiles(prev=>[...prev, ...arr.filter(f=>!prev.some(p=>p.name===f.name&&p.size===f.size))]); };
+  const day=async()=>{ if(!files.length) return notify('Chưa chọn file nào','warn');
+    setBusy(true); let ok=0, loi=0;
+    for(let i=0;i<files.length;i++){
+      setTien({i:i+1,n:files.length});
+      try{
+        const r=await uploadMedia(files[i]);
+        if(!r||!r.media_url){ loi++; continue; }
+        const res=await createFootage({ ten:files[i].name.replace(/\.[^.]+$/,''), media_url:r.media_url, media_type:r.media_type||'VIDEO',
+          tags:meta.tags.split(',').map(x=>x.trim()).filter(Boolean), san_pham_id:meta.san_pham_id||null,
+          dia_diem:meta.dia_diem, ngay_quay:meta.ngay_quay, nguoi_quay:meta.nguoi_quay });
+        if(res&&res.ok) ok++; else loi++;
+      }catch(e){ loi++; }
+    }
+    setBusy(false); setTien({i:0,n:0}); setFiles([]);
+    notify(loi? ('Đưa vào kho '+ok+' file, '+loi+' file lỗi') : ('Đã đưa '+ok+' file vào Kho footage'), loi?'warn':'ok'); };
+  return <div className="bg-white rounded-2xl border border-line shadow-card p-4 space-y-3">
+    <div>
+      <div className="text-sm font-semibold text-ink">📥 Đưa file đã lọc vào Kho footage</div>
+      <div className="text-[11px] text-slate-500 mt-0.5 leading-relaxed">
+        Công cụ lọc chạy trên máy nên <b>không tự đẩy lên được</b>. Lọc xong, mở folder kết quả rồi <b>kéo-thả các file đã chọn</b> vào đây —
+        chúng sẽ lên kho, gắn <b>thẻ chung một lần</b>, và dùng lại được cho mọi kịch bản.
+      </div>
+    </div>
+    <div onDragOver={e=>{e.preventDefault(); setKeo(true);}} onDragLeave={()=>setKeo(false)}
+      onDrop={e=>{e.preventDefault(); setKeo(false); them(e.dataTransfer.files);}}
+      onClick={()=>inputRef.current&&inputRef.current.click()}
+      className={"rounded-xl border-2 border-dashed p-6 text-center cursor-pointer transition "+(keo?'border-brand bg-brand-bg':'border-line hover:border-brand/50')}>
+      <div className="text-2xl">🎞</div>
+      <div className="text-xs text-ink font-semibold mt-1">Kéo-thả video/ảnh vào đây</div>
+      <div className="text-[11px] text-slate-400">hoặc bấm để chọn file</div>
+      <input ref={inputRef} type="file" multiple accept="video/*,image/*" className="hidden" onChange={e=>{them(e.target.files); e.target.value='';}}/>
+    </div>
+    {files.length>0 && <>
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-semibold text-ink">{files.length} file đã chọn</span>
+        <button onClick={()=>setFiles([])} className="text-[11px] text-rose-400 hover:underline" disabled={busy}>Bỏ hết</button>
+      </div>
+      <div className="max-h-32 overflow-y-auto space-y-0.5">{files.map((f,i)=>
+        <div key={i} className="flex items-center gap-2 text-[11px] text-slate-600">
+          <span className="flex-1 truncate">{f.name}</span>
+          <span className="text-slate-400 shrink-0">{(f.size/1048576).toFixed(1)} MB</span>
+          <button onClick={()=>setFiles(p=>p.filter((_,j)=>j!==i))} className="text-rose-400 shrink-0" disabled={busy}>✕</button>
+        </div>)}
+      </div>
+      <div className="rounded-xl border border-line p-2">
+        <div className="text-[11px] font-semibold text-ink-muted uppercase tracking-wide mb-1">Gắn chung cho cả lô</div>
+        <Field label="Thẻ (tag)" hint="Cách nhau bằng dấu phẩy — để sau tìm lại nhanh">
+          <Input value={meta.tags} onChange={e=>setMeta({...meta,tags:e.target.value})} placeholder="chít mạch, cận cảnh"/></Field>
+        <div className="grid sm:grid-cols-2 gap-2">
+          <Field label="Sản phẩm"><Select value={meta.san_pham_id} onChange={e=>setMeta({...meta,san_pham_id:e.target.value})}><option value="">—</option>{(db.san_pham||[]).map(p=><option key={p.id} value={p.id}>{p.ten}</option>)}</Select></Field>
+          <Field label="Địa điểm"><Input value={meta.dia_diem} onChange={e=>setMeta({...meta,dia_diem:e.target.value})}/></Field>
+          <Field label="Ngày quay"><Input type="date" value={meta.ngay_quay} onChange={e=>setMeta({...meta,ngay_quay:e.target.value})}/></Field>
+          <Field label="Người quay"><Input value={meta.nguoi_quay} onChange={e=>setMeta({...meta,nguoi_quay:e.target.value})}/></Field>
+        </div>
+      </div>
+      {busy && <div className="text-[11px] text-brand-dark font-semibold">Đang đưa lên… {tien.i}/{tien.n}</div>}
+      <Btn variant="brand" className="w-full" onClick={day} disabled={busy}>{busy?('Đang xử lý '+tien.i+'/'+tien.n):('📥 Đưa '+files.length+' file vào Kho footage')}</Btn>
+      <p className="text-[10px] text-slate-400">File &gt;100MB sẽ bị từ chối — với video lớn, nén ở công cụ trước rồi mới đẩy lên.</p>
+    </>}
   </div>;
 }
 function CreativeStudio(){
@@ -2862,6 +2950,39 @@ function BaiHocForm({onClose}){
    Nguyên tắc: KHÔNG cộng dồn 3 mức tin cậy · KHÔNG xếp hạng khi chưa đủ mẫu.
 ============================================================ */
 const MIN_MAU = 5;   // dưới ngưỡng này thì hiện số nhưng KHÔNG xếp hạng (tránh oan cho người ít việc)
+// Nhắc việc — chỉ hiện việc ĐANG KẸT quá ngưỡng, kèm số ngày để lâu. Hết kẹt thì tự biến mất.
+function ViecKet(){
+  const { db } = useApp();
+  const v = db.viec_ket || tinhViecKetFE(db);
+  const [mo,setMo]=useState(false);
+  if(!v || v.tong===0) return <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-3 text-[11px] text-emerald-800">
+    ✓ Không có việc nào đang kẹt. Mọi khâu đang chạy đúng nhịp.</div>;
+  const N=v.nguong||NGUONG_KET_FE;
+  const Nhom=({icon,ten,items,mo_ta,render})=> items.length===0?null:<div className="rounded-xl border border-line p-2">
+    <div className="text-xs font-semibold text-ink">{icon} {ten} <span className="text-rose-600">({items.length})</span></div>
+    <div className="text-[10px] text-slate-400 mb-1">{mo_ta}</div>
+    <ul className="space-y-0.5">{items.slice(0,5).map((x,i)=><li key={i} className="text-[11px] text-slate-600">• {render(x)}</li>)}
+      {items.length>5 && <li className="text-[11px] text-slate-400">… và {items.length-5} mục nữa</li>}</ul>
+  </div>;
+  return <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3">
+    <button onClick={()=>setMo(m=>!m)} className="w-full flex items-center justify-between text-left">
+      <span className="text-sm font-semibold text-amber-900">🔔 {v.tong} việc đang kẹt</span>
+      <span className="text-[11px] text-amber-700">{mo?'Thu gọn ▲':'Xem chi tiết ▼'}</span>
+    </button>
+    {!mo && <div className="text-[11px] text-amber-700 mt-1">
+      {[v.sua_lai.length&&v.sua_lai.length+' kịch bản bị trả chưa sửa', v.cho_duyet.length&&v.cho_duyet.length+' cổng duyệt tồn',
+        v.chua_nhap_kq.length&&v.chua_nhap_kq.length+' bài chưa nhập kết quả', v.trend_gap.length&&v.trend_gap.length+' trend gấp',
+        v.don_ket.length&&v.don_ket.length+' đơn chờ gán'].filter(Boolean).join(' · ')}
+    </div>}
+    {mo && <div className="space-y-2 mt-2">
+      <Nhom icon="✍️" ten="Kịch bản bị trả chưa sửa" items={v.sua_lai} mo_ta={'Để quá '+N.sua_lai+' ngày'} render={x=>x.ten+' — '+x.ngay+' ngày'}/>
+      <Nhom icon="🛂" ten="Cổng duyệt còn tồn" items={v.cho_duyet} mo_ta={'Chờ quá '+N.cho_duyet+' ngày'} render={x=>(x.cong==='CLAIM'?'Claim (Kỹ thuật)':'Nội dung')+' — '+x.ngay+' ngày'}/>
+      <Nhom icon="📈" ten="Bài đã đăng chưa nhập kết quả" items={v.chua_nhap_kq} mo_ta={'Đăng quá '+N.chua_nhap_kq+' ngày — để lâu sẽ khó đối soát'} render={x=>x.ten+' — '+x.ngay+' ngày'}/>
+      <Nhom icon="🔥" ten="Trend sắp/đã hết hạn" items={v.trend_gap} mo_ta="Quyết sớm kẻo lỡ nhịp" render={x=>x.ten+(x.con<0?(' — quá hạn '+(-x.con)+' ngày'):(' — còn '+x.con+' ngày'))}/>
+      <Nhom icon="🕗" ten="Đơn chờ gán tay" items={v.don_ket} mo_ta={'Tồn quá '+N.don_cho_gan+' ngày — chưa gán thì chưa quy đơn được'} render={x=>(x.ma||'không mã')+' — '+x.ngay+' ngày'}/>
+    </div>}
+  </div>;
+}
 // Kế hoạch vs Thực hiện — đối chiếu cái ĐỊNH LÀM với cái ĐÃ LÀM, và chỉ ra nghẽn ở khâu nào
 function KeHoachVsThucHien(){
   const { db } = useApp();
@@ -3059,6 +3180,8 @@ function ContentDashboard(){
       {[['kpi','KPI & hiệu suất'],['kh','Kế hoạch vs Thực hiện']].map(([k,l])=>
         <button key={k} onClick={()=>setView(k)} className={"px-3 py-1 rounded-lg text-xs font-semibold whitespace-nowrap "+(view===k?'bg-white text-ink shadow-sm':'text-slate-500')}>{l}</button>)}
     </div>
+
+    <ViecKet/>
 
     {view==='kh' ? <KeHoachVsThucHien/> : <>
 

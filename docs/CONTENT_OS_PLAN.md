@@ -258,9 +258,11 @@ Tokens Tailwind (inline config trong `seeding-app.html`): `ink #0b3543` (soft #1
 - (Trước đó, Domain A: seeding/quay/lịch/thư viện ảnh/vinh danh/chống trùng… đã deploy.)
 - **P7 Đăng & checklist** — bảng `air_posts` + UNIQUE mã theo dõi (1 mã = 1 bài); chỉ đăng nội dung đã duyệt; checklist bắt buộc + link + mã mới cho đánh dấu Đã đăng; đã đăng thì khoá sửa (21 test).
 - **Công cụ Lọc & dựng video v4.0** gắn vào Creative Studio dạng tab (phục vụ tĩnh `/tools/loc-video.html` + vendor ffmpeg cùng origin + route công khai `/api/nhac`) (13 test).
-- ▶️ **Kế tiếp:** gỡ `BETA_KEYS` khi user duyệt xong để cả team dùng; thêm `TRUONG_MKT`/`GIAM_DOC`; nâng P4 lên gợi ý AI khi có `ANTHROPIC_API_KEY`.
+- **Nhắc việc** — `tinhViecKet()` tính TRỰC TIẾP trong bootstrap (luôn tươi, không lệch); cron hằng ngày chỉ ghi nhật ký. 5 nhóm: kịch bản bị trả chưa sửa (>3n) · cổng duyệt tồn (>2n) · bài đăng chưa nhập kết quả (>14n) · trend sắp/đã hết hạn (≤7n) · đơn chờ gán tay (>3n). Ngưỡng `NGUONG_KET` khớp FE↔BE, có test chặn lệch. UI: thẻ gấp gọn ở Dashboard, hết kẹt thì tự chuyển xanh (10 test).
+- **Cầu nối Lọc video → Kho footage** — công cụ chạy cục bộ nên không tự đẩy được; thêm vùng **kéo-thả nhiều file** ngay dưới khung công cụ, gắn thẻ/sản phẩm/địa điểm **chung một lần cho cả lô**, dùng lại luồng upload R2 sẵn có, báo tiến độ từng file.
+- ▶️ **Kế tiếp:** ⏳ **Nối Seeding ↔ Content OS (việc 1 — CHƯA LÀM)**: `content_topics` chưa nối `content_items`, `media_library` chưa nối `footage` → Sales seeding và MKT lên kế hoạch vẫn là 2 luồng không biết nhau. Sau đó: gỡ `BETA_KEYS`; thêm `TRUONG_MKT`/`GIAM_DOC`; nâng P4 lên gợi ý AI khi có `ANTHROPIC_API_KEY`.
 - **P8** Nhập kết quả 3 mức tin cậy (25 test) · **P5** Kho footage & shot list (22 test) · **P9** Dashboard 4 hệ KPI + hiệu suất người (9 test) · **P10** Thư viện học + vòng lặp tự học (19 test).
-- 📌 **Tổng test đang xanh:** import 8 · Creative Studio 16 · Duyệt 22 · Đăng bài 21 · Kết quả 25 · Footage 22 · Thư viện học 19 · công cụ 13 · chống trùng seeding 13 = **159**.
+- 📌 **Tổng test đang xanh:** import 8 · Creative Studio 16 · Duyệt 22 · Đăng bài 21 · Kết quả 25 · Footage 22 · Thư viện học 19 · công cụ 13 · chống trùng seeding 13 = **193**.
 - ✅ **ĐÃ XONG TOÀN BỘ P1→P10.** Còn lại là các mảnh nhỏ: vai trò `TRUONG_MKT`/`GIAM_DOC` riêng, `can()` tập trung (P0), và nâng P4 lên gợi ý AI khi có `ANTHROPIC_API_KEY`.
 
 ### ⚙️ Quy trình deploy (CẬP NHẬT)
