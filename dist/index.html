@@ -2269,6 +2269,14 @@ function ScriptEditor({init, onClose}){
 
     {/* Thiết lập + sinh nháp */}
     <div className="bg-white rounded-2xl border border-line shadow-card p-4 space-y-3">
+      {/* Nối kịch bản về mục kế hoạch — thiếu liên kết này thì Kế hoạch vs Thực hiện và Dashboard đếm sai */}
+      <Field label="Thuộc mục kế hoạch nào" hint="Nối để đối chiếu Kế hoạch vs Thực hiện và xếp đúng hệ KPI">
+        <Select value={f.content_item_id} onChange={e=>{ const id=e.target.value; const ci=(db.content_items||[]).find(c=>c.id===id);
+          setF(v=>({...v, content_item_id:id, ...(ci?{ framework_id:v.framework_id||ci.framework_id||'', san_pham_id:v.san_pham_id||ci.san_pham_id||'', kenh_id:v.kenh_id||ci.kenh_id||'' }:{}) })); }}>
+          <option value="">— Chưa nối (nên chọn) —</option>
+          {(db.content_items||[]).map(c=><option key={c.id} value={c.id}>{(c.tieu_de||'(không tên)')+(c.thang?(' · '+c.thang):'')}</option>)}
+        </Select></Field>
+      {!f.content_item_id && <div className="text-[11px] text-amber-600 -mt-1">⚠ Chưa nối vào kế hoạch → bài này sẽ không được tính vào tỷ lệ hoàn thành và không vào hệ KPI nào.</div>}
       <div className="grid sm:grid-cols-3 gap-2">
         <Field label="Framework (nhóm kịch bản)"><Select value={f.framework_id} onChange={e=>setF({...f,framework_id:e.target.value})}><option value="">— Chọn —</option>{(db.frameworks||[]).filter(x=>x.active!==false).map(x=><option key={x.id} value={x.id}>{x.ten}</option>)}</Select></Field>
         <Field label="Sản phẩm (spec thật)"><Select value={f.san_pham_id} onChange={e=>setF({...f,san_pham_id:e.target.value})}><option value="">— Không gắn —</option>{(db.san_pham||[]).filter(x=>x.active!==false).map(x=><option key={x.id} value={x.id}>{x.ten}</option>)}</Select></Field>
@@ -2872,6 +2880,8 @@ function KeHoachVsThucHien(){
   });
   const daDang=keHoach.filter(c=>daDangIds.has(c.id)).length;
   const pct=keHoach.length?Math.round(daDang/keHoach.length*100):0;
+  // kịch bản mồ côi: không nối về kế hoạch → làm mọi con số bên dưới bị thiếu
+  const scriptRoi=(db.scripts||[]).filter(s=>!s.content_item_id).length;
 
   // Nghẽn ở khâu nào: đếm theo trạng thái pipeline
   const theoTrangThai={};
@@ -2950,6 +2960,15 @@ function KeHoachVsThucHien(){
           </div>}
         {chuaGanPillar>0 && <div className="text-[11px] text-amber-600 mt-2">⚠ {chuaGanPillar} nội dung chưa gắn trụ cột — chưa tính vào tỷ lệ trên.</div>}
       </div>
+
+      {/* Cảnh báo mắt xích đứt: kịch bản không nối về kế hoạch thì mọi con số trên đây đều thiếu */}
+      {scriptRoi>0 && <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3">
+        <div className="text-xs font-semibold text-amber-800">⚠ {scriptRoi} kịch bản chưa nối về mục kế hoạch nào</div>
+        <div className="text-[11px] text-amber-700 mt-1 leading-relaxed">
+          Những bài này <b>không được tính</b> vào tỷ lệ hoàn thành ở trên, và cũng <b>không vào hệ KPI nào</b> ở tab KPI —
+          nghĩa là số thật cao hơn số đang hiển thị. Mở <b>Content → Kịch bản</b>, chọn mục “Thuộc mục kế hoạch nào” để nối lại.
+        </div>
+      </div>}
 
       {/* Kênh */}
       {kenhRows.length>0 && <div className="bg-white rounded-2xl border border-line shadow-card p-4">
