@@ -111,6 +111,11 @@ POST/CMT seeding, Quay công trình (3 mức chất lượng/source: Tạm ổn 
 ### ◐ P0 — Khung + 6 vai trò + `can()`
 Có 3 vai trò + KY_THUAT. ⏳ Còn: `can()` tập trung + 3 vai trò còn lại + sidebar theo quyền. Làm khi P3/P6/P9 cần.
 
+**⚠️ QUY ƯỚC MENU (BẮT BUỘC GIỮ — user yêu cầu, tránh dàn trải):** menu **2 cấp** qua `NAV_GROUPS` (KHÔNG dùng `NAV` phẳng nữa). Đúng **5 nhóm lớn dùng chung toàn app**: `Content` (✍️) · `Seeding` (💬) · `Quay CT` (🎬) · `Ngân sách` (💰) · `Hệ thống` (⚙️). **Mọi module mới phải nằm trong 1 trong 5 nhóm này** — không thêm mục cấp 1 mới. Module Content OS (P1–P10) vào nhóm **Content**.
+- Desktop: sidebar nhóm có tiêu đề nhỏ + danh sách module con.
+- Mobile: bottom bar **chỉ 5 nhóm, chia đều `flex-1`, KHÔNG cuộn ngang**; module con hiện ở **hàng tab phụ** trong header (tự ẩn khi nhóm chỉ có 1 module).
+- Nhóm rỗng sau khi lọc `BETA_KEYS` sẽ tự biến mất; badge nhóm = tổng badge module con.
+
 ### ✅ P1 — Dữ liệu nền: Sản phẩm + Claim cấm
 - Bảng: `san_pham`, `claim_cam`. Quyền: `canBaseData`.
 - Endpoints: `POST/PATCH/DELETE /sanpham`, `POST/PATCH/DELETE /claimcam`.
@@ -138,8 +143,9 @@ Thiết kế `content_items` bao cả 2 loại:
 - **Lát cắt:** (1) schema + import + list/Kanban → (2) calendar + cảnh báo lệch → (3) đẩy "Chờ duyệt" sang P6.
 - Thêm bảng phụ: `frameworks` (seed 12 nhóm kịch bản §7), `kenh` (seed kênh §7).
 
-### ⏳ P4 — Creative Studio (AI) — **thay chatbot rời**
-Chọn framework + brand_voice + sản phẩm + góc → Worker gọi Anthropic (cần API key) → output block (hook/problem/solution/proof/cta), lưu `script`+`script_version`. **Guardrail claim bắt buộc** (dùng `scanClaims` + chỉ trích `thong_so`): chạm CHAN → chặn "Gửi duyệt". Hook Optimizer 5 variant + lý do (KHÔNG dự đoán %). Cần: `ANTHROPIC_API_KEY`.
+### ◐ P4 — Creative Studio — **thay chatbot rời**
+**Lát cắt (1) ✅ ĐÃ LÀM & DEPLOY (rule-based, chưa cần API key):** bảng `scripts` (content_item_id, framework_id, san_pham_id, kenh_id, tieu_de, hook, sections[JSON], cta, brand_voice, claim_flags[JSON], trang_thai, version) + `script_versions` (snapshot mỗi lần lưu) + cột `content_strategy.brand_voice`. Endpoints `POST/PATCH/DELETE /scripts` + `GET /scripts/:id/versions` (staff-only; Sales không thấy `scripts` trong bootstrap). **Guardrail claim ở BACKEND** (`scanScriptClaims` quét toàn văn qua `scriptText`): mức `CHAN` → **422, không lưu**; `CANH_BAO` → lưu nhưng ghi `claim_flags`. UI `CreativeStudio` (nav `studio`, MKT/ADMIN, dev preview): danh sách thẻ + trình soạn (hook / các phần / CTA sửa tay), **`generateScript` rule-based cho cả 12 framework thật** — chỉ chèn `thong_so`/`tieu_chuan`/`huong_dan` THẬT của sản phẩm, thiếu dữ liệu thì để `[điền …]`, **không tự sinh số liệu**; cảnh báo claim hiện ngay khi gõ + khoá nút Lưu khi còn cụm CHẶN; xem lịch sử phiên bản. Test: 16/16 integration + 6/6 kiểm tra bộ sinh.
+**Lát cắt (2) ⏳ (chờ `ANTHROPIC_API_KEY`):** thay/bổ sung bộ sinh bằng gọi Anthropic từ Worker; Hook Optimizer 5 variant + lý do (**KHÔNG dự đoán %view**). Giữ nguyên guardrail claim + nguyên tắc không bịa số liệu. Fallback về rule-based khi thiếu key.
 
 ### ⏳ P5 — Kho footage & shot list (mobile-first, R2)
 ### ⏳ P6 — Hàng đợi duyệt (2 cổng song song: nội dung / claim) → thêm TRUONG_MKT
@@ -202,5 +208,7 @@ Tokens Tailwind (inline config trong `seeding-app.html`): `ink #0b3543` (soft #1
 - Mobile: thanh menu dưới cuộn ngang 1 dòng (nhãn ngắn + tự cuộn mục mở).
 - P3 lát cắt (2a) — Calendar (agenda) + PIC theo khâu + form mobile 1-cột (4 test).
 - `310a499` — P3 lát cắt (2b): import .xlsx trực tiếp (SheetJS) — sheet picker + dò dòng tiêu đề + auto-map cột + mặc định lần import + khớp tên→id (8 test, verified 2 file thật).
+- `67fd596` — **P4 Creative Studio**: bảng `scripts`+`script_versions`, cột `content_strategy.brand_voice`; CRUD `/scripts` + `GET /scripts/:id/versions` (staff-only); **guardrail claim** (CHẶN→422 không lưu, Cảnh báo→lưu + ghi `claim_flags`); version tăng + snapshot mỗi lần lưu. UI: danh sách + trình soạn, **sinh nháp rule-based theo 12 framework thật** chỉ chèn dữ kiện thật của sản phẩm, thiếu thì để `[điền …]` (16 test + 6 kiểm tra bộ sinh).
+- **MENU 2 CẤP** — gom toàn app vào **5 nhóm lớn**: `Content` · `Seeding` · `Quay CT` · `Ngân sách` · `Hệ thống` (`NAV_GROUPS` thay `NAV`). Desktop: sidebar có tiêu đề nhóm. Mobile: **bottom bar chỉ 5 nhóm chia đều, KHÔNG cuộn ngang** + hàng **tab phụ** cho module con (ẩn khi nhóm chỉ 1 module) (16 kiểm tra cấu trúc nav).
 - (Trước đó, Domain A: seeding/quay/lịch/thư viện ảnh/vinh danh/chống trùng… đã deploy.)
-- ▶️ **Kế tiếp:** P4 Creative Studio — sinh kịch bản theo framework + guardrail claim (chỉ trích specs thật, chặn ClaimCam) + brand_voice; graceful fallback khi CHƯA có `ANTHROPIC_API_KEY`.
+- ▶️ **Kế tiếp:** P5+ theo lộ trình §5. Khi có `ANTHROPIC_API_KEY` → nâng P4 từ rule-based lên gợi ý AI (vẫn giữ nguyên guardrail claim + không bịa số liệu).
