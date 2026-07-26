@@ -79,6 +79,10 @@ async function ensureSchema(env){
     `CREATE TABLE IF NOT EXISTS air_posts (id TEXT PRIMARY KEY, content_item_id TEXT, script_id TEXT, kenh_id TEXT, tieu_de TEXT, ngay_dang TEXT, link_bai TEXT, ma_theo_doi TEXT, loai_ma TEXT, checklist TEXT, ghi_chu TEXT, trang_thai TEXT, nguoi_dang TEXT, nguoi_dang_ten TEXT, created_at TEXT, updated_at TEXT, posted_at TEXT)`,
     // 1 mã theo dõi chỉ thuộc 1 bài → tránh "1 voucher nhiều video" làm P8 không quy đơn được
     `CREATE UNIQUE INDEX IF NOT EXISTS idx_air_ma ON air_posts(ma_theo_doi) WHERE ma_theo_doi IS NOT NULL AND ma_theo_doi<>''`,
+    // CONTENT OS · P8 — Kết quả với 3 MỨC TIN CẬY (TUYỆT ĐỐI KHÔNG cộng dồn 3 mức thành "doanh thu từ content")
+    `CREATE TABLE IF NOT EXISTS ket_qua (id TEXT PRIMARY KEY, air_post_id TEXT, muc_tin_cay TEXT, nguon TEXT, ky TEXT, doanh_thu REAL DEFAULT 0, so_don INTEGER DEFAULT 0, luot_xem INTEGER DEFAULT 0, luot_tuong_tac INTEGER DEFAULT 0, luot_click INTEGER DEFAULT 0, ma_theo_doi TEXT, ghi_chu TEXT, created_at TEXT, created_by TEXT, created_by_name TEXT)`,
+    // Đơn không khớp được 1 bài duy nhất → CHỜ GÁN TAY, KHÔNG chia đều (ràng buộc §9)
+    `CREATE TABLE IF NOT EXISTS don_cho_gan (id TEXT PRIMARY KEY, nguon TEXT, ma_doi_soat TEXT, doanh_thu REAL DEFAULT 0, so_don INTEGER DEFAULT 0, ky TEXT, ly_do TEXT, trang_thai TEXT, air_post_id TEXT, created_at TEXT, decided_at TEXT, decided_by_name TEXT)`,
   ];
   await env.DB.batch(stmts.map(s=>env.DB.prepare(s)));
   // thêm cột đơn giá quay công trình cho DB cũ (bỏ qua nếu đã có)
@@ -298,6 +302,16 @@ async function ensurePostSlots(env){
 }
 
 // Content OS · P3 — chèn 1 content_item từ body (dùng chung cho tạo & import)
+// P8 — 3 MỨC TIN CẬY. Ranh giới đạo đức số liệu: 3 mức này KHÔNG BAO GIỜ được cộng dồn
+// thành một con số "doanh thu từ content" — luôn báo cáo tách 3 cột riêng.
+const MUC_TIN_CAY = {
+  TRUC_TIEP:   'Trực tiếp',      // sàn trả về đúng mã của bài → quy đơn chắc chắn
+  GIAN_TIEP:   'Gián tiếp',      // có liên hệ nhưng không chắc 100% (vd voucher dùng chung)
+  KHONG_QUY_DON:'Không quy đơn', // chỉ là chỉ số hiển thị/tương tác, KHÔNG suy ra doanh thu
+};
+const NGUON_KQ = ['TIKTOK_SHOP','SHOPEE','API_KENH','NHAP_TAY'];
+// Nguồn nào mặc định thuộc mức tin cậy nào (người nhập vẫn có thể chọn khác)
+const NGUON_MUC_MAC_DINH = { TIKTOK_SHOP:'TRUC_TIEP', SHOPEE:'GIAN_TIEP', API_KENH:'KHONG_QUY_DON', NHAP_TAY:'KHONG_QUY_DON' };
 // P7 — Checklist đăng thủ công. KHÔNG auto-post (TikTok Content Posting API cần audit → SELF_ONLY).
 // bat_buoc=true → phải tick hết mới cho đánh dấu "Đã đăng".
 const AIR_CHECKLIST = [
@@ -408,6 +422,9 @@ async function bootstrap(env, u){
   // P7 — bài đăng (checklist thủ công + mã theo dõi)
   const air_posts = canContent ? (await env.DB.prepare(`SELECT * FROM air_posts ORDER BY created_at DESC`).all()).results
     .map(r=>({ ...r, checklist: JSON.parse(r.checklist||'{}') })) : [];
+  // P8 — kết quả 3 mức tin cậy + hàng đợi gán tay
+  const ket_qua = canContent ? (await env.DB.prepare(`SELECT * FROM ket_qua ORDER BY created_at DESC`).all()).results : [];
+  const don_cho_gan = canContent ? (await env.DB.prepare(`SELECT * FROM don_cho_gan ORDER BY created_at DESC`).all()).results : [];
 
   return {
     me: rowUser(u),
@@ -416,6 +433,7 @@ async function bootstrap(env, u){
     filming_templates, project_filmings, guides, post_type_prefs, post_slots, media_library,
     san_pham, claim_cam, pillars, content_strategy,
     frameworks, kenh, content_items, scripts, approvals, air_posts, air_checklist:AIR_CHECKLIST,
+    ket_qua, don_cho_gan, muc_tin_cay:MUC_TIN_CAY, nguon_kq:NGUON_KQ,
     pricing: pricingRow, payouts: [], audit,
   };
 }
@@ -1018,6 +1036,86 @@ async function handleApi(request, env){
     if(!isStaff(me)) return json({error:'Không có quyền'},403);
     await env.DB.prepare(`DELETE FROM air_posts WHERE id=?`).bind(m[1]).run();
     await logAudit(env,me,'xoá bài đăng','air_posts',m[1]);
+    return json({ db: await bootstrap(env, me) });
+  }
+
+  // ===== CONTENT OS · P8 — Nhập kết quả (3 mức tin cậy) + hàng đợi gán tay =====
+  if(path==='/ketqua' && method==='POST'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    if(!body.air_post_id) return json({error:'Cần chọn bài đăng'},400);
+    const ap=await env.DB.prepare(`SELECT * FROM air_posts WHERE id=?`).bind(body.air_post_id).first();
+    if(!ap) return json({error:'Không tìm thấy bài đăng'},404);
+    const muc=String(body.muc_tin_cay||'').toUpperCase();
+    if(!MUC_TIN_CAY[muc]) return json({error:'Mức tin cậy không hợp lệ'},400);
+    // Ranh giới: mức KHÔNG QUY ĐƠN không được mang doanh thu/đơn — nếu không sẽ thành "bịa" quy đơn
+    const dt=Number(body.doanh_thu)||0, sd=Number(body.so_don)||0;
+    if(muc==='KHONG_QUY_DON' && (dt>0||sd>0))
+      return json({error:'Mức "Không quy đơn" chỉ ghi chỉ số hiển thị/tương tác, không được gắn doanh thu hay số đơn'},422);
+    const id=uid('kq');
+    await env.DB.prepare(`INSERT INTO ket_qua (id,air_post_id,muc_tin_cay,nguon,ky,doanh_thu,so_don,luot_xem,luot_tuong_tac,luot_click,ma_theo_doi,ghi_chu,created_at,created_by,created_by_name) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+      .bind(id, ap.id, muc, (body.nguon||'NHAP_TAY').trim(), (body.ky||'').trim(), dt, sd,
+        Number(body.luot_xem)||0, Number(body.luot_tuong_tac)||0, Number(body.luot_click)||0,
+        ap.ma_theo_doi||'', (body.ghi_chu||'').trim(), nowISO(), me.id, me.ho_ten).run();
+    await logAudit(env,me,'nhập kết quả','ket_qua',id,MUC_TIN_CAY[muc]);
+    return json({ db: await bootstrap(env, me), id });
+  }
+  // Import lô đối soát từ sàn: khớp mã → quy đơn; KHÔNG khớp duy nhất → vào hàng đợi gán tay
+  if(path==='/ketqua/import' && method==='POST'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    const rows=Array.isArray(body.rows)?body.rows:[];
+    const nguon=(body.nguon||'SHOPEE').trim();
+    const muc=String(body.muc_tin_cay||NGUON_MUC_MAC_DINH[nguon]||'GIAN_TIEP').toUpperCase();
+    if(!MUC_TIN_CAY[muc]) return json({error:'Mức tin cậy không hợp lệ'},400);
+    if(muc==='KHONG_QUY_DON') return json({error:'Import đối soát phải là mức quy đơn được (Trực tiếp/Gián tiếp)'},400);
+    let gan=0, cho=0;
+    for(const r of rows){
+      const ma=String(r.ma_theo_doi||r.ma||'').trim();
+      const dt=Number(r.doanh_thu)||0, sd=Number(r.so_don)||0;
+      if(!ma && !dt && !sd) continue;
+      // Khớp mã: CHỈ quy đơn khi khớp ĐÚNG 1 bài. Mọi trường hợp khác → gán tay.
+      const hits = ma ? (await env.DB.prepare(`SELECT * FROM air_posts WHERE ma_theo_doi=?`).bind(ma).all()).results : [];
+      if(hits.length===1){
+        await env.DB.prepare(`INSERT INTO ket_qua (id,air_post_id,muc_tin_cay,nguon,ky,doanh_thu,so_don,luot_xem,luot_tuong_tac,luot_click,ma_theo_doi,ghi_chu,created_at,created_by,created_by_name) VALUES (?,?,?,?,?,?,?,0,0,0,?,?,?,?,?)`)
+          .bind(uid('kq'), hits[0].id, muc, nguon, (r.ky||body.ky||'').trim(), dt, sd, ma, 'Khớp mã tự động', nowISO(), me.id, me.ho_ten).run();
+        gan++;
+      } else {
+        await env.DB.prepare(`INSERT INTO don_cho_gan (id,nguon,ma_doi_soat,doanh_thu,so_don,ky,ly_do,trang_thai,created_at) VALUES (?,?,?,?,?,?,?, 'CHO_GAN',?)`)
+          .bind(uid('dcg'), nguon, ma, dt, sd, (r.ky||body.ky||'').trim(),
+            !ma ? 'Dòng không có mã theo dõi' : (hits.length===0 ? 'Mã không khớp bài nào' : 'Mã khớp nhiều bài ('+hits.length+')'), nowISO()).run();
+        cho++;
+      }
+    }
+    await logAudit(env,me,'import đối soát','ket_qua',nguon,'khớp '+gan+' · chờ gán '+cho);
+    return json({ db: await bootstrap(env, me), gan, cho });
+  }
+  if((m=path.match(/^\/ketqua\/(.+)$/)) && method==='DELETE'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    await env.DB.prepare(`DELETE FROM ket_qua WHERE id=?`).bind(m[1]).run();
+    await logAudit(env,me,'xoá kết quả','ket_qua',m[1]);
+    return json({ db: await bootstrap(env, me) });
+  }
+  // Gán tay 1 đơn trong hàng đợi vào đúng 1 bài (KHÔNG chia đều cho nhiều bài)
+  if((m=path.match(/^\/donchogan\/(.+)\/assign$/)) && method==='POST'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    const id=m[1]; const d=await env.DB.prepare(`SELECT * FROM don_cho_gan WHERE id=?`).bind(id).first();
+    if(!d) return json({error:'Không tìm thấy'},404);
+    if(d.trang_thai!=='CHO_GAN') return json({error:'Đơn này đã xử lý'},409);
+    const ap=await env.DB.prepare(`SELECT * FROM air_posts WHERE id=?`).bind(body.air_post_id||'').first();
+    if(!ap) return json({error:'Chọn bài đăng để gán'},400);
+    // Gán tay luôn là GIÁN TIẾP: người vận hành suy luận, không phải sàn khẳng định
+    await env.DB.prepare(`INSERT INTO ket_qua (id,air_post_id,muc_tin_cay,nguon,ky,doanh_thu,so_don,luot_xem,luot_tuong_tac,luot_click,ma_theo_doi,ghi_chu,created_at,created_by,created_by_name) VALUES (?,?,'GIAN_TIEP',?,?,?,?,0,0,0,?,?,?,?,?)`)
+      .bind(uid('kq'), ap.id, d.nguon, d.ky||'', Number(d.doanh_thu)||0, Number(d.so_don)||0, d.ma_doi_soat||'', 'Gán tay từ hàng đợi', nowISO(), me.id, me.ho_ten).run();
+    await env.DB.prepare(`UPDATE don_cho_gan SET trang_thai='DA_GAN', air_post_id=?, decided_at=?, decided_by_name=? WHERE id=?`).bind(ap.id,nowISO(),me.ho_ten,id).run();
+    await logAudit(env,me,'gán tay đơn','don_cho_gan',id,ap.tieu_de||'');
+    return json({ db: await bootstrap(env, me) });
+  }
+  if((m=path.match(/^\/donchogan\/(.+)\/skip$/)) && method==='POST'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    const id=m[1]; const d=await env.DB.prepare(`SELECT * FROM don_cho_gan WHERE id=?`).bind(id).first();
+    if(!d) return json({error:'Không tìm thấy'},404);
+    if(d.trang_thai!=='CHO_GAN') return json({error:'Đơn này đã xử lý'},409);
+    await env.DB.prepare(`UPDATE don_cho_gan SET trang_thai='BO_QUA', decided_at=?, decided_by_name=? WHERE id=?`).bind(nowISO(),me.ho_ten,id).run();
+    await logAudit(env,me,'bỏ qua đơn không quy được','don_cho_gan',id,(body.ly_do||'').trim());
     return json({ db: await bootstrap(env, me) });
   }
   if((m=path.match(/^\/posts\/(.+)\/review$/)) && method==='POST'){

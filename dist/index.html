@@ -140,6 +140,9 @@ const AIR_CHECKLIST_FE = [
   {k:'hashtag_cta',    label:'Hashtag & CTA đầy đủ', bat_buoc:false},
   {k:'hen_gio',        label:'Đã hẹn giờ / canh khung giờ đăng', bat_buoc:false},
 ];
+const MUC_TIN_CAY_FE = { TRUC_TIEP:'Trực tiếp', GIAN_TIEP:'Gián tiếp', KHONG_QUY_DON:'Không quy đơn' };
+const MUC_STYLE = { TRUC_TIEP:'bg-emerald-100 text-emerald-700', GIAN_TIEP:'bg-amber-100 text-amber-700', KHONG_QUY_DON:'bg-slate-100 text-slate-600' };
+const NGUON_KQ_FE = [{v:'TIKTOK_SHOP',label:'TikTok Shop'},{v:'SHOPEE',label:'Shopee'},{v:'API_KENH',label:'API kênh (view/tương tác)'},{v:'NHAP_TAY',label:'Nhập tay'}];
 const LOAI_MA = [{v:'VOUCHER',label:'Mã voucher'},{v:'UTM',label:'Link UTM'},{v:'MA_DON',label:'Mã đơn riêng'},{v:'KHAC',label:'Khác'}];
 const ST = { NHAP:'NHAP', CHO_DUYET:'CHO_DUYET', DAT:'DAT', KHONG_DAT:'KHONG_DAT', DA_CHI:'DA_CHI' };
 const ST_LABEL = { NHAP:'Nháp', CHO_DUYET:'Chờ duyệt', DAT:'Đạt', KHONG_DAT:'Không đạt', DA_CHI:'Đã chi' };
@@ -370,7 +373,7 @@ function seedDB(){
     frameworks: ['Chuẩn bán hàng','PAS','Phản biện comment','Test chất lượng','Hành trình thi công','Size / Combo','FOMO','Review KOC','"đừng..." Trend','Q&A khách hàng','So sánh kinh tế','Hướng dẫn thi công'].map((ten,i)=>({id:uid('fw'),ten,mo_ta:'',thu_tu:i+1,active:true,created_at:now()})),
     kenh: [['Fanpage Kingsmen','FANPAGE','Kingsmen'],['TikTok Kingsmen','TIKTOK','Kingsmen'],['YouTube Short Kingsmen','YOUTUBE','Kingsmen'],['Fanpage VKXD','FANPAGE','VKXD'],['TikTok VKXD','TIKTOK','VKXD'],['Shopee VKXD','SHOPEE','VKXD'],['Zalo OA','ZALO_OA','Kingsmen'],['CHÍNH - Vật liệu mới FINEX','TIKTOK','FINEX'],['AFF - Sơn sàn hiệu ứng','TIKTOK','FINEX'],['BC - Vật liệu hoàn thiện','TIKTOK','Kingsmen']].map(([ten,loai,th])=>({id:uid('kn'),ten,loai,thuong_hieu:th,active:true,created_at:now()})),
     content_items: [],
-    scripts: [], approvals: [], air_posts: [], air_checklist: AIR_CHECKLIST_FE,
+    scripts: [], approvals: [], air_posts: [], air_checklist: AIR_CHECKLIST_FE, ket_qua: [], don_cho_gan: [],
     payouts: [],
     audit: [],
   };
@@ -411,6 +414,7 @@ function migrate(db){
   db.kenh ||= [];
   db.content_items ||= [];
   db.scripts ||= []; db.approvals ||= []; db.air_posts ||= []; db.air_checklist ||= AIR_CHECKLIST_FE;
+  db.ket_qua ||= []; db.don_cho_gan ||= [];
   db.post_seedings.forEach(p=>{ p.react ??= 0; p.so_cmt_seeding ??= 0; p.so_cmt_tu_nhien ??= 0; p.thanh_tien ??= 0; });
   db.cmt_seedings.forEach(c=>{ c.proofs ||= []; c.so_cmt_seeding ??= 0; c.react ??= 0; c.so_cmt_tu_nhien ??= 0; c.thanh_tien ??= 0; });
   db.groups.forEach(g=>{ g.uu_tien ??= false; });
@@ -551,6 +555,34 @@ function AppProvider({children}){
         if(!String(a.ma_theo_doi||'').trim()) return {ok:false,msg:'Cần mã theo dõi để quy đơn'};
         a.trang_thai='DA_DANG'; a.posted_at=now(); a.updated_at=now(); commit(); return {ok:true}; },
       deleteAir: async id=>{ S.air_posts=(S.air_posts||[]).filter(x=>x.id!==id); commit(); return true; },
+      createKetQua: async o=>{ S.ket_qua ||= []; const muc=String(o.muc_tin_cay||'').toUpperCase();
+        if(!MUC_TIN_CAY_FE[muc]) return {ok:false,msg:'Mức tin cậy không hợp lệ'};
+        const dt=Number(o.doanh_thu)||0, sd=Number(o.so_don)||0;
+        if(muc==='KHONG_QUY_DON'&&(dt>0||sd>0)) return {ok:false,msg:'Mức "Không quy đơn" không được gắn doanh thu/số đơn'};
+        const ap=(S.air_posts||[]).find(x=>x.id===o.air_post_id); if(!ap) return {ok:false,msg:'Không tìm thấy bài đăng'};
+        S.ket_qua.unshift({ id:uid('kq'), air_post_id:ap.id, muc_tin_cay:muc, nguon:o.nguon||'NHAP_TAY', ky:o.ky||'', doanh_thu:dt, so_don:sd,
+          luot_xem:Number(o.luot_xem)||0, luot_tuong_tac:Number(o.luot_tuong_tac)||0, luot_click:Number(o.luot_click)||0,
+          ma_theo_doi:ap.ma_theo_doi||'', ghi_chu:o.ghi_chu||'', created_at:now(), created_by_name:meRef.current.ho_ten });
+        commit(); return {ok:true}; },
+      deleteKetQua: async id=>{ S.ket_qua=(S.ket_qua||[]).filter(x=>x.id!==id); commit(); return true; },
+      importKetQua: async o=>{ S.ket_qua ||= []; S.don_cho_gan ||= []; const nguon=o.nguon||'SHOPEE';
+        const muc=String(o.muc_tin_cay||(nguon==='TIKTOK_SHOP'?'TRUC_TIEP':'GIAN_TIEP')).toUpperCase();
+        if(muc==='KHONG_QUY_DON') return {ok:false,msg:'Import phải là mức quy đơn được'};
+        let gan=0,cho=0;
+        (o.rows||[]).forEach(r=>{ const ma=String(r.ma_theo_doi||r.ma||'').trim(); const dt=Number(r.doanh_thu)||0, sd=Number(r.so_don)||0;
+          if(!ma&&!dt&&!sd) return;
+          const hits=ma?(S.air_posts||[]).filter(a=>a.ma_theo_doi===ma):[];
+          if(hits.length===1){ S.ket_qua.unshift({ id:uid('kq'), air_post_id:hits[0].id, muc_tin_cay:muc, nguon, ky:r.ky||o.ky||'', doanh_thu:dt, so_don:sd, luot_xem:0, luot_tuong_tac:0, luot_click:0, ma_theo_doi:ma, ghi_chu:'Khớp mã tự động', created_at:now(), created_by_name:meRef.current.ho_ten }); gan++; }
+          else { S.don_cho_gan.unshift({ id:uid('dcg'), nguon, ma_doi_soat:ma, doanh_thu:dt, so_don:sd, ky:r.ky||o.ky||'', trang_thai:'CHO_GAN', created_at:now(),
+            ly_do: !ma?'Dòng không có mã theo dõi':(hits.length===0?'Mã không khớp bài nào':'Mã khớp nhiều bài ('+hits.length+')') }); cho++; } });
+        commit(); return {ok:true,gan,cho}; },
+      assignDon: async (id,air_post_id)=>{ const d=(S.don_cho_gan||[]).find(x=>x.id===id); if(!d) return {ok:false,msg:'Không tìm thấy'};
+        if(d.trang_thai!=='CHO_GAN') return {ok:false,msg:'Đơn này đã xử lý'};
+        const ap=(S.air_posts||[]).find(x=>x.id===air_post_id); if(!ap) return {ok:false,msg:'Chọn bài đăng để gán'};
+        S.ket_qua.unshift({ id:uid('kq'), air_post_id:ap.id, muc_tin_cay:'GIAN_TIEP', nguon:d.nguon, ky:d.ky||'', doanh_thu:Number(d.doanh_thu)||0, so_don:Number(d.so_don)||0, luot_xem:0, luot_tuong_tac:0, luot_click:0, ma_theo_doi:d.ma_doi_soat||'', ghi_chu:'Gán tay từ hàng đợi', created_at:now(), created_by_name:meRef.current.ho_ten });
+        Object.assign(d,{trang_thai:'DA_GAN',air_post_id:ap.id,decided_at:now(),decided_by_name:meRef.current.ho_ten}); commit(); return {ok:true}; },
+      skipDon: async (id,ly_do)=>{ const d=(S.don_cho_gan||[]).find(x=>x.id===id); if(!d||d.trang_thai!=='CHO_GAN') return false;
+        Object.assign(d,{trang_thai:'BO_QUA',decided_at:now(),decided_by_name:meRef.current.ho_ten}); commit(); return true; },
       decideApproval: async (id,result,ghi_chu)=>{ const ap=(S.approvals||[]).find(a=>a.id===id); if(!ap) return false;
         const arr = ap.doi_tuong==='SCRIPT'?S.scripts:S.content_items; const o=(arr||[]).find(x=>x.id===ap.doi_tuong_id);
         Object.assign(ap,{ trang_thai:result==='DAT'?'DAT':'TRA_LAI', nguoi_duyet:meRef.current.id, nguoi_duyet_ten:meRef.current.ho_ten, ghi_chu:ghi_chu||'', decided_at:now() });
@@ -694,6 +726,14 @@ function AppProvider({children}){
     publishAir: async id => { try { const r=await call('/air/'+id+'/publish',{method:'POST'}); if(r&&r.db) setDb(r.db); return {ok:true}; }
       catch(e){ return {ok:false, thieu:e.thieu, msg:e.message}; } },
     deleteAir: id => mut('/air/'+id, {method:'DELETE'}),
+    createKetQua: async o => { try { const r=await call('/ketqua',{method:'POST',body:o}); if(r&&r.db) setDb(r.db); return {ok:true}; }
+      catch(e){ return {ok:false, msg:e.message}; } },
+    deleteKetQua: id => mut('/ketqua/'+id, {method:'DELETE'}),
+    importKetQua: async o => { try { const r=await call('/ketqua/import',{method:'POST',body:o}); if(r&&r.db) setDb(r.db); return {ok:true, gan:r.gan, cho:r.cho}; }
+      catch(e){ return {ok:false, msg:e.message}; } },
+    assignDon: async (id,air_post_id) => { try { const r=await call('/donchogan/'+id+'/assign',{method:'POST',body:{air_post_id}}); if(r&&r.db) setDb(r.db); return {ok:true}; }
+      catch(e){ return {ok:false, msg:e.message}; } },
+    skipDon: (id,ly_do) => mut('/donchogan/'+id+'/skip', {method:'POST', body:{ly_do}}),
     createCmtSeed: c => mut('/cmtseed', {method:'POST', body:c}),
     reviewCmtSeed: (id, result, reason) => mut(`/cmtseed/${id}/review`, {method:'POST', body:{result, reason}}),
     markPaid: (sales_id, ky) => mut('/markpaid', {method:'POST', body:{sales_id, ky}}),
@@ -902,6 +942,7 @@ const NAV_GROUPS = {
       {key:'studio', label:'Creative Studio', short:'Kịch bản', icon:'✍️'},
       {key:'approve', label:'Hàng đợi duyệt', short:'Duyệt', icon:'🛂'},
       {key:'air', label:'Đăng bài', short:'Đăng', icon:'🚀'},
+      {key:'ketqua', label:'Kết quả', short:'Kết quả', icon:'📈'},
       {key:'products', label:'Sản phẩm & Claim', short:'Sản phẩm', icon:'🧪'},
     ]},
     {key:'g_seeding', label:'Seeding', icon:'💬', items:[
@@ -936,6 +977,7 @@ const NAV_GROUPS = {
       {key:'studio', label:'Creative Studio', short:'Kịch bản', icon:'✍️'},
       {key:'approve', label:'Hàng đợi duyệt', short:'Duyệt', icon:'🛂'},
       {key:'air', label:'Đăng bài', short:'Đăng', icon:'🚀'},
+      {key:'ketqua', label:'Kết quả', short:'Kết quả', icon:'📈'},
       {key:'products', label:'Sản phẩm & Claim', short:'Sản phẩm', icon:'🧪'},
     ]},
     {key:'g_seeding', label:'Seeding', icon:'💬', items:[
@@ -980,7 +1022,7 @@ function ProfileModal({open, onClose}){
   </Modal>;
 }
 // Module đang NÂNG CẤP — chỉ tài khoản dev preview (is_dev) mới thấy
-const BETA_KEYS = new Set(['strategy','plan','products','studio','approve','air']);
+const BETA_KEYS = new Set(['strategy','plan','products','studio','approve','air','ketqua']);
 function Shell(){
   const { me, logout, db } = useApp();
   // Lọc module đang nâng cấp → bỏ nhóm rỗng
@@ -1023,6 +1065,7 @@ function Shell(){
       case 'studio': return <CreativeStudio/>;
       case 'approve': return <ApprovalQueue/>;
       case 'air': return <AirPosts/>;
+      case 'ketqua': return <KetQua/>;
       case 'schedule': return <PostSchedule/>;
       case 'pay_report': return <MktPayReport/>;
       case 'users': return <UserManagement/>;
@@ -2413,6 +2456,198 @@ function AirEditor({post, onClose}){
     </div>}
     {posted && <div className="text-[11px] text-slate-400">Đã đăng lúc {fmtDate(post.posted_at)} — khoá chỉnh sửa để giữ nguyên dữ liệu quy đơn.</div>}
   </div>;
+}
+
+/* ============================================================
+   CONTENT OS · P8 — KẾT QUẢ (3 mức tin cậy, KHÔNG cộng dồn) + gán tay
+============================================================ */
+function KetQua(){
+  const { db, createKetQua, deleteKetQua, importKetQua, assignDon, skipDon, notify } = useApp();
+  const KQ=db.ket_qua||[], DCG=db.don_cho_gan||[], AIR=db.air_posts||[];
+  const [tab,setTab]=useState('tong_hop');
+  const [form,setForm]=useState(null); const [imp,setImp]=useState(false); const [assign,setAssign]=useState(null);
+  const [ky,setKy]=useState('');
+  const airTen=id=>{ const a=AIR.find(x=>x.id===id); return a?(a.tieu_de||'(không tên)'):'—'; };
+  const inKy=k=>!ky || (k.ky||'')===ky;
+  const kyList=[...new Set(KQ.map(k=>k.ky).filter(Boolean))].sort().reverse();
+  // 3 mức TÁCH BẠCH — cố ý không có biến "tổng cộng"
+  const bucket=m=>KQ.filter(k=>k.muc_tin_cay===m && inKy(k));
+  const sum=(arr,f)=>arr.reduce((s,x)=>s+(Number(x[f])||0),0);
+  const cho=DCG.filter(d=>d.trang_thai==='CHO_GAN');
+  const MucCard=({m,note})=>{ const arr=bucket(m); return <div className="bg-white rounded-2xl border border-line shadow-card p-3">
+    <div className="flex items-center gap-2 mb-1">
+      <span className={"text-[10px] px-1.5 py-0.5 rounded-full font-semibold "+MUC_STYLE[m]}>{MUC_TIN_CAY_FE[m]}</span>
+      <span className="text-[10px] text-slate-400 ml-auto">{arr.length} bản ghi</span>
+    </div>
+    {m==='KHONG_QUY_DON'
+      ? <div className="mt-1">
+          <div className="text-lg font-display font-bold text-ink">{sum(arr,'luot_xem').toLocaleString('vi-VN')}<span className="text-xs font-normal text-slate-400"> lượt xem</span></div>
+          <div className="text-xs text-slate-500">{sum(arr,'luot_tuong_tac').toLocaleString('vi-VN')} tương tác · {sum(arr,'luot_click').toLocaleString('vi-VN')} click</div>
+        </div>
+      : <div className="mt-1">
+          <div className="text-lg font-display font-bold text-ink">{sum(arr,'doanh_thu').toLocaleString('vi-VN')}<span className="text-xs font-normal text-slate-400"> đ</span></div>
+          <div className="text-xs text-slate-500">{sum(arr,'so_don').toLocaleString('vi-VN')} đơn</div>
+        </div>}
+    <div className="text-[10px] text-slate-400 mt-1.5 leading-snug">{note}</div>
+  </div>; };
+  return <div className="space-y-4">
+    <div className="flex items-center justify-between flex-wrap gap-2">
+      <h2 className="font-display text-lg font-bold text-ink">📈 Kết quả</h2>
+      <div className="flex gap-2">
+        <Btn variant="ghost" onClick={()=>setImp(true)}>⬆ Import đối soát</Btn>
+        <Btn variant="brand" onClick={()=>setForm({muc_tin_cay:'TRUC_TIEP',nguon:'TIKTOK_SHOP'})}>＋ Nhập kết quả</Btn>
+      </div>
+    </div>
+
+    <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3">
+      <div className="text-xs font-semibold text-amber-800">⚠️ 3 mức tin cậy KHÔNG được cộng dồn</div>
+      <div className="text-[11px] text-amber-700 mt-1 leading-relaxed">
+        Ba con số dưới đây đo ba thứ khác nhau, cộng lại là <b>sai bản chất</b> và sẽ thổi phồng đóng góp của content.
+        Luôn đọc <b>tách riêng</b> và nói rõ mức tin cậy khi báo cáo.
+      </div>
+    </div>
+
+    <div className="flex flex-wrap items-center gap-2">
+      <Select value={ky} onChange={e=>setKy(e.target.value)} className="w-auto"><option value="">Tất cả kỳ</option>{kyList.map(k=><option key={k} value={k}>{k}</option>)}</Select>
+      {cho.length>0 && <button onClick={()=>setTab('hang_doi')} className="text-xs px-2 py-1 rounded-lg bg-rose-100 text-rose-700 font-semibold">🕗 {cho.length} đơn chờ gán tay</button>}
+    </div>
+
+    <div className="grid sm:grid-cols-3 gap-3">
+      <MucCard m="TRUC_TIEP" note="Sàn trả về đúng mã của bài → quy đơn chắc chắn."/>
+      <MucCard m="GIAN_TIEP" note="Có liên hệ nhưng không chắc 100% (voucher dùng chung, gán tay)."/>
+      <MucCard m="KHONG_QUY_DON" note="Chỉ số hiển thị/tương tác. KHÔNG suy ra doanh thu."/>
+    </div>
+
+    <div className="flex gap-1 bg-slate-100 rounded-xl p-1 w-fit">
+      {[['tong_hop','Bản ghi ('+KQ.filter(inKy).length+')'],['hang_doi','Hàng đợi gán tay ('+cho.length+')']].map(([k,l])=>
+        <button key={k} onClick={()=>setTab(k)} className={"px-3 py-1 rounded-lg text-xs font-semibold "+(tab===k?'bg-white text-ink shadow-sm':'text-slate-500')}>{l}</button>)}
+    </div>
+
+    {tab==='tong_hop' ? (KQ.filter(inKy).length===0 ? <Empty>Chưa có kết quả nào.</Empty> :
+      <div className="space-y-2">{KQ.filter(inKy).map(k=>
+        <div key={k.id} className="bg-white rounded-2xl border border-line shadow-card p-3">
+          <div className="flex items-start gap-2 flex-wrap">
+            <span className={"text-[10px] px-1.5 py-0.5 rounded-full font-semibold "+MUC_STYLE[k.muc_tin_cay]}>{MUC_TIN_CAY_FE[k.muc_tin_cay]}</span>
+            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-600">{(NGUON_KQ_FE.find(n=>n.v===k.nguon)||{}).label||k.nguon}</span>
+            {k.ky && <span className="text-[10px] text-slate-400">{k.ky}</span>}
+            <button onClick={()=>{ if(confirm('Xoá bản ghi kết quả này?')) deleteKetQua(k.id).then(ok=>ok&&notify('Đã xoá')); }} className="text-xs text-rose-400 hover:underline ml-auto">Xoá</button>
+          </div>
+          <div className="text-sm font-semibold text-ink mt-1">{airTen(k.air_post_id)}</div>
+          <div className="text-xs text-slate-600 mt-0.5">
+            {k.muc_tin_cay==='KHONG_QUY_DON'
+              ? <>{Number(k.luot_xem).toLocaleString('vi-VN')} xem · {Number(k.luot_tuong_tac).toLocaleString('vi-VN')} tương tác · {Number(k.luot_click).toLocaleString('vi-VN')} click</>
+              : <>{Number(k.doanh_thu).toLocaleString('vi-VN')}đ · {Number(k.so_don).toLocaleString('vi-VN')} đơn</>}
+            {k.ma_theo_doi && <span className="font-mono text-slate-400"> · {k.ma_theo_doi}</span>}
+          </div>
+          {k.ghi_chu && <div className="text-[11px] text-slate-400 mt-0.5">{k.ghi_chu}</div>}
+        </div>)}
+      </div>)
+    : (DCG.length===0 ? <Empty>Hàng đợi trống.</Empty> :
+      <div className="space-y-2">{DCG.map(d=>
+        <div key={d.id} className={"bg-white rounded-2xl border shadow-card p-3 "+(d.trang_thai==='CHO_GAN'?'border-rose-200':'border-line opacity-60')}>
+          <div className="flex items-start gap-2 flex-wrap">
+            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-600">{(NGUON_KQ_FE.find(n=>n.v===d.nguon)||{}).label||d.nguon}</span>
+            {d.ma_doi_soat ? <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-600">{d.ma_doi_soat}</span>
+              : <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-rose-50 text-rose-500">không có mã</span>}
+            <span className="text-[10px] px-1.5 py-0.5 rounded-full font-semibold ml-auto"
+              style={{background:d.trang_thai==='CHO_GAN'?'#fee2e2':d.trang_thai==='DA_GAN'?'#d1fae5':'#f1f5f9', color:d.trang_thai==='CHO_GAN'?'#b91c1c':d.trang_thai==='DA_GAN'?'#047857':'#64748b'}}>
+              {d.trang_thai==='CHO_GAN'?'Chờ gán':d.trang_thai==='DA_GAN'?'Đã gán':'Bỏ qua'}</span>
+          </div>
+          <div className="text-sm font-semibold text-ink mt-1">{Number(d.doanh_thu).toLocaleString('vi-VN')}đ · {Number(d.so_don).toLocaleString('vi-VN')} đơn {d.ky?('· '+d.ky):''}</div>
+          <div className="text-[11px] text-rose-600 mt-0.5">{d.ly_do}</div>
+          {d.trang_thai==='DA_GAN' && <div className="text-[11px] text-emerald-700 mt-0.5">→ {airTen(d.air_post_id)} ({d.decided_by_name})</div>}
+          {d.trang_thai==='CHO_GAN' && <div className="flex gap-2 mt-2">
+            <Btn variant="ghost" onClick={()=>{ if(confirm('Bỏ qua đơn này? Sẽ không tính vào kết quả của bài nào.')) skipDon(d.id,'').then(ok=>ok&&notify('Đã bỏ qua')); }}>Bỏ qua</Btn>
+            <Btn variant="brand" className="flex-1" onClick={()=>setAssign(d)}>Gán vào 1 bài</Btn>
+          </div>}
+        </div>)}
+      </div>)}
+
+    {form && <KetQuaForm init={form} onClose={()=>setForm(null)}/>}
+    {imp && <KetQuaImport onClose={()=>setImp(false)}/>}
+    {assign && <Modal open={true} onClose={()=>setAssign(null)} title="Gán đơn vào 1 bài đăng" wide>
+      <div className="rounded-xl bg-amber-50 border border-amber-200 p-2 mb-2 text-[11px] text-amber-800">
+        Gán tay được ghi ở mức <b>Gián tiếp</b> — vì đây là suy luận của người vận hành, không phải sàn khẳng định.
+        Chọn <b>đúng một</b> bài; hệ thống cố ý không cho chia đều cho nhiều bài.
+      </div>
+      <div className="text-xs text-slate-500 mb-2">{Number(assign.doanh_thu).toLocaleString('vi-VN')}đ · {assign.so_don} đơn · {assign.ma_doi_soat||'không mã'}</div>
+      {AIR.length===0 ? <Empty>Chưa có bài đăng nào.</Empty> :
+        <div className="space-y-1 max-h-72 overflow-y-auto">{AIR.map(a=>
+          <button key={a.id} onClick={async()=>{ const r=await assignDon(assign.id,a.id); if(r&&r.ok){ notify('Đã gán'); setAssign(null); } else notify((r&&r.msg)||'Lỗi','err'); }}
+            className="w-full text-left rounded-xl border border-line p-2 hover:border-brand transition">
+            <div className="text-sm font-semibold text-ink truncate">{a.tieu_de||'(không tên)'}</div>
+            <div className="text-[10px] text-slate-400 font-mono">{a.ma_theo_doi||'—'}</div>
+          </button>)}
+        </div>}
+    </Modal>}
+  </div>;
+}
+function KetQuaForm({init,onClose}){
+  const { db, createKetQua, notify } = useApp();
+  const [f,setF]=useState({ air_post_id:'', muc_tin_cay:init.muc_tin_cay||'TRUC_TIEP', nguon:init.nguon||'TIKTOK_SHOP', ky:'', doanh_thu:'', so_don:'', luot_xem:'', luot_tuong_tac:'', luot_click:'', ghi_chu:'' });
+  const [busy,setBusy]=useState(false);
+  const isKQD = f.muc_tin_cay==='KHONG_QUY_DON';
+  const save=async()=>{ if(!f.air_post_id) return notify('Chọn bài đăng','warn');
+    setBusy(true); const r=await createKetQua(f); setBusy(false);
+    if(r&&r.ok){ notify('Đã lưu kết quả'); onClose(); } else notify((r&&r.msg)||'Lỗi','err'); };
+  return <Modal open={true} onClose={onClose} title="Nhập kết quả" wide>
+    <Field label="Bài đăng" required><Select value={f.air_post_id} onChange={e=>setF({...f,air_post_id:e.target.value})}>
+      <option value="">— Chọn bài —</option>
+      {(db.air_posts||[]).map(a=><option key={a.id} value={a.id}>{(a.tieu_de||'(không tên)')+(a.ma_theo_doi?(' · '+a.ma_theo_doi):'')}</option>)}
+    </Select></Field>
+    <div className="grid sm:grid-cols-3 gap-2">
+      <Field label="Mức tin cậy" required><Select value={f.muc_tin_cay} onChange={e=>setF({...f,muc_tin_cay:e.target.value})}>
+        {Object.keys(MUC_TIN_CAY_FE).map(k=><option key={k} value={k}>{MUC_TIN_CAY_FE[k]}</option>)}</Select></Field>
+      <Field label="Nguồn"><Select value={f.nguon} onChange={e=>setF({...f,nguon:e.target.value})}>{NGUON_KQ_FE.map(n=><option key={n.v} value={n.v}>{n.label}</option>)}</Select></Field>
+      <Field label="Kỳ (YYYY-MM)"><Input value={f.ky} onChange={e=>setF({...f,ky:e.target.value})} placeholder="2026-07"/></Field>
+    </div>
+    {isKQD
+      ? <>
+          <div className="rounded-xl bg-slate-50 border border-line p-2 mb-2 text-[11px] text-slate-500">Mức này <b>chỉ ghi chỉ số hiển thị/tương tác</b>. Không nhập doanh thu/đơn — vì không có căn cứ quy về bài nào.</div>
+          <div className="grid sm:grid-cols-3 gap-2">
+            <Field label="Lượt xem"><Input type="number" className="no-spin" value={f.luot_xem} onChange={e=>setF({...f,luot_xem:e.target.value})}/></Field>
+            <Field label="Tương tác"><Input type="number" className="no-spin" value={f.luot_tuong_tac} onChange={e=>setF({...f,luot_tuong_tac:e.target.value})}/></Field>
+            <Field label="Click"><Input type="number" className="no-spin" value={f.luot_click} onChange={e=>setF({...f,luot_click:e.target.value})}/></Field>
+          </div>
+        </>
+      : <div className="grid sm:grid-cols-2 gap-2">
+          <Field label="Doanh thu (đ)"><Input type="number" className="no-spin" value={f.doanh_thu} onChange={e=>setF({...f,doanh_thu:e.target.value})}/></Field>
+          <Field label="Số đơn"><Input type="number" className="no-spin" value={f.so_don} onChange={e=>setF({...f,so_don:e.target.value})}/></Field>
+        </div>}
+    <Field label="Ghi chú"><Input value={f.ghi_chu} onChange={e=>setF({...f,ghi_chu:e.target.value})}/></Field>
+    <div className="flex gap-2 mt-3"><Btn variant="ghost" onClick={onClose} disabled={busy}>Huỷ</Btn><Btn variant="brand" className="flex-1" onClick={save} disabled={busy}>{busy?'…':'Lưu'}</Btn></div>
+  </Modal>;
+}
+function KetQuaImport({onClose}){
+  const { importKetQua, notify } = useApp();
+  const [nguon,setNguon]=useState('SHOPEE'); const [ky,setKy]=useState(''); const [txt,setTxt]=useState(''); const [busy,setBusy]=useState(false);
+  const HEAD=['Mã theo dõi','Doanh thu','Số đơn'];
+  const dlTpl=()=>download('mau_doi_soat.csv', toCSV([HEAD,['KM-T7-001','1500000','3']]));
+  const rows=()=>{ const rr=parseTable(txt); if(!rr.length) return [];
+    if(/mã/i.test(rr[0][0]||'')) rr.shift();
+    return rr.map(c=>({ ma_theo_doi:(c[0]||'').trim(), doanh_thu:Number(String(c[1]||'').replace(/[^\d.-]/g,''))||0, so_don:Number(String(c[2]||'').replace(/[^\d-]/g,''))||0 }))
+             .filter(r=>r.ma_theo_doi||r.doanh_thu||r.so_don); };
+  const list=rows();
+  const run=async()=>{ if(!list.length) return notify('Chưa có dữ liệu','warn');
+    setBusy(true); const r=await importKetQua({nguon,ky,rows:list}); setBusy(false);
+    if(r&&r.ok){ notify('Khớp mã '+r.gan+' dòng · '+r.cho+' dòng vào hàng đợi gán tay'); onClose(); }
+    else notify((r&&r.msg)||'Lỗi','err'); };
+  return <Modal open={true} onClose={onClose} title="Import đối soát từ sàn" wide>
+    <div className="rounded-xl bg-slate-50 border border-line p-2 mb-3 text-[11px] text-slate-500">
+      Dòng nào <b>khớp đúng 1 bài</b> theo mã theo dõi thì tự quy đơn. Dòng <b>không có mã</b>, <b>không khớp</b>, hoặc <b>khớp nhiều bài</b> sẽ vào
+      <b> hàng đợi gán tay</b> — hệ thống cố ý <b>không chia đều</b> để tránh tạo ra số liệu sai.
+    </div>
+    <div className="grid sm:grid-cols-2 gap-2">
+      <Field label="Nguồn"><Select value={nguon} onChange={e=>setNguon(e.target.value)}>{NGUON_KQ_FE.filter(n=>n.v==='TIKTOK_SHOP'||n.v==='SHOPEE').map(n=><option key={n.v} value={n.v}>{n.label}</option>)}</Select></Field>
+      <Field label="Kỳ (YYYY-MM)"><Input value={ky} onChange={e=>setKy(e.target.value)} placeholder="2026-07"/></Field>
+    </div>
+    <div className="text-[11px] text-slate-400 mb-1">Mức tin cậy tự đặt theo nguồn: TikTok Shop → <b>Trực tiếp</b>, Shopee → <b>Gián tiếp</b>.</div>
+    <Btn variant="ghost" onClick={dlTpl}>⬇ Tải file mẫu</Btn>
+    <div className="text-xs font-mono bg-slate-100 rounded-lg p-2 my-2 overflow-x-auto whitespace-nowrap">{HEAD.join(' | ')}</div>
+    <Textarea rows="6" value={txt} onChange={e=>setTxt(e.target.value)} placeholder="Dán bảng đối soát từ Excel vào đây…"/>
+    {list.length>0 && <div className="text-xs text-slate-600 mt-1">Đọc được <b className="text-brand-dark">{list.length}</b> dòng.</div>}
+    <div className="flex gap-2 mt-3"><Btn variant="ghost" onClick={onClose} disabled={busy}>Huỷ</Btn><Btn variant="brand" className="flex-1" onClick={run} disabled={busy||!list.length}>{busy?'…':'Import'}</Btn></div>
+  </Modal>;
 }
 
 /* ============================================================
