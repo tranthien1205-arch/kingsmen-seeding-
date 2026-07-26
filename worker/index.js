@@ -87,6 +87,8 @@ async function ensureSchema(env){
   try { await env.DB.prepare(`ALTER TABLE pricing ADD COLUMN sched_on INTEGER DEFAULT 0`).run(); } catch(e){}
   try { await env.DB.prepare(`ALTER TABLE pricing ADD COLUMN sched_enforce INTEGER DEFAULT 1`).run(); } catch(e){}
   try { await env.DB.prepare(`ALTER TABLE pricing ADD COLUMN sched_days TEXT DEFAULT '0,2,4,6'`).run(); } catch(e){}
+  // cờ DEV PREVIEW: chỉ tài khoản is_dev=1 thấy các module đang nâng cấp
+  try { await env.DB.prepare(`ALTER TABLE users ADD COLUMN is_dev INTEGER DEFAULT 0`).run(); } catch(e){}
 
   // seed pricing
   const pr = await env.DB.prepare(`SELECT id FROM pricing WHERE id=1`).first();
@@ -167,6 +169,14 @@ async function ensureSchema(env){
     for(const [ten,loai,th] of K) await env.DB.prepare(`INSERT INTO kenh (id,ten,loai,thuong_hieu,active,created_at) VALUES (?,?,?,?,1,?)`).bind(uid('kn'),ten,loai,th,nowISO()).run();
   }
 
+  // Tài khoản ADMIN DEV — chỉ tài khoản này (is_dev=1) thấy module đang nâng cấp. Đổi mật khẩu sau khi nhận.
+  const devEx = await env.DB.prepare(`SELECT id FROM users WHERE lower(email)=?`).bind('dev@masfico.vn').first();
+  if(!devEx){
+    const dpass = await hashPassword('Dev2026!');
+    await env.DB.prepare(`INSERT INTO users (id,ho_ten,email,password,vai_tro,active,is_dev,created_at) VALUES (?,?,?,?,?,1,1,?)`)
+      .bind(uid('u'),'Admin Dev','dev@masfico.vn',dpass,ROLES.ADMIN,nowISO()).run();
+  }
+
   SCHEMA_READY = true;
 }
 
@@ -212,7 +222,7 @@ async function seedFilming(env){
 // ---------- helpers ----------
 const bool = v => v?1:0;
 const uBool = v => !!v;
-function rowUser(u){ if(!u) return null; return { id:u.id, ho_ten:u.ho_ten, email:u.email, vai_tro:u.vai_tro, active:uBool(u.active), created_at:u.created_at }; }
+function rowUser(u){ if(!u) return null; return { id:u.id, ho_ten:u.ho_ten, email:u.email, vai_tro:u.vai_tro, active:uBool(u.active), is_dev:uBool(u.is_dev), created_at:u.created_at }; }
 function rowGroup(g){ return { ...g, active:uBool(g.active), uu_tien:uBool(g.uu_tien) }; }
 function rowTopic(t){ return { ...t, active:uBool(t.active), uu_tien:uBool(t.uu_tien), tags: JSON.parse(t.tags||'[]') }; }
 function rowCmtSug(c){ return { ...c, active:uBool(c.active), tags: JSON.parse(c.tags||'[]') }; }
@@ -424,8 +434,8 @@ async function handleApi(request, env){
     const dup = await env.DB.prepare(`SELECT id FROM users WHERE lower(email)=?`).bind(email).first();
     if(dup) return json({error:'Email đã tồn tại'},409);
     const id=uid('u'); const pass=await hashPassword(body.password);
-    await env.DB.prepare(`INSERT INTO users (id,ho_ten,email,password,vai_tro,active,created_at) VALUES (?,?,?,?,?,?,?)`)
-      .bind(id,body.ho_ten.trim(),email,pass,body.vai_tro||ROLES.SALES,bool(body.active!==false),nowISO()).run();
+    await env.DB.prepare(`INSERT INTO users (id,ho_ten,email,password,vai_tro,active,is_dev,created_at) VALUES (?,?,?,?,?,?,?,?)`)
+      .bind(id,body.ho_ten.trim(),email,pass,body.vai_tro||ROLES.SALES,bool(body.active!==false),bool(body.is_dev),nowISO()).run();
     await logAudit(env,me,'tạo tài khoản','user',id,body.vai_tro);
     return json({ db: await bootstrap(env, me) });
   }
@@ -440,8 +450,9 @@ async function handleApi(request, env){
     if(u.vai_tro===ROLES.MARKETING && u.active && activeMkt<=1 && (newRole!==ROLES.MARKETING || !newActive))
       return json({error:'Phải còn ít nhất 1 Marketing đang hoạt động'},400);
     const pass = body.password ? await hashPassword(body.password) : u.password;
-    await env.DB.prepare(`UPDATE users SET ho_ten=?, vai_tro=?, active=?, password=? WHERE id=?`)
-      .bind(body.ho_ten??u.ho_ten, newRole, newActive, pass, id).run();
+    const newDev = body.is_dev!=null ? bool(body.is_dev) : u.is_dev;
+    await env.DB.prepare(`UPDATE users SET ho_ten=?, vai_tro=?, active=?, is_dev=?, password=? WHERE id=?`)
+      .bind(body.ho_ten??u.ho_ten, newRole, newActive, newDev, pass, id).run();
     await logAudit(env,me,'sửa tài khoản','user',id);
     return json({ db: await bootstrap(env, me) });
   }

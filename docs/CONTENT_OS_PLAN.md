@@ -65,6 +65,8 @@ App hiện tại KHÔNG phải Next.js/Supabase như brief gốc. Ta **thích �
 | `MKT_STAFF` | ⏳ thêm ở P3/P4 | người sản xuất |
 | `GIAM_DOC` | ⏳ thêm ở P9 | xem Dashboard + đặt pillar/tỷ lệ |
 
+**DEV PREVIEW (cờ `is_dev` trên user):** chỉ tài khoản `is_dev=1` thấy các module ĐANG NÂNG CẤP. `BETA_KEYS = {strategy, plan, products}` (lọc trong `Shell`). Seed sẵn **`dev@masfico.vn` / `Dev2026!`** (ADMIN, is_dev=1) — đổi mật khẩu sau. Admin/Marketing bật/tắt cờ dev cho từng tài khoản ở màn Tài khoản. Khi 1 module "ra mắt chính thức" → bỏ key khỏi `BETA_KEYS`.
+
 **Quyền helper trong Worker:**
 - `isStaff(u)` = MARKETING || ADMIN (gác 29+ hành động seeding/review — **KHÔNG mở rộng bừa**).
 - `canBaseData(u)` = KY_THUAT || MARKETING || ADMIN (dữ liệu nền P1).
@@ -195,5 +197,6 @@ Tokens Tailwind (inline config trong `seeding-app.html`): `ink #0b3543` (soft #1
 - `88dd874` — P1: Sản phẩm & Claim cấm + vai trò KY_THUAT (10 test).
 - `719852e` — P2: Chiến lược & Pillar (seed pillar thật) (11 test).
 - P3 lát cắt (1) — content_items + frameworks(12)/kenh(10) + CRUD/import + List/Kanban 7 cột + cảnh báo lệch pillar (13 test).
+- DEV PREVIEW — cờ `is_dev` + BETA_KEYS ẩn module nâng cấp khỏi user thường + seed `dev@masfico.vn`; Kanban mobile horizontal-scroll (7 test). **Ưu tiên mobile-first cho mọi màn Content OS từ đây.**
 - (Trước đó, Domain A: seeding/quay/lịch/thư viện ảnh/vinh danh/chống trùng… đã deploy.)
 - ▶️ **Kế tiếp:** P3 lát cắt (2) — Calendar + faithful .xlsx import (SheetJS) + PIC theo khâu + đẩy sang P6.

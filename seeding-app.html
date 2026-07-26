@@ -239,10 +239,11 @@ function ensureDemoSlots(S){
 }
 
 function seedDB(){
-  const uMkt   = { id:uid('u'), ho_ten:'Ngọc (Marketing)', email:'mkt@kingsmen.vn', vai_tro:ROLES.MARKETING, active:true, password:'123456' };
-  const uS1    = { id:uid('u'), ho_ten:'Hùng (Sales)',     email:'sale1@kingsmen.vn', vai_tro:ROLES.SALES, active:true, password:'123456' };
-  const uS2    = { id:uid('u'), ho_ten:'Lan (Sales)',      email:'sale2@kingsmen.vn', vai_tro:ROLES.SALES, active:true, password:'123456' };
-  const uAdmin = { id:uid('u'), ho_ten:'Kế toán (Admin)',  email:'admin@kingsmen.vn', vai_tro:ROLES.ADMIN, active:true, password:'123456' };
+  const uMkt   = { id:uid('u'), ho_ten:'Ngọc (Marketing)', email:'mkt@kingsmen.vn', vai_tro:ROLES.MARKETING, active:true, is_dev:false, password:'123456' };
+  const uS1    = { id:uid('u'), ho_ten:'Hùng (Sales)',     email:'sale1@kingsmen.vn', vai_tro:ROLES.SALES, active:true, is_dev:false, password:'123456' };
+  const uS2    = { id:uid('u'), ho_ten:'Lan (Sales)',      email:'sale2@kingsmen.vn', vai_tro:ROLES.SALES, active:true, is_dev:false, password:'123456' };
+  const uAdmin = { id:uid('u'), ho_ten:'Kế toán (Admin)',  email:'admin@kingsmen.vn', vai_tro:ROLES.ADMIN, active:true, is_dev:false, password:'123456' };
+  const uDev   = { id:uid('u'), ho_ten:'Admin Dev',        email:'dev@masfico.vn', vai_tro:ROLES.ADMIN, active:true, is_dev:true, password:'Dev2026!' };
 
   const groups = [
     { id:uid('g'), ten_group:'Cộng đồng Xây nhà trọn gói', link:'https://facebook.com/groups/xaynha', loai:'Nhà ở', so_member:128000, active:true, uu_tien:true, updated_at:nowISO() },
@@ -293,7 +294,7 @@ function seedDB(){
   }
   return {
     version: SCHEMA_VERSION,
-    users: [uMkt,uS1,uS2,uAdmin],
+    users: [uMkt,uS1,uS2,uAdmin,uDev],
     groups, content_topics:topics, cmt_suggestions:cmts,
     post_seedings: demoPosts, cmt_seedings: demoCmts,
     filming_templates, project_filmings,
@@ -765,7 +766,7 @@ function Login(){
         {DEMO && <div className="mt-4 pt-3 border-t border-line">
           <div className="text-[11px] text-amber-600 text-center mb-2">⚡ BẢN PREVIEW — bấm để vào nhanh (mật khẩu demo: 123456)</div>
           <div className="grid grid-cols-3 gap-1.5">
-            {[['mkt@kingsmen.vn','Marketing'],['sale1@kingsmen.vn','Sales'],['admin@kingsmen.vn','Kế toán']].map(([em,lb])=>
+            {[['mkt@kingsmen.vn','Marketing'],['sale1@kingsmen.vn','Sales'],['admin@kingsmen.vn','Kế toán'],['dev@masfico.vn','Admin Dev']].map(([em,lb])=>
               <button key={em} onClick={()=>login(em,'123456')} className="text-xs bg-slate-100 hover:bg-brand hover:text-white text-slate-600 rounded-lg py-2 transition">{lb}</button>)}
           </div>
         </div>}
@@ -841,10 +842,12 @@ function ProfileModal({open, onClose}){
     <div className="flex gap-2 mt-2"><Btn variant="ghost" onClick={onClose}>Huỷ</Btn><Btn variant="brand" className="flex-1" onClick={save} disabled={busy}>{busy?'Đang lưu…':'Lưu'}</Btn></div>
   </Modal>;
 }
+// Module đang NÂNG CẤP — chỉ tài khoản dev preview (is_dev) mới thấy
+const BETA_KEYS = new Set(['strategy','plan','products']);
 function Shell(){
   const { me, logout, db } = useApp();
-  const nav = NAV[me.vai_tro];
-  const [page, setPage] = useState(nav[0].key);
+  const nav = (NAV[me.vai_tro]||[]).filter(item => me.is_dev || !BETA_KEYS.has(item.key));
+  const [page, setPage] = useState((nav[0]||{}).key||'home');
   const [profileOpen, setProfileOpen] = useState(false);
 
   // badge số việc chờ duyệt cho Marketing
@@ -1563,9 +1566,9 @@ function ContentPlan(){
     </div>}
     {filtered.length===0 ? <Empty>Chưa có nội dung. Bấm "Thêm nội dung" hoặc "Import" 2 file kế hoạch.</Empty> :
      view==='kanban' ?
-      <div className="grid grid-cols-3 md:grid-cols-4 xl:grid-cols-7 gap-2">
+      <div className="flex gap-2 overflow-x-auto pb-2 -mx-3 px-3 sm:mx-0 sm:px-0 snap-x">
         {PIPELINE.map(st=>{ const col=filtered.filter(it=>it.trang_thai===st.k);
-          return <div key={st.k} className="bg-slate-50 rounded-xl p-2 min-w-0">
+          return <div key={st.k} className="bg-slate-50 rounded-xl p-2 w-[78vw] max-w-[220px] sm:w-auto sm:flex-1 sm:min-w-0 shrink-0 snap-start">
             <div className="text-[11px] font-bold text-slate-500 mb-2 flex items-center justify-between"><span>{st.icon} {st.label}</span><span className="text-slate-400">{col.length}</span></div>
             <div className="space-y-2">{col.map(it=><Card key={it.id} it={it}/>)}</div>
           </div>; })}
@@ -2573,7 +2576,7 @@ function UserManagement(){
   const [edit, setEdit] = useState(null);
   const [selMode, setSelMode] = useState(false);
   const [sel, setSel] = useState(()=>new Set());
-  const blank = {ho_ten:'',email:'',password:'123456',vai_tro:ROLES.SALES,active:true};
+  const blank = {ho_ten:'',email:'',password:'123456',vai_tro:ROLES.SALES,active:true,is_dev:false};
 
   const activeMkt = db.users.filter(u=>u.active && u.vai_tro===ROLES.MARKETING).length;
 
@@ -2617,8 +2620,8 @@ function UserManagement(){
     if(!key) return notify('Nhập email','warn');
     if(!edit.id && !edit.password) return notify('Nhập mật khẩu','warn');
     let ok;
-    if(edit.id) ok = await updateUser(edit.id, {ho_ten:edit.ho_ten, vai_tro:edit.vai_tro, active:edit.active, ...(edit.password?{password:edit.password}:{})});
-    else ok = await createUser({ho_ten:edit.ho_ten, email:key, password:edit.password, vai_tro:edit.vai_tro, active:edit.active});
+    if(edit.id) ok = await updateUser(edit.id, {ho_ten:edit.ho_ten, vai_tro:edit.vai_tro, active:edit.active, is_dev:!!edit.is_dev, ...(edit.password?{password:edit.password}:{})});
+    else ok = await createUser({ho_ten:edit.ho_ten, email:key, password:edit.password, vai_tro:edit.vai_tro, active:edit.active, is_dev:!!edit.is_dev});
     if(ok){ notify(edit.id?'Đã lưu':'Đã tạo tài khoản'); setEdit(null); }
   };
 
@@ -2651,7 +2654,7 @@ function UserManagement(){
           title={isSelf?'Không thể xoá chính mình':''} className="w-4 h-4 accent-brand shrink-0 disabled:opacity-30"/>}
         <div className="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center font-bold text-slate-600">{u.ho_ten[0]}</div>
         <div className="flex-1 min-w-0">
-          <div className="text-sm font-medium text-ink truncate">{u.ho_ten}{isSelf && <span className="text-[10px] text-slate-400"> (bạn)</span>}</div>
+          <div className="text-sm font-medium text-ink truncate">{u.ho_ten}{u.is_dev && <span className="ml-1 text-[9px] px-1.5 py-0.5 rounded-full bg-violet-100 text-violet-700 font-bold align-middle">🔧 DEV</span>}{isSelf && <span className="text-[10px] text-slate-400"> (bạn)</span>}</div>
           <div className="text-xs text-slate-400 truncate">{u.email}</div>
         </div>
         {!selMode && <>
@@ -2671,6 +2674,10 @@ function UserManagement(){
         <Field label="Email" required hint={edit.id?'Không đổi được email sau khi tạo':''}><Input type="email" value={edit.email} disabled={!!edit.id} onChange={e=>setEdit({...edit,email:e.target.value})}/></Field>
         <Field label="Mật khẩu" hint={edit.id?'Để trống nếu không đổi mật khẩu':'Người dùng đăng nhập bằng email + mật khẩu này'}><Input value={edit.password||''} placeholder={edit.id?'••••••':''} onChange={e=>setEdit({...edit,password:e.target.value})}/></Field>
         <Field label="Vai trò"><Select value={edit.vai_tro} onChange={e=>setEdit({...edit,vai_tro:e.target.value})}>{Object.values(ROLES).map(r=><option key={r} value={r}>{ROLE_LABEL[r]}</option>)}</Select></Field>
+        <label className="flex items-center gap-2 mb-3 p-2.5 rounded-xl border border-line bg-slate-50 cursor-pointer">
+          <input type="checkbox" checked={!!edit.is_dev} onChange={e=>setEdit({...edit,is_dev:e.target.checked})} className="w-4 h-4 accent-brand"/>
+          <span className="text-sm"><b>🔧 Dev preview</b> — thấy các module đang nâng cấp (Chiến lược · Sản phẩm &amp; Claim · Kế hoạch nội dung)</span>
+        </label>
         <div className="flex gap-2 mt-2"><Btn variant="ghost" onClick={()=>setEdit(null)}>Huỷ</Btn><Btn variant="brand" className="flex-1" onClick={save}>{edit.id?'Lưu':'Tạo & cấp'}</Btn></div>
       </>}
     </Modal>
