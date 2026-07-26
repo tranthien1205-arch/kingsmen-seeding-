@@ -182,8 +182,8 @@ const KENH_TU_DONG_FE = {
   SHOPEE:{duoc:false,ten:'Shopee',dieu_kien:'Không có API đăng bài công khai → đăng tay'},
   WEBSITE:{duoc:false,ten:'Website',dieu_kien:'Tuỳ hệ quản trị website → đăng tay'},
 };
-const AIR_ST_LABEL = { CHUAN_BI:'Chuẩn bị', DA_LEN_LICH:'Đã lên lịch', DEN_GIO:'Đến giờ — chưa đăng', DA_DANG:'Đã đăng', LOI:'Lỗi đăng' };
-const AIR_ST_STYLE = { CHUAN_BI:'bg-amber-100 text-amber-700', DA_LEN_LICH:'bg-blue-100 text-blue-700', DEN_GIO:'bg-rose-100 text-rose-700', DA_DANG:'bg-emerald-100 text-emerald-700', LOI:'bg-rose-100 text-rose-700' };
+const AIR_ST_LABEL = { CHUAN_BI:'Chuẩn bị', DA_LEN_LICH:'Đã lên lịch', DANG_GUI:'Đã gửi n8n — chờ kết quả', DEN_GIO:'Đến giờ — chưa đăng', DA_DANG:'Đã đăng', LOI:'Lỗi đăng' };
+const AIR_ST_STYLE = { CHUAN_BI:'bg-amber-100 text-amber-700', DA_LEN_LICH:'bg-blue-100 text-blue-700', DANG_GUI:'bg-indigo-100 text-indigo-700', DEN_GIO:'bg-rose-100 text-rose-700', DA_DANG:'bg-emerald-100 text-emerald-700', LOI:'bg-rose-100 text-rose-700' };
 const LOAI_MA = [{v:'VOUCHER',label:'Mã voucher'},{v:'UTM',label:'Link UTM'},{v:'MA_DON',label:'Mã đơn riêng'},{v:'KHAC',label:'Khác'}];
 const ST = { NHAP:'NHAP', CHO_DUYET:'CHO_DUYET', DAT:'DAT', KHONG_DAT:'KHONG_DAT', DA_CHI:'DA_CHI' };
 const ST_LABEL = { NHAP:'Nháp', CHO_DUYET:'Chờ duyệt', DAT:'Đạt', KHONG_DAT:'Không đạt', DA_CHI:'Đã chi' };
@@ -414,7 +414,7 @@ function seedDB(){
     frameworks: ['Chuẩn bán hàng','PAS','Phản biện comment','Test chất lượng','Hành trình thi công','Size / Combo','FOMO','Review KOC','"đừng..." Trend','Q&A khách hàng','So sánh kinh tế','Hướng dẫn thi công'].map((ten,i)=>({id:uid('fw'),ten,mo_ta:'',thu_tu:i+1,active:true,created_at:now()})),
     kenh: [['Fanpage Kingsmen','FANPAGE','Kingsmen'],['TikTok Kingsmen','TIKTOK','Kingsmen'],['YouTube Short Kingsmen','YOUTUBE','Kingsmen'],['Fanpage VKXD','FANPAGE','VKXD'],['TikTok VKXD','TIKTOK','VKXD'],['Shopee VKXD','SHOPEE','VKXD'],['Zalo OA','ZALO_OA','Kingsmen'],['CHÍNH - Vật liệu mới FINEX','TIKTOK','FINEX'],['AFF - Sơn sàn hiệu ứng','TIKTOK','FINEX'],['BC - Vật liệu hoàn thiện','TIKTOK','Kingsmen']].map(([ten,loai,th])=>({id:uid('kn'),ten,loai,thuong_hieu:th,active:true,created_at:now()})),
     content_items: [],
-    scripts: [], approvals: [], air_posts: [], air_checklist: AIR_CHECKLIST_FE, ket_qua: [], don_cho_gan: [], footage: [], shot_list: [], bai_hoc: [], min_mau: MIN_MAU, trends: [], trend_check: TREND_CHECK_FE, viec_ket: null, seeding_theo_noi_dung: {}, kenh_tu_dong: KENH_TU_DONG_FE, kenh_san_sang: {},
+    scripts: [], approvals: [], air_posts: [], air_checklist: AIR_CHECKLIST_FE, ket_qua: [], don_cho_gan: [], footage: [], shot_list: [], bai_hoc: [], min_mau: MIN_MAU, trends: [], trend_check: TREND_CHECK_FE, viec_ket: null, seeding_theo_noi_dung: {}, kenh_tu_dong: KENH_TU_DONG_FE, kenh_san_sang: {}, n8n_san_sang: false,
     payouts: [],
     audit: [],
   };
@@ -455,7 +455,7 @@ function migrate(db){
   db.kenh ||= [];
   db.content_items ||= [];
   db.scripts ||= []; db.approvals ||= []; db.air_posts ||= []; db.air_checklist ||= AIR_CHECKLIST_FE;
-  db.ket_qua ||= []; db.don_cho_gan ||= []; db.footage ||= []; db.shot_list ||= []; db.bai_hoc ||= []; db.min_mau ||= MIN_MAU; db.trends ||= []; db.trend_check ||= TREND_CHECK_FE; db.viec_ket ||= null; db.seeding_theo_noi_dung ||= {}; db.kenh_tu_dong ||= KENH_TU_DONG_FE; db.kenh_san_sang ||= {};
+  db.ket_qua ||= []; db.don_cho_gan ||= []; db.footage ||= []; db.shot_list ||= []; db.bai_hoc ||= []; db.min_mau ||= MIN_MAU; db.trends ||= []; db.trend_check ||= TREND_CHECK_FE; db.viec_ket ||= null; db.seeding_theo_noi_dung ||= {}; db.kenh_tu_dong ||= KENH_TU_DONG_FE; db.kenh_san_sang ||= {}; db.n8n_san_sang ||= false;
   db.post_seedings.forEach(p=>{ p.react ??= 0; p.so_cmt_seeding ??= 0; p.so_cmt_tu_nhien ??= 0; p.thanh_tien ??= 0; });
   db.cmt_seedings.forEach(c=>{ c.proofs ||= []; c.so_cmt_seeding ??= 0; c.react ??= 0; c.so_cmt_tu_nhien ??= 0; c.thanh_tien ??= 0; });
   db.groups.forEach(g=>{ g.uu_tien ??= false; });
@@ -2651,7 +2651,7 @@ function AirPosts(){
     ...(db.scripts||[]).filter(s=>s.trang_thai==='DUYET'&&!used.has(s.id)).map(s=>({...s,_loai:'SCRIPT'})),
     ...(db.content_items||[]).filter(c=>c.trang_thai==='DUYET'&&!used.has(c.id)).map(c=>({...c,_loai:'CONTENT'})),
   ];
-  const list=posts.filter(p=>tab==='DEN_GIO'?(p.trang_thai==='DEN_GIO'||p.trang_thai==='LOI'):p.trang_thai===tab);
+  const list=posts.filter(p=>tab==='DEN_GIO'?(p.trang_thai==='DEN_GIO'||p.trang_thai==='LOI'):tab==='DA_LEN_LICH'?(p.trang_thai==='DA_LEN_LICH'||p.trang_thai==='DANG_GUI'):p.trang_thai===tab);
   const add=async(o)=>{ const r=await createAir(o._loai==='SCRIPT'?{script_id:o.id}:{content_item_id:o.id});
     if(r&&r.ok){ notify('Đã đưa vào khâu đăng'); setPick(false); setOpen(r.id); } else notify((r&&r.msg)||'Lỗi','err'); };
   const cur = open ? posts.find(p=>p.id===open) : null;
@@ -2668,7 +2668,7 @@ function AirPosts(){
     <div className="flex gap-1 bg-slate-100 rounded-xl p-1 w-fit">
       {[['CHUAN_BI','Đang chuẩn bị'],['DA_LEN_LICH','Đã lên lịch'],['DEN_GIO','Cần xử lý'],['DA_DANG','Đã đăng']].map(([k,l])=>
         <button key={k} onClick={()=>setTab(k)} className={"px-3 py-1 rounded-lg text-xs font-semibold "+(tab===k?'bg-white text-ink shadow-sm':'text-slate-500')}>
-          {l} ({posts.filter(p=>k==='DEN_GIO'?(p.trang_thai==='DEN_GIO'||p.trang_thai==='LOI'):p.trang_thai===k).length})</button>)}
+          {l} ({posts.filter(p=>k==='DEN_GIO'?(p.trang_thai==='DEN_GIO'||p.trang_thai==='LOI'):k==='DA_LEN_LICH'?(p.trang_thai==='DA_LEN_LICH'||p.trang_thai==='DANG_GUI'):p.trang_thai===k).length})</button>)}
     </div>
     {list.length===0 ? <Empty>{tab==='CHUAN_BI'?'Chưa có bài nào đang chuẩn bị.':'Chưa có bài nào được đánh dấu đã đăng.'}</Empty> :
       <div className="grid sm:grid-cols-2 gap-3">{list.map(p=>{
@@ -2711,7 +2711,8 @@ function AirPosts(){
 function AirEditor({post, onClose}){
   const { db, patchAir, publishAir, notify } = useApp();
   const CL = db.air_checklist||AIR_CHECKLIST_FE;
-  const [f,setF]=useState({ kenh_id:post.kenh_id||'', tieu_de:post.tieu_de||'', ngay_dang:post.ngay_dang||'', link_bai:post.link_bai||'', ma_theo_doi:post.ma_theo_doi||'', loai_ma:post.loai_ma||'VOUCHER', ghi_chu:post.ghi_chu||'' });
+  const [f,setF]=useState({ kenh_id:post.kenh_id||'', tieu_de:post.tieu_de||'', ngay_dang:post.ngay_dang||'', link_bai:post.link_bai||'', ma_theo_doi:post.ma_theo_doi||'', loai_ma:post.loai_ma||'VOUCHER', ghi_chu:post.ghi_chu||'', media_url:post.media_url||'' });
+  const [pickFt,setPickFt]=useState(false);
   const [cl,setCl]=useState(post.checklist||{});
   const [busy,setBusy]=useState(false);
   const posted = post.trang_thai==='DA_DANG';
@@ -2740,6 +2741,11 @@ function AirEditor({post, onClose}){
       <Field label="Mã theo dõi" required hint="1 mã chỉ dùng cho 1 bài — để bước đo lường quy đơn chính xác">
         <Input value={f.ma_theo_doi} onChange={e=>setF({...f,ma_theo_doi:e.target.value})} placeholder="VD: KM-T7-001" className="font-mono" disabled={posted}/></Field>
       <Field label="Link bài đã đăng" required><Input value={f.link_bai} onChange={e=>setF({...f,link_bai:e.target.value})} placeholder="https://…" disabled={posted}/></Field>
+      <Field label="Media để đăng" hint="Bắt buộc nếu để hệ thống/n8n tự đăng — chọn từ Kho footage hoặc dán link">
+        <div className="flex gap-2">
+          <Input value={f.media_url} onChange={e=>setF({...f,media_url:e.target.value})} placeholder="/media/… hoặc https://…" disabled={posted}/>
+          {!posted && <Btn variant="ghost" onClick={()=>setPickFt(true)}>🎞 Kho</Btn>}
+        </div></Field>
       <Field label="Ghi chú"><Textarea rows="2" value={f.ghi_chu} onChange={e=>setF({...f,ghi_chu:e.target.value})} disabled={posted}/></Field>
     </div>
 
@@ -2765,6 +2771,19 @@ function AirEditor({post, onClose}){
       <Btn variant="brand" className="flex-1 min-w-[160px]" onClick={publish} disabled={busy}>{busy?'…':'✓ Đánh dấu ĐÃ ĐĂNG'}</Btn>
     </div>}
     {posted && <div className="text-[11px] text-slate-400">Đã đăng lúc {fmtDate(post.posted_at)} — khoá chỉnh sửa để giữ nguyên dữ liệu quy đơn.</div>}
+    {pickFt && <Modal open={true} onClose={()=>setPickFt(false)} title="Chọn media từ Kho footage" wide>
+      {(db.footage||[]).filter(x=>x.active!==false).length===0 ? <Empty>Kho footage đang trống.</Empty> :
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-96 overflow-y-auto">
+          {(db.footage||[]).filter(x=>x.active!==false).map(ft=>
+            <button key={ft.id} onClick={()=>{ setF(v=>({...v,media_url:ft.media_url})); setPickFt(false); }}
+              className="rounded-xl border border-line overflow-hidden hover:border-brand transition text-left">
+              <div className="bg-slate-900 aspect-video">
+                {ft.media_type==='IMAGE'?<img src={ft.media_url} className="w-full h-full object-cover"/>:<video src={ft.media_url} className="w-full h-full object-cover" preload="metadata"/>}
+              </div>
+              <div className="p-1.5 text-[11px] font-semibold text-ink truncate">{ft.ten||'(chưa đặt tên)'}</div>
+            </button>)}
+        </div>}
+    </Modal>}
   </div>;
 }
 
@@ -3605,6 +3624,44 @@ function LichDangBox({post,onSaveFirst}){
   </div>;
 }
 // Quản lý kênh + cấu hình tự động đăng. Token KHÔNG nhập ở đây (xem giải thích trong màn).
+// Hướng dẫn dựng workflow n8n — kèm đúng payload app gửi, để không phải đoán
+function HuongDanN8N(){
+  const { db } = useApp();
+  const [mo,setMo]=useState(false);
+  const ok=db.n8n_san_sang;
+  const mau=JSON.stringify({
+    air_post_id:'air_abc', kenh:{id:'kn_1',ten:'TikTok Kingsmen',loai:'TIKTOK',thuong_hieu:'Kingsmen',object_id:''},
+    tieu_de:'Chống ố mạch gạch', caption:'Nội dung bài đăng…', media_url:'/media/filming/xyz.mp4',
+    link_bai:'', ma_theo_doi:'KM-T7-001', lich_dang:'2026-08-01T09:00:00.000Z',
+    callback_url:'https://app.masfico.vn/api/air/air_abc/n8n-callback'
+  },null,2);
+  return <div className={"rounded-2xl border p-3 "+(ok?'border-emerald-200 bg-emerald-50':'border-blue-200 bg-blue-50')}>
+    <button onClick={()=>setMo(m=>!m)} className="w-full flex items-center justify-between text-left">
+      <span className={"text-sm font-semibold "+(ok?'text-emerald-800':'text-blue-800')}>
+        {ok?'✓ n8n đã sẵn sàng':'⚙️ Chưa cắm n8n'} — cách dựng workflow</span>
+      <span className="text-[11px] opacity-70">{mo?'Thu gọn ▲':'Xem ▼'}</span>
+    </button>
+    {mo && <div className="mt-2 space-y-2 text-[11px] text-ink-soft leading-relaxed">
+      <div><b>1.</b> Trong n8n tạo workflow bắt đầu bằng node <b>Webhook</b> (POST). Copy URL của nó.</div>
+      <div><b>2.</b> Cắm 3 secret cho Worker:
+        <div className="font-mono bg-white/70 rounded p-2 mt-1 overflow-x-auto whitespace-pre">{`wrangler secret put N8N_WEBHOOK_URL   # URL webhook n8n
+wrangler secret put N8N_TOKEN         # chuỗi bí mật tự đặt, để 2 bên tin nhau
+wrangler secret put APP_BASE_URL      # https://appseeding.masfico.vn`}</div>
+      </div>
+      <div><b>3.</b> App sẽ POST sang n8n payload dạng này (header <code>X-App-Token</code> = N8N_TOKEN — nên kiểm tra ở n8n để chặn người lạ gọi):
+        <div className="font-mono bg-white/70 rounded p-2 mt-1 overflow-x-auto whitespace-pre text-[10px]">{mau}</div>
+      </div>
+      <div><b>4.</b> Trong workflow: tải <code>media_url</code> → đăng lên nền tảng bằng node tương ứng (TikTok / Facebook / YouTube), rồi <b>báo kết quả về</b> bằng node HTTP Request:
+        <div className="font-mono bg-white/70 rounded p-2 mt-1 overflow-x-auto whitespace-pre text-[10px]">{`POST {{ $json.callback_url }}
+Header: X-N8N-Token: <N8N_TOKEN>
+Body thành công: { "ok": true,  "link": "https://..." }
+Body thất bại:   { "ok": false, "loi": "lý do cụ thể" }`}</div>
+      </div>
+      <div className="text-ink-muted">Workflow ngắn có thể trả thẳng <code>{'{ok:true, link:"..."}'}</code> trong response của Webhook — app hiểu luôn, khỏi cần gọi callback.
+        Nếu app gửi đi mà <b>quá 60 phút</b> không thấy báo về, bài tự chuyển sang <b>“cần đăng tay”</b> để không treo im lặng.</div>
+    </div>}
+  </div>;
+}
 function KenhManager(){
   const { db, upsertKenh, deleteKenh, notify } = useApp();
   const CAP=db.kenh_tu_dong||KENH_TU_DONG_FE; const SS=db.kenh_san_sang||{};
@@ -3615,6 +3672,7 @@ function KenhManager(){
       <h2 className="font-display text-lg font-bold text-ink">📡 Kênh &amp; tự động đăng</h2>
       <Btn variant="brand" onClick={()=>setEdit({ten:'',loai:'FANPAGE',thuong_hieu:''})}>＋ Thêm kênh</Btn>
     </div>
+    <HuongDanN8N/>
     <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3 text-[11px] text-amber-800 leading-relaxed">
       <b>Về token:</b> token đăng bài <b>không nhập ở đây</b> và không lưu trong cơ sở dữ liệu — vì D1 không mã hoá,
       token rò rỉ đồng nghĩa người khác đăng bài được lên Page thật của bạn. Token phải cắm bằng
@@ -3652,10 +3710,11 @@ function KenhForm({init,onClose}){
   const { db, upsertKenh, notify } = useApp();
   const CAP=db.kenh_tu_dong||KENH_TU_DONG_FE;
   const [f,setF]=useState({ten:init.ten||'',loai:init.loai||'FANPAGE',thuong_hieu:init.thuong_hieu||'',
-    active:init.active!==false, tu_dong_dang:!!init.tu_dong_dang, api_ma:init.api_ma||'', api_object_id:init.api_object_id||''});
+    active:init.active!==false, tu_dong_dang:!!init.tu_dong_dang, api_ma:init.api_ma||'', api_object_id:init.api_object_id||'',
+    cach_dang:(init.cach_dang||'API').toUpperCase()});
   const cap=CAP[String(f.loai||'').toUpperCase()];
   const save=async()=>{ if(!f.ten.trim()) return notify('Nhập tên kênh','warn');
-    if(f.tu_dong_dang && !f.api_ma.trim()) return notify('Nhập mã API để biết cần secret nào','warn');
+    if(f.tu_dong_dang && f.cach_dang==='API' && !f.api_ma.trim()) return notify('Nhập mã API để biết cần secret nào','warn');
     const ok=await upsertKenh({...(init.id?{id:init.id}:{}), ...f, ten:f.ten.trim(), api_ma:f.api_ma.trim().toUpperCase().replace(/[^A-Z0-9_]/g,'')});
     if(ok){ notify(init.id?'Đã lưu':'Đã thêm kênh'); onClose(); } };
   return <Modal open={true} onClose={onClose} title={init.id?'Sửa kênh':'Thêm kênh'} wide>
@@ -3667,22 +3726,31 @@ function KenhForm({init,onClose}){
     </div>
     <div className="rounded-xl border border-line p-3 mt-2">
       <div className="text-[11px] font-semibold text-ink-muted uppercase tracking-wide mb-1">Tự động đăng</div>
-      {!cap || !cap.duoc
-        ? <div className="text-[11px] text-slate-500">Loại <b>{f.loai}</b> không đăng tự động được: {(cap&&cap.dieu_kien)||'chưa hỗ trợ'}. Lịch đăng sẽ nhắc đăng tay.</div>
+      <label className="flex items-center gap-2 cursor-pointer mb-2">
+        <input type="checkbox" checked={f.tu_dong_dang} onChange={e=>setF({...f,tu_dong_dang:e.target.checked})} className="w-4 h-4 accent-brand"/>
+        <span className="text-sm text-ink">Cho phép hệ thống tự đăng lên kênh này</span>
+      </label>
+      {f.tu_dong_dang && <Field label="Cách đăng">
+        <Select value={f.cach_dang} onChange={e=>setF({...f,cach_dang:e.target.value})}>
+          <option value="N8N">Qua n8n (khuyên dùng — chạy được cả TikTok)</option>
+          <option value="API">Gọi thẳng API nền tảng</option>
+        </Select></Field>}
+      {f.tu_dong_dang && f.cach_dang==='N8N' && <div className="text-[11px] text-emerald-700 mb-2">
+        n8n đã có quyền đăng sẵn nên <b>không bị giới hạn nền tảng</b> — kể cả TikTok. App chỉ gửi yêu cầu, n8n đăng và báo kết quả về.
+        Cần 2 secret dùng chung: <code>N8N_WEBHOOK_URL</code> và <code>N8N_TOKEN</code>.
+      </div>}
+      {f.tu_dong_dang && f.cach_dang==='API' && (!cap || !cap.duoc
+        ? <div className="text-[11px] text-rose-600">Loại <b>{f.loai}</b> KHÔNG gọi API thẳng được: {(cap&&cap.dieu_kien)||'chưa hỗ trợ'}. Chọn <b>qua n8n</b> nếu muốn tự động.</div>
         : <>
-            <label className="flex items-center gap-2 cursor-pointer mb-2">
-              <input type="checkbox" checked={f.tu_dong_dang} onChange={e=>setF({...f,tu_dong_dang:e.target.checked})} className="w-4 h-4 accent-brand"/>
-              <span className="text-sm text-ink">Cho phép hệ thống tự đăng lên kênh này</span>
-            </label>
             <div className="text-[11px] text-slate-500 mb-2">{cap.dieu_kien}</div>
-            {f.tu_dong_dang && <div className="grid sm:grid-cols-2 gap-2">
+            {<div className="grid sm:grid-cols-2 gap-2">
               <Field label="Mã API" hint="Chữ HOA/số/gạch dưới — dùng để đặt tên secret"><Input value={f.api_ma} onChange={e=>setF({...f,api_ma:e.target.value})} placeholder="FBPAGE"/></Field>
               <Field label="ID đối tượng" hint="VD: Facebook Page ID"><Input value={f.api_object_id} onChange={e=>setF({...f,api_object_id:e.target.value})}/></Field>
             </div>}
-            {f.tu_dong_dang && f.api_ma && <div className="text-[11px] text-amber-700 mt-2">
+            {f.api_ma && <div className="text-[11px] text-amber-700 mt-2">
               Sau khi lưu, cắm token bằng lệnh: <code className="bg-slate-100 px-1 rounded">wrangler secret put TOKEN_{f.api_ma.toUpperCase().replace(/[^A-Z0-9_]/g,'')}</code>
             </div>}
-          </>}
+          </>)}
     </div>
     <div className="flex gap-2 mt-3"><Btn variant="ghost" onClick={onClose}>Huỷ</Btn><Btn variant="brand" className="flex-1" onClick={save}>Lưu</Btn></div>
   </Modal>;

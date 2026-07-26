@@ -240,6 +240,18 @@ Bảng `bai_hoc` (loai, tieu_de, noi_dung, bang_chung JSON, so_mau, nguon_tu_don
   - Trạng thái: `CHUAN_BI → DA_LEN_LICH → (DA_DANG | LOI | DEN_GIO)`. **Không tự động được hoặc lỗi → `DEN_GIO`, KHÔNG BAO GIỜ tự đánh dấu đã đăng.** Thử tối đa `MAX_LAN_THU=3` rồi chuyển đăng tay. Bài `DEN_GIO`/`LOI` vào nhắc việc.
   - Bật tự động bị **chặn ngay lúc lên lịch** nếu kênh chưa đủ điều kiện (422 kèm lý do) — không để đến giờ mới vỡ. **Đăng tự động vẫn phải xong checklist**, không có ngoại lệ.
   - UI: `KenhManager` (nav `kenh`, nhóm Hệ thống) cấu hình kênh; `LichDangBox` trong trình soạn bài đăng. (21 test, gồm cả đường thất bại)
+
+**✅ ĐĂNG QUA n8n (cách user chọn) — giải được TikTok.** `kenh.cach_dang = 'API' | 'N8N'`.
+- n8n **đã có quyền đăng sẵn** (node qua audit) nên **không bị giới hạn nền tảng** — kể cả TikTok. Khi `cach_dang='N8N'`, bỏ qua bảng `KENH_TU_DONG`.
+- Secret: `N8N_WEBHOOK_URL`, `N8N_TOKEN`, `APP_BASE_URL`. App POST payload (air_post_id, kenh, tieu_de, caption, **media_url**, ma_theo_doi, **callback_url**) kèm header `X-App-Token`.
+- **Hai chế độ trả kết quả:** workflow ngắn trả thẳng `{ok,link}` trong response → chốt luôn; workflow dài (upload video) → app đặt `DANG_GUI`, n8n gọi `POST /api/air/:id/n8n-callback` (header `X-N8N-Token`, **công khai nhưng bắt buộc token**, không có `N8N_TOKEN` thì 503 chứ không mở toang).
+- **Chống treo:** `DANG_GUI` quá `N8N_TIMEOUT_PHUT=60` → cron chuyển `DEN_GIO` kèm lý do. n8n sập / HTTP lỗi → `LOI`, **không bao giờ tự đánh dấu đã đăng**.
+- Thêm `air_posts.media_url` (**bắt buộc để đăng thật** — trước đó thiếu, n8n không có gì để đăng); chọn từ Kho footage hoặc dán link.
+- UI `HuongDanN8N` in sẵn payload mẫu + lệnh cắm secret + mẫu node callback để khỏi đoán. (21 test)
+
+**⚠️ Bẫy đã dính khi làm, đừng lặp lại:**
+- Route đặt **trước** `let m` → TDZ `Cannot access 'm'`. Dùng biến riêng cho match ở vùng chưa đăng nhập.
+- `const body = await request.json()` chạy **trước** vùng route công khai → đọc `request.json()` lần nữa ra rỗng, hiểu nhầm thành thất bại. Dùng lại `body`.
 - Không scrape Creative Center / không đọc nội dung từ link Facebook (ToS).
 - Đo lường: chỉ API kênh sở hữu + nhập tay; 3 mức tin cậy, KHÔNG cộng dồn thành "doanh thu từ content".
 - Đơn Shopee mơ hồ (1 voucher nhiều video) → hàng đợi gán tay, KHÔNG chia đều.
@@ -269,7 +281,7 @@ Tokens Tailwind (inline config trong `seeding-app.html`): `ink #0b3543` (soft #1
   **Chảy ngược:** `gomSeedingTheoNoiDung()` gom số bài / bài đạt / react / cmt về từng `content_item`; hiện ở cột **Seeding** trong Kế hoạch nội dung. **CHỦ Ý chỉ đếm, KHÔNG quy ra doanh thu** — seeding không quy đơn được (§9), có test chặn hồi quy. (18 test)
 - ▶️ **Kế tiếp:** gỡ `BETA_KEYS` khi user duyệt xong; thêm `TRUONG_MKT`/`GIAM_DOC`; nâng P4 lên gợi ý AI khi có `ANTHROPIC_API_KEY`. Còn lại (giá trị thấp): `media_library` ↔ `footage`.
 - **P8** Nhập kết quả 3 mức tin cậy (25 test) · **P5** Kho footage & shot list (22 test) · **P9** Dashboard 4 hệ KPI + hiệu suất người (9 test) · **P10** Thư viện học + vòng lặp tự học (19 test).
-- 📌 **Tổng test đang xanh:** import 8 · Creative Studio 16 · Duyệt 22 · Đăng bài 21 · Kết quả 25 · Footage 22 · Thư viện học 19 · công cụ 13 · chống trùng seeding 13 = **232**.
+- 📌 **Tổng test đang xanh:** import 8 · Creative Studio 16 · Duyệt 22 · Đăng bài 21 · Kết quả 25 · Footage 22 · Thư viện học 19 · công cụ 13 · chống trùng seeding 13 = **253**.
 - ✅ **ĐÃ XONG TOÀN BỘ P1→P10.** Còn lại là các mảnh nhỏ: vai trò `TRUONG_MKT`/`GIAM_DOC` riêng, `can()` tập trung (P0), và nâng P4 lên gợi ý AI khi có `ANTHROPIC_API_KEY`.
 
 ### ⚙️ Quy trình deploy (CẬP NHẬT)

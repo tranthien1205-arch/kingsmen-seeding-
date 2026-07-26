@@ -114,10 +114,14 @@ async function ensureSchema(env){
   try { await env.DB.prepare(`ALTER TABLE air_posts ADD COLUMN tu_dong INTEGER DEFAULT 0`).run(); } catch(e){}
   try { await env.DB.prepare(`ALTER TABLE air_posts ADD COLUMN lan_thu INTEGER DEFAULT 0`).run(); } catch(e){}
   try { await env.DB.prepare(`ALTER TABLE air_posts ADD COLUMN loi TEXT`).run(); } catch(e){}
+  // Media để đăng — không có cái này thì n8n/API không đăng video được
+  try { await env.DB.prepare(`ALTER TABLE air_posts ADD COLUMN media_url TEXT`).run(); } catch(e){}
+  try { await env.DB.prepare(`ALTER TABLE air_posts ADD COLUMN gui_luc TEXT`).run(); } catch(e){}
   // Kênh: bật tự động + định danh trên nền tảng. TOKEN KHÔNG lưu ở DB (xem §bảo mật dưới).
   try { await env.DB.prepare(`ALTER TABLE kenh ADD COLUMN tu_dong_dang INTEGER DEFAULT 0`).run(); } catch(e){}
   try { await env.DB.prepare(`ALTER TABLE kenh ADD COLUMN api_ma TEXT`).run(); } catch(e){}
   try { await env.DB.prepare(`ALTER TABLE kenh ADD COLUMN api_object_id TEXT`).run(); } catch(e){}
+  try { await env.DB.prepare(`ALTER TABLE kenh ADD COLUMN cach_dang TEXT DEFAULT 'API'`).run(); } catch(e){}
   // NỐI SEEDING ↔ CONTENT OS: chủ đề seeding biết mình sinh ra từ nội dung nào
   try { await env.DB.prepare(`ALTER TABLE content_topics ADD COLUMN content_item_id TEXT`).run(); } catch(e){}
   // P6 — đếm số lần bị trả lại (chỉ số Process cho P9)
@@ -403,7 +407,9 @@ const AIR_CHECKLIST = [
   {k:'hashtag_cta',    label:'Hashtag & CTA đầy đủ', bat_buoc:false},
   {k:'hen_gio',        label:'Đã hẹn giờ / canh khung giờ đăng', bat_buoc:false},
 ];
-const AIR_ST = { CHUAN_BI:'CHUAN_BI', DA_LEN_LICH:'DA_LEN_LICH', DEN_GIO:'DEN_GIO', DA_DANG:'DA_DANG', LOI:'LOI' };
+const AIR_ST = { CHUAN_BI:'CHUAN_BI', DA_LEN_LICH:'DA_LEN_LICH', DANG_GUI:'DANG_GUI', DEN_GIO:'DEN_GIO', DA_DANG:'DA_DANG', LOI:'LOI' };
+// Gửi sang n8n rồi mà quá lâu không thấy báo về → coi như hỏng, chuyển đăng tay (tránh treo mãi)
+const N8N_TIMEOUT_PHUT = 60;
 // Nền tảng nào ĐĂNG TỰ ĐỘNG ĐƯỢC. Ghi rõ điều kiện để không hứa quá.
 // TikTok cố ý = false: Content Posting API chưa qua audit thì bài ra SELF_ONLY (chỉ mình thấy) → auto-post vô nghĩa.
 const KENH_TU_DONG = {
@@ -445,12 +451,45 @@ async function dangLenNenTang(env, kenh, post){
     return {ok:false, loi:'Chưa hiện thực bộ đăng cho '+cap.ten+' — hiện phải đăng tay'};
   }catch(e){ return {ok:false, loi:'Lỗi gọi API: '+(e.message||e)}; }
 }
+// Đăng qua n8n: app CHỈ gửi yêu cầu, n8n mới là bên đăng thật.
+// n8n đã qua audit của các nền tảng nên đăng được cả TikTok — thứ API trực tiếp không làm được.
+async function guiN8N(env, kenh, post){
+  const url=env.N8N_WEBHOOK_URL;
+  if(!url) return {ok:false, loi:'Chưa cắm N8N_WEBHOOK_URL (secret của Worker)'};
+  const payload={
+    air_post_id: post.id,
+    kenh: { id:kenh.id, ten:kenh.ten, loai:kenh.loai, thuong_hieu:kenh.thuong_hieu, object_id:kenh.api_object_id||'' },
+    tieu_de: post.tieu_de||'',
+    caption: post.ghi_chu||'',
+    media_url: post.media_url||'',
+    link_bai: post.link_bai||'',
+    ma_theo_doi: post.ma_theo_doi||'',
+    lich_dang: post.lich_dang||'',
+    // n8n gọi ngược về đây để báo kết quả (kèm token ở header X-N8N-Token)
+    callback_url: (env.APP_BASE_URL||'') + '/api/air/' + post.id + '/n8n-callback',
+  };
+  try{
+    const res=await fetch(url,{ method:'POST',
+      headers:{ 'content-type':'application/json', ...(env.N8N_TOKEN?{'X-App-Token':env.N8N_TOKEN}:{}) },
+      body: JSON.stringify(payload) });
+    let j=null; try{ j=await res.json(); }catch{}
+    if(!res.ok) return {ok:false, loi:'n8n trả lỗi HTTP '+res.status+(j&&j.error?(': '+j.error):'')};
+    // n8n trả kết quả ngay (workflow ngắn)
+    if(j && typeof j.ok==='boolean') return j.ok ? {ok:true, id:j.post_id||'', link:j.link||''} : {ok:false, loi:j.loi||'n8n báo thất bại'};
+    // n8n nhận việc, sẽ báo kết quả sau qua callback (upload video có thể lâu)
+    return {pending:true};
+  }catch(e){ return {ok:false, loi:'Không gọi được n8n: '+(e.message||e)}; }
+}
 // Cron: quét bài đến giờ. Đăng được thì đăng, không thì chuyển ĐẾN GIỜ để nhắc đăng tay.
 const MAX_LAN_THU = 3;
 async function chayLichDang(env){
   try{
     await ensureSchema(env);
     const now=nowISO();
+    // Bài đã gửi n8n mà quá lâu không báo về → chuyển đăng tay, KHÔNG treo vô hạn
+    const hetHan=new Date(Date.now()-N8N_TIMEOUT_PHUT*60000).toISOString();
+    await env.DB.prepare(`UPDATE air_posts SET trang_thai='DEN_GIO', loi=?, updated_at=? WHERE trang_thai='DANG_GUI' AND gui_luc IS NOT NULL AND gui_luc<?`)
+      .bind('Đã gửi n8n nhưng quá '+N8N_TIMEOUT_PHUT+' phút không thấy báo kết quả — kiểm tra workflow n8n hoặc đăng tay', nowISO(), hetHan).run();
     const dueRows=(await env.DB.prepare(
       `SELECT * FROM air_posts WHERE lich_dang IS NOT NULL AND lich_dang<>'' AND lich_dang<=? AND trang_thai IN ('DA_LEN_LICH','LOI') AND COALESCE(lan_thu,0)<?`
     ).bind(now, MAX_LAN_THU).all()).results;
@@ -462,7 +501,12 @@ async function chayLichDang(env){
         await env.DB.prepare(`UPDATE air_posts SET trang_thai='DEN_GIO', updated_at=? WHERE id=?`).bind(nowISO(),p.id).run();
         continue;
       }
-      const r=await dangLenNenTang(env, kenh, p);
+      const quaN8N = String(kenh.cach_dang||'API').toUpperCase()==='N8N';
+      const r = quaN8N ? await guiN8N(env, kenh, p) : await dangLenNenTang(env, kenh, p);
+      if(r.pending){
+        await env.DB.prepare(`UPDATE air_posts SET trang_thai='DANG_GUI', gui_luc=?, updated_at=? WHERE id=?`).bind(nowISO(),nowISO(),p.id).run();
+        continue;
+      }
       if(r.ok){
         await env.DB.prepare(`UPDATE air_posts SET trang_thai='DA_DANG', posted_at=?, updated_at=?, loi=NULL WHERE id=?`).bind(nowISO(),nowISO(),p.id).run();
       } else {
@@ -594,7 +638,11 @@ async function bootstrap(env, u){
     frameworks, kenh, content_items, scripts, approvals, air_posts, air_checklist:AIR_CHECKLIST,
     ket_qua, don_cho_gan, muc_tin_cay:MUC_TIN_CAY, nguon_kq:NGUON_KQ,
     kenh_tu_dong: KENH_TU_DONG,
-    kenh_san_sang: staff ? Object.fromEntries((kenh||[]).map(k=>[k.id, !!layToken(env,k) && !!String(k.api_object_id||'').trim()])) : {},
+    kenh_san_sang: staff ? Object.fromEntries((kenh||[]).map(k=>[k.id,
+      String(k.cach_dang||'API').toUpperCase()==='N8N'
+        ? (!!env.N8N_WEBHOOK_URL && !!env.N8N_TOKEN)
+        : (!!layToken(env,k) && !!String(k.api_object_id||'').trim())])) : {},
+    n8n_san_sang: staff ? (!!env.N8N_WEBHOOK_URL && !!env.N8N_TOKEN) : false,
     footage, shot_list, bai_hoc, min_mau:MIN_MAU_BANG_CHUNG, trends, trend_check:TREND_CHECK,
     viec_ket: canContent ? tinhViecKet({scripts,approvals,air_posts,ket_qua,trends,don_cho_gan}) : null,
     seeding_theo_noi_dung: staff ? gomSeedingTheoNoiDung(topics, posts, cmts) : {},
@@ -642,6 +690,32 @@ async function handleApi(request, env){
     const exp = new Date(Date.now()+30*864e5).toISOString();
     await env.DB.prepare(`INSERT INTO sessions (token,user_id,expires_at) VALUES (?,?,?)`).bind(token,u.id,exp).run();
     return json({ token, db: await bootstrap(env, u) });
+  }
+
+  // n8n báo kết quả đăng về. KHÔNG dùng phiên đăng nhập (n8n không phải người dùng)
+  // → xác thực bằng secret dùng chung. Không có N8N_TOKEN thì TỪ CHỐI, không mở toang.
+  const cbMatch = method==='POST' ? path.match(/^\/air\/(.+)\/n8n-callback$/) : null;
+  if(cbMatch){
+    const tok=request.headers.get('X-N8N-Token')||'';
+    if(!env.N8N_TOKEN) return json({error:'Chưa cấu hình N8N_TOKEN'},503);
+    if(tok!==env.N8N_TOKEN) return json({error:'Sai token'},401);
+    const id=cbMatch[1];
+    // body đã được đọc ở trên — đọc request.json() lần nữa sẽ ra rỗng và hiểu nhầm là thất bại
+    const cb=body||{};
+    const r=await env.DB.prepare(`SELECT * FROM air_posts WHERE id=?`).bind(id).first();
+    if(!r) return json({error:'Không tìm thấy bài'},404);
+    if(r.trang_thai===AIR_ST.DA_DANG) return json({ok:true, note:'Bài đã đăng trước đó'});
+    if(cb.ok===true){
+      const link=String(cb.link||'').trim();
+      await env.DB.prepare(`UPDATE air_posts SET trang_thai='DA_DANG', posted_at=?, updated_at=?, loi=NULL, link_bai=? WHERE id=?`)
+        .bind(nowISO(), nowISO(), link||r.link_bai||'', id).run();
+      return json({ok:true});
+    }
+    const lan=Number(r.lan_thu||0)+1;
+    const het=lan>=MAX_LAN_THU;
+    await env.DB.prepare(`UPDATE air_posts SET trang_thai=?, lan_thu=?, loi=?, updated_at=? WHERE id=?`)
+      .bind(het?'DEN_GIO':'LOI', lan, String(cb.loi||'n8n báo thất bại')+(het?' — đã thử '+lan+' lần, chuyển sang đăng tay':''), nowISO(), id).run();
+    return json({ok:true, recorded:'that_bai'});
   }
 
   // Công cụ Lọc video (/tools/loc-video.html) hỏi danh sách nhạc nền từ folder cục bộ.
@@ -996,12 +1070,13 @@ async function handleApi(request, env){
   if((m=path.match(/^\/kenh\/(.+)$/)) && method==='PATCH'){
     if(!isStaff(me)) return json({error:'Không có quyền'},403);
     const id=m[1]; const r=await env.DB.prepare(`SELECT * FROM kenh WHERE id=?`).bind(id).first(); if(!r) return json({error:'Không tìm thấy'},404);
-    await env.DB.prepare(`UPDATE kenh SET ten=?, loai=?, thuong_hieu=?, active=?, tu_dong_dang=?, api_ma=?, api_object_id=? WHERE id=?`)
+    await env.DB.prepare(`UPDATE kenh SET ten=?, loai=?, thuong_hieu=?, active=?, tu_dong_dang=?, api_ma=?, api_object_id=?, cach_dang=? WHERE id=?`)
       .bind(body.ten!=null?String(body.ten).trim():r.ten, body.loai!=null?String(body.loai).trim():r.loai,
         body.thuong_hieu!=null?String(body.thuong_hieu).trim():r.thuong_hieu, body.active!=null?bool(body.active):r.active,
         body.tu_dong_dang!=null?bool(body.tu_dong_dang):r.tu_dong_dang,
         body.api_ma!=null?String(body.api_ma).trim().toUpperCase().replace(/[^A-Z0-9_]/g,''):r.api_ma,
-        body.api_object_id!=null?String(body.api_object_id).trim():r.api_object_id, id).run();
+        body.api_object_id!=null?String(body.api_object_id).trim():r.api_object_id,
+        body.cach_dang!=null?String(body.cach_dang).trim().toUpperCase():(r.cach_dang||'API'), id).run();
     return json({ db: await bootstrap(env, me) });
   }
   if((m=path.match(/^\/kenh\/(.+)$/)) && method==='DELETE'){
@@ -1201,11 +1276,17 @@ async function handleApi(request, env){
     if(tuDong){
       const kenh = r.kenh_id ? await env.DB.prepare(`SELECT * FROM kenh WHERE id=?`).bind(r.kenh_id).first() : null;
       if(!kenh) return json({error:'Bài chưa gắn kênh — không tự đăng được'},400);
-      const cap=KENH_TU_DONG[String(kenh.loai||'').toUpperCase()];
-      if(!cap || !cap.duoc) return json({error:'Kênh loại '+(kenh.loai||'?')+' không đăng tự động được: '+((cap&&cap.dieu_kien)||'')},422);
-      if(!uBool(kenh.tu_dong_dang)) return json({error:'Kênh này chưa bật tự động đăng (mở ở Kênh & Framework)'},422);
-      if(!layToken(env,kenh)) return json({error:'Chưa cắm token cho kênh (secret TOKEN_'+(kenh.api_ma||'?')+')'},422);
-      if(!String(kenh.api_object_id||'').trim()) return json({error:'Kênh chưa khai ID đối tượng (VD: Page ID)'},422);
+      if(!uBool(kenh.tu_dong_dang)) return json({error:'Kênh này chưa bật tự động đăng (mở ở Kênh & tự động đăng)'},422);
+      if(String(kenh.cach_dang||'API').toUpperCase()==='N8N'){
+        // Qua n8n thì KHÔNG bị giới hạn nền tảng — n8n đã có quyền, kể cả TikTok
+        if(!env.N8N_WEBHOOK_URL) return json({error:'Chưa cắm N8N_WEBHOOK_URL (secret của Worker)'},422);
+        if(!env.N8N_TOKEN) return json({error:'Chưa cắm N8N_TOKEN — cần để xác thực n8n báo kết quả về'},422);
+      } else {
+        const cap=KENH_TU_DONG[String(kenh.loai||'').toUpperCase()];
+        if(!cap || !cap.duoc) return json({error:'Kênh loại '+(kenh.loai||'?')+' không đăng tự động trực tiếp được: '+((cap&&cap.dieu_kien)||'')+'. Chuyển kênh sang cách đăng "n8n" nếu muốn tự động.'},422);
+        if(!layToken(env,kenh)) return json({error:'Chưa cắm token cho kênh (secret TOKEN_'+(kenh.api_ma||'?')+')'},422);
+        if(!String(kenh.api_object_id||'').trim()) return json({error:'Kênh chưa khai ID đối tượng (VD: Page ID)'},422);
+      }
     }
     // Đăng tự động thì checklist vẫn phải xong — không vì tự động mà bỏ qua kiểm tra
     const cl=JSON.parse(r.checklist||'{}');
@@ -1235,9 +1316,9 @@ async function handleApi(request, env){
       if(dup) return json({error:'Mã theo dõi đã dùng cho bài khác — 1 mã chỉ thuộc 1 bài'},409);
     }
     const g=(k,d)=> body[k]!=null?String(body[k]).trim():d;
-    await env.DB.prepare(`UPDATE air_posts SET kenh_id=?, tieu_de=?, ngay_dang=?, link_bai=?, ma_theo_doi=?, loai_ma=?, checklist=?, ghi_chu=?, updated_at=? WHERE id=?`)
+    await env.DB.prepare(`UPDATE air_posts SET kenh_id=?, tieu_de=?, ngay_dang=?, link_bai=?, ma_theo_doi=?, loai_ma=?, checklist=?, ghi_chu=?, media_url=?, updated_at=? WHERE id=?`)
       .bind(body.kenh_id!==undefined?(body.kenh_id||null):r.kenh_id, g('tieu_de',r.tieu_de), g('ngay_dang',r.ngay_dang), g('link_bai',r.link_bai),
-        ma, g('loai_ma',r.loai_ma), body.checklist!=null?JSON.stringify(body.checklist):r.checklist, g('ghi_chu',r.ghi_chu), nowISO(), id).run();
+        ma, g('loai_ma',r.loai_ma), body.checklist!=null?JSON.stringify(body.checklist):r.checklist, g('ghi_chu',r.ghi_chu), g('media_url',r.media_url), nowISO(), id).run();
     return json({ db: await bootstrap(env, me) });
   }
   if((m=path.match(/^\/air\/(.+)$/)) && method==='DELETE'){
