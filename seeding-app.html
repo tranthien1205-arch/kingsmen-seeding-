@@ -91,6 +91,43 @@ function scanClaims(text, claims){
   const t=(text||'').toLowerCase();
   return (claims||[]).filter(c=>c.active!==false && c.cum_tu && t.includes(c.cum_tu.toLowerCase()));
 }
+// P4 — gộp toàn văn kịch bản (để quét claim) — khớp scriptText ở worker
+function scriptTextFE(s){
+  const secs=Array.isArray(s.sections)?s.sections.map(x=>(x&&x.text)||'').join('\n'):'';
+  return [s.tieu_de,s.hook,secs,s.cta].filter(Boolean).join('\n');
+}
+// P4 — bộ khung kịch bản theo 12 framework THẬT (rule-based, KHÔNG bịa số liệu).
+// Placeholder chỉ chèn dữ liệu THẬT: {SP} tên sản phẩm · {DONG} dòng · {ANGLE} góc nhìn · {AUD} đối tượng.
+// Spec/tiêu chuẩn/hướng dẫn thật được chèn thành gạch đầu dòng khi có; nếu thiếu → để "[điền …]".
+const FW_TEMPLATES = {
+  'chuẩn bán hàng':{ hook:'{SP} — {ANGLE}', secs:[['Vấn đề','Khách {AUD} thường gặp: [điền nỗi đau cụ thể].'],['Giải pháp','{SP} giải quyết nhờ: {SPEC}'],['Bằng chứng','Tiêu chuẩn/chứng nhận: {STD}. Cách dùng: {GUIDE}'],['Chốt','Phù hợp cho: [điền trường hợp dùng].']], cta:'Nhắn tin để được tư vấn & báo giá {SP}.' },
+  'pas':{ hook:'{ANGLE}?', secs:[['Problem — Vấn đề','[điền nỗi đau {AUD} đang gặp].'],['Agitate — Khoét sâu','Nếu không xử lý: [điền hệ quả].'],['Solve — Giải pháp','{SP}: {SPEC}. {STD}']], cta:'Inbox để {SP} xử lý dứt điểm.' },
+  'phản biện comment':{ hook:'"[dán comment thật của khách]"', secs:[['Bối cảnh','Nhiều người thắc mắc: [điền].'],['Phản biện bằng dữ kiện','Sự thật về {SP}: {SPEC}. Tiêu chuẩn: {STD}'],['Chốt','Nói có sách mách có chứng — không nói quá.']], cta:'Còn câu hỏi nào về {SP}? Comment bên dưới.' },
+  'test chất lượng':{ hook:'Thử {SP} tại chỗ — {ANGLE}', secs:[['Bài test','Mô tả bài kiểm tra: [điền cách test].'],['Kết quả quan sát','Ghi đúng những gì thấy được, không suy diễn. Thông số liên quan: {SPEC}'],['Kết luận','Đạt/không đạt theo {STD}.']], cta:'Muốn xem test trực tiếp? Nhắn {SP}.' },
+  'hành trình thi công':{ hook:'Từ mặt bằng thô đến hoàn thiện với {SP}', secs:[['Chuẩn bị','Bề mặt & dụng cụ: {GUIDE}'],['Thi công','Các bước: {GUIDE}'],['Hoàn thiện','Kết quả & lưu ý bảo dưỡng. Thông số: {SPEC}']], cta:'Cần đội thi công {SP}? Liên hệ ngay.' },
+  'size / combo':{ hook:'Chọn đúng quy cách {SP} cho {ANGLE}', secs:[['Các quy cách','{SPEC}'],['Combo gợi ý','[điền combo theo nhu cầu].'],['Cách chọn','Theo diện tích/mục đích: [điền].']], cta:'Nhắn diện tích để được gợi ý combo {SP}.' },
+  'fomo':{ hook:'{ANGLE} — số lượng có hạn', secs:[['Ưu đãi','[điền chương trình thật, thời hạn thật].'],['Vì sao nên nhanh','[điền lý do thật: hết hàng/hết hạn].'],['Sản phẩm','{SP}: {SPEC}']], cta:'Chốt {SP} trước [ngày] để nhận ưu đãi.' },
+  'review koc':{ hook:'KOC thử {SP}: {ANGLE}', secs:[['Trải nghiệm','Cảm nhận thật của người dùng: [điền].'],['Điểm nổi bật','{SPEC}'],['Đánh giá','Ưu/nhược trung thực. Tiêu chuẩn: {STD}']], cta:'Bạn muốn thử {SP}? Nhắn shop.' },
+  '"đừng..." trend':{ hook:'Đừng mua {DONG} nếu chưa biết điều này', secs:[['Sai lầm thường gặp','[điền sai lầm thực tế].'],['Đúng ra nên','{SP} khác biệt nhờ: {SPEC}'],['Chốt','Chọn đúng ngay từ đầu.']], cta:'Lưu lại & nhắn {SP} để không mua nhầm.' },
+  'q&a khách hàng':{ hook:'Hỏi nhanh đáp gọn về {SP}', secs:[['Câu hỏi 1','[điền câu hỏi thật] → [đáp dựa trên {SPEC}].'],['Câu hỏi 2','[điền] → [đáp theo {STD}].'],['Câu hỏi 3','[điền] → [đáp theo {GUIDE}].']], cta:'Còn thắc mắc về {SP}? Comment ngay.' },
+  'so sánh kinh tế':{ hook:'{SP} — tính ra rẻ hay đắt?', secs:[['Chi phí ban đầu','[điền số liệu thật, không bịa].'],['Chi phí dài hạn','Độ bền & bảo trì theo {SPEC}.'],['Kết luận','Tính trên vòng đời sử dụng.']], cta:'Nhắn để nhận bảng tính chi tiết {SP}.' },
+  'hướng dẫn thi công':{ hook:'Hướng dẫn thi công {SP} đúng chuẩn', secs:[['Chuẩn bị','{GUIDE}'],['Các bước','{GUIDE}'],['Lưu ý','Tránh lỗi thường gặp. Thông số: {SPEC}. Tiêu chuẩn: {STD}']], cta:'Tải hướng dẫn {SP} đầy đủ — nhắn shop.' },
+};
+function fwKey(name){ return String(name||'').trim().toLowerCase(); }
+// Sinh nháp kịch bản rule-based từ framework + sản phẩm thật + góc nhìn/đối tượng. KHÔNG bịa số liệu.
+function generateScript({framework, product, angle, audience}){
+  const tpl = FW_TEMPLATES[fwKey(framework&&framework.ten)] || { hook:'{SP} — {ANGLE}', secs:[['Nội dung','{SPEC}']], cta:'Nhắn tin để tư vấn {SP}.' };
+  const SP = (product&&product.ten) || '[sản phẩm]';
+  const DONG = (product&&product.dong) || '[dòng sản phẩm]';
+  const specArr = product && Array.isArray(product.thong_so) ? product.thong_so.filter(Boolean) : [];
+  const SPEC = specArr.length ? specArr.join('; ') : '[điền thông số thật của sản phẩm]';
+  const STD = (product&&product.tieu_chuan) || '[điền tiêu chuẩn/chứng nhận thật]';
+  const GUIDE = (product&&product.huong_dan) || '[điền hướng dẫn sử dụng thật]';
+  const ANGLE = (angle||'').trim() || 'lý do nên chọn';
+  const AUD = (audience||'').trim() || 'mục tiêu';
+  const fill = s => String(s).replaceAll('{SP}',SP).replaceAll('{DONG}',DONG).replaceAll('{SPEC}',SPEC).replaceAll('{STD}',STD).replaceAll('{GUIDE}',GUIDE).replaceAll('{ANGLE}',ANGLE).replaceAll('{AUD}',AUD);
+  return { hook: fill(tpl.hook), sections: tpl.secs.map(([label,text])=>({label, text:fill(text)})), cta: fill(tpl.cta) };
+}
 
 const ST = { NHAP:'NHAP', CHO_DUYET:'CHO_DUYET', DAT:'DAT', KHONG_DAT:'KHONG_DAT', DA_CHI:'DA_CHI' };
 const ST_LABEL = { NHAP:'Nháp', CHO_DUYET:'Chờ duyệt', DAT:'Đạt', KHONG_DAT:'Không đạt', DA_CHI:'Đã chi' };
@@ -475,6 +512,11 @@ function AppProvider({children}){
       deleteKenh: async id=>{ S.kenh=(S.kenh||[]).filter(x=>x.id!==id); commit(); return true; },
       upsertFramework: async o=>{ S.frameworks ||= []; if(o.id){ const i=S.frameworks.findIndex(x=>x.id===o.id); if(i>=0) S.frameworks[i]={...S.frameworks[i],...o}; } else S.frameworks.push({id:uid('fw'),ten:'',mo_ta:'',thu_tu:(S.frameworks.length+1),active:true,created_at:now(),...o}); commit(); return true; },
       deleteFramework: async id=>{ S.frameworks=(S.frameworks||[]).filter(x=>x.id!==id); commit(); return true; },
+      upsertScript: async o=>{ S.scripts ||= []; const flags=scanClaims(scriptTextFE(o), S.claim_cam); if(flags.some(f=>f.muc_do==='CHAN')){ return {ok:false, blocked:flags.filter(f=>f.muc_do==='CHAN').map(f=>f.cum_tu)}; }
+        if(o.id){ const i=S.scripts.findIndex(x=>x.id===o.id); if(i>=0) S.scripts[i]={...S.scripts[i],...o, claim_flags:flags, version:(S.scripts[i].version||1)+1, updated_at:now()}; }
+        else S.scripts.unshift({ id:uid('scr'), tieu_de:'', hook:'', sections:[], cta:'', framework_id:null, san_pham_id:null, kenh_id:null, brand_voice:'', trang_thai:'NHAP', version:1, claim_flags:flags, created_at:now(), created_by:meRef.current.id, created_by_name:meRef.current.ho_ten, updated_at:now(), ...o }); commit(); return {ok:true}; },
+      deleteScript: async id=>{ S.scripts=(S.scripts||[]).filter(x=>x.id!==id); commit(); return true; },
+      fetchScriptVersions: async id=>({ versions: [] }),
       createLibImg: async o=>{ S.media_library ||= []; S.media_library.unshift({ id:uid('lib'), media_url:o.media_url, caption:o.caption||'', muc_dich:o.muc_dich||'CA_HAI', topic_id:o.topic_id||null, tags:o.tags||[], uploaded_by:meRef.current.id, uploaded_by_name:meRef.current.ho_ten, active:true, uploaded_at:now() }); commit(); return true; },
       patchLibImg: async (id, patch)=>{ const r=(S.media_library||[]).find(x=>x.id===id); if(r) Object.assign(r, patch); commit(); return true; },
       deleteLibImg: async id=>{ S.media_library=(S.media_library||[]).filter(x=>x.id!==id); commit(); return true; },
@@ -526,7 +568,7 @@ function AppProvider({children}){
       body: opts.body ? JSON.stringify(opts.body) : undefined,
     });
     const data = await res.json().catch(()=>({}));
-    if(!res.ok) throw new Error(data.error || ('Lỗi '+res.status));
+    if(!res.ok){ const err=new Error(data.error || ('Lỗi '+res.status)); err.blocked=data.blocked; err.status=res.status; throw err; }
     return data;
   };
 
@@ -598,6 +640,10 @@ function AppProvider({children}){
     deleteKenh: id => mut('/kenh/'+id, {method:'DELETE'}),
     upsertFramework: o => mut(o.id?'/frameworks/'+o.id:'/frameworks', {method:o.id?'PATCH':'POST', body:o}),
     deleteFramework: id => mut('/frameworks/'+id, {method:'DELETE'}),
+    upsertScript: async o => { try { const r=await call(o.id?'/scripts/'+o.id:'/scripts', {method:o.id?'PATCH':'POST', body:o}); if(r&&r.db) setDb(r.db); return {ok:true, id:r.id}; }
+      catch(e){ return {ok:false, blocked:e.blocked, msg:e.message}; } },
+    deleteScript: id => mut('/scripts/'+id, {method:'DELETE'}),
+    fetchScriptVersions: async id => { try { return await call('/scripts/'+id+'/versions'); } catch(e){ return {versions:[]}; } },
     createCmtSeed: c => mut('/cmtseed', {method:'POST', body:c}),
     reviewCmtSeed: (id, result, reason) => mut(`/cmtseed/${id}/review`, {method:'POST', body:{result, reason}}),
     markPaid: (sales_id, ky) => mut('/markpaid', {method:'POST', body:{sales_id, ky}}),
@@ -795,6 +841,7 @@ const NAV = {
     {key:'dash', label:'Dashboard', icon:'📊'},
     {key:'strategy', label:'Chiến lược', icon:'🎯'},
     {key:'plan', label:'Kế hoạch nội dung', short:'Kế hoạch', icon:'🗓️'},
+    {key:'studio', label:'Creative Studio', short:'Kịch bản', icon:'✍️'},
     {key:'library', label:'Thư viện', icon:'📚'},
     {key:'products', label:'Sản phẩm & Claim', short:'Sản phẩm', icon:'🧪'},
     {key:'filming', label:'Quay CT', icon:'🎬'},
@@ -811,6 +858,7 @@ const NAV = {
     {key:'users', label:'Người dùng', icon:'👥'},
     {key:'strategy', label:'Chiến lược', icon:'🎯'},
     {key:'plan', label:'Kế hoạch nội dung', short:'Kế hoạch', icon:'🗓️'},
+    {key:'studio', label:'Creative Studio', short:'Kịch bản', icon:'✍️'},
     {key:'library', label:'Thư viện', icon:'📚'},
     {key:'products', label:'Sản phẩm & Claim', short:'Sản phẩm', icon:'🧪'},
     {key:'filming', label:'Quay CT', icon:'🎬'},
@@ -845,7 +893,7 @@ function ProfileModal({open, onClose}){
   </Modal>;
 }
 // Module đang NÂNG CẤP — chỉ tài khoản dev preview (is_dev) mới thấy
-const BETA_KEYS = new Set(['strategy','plan','products']);
+const BETA_KEYS = new Set(['strategy','plan','products','studio']);
 function Shell(){
   const { me, logout, db } = useApp();
   const nav = (NAV[me.vai_tro]||[]).filter(item => me.is_dev || !BETA_KEYS.has(item.key));
@@ -874,6 +922,7 @@ function Shell(){
       case 'products': return <ProductClaimManager/>;
       case 'strategy': return <StrategyPillar/>;
       case 'plan': return <ContentPlan/>;
+      case 'studio': return <CreativeStudio/>;
       case 'schedule': return <PostSchedule/>;
       case 'pay_report': return <MktPayReport/>;
       case 'users': return <UserManagement/>;
@@ -1809,6 +1858,159 @@ function ContentImportModal({onClose}){
 }
 
 /* ============================================================
+   CONTENT OS · P4 — CREATIVE STUDIO (sinh kịch bản + guardrail claim)
+============================================================ */
+const SCRIPT_ST = { NHAP:'Nháp', CHO_DUYET:'Chờ duyệt', DUYET:'Đã duyệt' };
+const SCRIPT_ST_STYLE = { NHAP:'bg-slate-100 text-slate-600', CHO_DUYET:'bg-amber-100 text-amber-700', DUYET:'bg-emerald-100 text-emerald-700' };
+function CreativeStudio(){
+  const { db, notify } = useApp();
+  const scripts = (db.scripts||[]);
+  const [edit,setEdit]=useState(null);           // script đang soạn (null = danh sách)
+  const [q,setQ]=useState('');
+  const nameById=(arr,id)=>{ const x=(arr||[]).find(o=>o.id===id); return x?x.ten:''; };
+  const filtered = scripts.filter(s=>!q || (s.tieu_de||'').toLowerCase().includes(q.toLowerCase()) || (s.hook||'').toLowerCase().includes(q.toLowerCase()));
+  if(edit) return <ScriptEditor init={edit} onClose={()=>setEdit(null)}/>;
+  return <div className="space-y-4">
+    <div className="flex items-center justify-between flex-wrap gap-2">
+      <h2 className="font-display text-lg font-bold text-ink">✍️ Creative Studio — Kịch bản</h2>
+      <Btn variant="brand" onClick={()=>setEdit({})}>＋ Kịch bản mới</Btn>
+    </div>
+    <div className="bg-white rounded-2xl border border-line shadow-card p-3">
+      <div className="text-[11px] text-slate-500 leading-relaxed">
+        Sinh nháp theo <b>framework thật</b> + <b>thông số sản phẩm thật</b> — công cụ <b>chỉ chèn dữ liệu bạn đã nhập</b>, không tự bịa số liệu.
+        Guardrail quét <b>cụm từ claim cấm</b>: mức <span className="text-rose-600 font-semibold">CHẶN</span> không cho lưu, mức <span className="text-amber-600 font-semibold">Cảnh báo</span> vẫn lưu nhưng đánh dấu để rà lại.
+      </div>
+    </div>
+    <div className="flex gap-2"><Input value={q} onChange={e=>setQ(e.target.value)} placeholder="Tìm kịch bản…"/></div>
+    {filtered.length===0 ? <Empty>Chưa có kịch bản. Bấm “Kịch bản mới” để bắt đầu.</Empty> :
+      <div className="grid sm:grid-cols-2 gap-3">{filtered.map(s=>{
+        const warn=(s.claim_flags||[]).filter(f=>f.muc_do==='CANH_BAO').length;
+        return <div key={s.id} className="bg-white rounded-2xl border border-line shadow-card p-3 flex flex-col">
+          <div className="flex items-start justify-between gap-2">
+            <div className="font-display font-bold text-ink text-sm flex-1 min-w-0">{s.tieu_de||s.hook||'(chưa đặt tên)'}</div>
+            <span className={"text-[10px] px-1.5 py-0.5 rounded-full font-semibold shrink-0 "+(SCRIPT_ST_STYLE[s.trang_thai]||SCRIPT_ST_STYLE.NHAP)}>{SCRIPT_ST[s.trang_thai]||'Nháp'}</span>
+          </div>
+          {s.hook && <div className="text-xs text-slate-500 mt-1 line-clamp-2">{s.hook}</div>}
+          <div className="flex flex-wrap gap-1 mt-2">
+            {nameById(db.frameworks,s.framework_id) && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-brand/10 text-brand-dark">{nameById(db.frameworks,s.framework_id)}</span>}
+            {nameById(db.san_pham,s.san_pham_id) && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-600">{nameById(db.san_pham,s.san_pham_id)}</span>}
+            {nameById(db.kenh,s.kenh_id) && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-600">{nameById(db.kenh,s.kenh_id)}</span>}
+            {warn>0 && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700">⚠ {warn} cảnh báo</span>}
+          </div>
+          <div className="flex items-center justify-between mt-3 pt-2 border-t border-line/60">
+            <span className="text-[10px] text-slate-400">v{s.version||1} · {s.created_by_name||''}</span>
+            <button onClick={()=>setEdit(s)} className="text-xs text-brand-dark font-semibold hover:underline">Mở soạn →</button>
+          </div>
+        </div>;
+      })}</div>}
+  </div>;
+}
+function ScriptEditor({init, onClose}){
+  const { db, upsertScript, deleteScript, fetchScriptVersions, notify } = useApp();
+  const brandVoice0 = (db.content_strategy||{}).brand_voice||'';
+  const [f,setF]=useState(()=>({
+    id:init.id, framework_id:init.framework_id||'', san_pham_id:init.san_pham_id||'', kenh_id:init.kenh_id||'', content_item_id:init.content_item_id||'',
+    tieu_de:init.tieu_de||'', hook:init.hook||'', sections:Array.isArray(init.sections)&&init.sections.length?init.sections:[], cta:init.cta||'',
+    brand_voice:init.brand_voice||brandVoice0, trang_thai:init.trang_thai||'NHAP',
+  }));
+  const [angle,setAngle]=useState(''); const [busy,setBusy]=useState(false); const [vers,setVers]=useState(null);
+  const product = (db.san_pham||[]).find(p=>p.id===f.san_pham_id);
+  const framework = (db.frameworks||[]).find(x=>x.id===f.framework_id);
+  const audience = (db.content_strategy||{}).audience||'';
+  const flags = scanClaims(scriptTextFE(f), db.claim_cam);
+  const blocked = flags.filter(x=>x.muc_do==='CHAN');
+  const warns = flags.filter(x=>x.muc_do!=='CHAN');
+  const specArr = product && Array.isArray(product.thong_so) ? product.thong_so.filter(Boolean) : [];
+
+  const gen=()=>{ if(!framework) return notify('Chọn framework trước','warn');
+    const g=generateScript({framework, product, angle, audience});
+    setF(v=>({...v, hook:g.hook, sections:g.sections, cta:g.cta, tieu_de:v.tieu_de||((product&&product.ten||'')+' — '+(angle||framework.ten)) }));
+    notify('Đã sinh nháp — hãy đọc & sửa cho đúng thực tế'); };
+  const setSec=(i,k,val)=>setF(v=>{ const s=v.sections.slice(); s[i]={...s[i],[k]:val}; return {...v,sections:s}; });
+  const addSec=()=>setF(v=>({...v,sections:[...v.sections,{label:'Phần mới',text:''}]}));
+  const delSec=(i)=>setF(v=>({...v,sections:v.sections.filter((_,j)=>j!==i)}));
+  const save=async()=>{ if(!(f.tieu_de||'').trim() && !(f.hook||'').trim()) return notify('Nhập tiêu đề hoặc hook','warn');
+    if(blocked.length) return notify('Còn cụm bị CHẶN: '+blocked.map(b=>b.cum_tu).join(', '),'err');
+    setBusy(true); const r=await upsertScript({ ...f, framework_id:f.framework_id||null, san_pham_id:f.san_pham_id||null, kenh_id:f.kenh_id||null, content_item_id:f.content_item_id||null }); setBusy(false);
+    if(r&&r.ok){ notify('Đã lưu kịch bản'); onClose(); }
+    else if(r&&r.blocked){ notify('Bị chặn: '+r.blocked.join(', '),'err'); }
+    else if(r&&r.msg){ notify(r.msg,'err'); }
+  };
+  const remove=async()=>{ if(!f.id) return onClose(); if(!confirm('Xoá kịch bản này?')) return; const ok=await deleteScript(f.id); if(ok){ notify('Đã xoá'); onClose(); } };
+  const loadVers=async()=>{ if(!f.id) return; const r=await fetchScriptVersions(f.id); setVers(r.versions||[]); };
+
+  const Chip=({c})=><span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">{c}</span>;
+  return <div className="space-y-4">
+    <div className="flex items-center gap-2">
+      <button onClick={onClose} className="text-sm text-slate-500 hover:underline">← Danh sách</button>
+      <h2 className="font-display text-lg font-bold text-ink flex-1 truncate">{f.id?'Sửa kịch bản':'Kịch bản mới'}</h2>
+      {f.id && <span className="text-[11px] text-slate-400">v{init.version||1}</span>}
+    </div>
+
+    {/* Thiết lập + sinh nháp */}
+    <div className="bg-white rounded-2xl border border-line shadow-card p-4 space-y-3">
+      <div className="grid sm:grid-cols-3 gap-2">
+        <Field label="Framework (nhóm kịch bản)"><Select value={f.framework_id} onChange={e=>setF({...f,framework_id:e.target.value})}><option value="">— Chọn —</option>{(db.frameworks||[]).filter(x=>x.active!==false).map(x=><option key={x.id} value={x.id}>{x.ten}</option>)}</Select></Field>
+        <Field label="Sản phẩm (spec thật)"><Select value={f.san_pham_id} onChange={e=>setF({...f,san_pham_id:e.target.value})}><option value="">— Không gắn —</option>{(db.san_pham||[]).filter(x=>x.active!==false).map(x=><option key={x.id} value={x.id}>{x.ten}</option>)}</Select></Field>
+        <Field label="Kênh"><Select value={f.kenh_id} onChange={e=>setF({...f,kenh_id:e.target.value})}><option value="">— Không —</option>{(db.kenh||[]).filter(x=>x.active!==false).map(x=><option key={x.id} value={x.id}>{x.ten}</option>)}</Select></Field>
+      </div>
+      <Field label="Góc nhìn / thông điệp (angle)" hint="VD: chống ố vàng cho nền nhà tắm"><Input value={angle} onChange={e=>setAngle(e.target.value)} placeholder="Nhập angle để sinh sát hơn…"/></Field>
+      {product && <div className="rounded-xl bg-emerald-50/60 border border-emerald-100 p-2">
+        <div className="text-[11px] font-semibold text-emerald-800 mb-1">✓ Chỉ dùng dữ kiện thật của “{product.ten}”:</div>
+        <div className="flex flex-wrap gap-1">
+          {specArr.map((s,i)=><Chip key={i} c={s}/>)}
+          {product.tieu_chuan && <Chip c={'TC: '+product.tieu_chuan}/>}
+          {specArr.length===0 && !product.tieu_chuan && <span className="text-[11px] text-amber-600">Sản phẩm chưa có thông số — nên bổ sung ở mục Sản phẩm & Claim.</span>}
+        </div>
+      </div>}
+      <Btn variant="brand" onClick={gen}>✨ Sinh nháp theo framework</Btn>
+    </div>
+
+    {/* Guardrail */}
+    {flags.length>0 && <div className={"rounded-2xl border p-3 "+(blocked.length?'bg-rose-50 border-rose-200':'bg-amber-50 border-amber-200')}>
+      <div className={"text-sm font-semibold "+(blocked.length?'text-rose-700':'text-amber-700')}>{blocked.length?'⛔ Có cụm từ bị CHẶN — phải gỡ mới lưu được':'⚠ Cụm từ cần rà lại (cảnh báo)'}</div>
+      <ul className="mt-1 space-y-0.5">{flags.map((x,i)=><li key={i} className={"text-xs "+(x.muc_do==='CHAN'?'text-rose-600':'text-amber-700')}>• “{x.cum_tu}”{x.ly_do?' — '+x.ly_do:''} <span className="opacity-60">({x.muc_do==='CHAN'?'CHẶN':'cảnh báo'})</span></li>)}</ul>
+    </div>}
+
+    {/* Soạn kịch bản */}
+    <div className="bg-white rounded-2xl border border-line shadow-card p-4 space-y-3">
+      <Field label="Tiêu đề"><Input value={f.tieu_de} onChange={e=>setF({...f,tieu_de:e.target.value})} placeholder="Tên kịch bản"/></Field>
+      <Field label="Hook (câu mở)"><Textarea rows="2" value={f.hook} onChange={e=>setF({...f,hook:e.target.value})} placeholder="Câu đầu giữ chân người xem"/></Field>
+      <div className="space-y-2">
+        <div className="text-[11px] font-semibold text-ink-muted uppercase tracking-wide">Thân kịch bản</div>
+        {f.sections.map((s,i)=><div key={i} className="rounded-xl border border-line p-2">
+          <div className="flex items-center gap-2 mb-1">
+            <input value={s.label||''} onChange={e=>setSec(i,'label',e.target.value)} className="text-xs font-semibold text-brand-dark bg-transparent border-b border-dashed border-line focus:outline-none flex-1"/>
+            <button onClick={()=>delSec(i)} className="text-xs text-rose-400 hover:underline shrink-0">Xoá</button>
+          </div>
+          <Textarea rows="2" value={s.text||''} onChange={e=>setSec(i,'text',e.target.value)}/>
+        </div>)}
+        <button onClick={addSec} className="text-xs text-brand-dark font-semibold hover:underline">＋ Thêm phần</button>
+      </div>
+      <Field label="CTA (kêu gọi hành động)"><Textarea rows="2" value={f.cta} onChange={e=>setF({...f,cta:e.target.value})}/></Field>
+      <div className="grid sm:grid-cols-2 gap-2">
+        <Field label="Brand voice (tông giọng)"><Input value={f.brand_voice} onChange={e=>setF({...f,brand_voice:e.target.value})} placeholder="VD: chuyên nghiệp, gần gũi"/></Field>
+        <Field label="Trạng thái"><Select value={f.trang_thai} onChange={e=>setF({...f,trang_thai:e.target.value})}>{Object.keys(SCRIPT_ST).map(k=><option key={k} value={k}>{SCRIPT_ST[k]}</option>)}</Select></Field>
+      </div>
+    </div>
+
+    <div className="flex flex-wrap gap-2">
+      <Btn variant="brand" className="flex-1 min-w-[140px]" onClick={save} disabled={busy||blocked.length>0}>{busy?'Đang lưu…':(blocked.length?'Gỡ cụm bị chặn để lưu':'💾 Lưu kịch bản')}</Btn>
+      {f.id && <Btn variant="ghost" onClick={loadVers}>🕑 Phiên bản</Btn>}
+      {f.id && <Btn variant="ghost" onClick={remove}>🗑 Xoá</Btn>}
+      <Btn variant="ghost" onClick={onClose}>Đóng</Btn>
+    </div>
+
+    {vers && <Modal open={true} onClose={()=>setVers(null)} title="Lịch sử phiên bản" wide>
+      {vers.length===0 ? <Empty>Chưa có lịch sử.</Empty> : <div className="space-y-2">{vers.map(v=><div key={v.id} className="rounded-xl border border-line p-2">
+        <div className="flex items-center justify-between"><span className="text-xs font-semibold text-ink">v{v.version} · {v.created_by_name||''}</span><span className="text-[10px] text-slate-400">{fmtDate(v.created_at)}</span></div>
+        <div className="text-xs text-slate-600 mt-1"><b>{(v.snapshot||{}).tieu_de||''}</b> — {(v.snapshot||{}).hook||''}</div>
+      </div>)}</div>}
+    </Modal>}
+  </div>;
+}
+
+/* ============================================================
    CONTENT OS · P2 — CHIẾN LƯỢC & PILLAR (trụ cột nội dung)
 ============================================================ */
 function StrategyPillar(){
@@ -1821,7 +2023,7 @@ function StrategyPillar(){
   useEffect(()=>{ setSt(db.content_strategy||{}); }, [db.content_strategy]);
   const blank={ten:'',objective:'',point_of_difference:'',request:'',ty_trong:0,active:true};
   const barColors=['#0a92b4','#0a7f9c','#0a6a80','#0b5567','#135465','#1c6b7e'];
-  const saveStrat=async()=>{ setBusy(true); const ok=await setStrategy({okr:st.okr||'',big_idea:st.big_idea||'',purpose:st.purpose||'',audience:st.audience||'',swot:st.swot||''}); setBusy(false); if(ok){ notify('Đã lưu chiến lược'); setEditStrat(false); } };
+  const saveStrat=async()=>{ setBusy(true); const ok=await setStrategy({okr:st.okr||'',big_idea:st.big_idea||'',purpose:st.purpose||'',audience:st.audience||'',swot:st.swot||'',brand_voice:st.brand_voice||''}); setBusy(false); if(ok){ notify('Đã lưu chiến lược'); setEditStrat(false); } };
   const SField=({label,k,rows})=> <div className="mb-2"><div className="text-[11px] font-semibold text-ink-muted uppercase tracking-wide mb-1">{label}</div>{editStrat ? <Textarea rows={rows||2} value={st[k]||''} onChange={e=>setSt({...st,[k]:e.target.value})}/> : <div className="text-sm text-ink whitespace-pre-wrap">{st[k]||<span className="text-slate-300 italic">—</span>}</div>}</div>;
   return <div className="space-y-4">
     <div className="flex items-center justify-between flex-wrap gap-2">
@@ -1840,6 +2042,7 @@ function StrategyPillar(){
         <SField label="Big Idea" k="big_idea"/>
         <SField label="Purpose (mục đích page)" k="purpose"/>
         <SField label="Đối tượng (Audience)" k="audience"/>
+        <div className="sm:col-span-2"><SField label="Brand voice (tông giọng — dùng cho Creative Studio)" k="brand_voice"/></div>
         <div className="sm:col-span-2"><SField label="SWOT / phân tích nền" k="swot" rows={3}/></div>
       </div>
     </div>
