@@ -1,7 +1,7 @@
 # KINGSMEN CONTENT & SEEDING OS — KẾ HOẠCH TRIỂN KHAI (bộ nhớ bền)
 
 > **Đọc file này ĐẦU TIÊN mỗi phiên.** Đây là nguồn sự thật về mục tiêu, kiến trúc, tiến độ, và cách build/test/deploy. Cập nhật file này sau MỖI lát cắt hoàn thành (mục "Changelog" + đổi trạng thái module).
-> Cập nhật lần cuối: sau khi deploy **P2** (commit `719852e`).
+> Cập nhật lần cuối: sau khi deploy **P10** (commit `ee1ed40`) — **đã xong toàn bộ P1→P10**.
 
 ---
 
@@ -65,7 +65,7 @@ App hiện tại KHÔNG phải Next.js/Supabase như brief gốc. Ta **thích �
 | `MKT_STAFF` | ⏳ thêm ở P3/P4 | người sản xuất |
 | `GIAM_DOC` | ⏳ thêm ở P9 | xem Dashboard + đặt pillar/tỷ lệ |
 
-**DEV PREVIEW (cờ `is_dev` trên user):** chỉ tài khoản `is_dev=1` thấy các module ĐANG NÂNG CẤP. `BETA_KEYS = {strategy, plan, products}` (lọc trong `Shell`). Seed sẵn **`dev@masfico.vn` / `Dev2026!`** (ADMIN, is_dev=1) — đổi mật khẩu sau. Admin/Marketing bật/tắt cờ dev cho từng tài khoản ở màn Tài khoản. Khi 1 module "ra mắt chính thức" → bỏ key khỏi `BETA_KEYS`.
+**DEV PREVIEW (cờ `is_dev` trên user):** chỉ tài khoản `is_dev=1` thấy các module ĐANG NÂNG CẤP. `BETA_KEYS = {strategy, plan, studio, approve, air, ketqua, footage, cdash, hoc, products}` (lọc trong `Shell`) — tức **toàn bộ Content OS đang ẩn với user thường**. Seed sẵn **`dev@masfico.vn` / `Dev2026!`** (ADMIN, is_dev=1) — đổi mật khẩu sau. Admin/Marketing bật/tắt cờ dev cho từng tài khoản ở màn Tài khoản. Khi 1 module "ra mắt chính thức" → bỏ key khỏi `BETA_KEYS`.
 
 **Quyền helper trong Worker:**
 - `isStaff(u)` = MARKETING || ADMIN (gác 29+ hành động seeding/review — **KHÔNG mở rộng bừa**).
@@ -87,14 +87,18 @@ App hiện tại KHÔNG phải Next.js/Supabase như brief gốc. Ta **thích �
 | `claim_cam` | P1 | ✅ | id, cum_tu, ly_do, muc_do(CANH_BAO/CHAN), active, created_at |
 | `pillars` | P2 | ✅ | id, ten, objective, point_of_difference, request, ty_trong(REAL %), thu_tu, active, created_at |
 | `content_strategy` | P2 | ✅ | id=1 singleton: okr, big_idea, purpose, audience, swot, updated_at |
-| `content_items` | P3 | ⏳ | XEM §5.P3 — trung tâm, 2 loại (ECOM/SOCIAL) |
-| `content_stages` / status | P3 | ⏳ | pipeline 6 giai đoạn (ECOM) / trạng thái (SOCIAL) |
-| `frameworks` | P3/P4 | ⏳ | 12 nhóm kịch bản thật (§7) |
-| `kenh` | P3 | ⏳ | kênh/shop đa thương hiệu (§7) |
-| `brand_voice` | P4 | ⏳ | tone, từ nên/cấm, CTA |
-| `script`, `script_version` | P4 | ⏳ | AI output có version/rollback |
-| `duyet_log` | P6 | ⏳ | cổng(nội dung/claim), kết quả, lý do |
-| `ket_qua` | P8 | ⏳ | chỉ số + mucTinCay(TRUC_TIEP/GIAN_TIEP/KHONG_QUY_DON) + nguồn |
+| `content_items` | P3 | ✅ | XEM §5.P3 — trung tâm, 2 loại (ECOM/SOCIAL) |
+| `content_stages` / status | P3 | ✅ | dùng cột `content_items.trang_thai` (7 giai đoạn), không tách bảng |
+| `air_posts` | P7 | ✅ | + UNIQUE `ma_theo_doi` → 1 mã = 1 bài |
+| `don_cho_gan` | P8 | ✅ | hàng đợi gán tay, KHÔNG chia đều |
+| `footage`, `shot_list` | P5 | ✅ | kho footage tái sử dụng + cảnh bám kịch bản |
+| `bai_hoc` | P10 | ✅ | đề xuất máy rút, phải người duyệt |
+| `frameworks` | P3/P4 | ✅ | 12 nhóm kịch bản thật (§7) |
+| `kenh` | P3 | ✅ | kênh/shop đa thương hiệu (§7) |
+| `content_strategy.brand_voice` | P4 | ✅ | cột trên bảng chiến lược (không tách bảng riêng) |
+| `scripts`, `script_versions` | P4 | ✅ | AI output có version/rollback |
+| `approvals` | P6 | ✅ | doi_tuong, cong(NOI_DUNG/CLAIM), trang_thai, nguoi_gui/nguoi_duyet, ghi_chu |
+| `ket_qua` | P8 | ✅ | chỉ số + mucTinCay(TRUC_TIEP/GIAN_TIEP/KHONG_QUY_DON) + nguồn |
 | `muc_tieu_thang` | P2b/P3 | ⏳ | (tuỳ chọn) tỷ lệ mục tiêu theo tháng để so lệch |
 
 `bootstrap(env,u)` trả tất cả các mảng trên (đọc chung cho mọi vai trò; ghi thì gác quyền). Endpoint mutation luôn `return json({db: await bootstrap(env,me)})`.
