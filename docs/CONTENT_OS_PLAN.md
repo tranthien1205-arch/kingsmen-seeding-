@@ -148,7 +148,14 @@ Thiết kế `content_items` bao cả 2 loại:
 **Lát cắt (2) ⏳ (chờ `ANTHROPIC_API_KEY`):** thay/bổ sung bộ sinh bằng gọi Anthropic từ Worker; Hook Optimizer 5 variant + lý do (**KHÔNG dự đoán %view**). Giữ nguyên guardrail claim + nguyên tắc không bịa số liệu. Fallback về rule-based khi thiếu key.
 
 ### ⏳ P5 — Kho footage & shot list (mobile-first, R2)
-### ⏳ P6 — Hàng đợi duyệt (2 cổng song song: nội dung / claim) → thêm TRUONG_MKT
+### ◐ P6 — Hàng đợi duyệt (2 cổng song song: nội dung / claim)
+**Lát cắt (1) ✅ ĐÃ LÀM & DEPLOY:** bảng `approvals` (doi_tuong SCRIPT|CONTENT, doi_tuong_id, **cong** NOI_DUNG|CLAIM, trang_thai CHO|DAT|TRA_LAI|HUY, nguoi_gui, nguoi_duyet, ghi_chu) + cột `so_lan_tra` cho `scripts`/`content_items` (**chỉ số Process cho P9**).
+- Endpoints: `POST /approvals/submit` (mở đúng 2 cổng; **chặn gửi nếu còn cụm claim CHAN** → 422; đang chờ mà gửi lại → 409; gửi lại sau khi bị trả thì **reset** 2 cổng chứ không cộng dồn) · `POST /approvals/:id/decide`.
+- Quy tắc: **CẢ HAI cổng Đạt** → đối tượng `DUYET`. **Một cổng trả lại** → đối tượng về `NHAP`, `so_lan_tra+1`, **cổng còn lại tự HUỶ**. Trả lại **bắt buộc nêu lý do** (400 nếu thiếu). Quyết lại cổng đã quyết → 409.
+- Phân quyền qua `canDecideGate(u,cong)` (worker) ⟷ `canDecideGateFE(me,cong)` (FE), khớp nhau: **NOI_DUNG = Marketing**, **CLAIM = Kỹ thuật**, Admin cả hai, Sales không cổng nào. Kỹ thuật được thấy `approvals`+`scripts` trong bootstrap để duyệt claim; **Sales không thấy gì**.
+- UI: `ApprovalQueue` (nav `approve`, tab "Việc của tôi" / "Tất cả", badge chỉ đếm việc thuộc cổng của chính mình) + `ApprovalStatus` nhúng trong trình soạn kịch bản (nút Gửi duyệt + trạng thái 2 cổng + lý do bị trả). Cổng CLAIM hiện sẵn **kết quả rà claim** để Kỹ thuật quyết nhanh.
+- Test: **22/22** integration.
+**⏳ Còn:** vai trò `TRUONG_MKT` riêng (hiện dùng MARKETING) — chỉ cần thêm 1 nhánh vào `canDecideGate`/`canDecideGateFE`; đẩy nút "Gửi duyệt" vào cả màn Kế hoạch nội dung (P3).
 ### ⏳ P7 — Đăng & checklist (KHÔNG auto-post) + khóa mã đơn/voucher (khóa cho P8)
 ### ⏳ P8 — Nhập kết quả (3 luồng, 3 mức tin cậy: TikTok Shop TRUC_TIEP / Shopee GIAN_TIEP + hàng đợi gán tay / chỉ số KHONG_QUY_DON)
 ### ⏳ P9 — Dashboard 4 hệ KPI riêng + 3 cột tin cậy (KHÔNG cộng dồn) + **Hiệu suất người phụ trách** (§6 Trụ A) → thêm GIAM_DOC
@@ -210,5 +217,7 @@ Tokens Tailwind (inline config trong `seeding-app.html`): `ink #0b3543` (soft #1
 - `310a499` — P3 lát cắt (2b): import .xlsx trực tiếp (SheetJS) — sheet picker + dò dòng tiêu đề + auto-map cột + mặc định lần import + khớp tên→id (8 test, verified 2 file thật).
 - `67fd596` — **P4 Creative Studio**: bảng `scripts`+`script_versions`, cột `content_strategy.brand_voice`; CRUD `/scripts` + `GET /scripts/:id/versions` (staff-only); **guardrail claim** (CHẶN→422 không lưu, Cảnh báo→lưu + ghi `claim_flags`); version tăng + snapshot mỗi lần lưu. UI: danh sách + trình soạn, **sinh nháp rule-based theo 12 framework thật** chỉ chèn dữ kiện thật của sản phẩm, thiếu thì để `[điền …]` (16 test + 6 kiểm tra bộ sinh).
 - **MENU 2 CẤP** — gom toàn app vào **5 nhóm lớn**: `Content` · `Seeding` · `Quay CT` · `Ngân sách` · `Hệ thống` (`NAV_GROUPS` thay `NAV`). Desktop: sidebar có tiêu đề nhóm. Mobile: **bottom bar chỉ 5 nhóm chia đều, KHÔNG cuộn ngang** + hàng **tab phụ** cho module con (ẩn khi nhóm chỉ 1 module) (16 kiểm tra cấu trúc nav).
+- **P6 Hàng đợi duyệt 2 cổng** — bảng `approvals` + `so_lan_tra`; cả 2 cổng Đạt mới duyệt, 1 cổng trả lại thì về Nháp + huỷ cổng kia; chặn gửi duyệt khi còn claim CHAN; phân quyền cổng khớp FE↔BE (22 test).
 - (Trước đó, Domain A: seeding/quay/lịch/thư viện ảnh/vinh danh/chống trùng… đã deploy.)
-- ▶️ **Kế tiếp:** P5+ theo lộ trình §5. Khi có `ANTHROPIC_API_KEY` → nâng P4 từ rule-based lên gợi ý AI (vẫn giữ nguyên guardrail claim + không bịa số liệu).
+- ▶️ **Kế tiếp:** P5 (Kho footage & shot list) hoặc P7 (Đăng & checklist). Khi có `ANTHROPIC_API_KEY` → nâng P4 từ rule-based lên gợi ý AI (vẫn giữ guardrail claim + không bịa số liệu).
+- 📌 **Tổng test đang xanh:** import 8 · Creative Studio 16 · Duyệt 2 cổng 22 · chống trùng seeding 13 = **59**.

@@ -73,6 +73,8 @@ async function ensureSchema(env){
     // CONTENT OS · P4 — Creative Studio: kịch bản có guardrail (chỉ trích spec thật, chặn claim cấm) + lịch sử phiên bản
     `CREATE TABLE IF NOT EXISTS scripts (id TEXT PRIMARY KEY, content_item_id TEXT, framework_id TEXT, san_pham_id TEXT, kenh_id TEXT, tieu_de TEXT, hook TEXT, sections TEXT, cta TEXT, brand_voice TEXT, claim_flags TEXT, trang_thai TEXT, version INTEGER DEFAULT 1, created_at TEXT, created_by TEXT, created_by_name TEXT, updated_at TEXT)`,
     `CREATE TABLE IF NOT EXISTS script_versions (id TEXT PRIMARY KEY, script_id TEXT, version INTEGER, snapshot TEXT, created_at TEXT, created_by_name TEXT)`,
+    // CONTENT OS · P6 — Hàng đợi duyệt 2 CỔNG SONG SONG: NOI_DUNG (Marketing) + CLAIM (Kỹ thuật)
+    `CREATE TABLE IF NOT EXISTS approvals (id TEXT PRIMARY KEY, doi_tuong TEXT, doi_tuong_id TEXT, cong TEXT, trang_thai TEXT, nguoi_gui TEXT, nguoi_gui_ten TEXT, nguoi_duyet TEXT, nguoi_duyet_ten TEXT, ghi_chu TEXT, created_at TEXT, decided_at TEXT)`,
   ];
   await env.DB.batch(stmts.map(s=>env.DB.prepare(s)));
   // thêm cột đơn giá quay công trình cho DB cũ (bỏ qua nếu đã có)
@@ -92,6 +94,9 @@ async function ensureSchema(env){
   try { await env.DB.prepare(`ALTER TABLE pricing ADD COLUMN sched_days TEXT DEFAULT '0,2,4,6'`).run(); } catch(e){}
   // P4 — brand voice (tông giọng thương hiệu) dùng cho Creative Studio
   try { await env.DB.prepare(`ALTER TABLE content_strategy ADD COLUMN brand_voice TEXT DEFAULT ''`).run(); } catch(e){}
+  // P6 — đếm số lần bị trả lại (chỉ số Process cho P9)
+  try { await env.DB.prepare(`ALTER TABLE scripts ADD COLUMN so_lan_tra INTEGER DEFAULT 0`).run(); } catch(e){}
+  try { await env.DB.prepare(`ALTER TABLE content_items ADD COLUMN so_lan_tra INTEGER DEFAULT 0`).run(); } catch(e){}
   // cờ DEV PREVIEW: chỉ tài khoản is_dev=1 thấy các module đang nâng cấp
   try { await env.DB.prepare(`ALTER TABLE users ADD COLUMN is_dev INTEGER DEFAULT 0`).run(); } catch(e){}
 
@@ -289,6 +294,18 @@ async function ensurePostSlots(env){
 }
 
 // Content OS · P3 — chèn 1 content_item từ body (dùng chung cho tạo & import)
+// P6 — 2 cổng duyệt song song. Ai được quyết cổng nào.
+// (Khi thêm vai trò TRUONG_MKT ở P0, chỉ cần bổ sung vào nhánh NOI_DUNG.)
+const APPROVAL_GATES = ['NOI_DUNG','CLAIM'];
+function canDecideGate(u, cong){
+  if(!u) return false;
+  if(u.vai_tro===ROLES.ADMIN) return true;
+  if(cong==='NOI_DUNG') return u.vai_tro===ROLES.MARKETING;
+  if(cong==='CLAIM') return u.vai_tro===ROLES.KY_THUAT;
+  return false;
+}
+// Bảng + cột trạng thái của từng loại đối tượng đưa vào hàng đợi duyệt
+const APPROVAL_TARGETS = { SCRIPT:'scripts', CONTENT:'content_items' };
 // P4 — gộp toàn văn kịch bản để quét claim cấm
 function scriptText(s){
   const secs=Array.isArray(s.sections)?s.sections.map(x=>(x&&x.text)||'').join('\n'):'';
@@ -366,8 +383,11 @@ async function bootstrap(env, u){
   const content_items = (await env.DB.prepare(`SELECT * FROM content_items ORDER BY created_at DESC`).all()).results
     .map(r=>({ ...r, pic: JSON.parse(r.pic||'{}'), chi_tiet: JSON.parse(r.chi_tiet||'{}'), links: JSON.parse(r.links||'{}') }));
   // P4 — kịch bản (chỉ staff xem; Sales không cần)
-  const scripts = staff ? (await env.DB.prepare(`SELECT * FROM scripts ORDER BY updated_at DESC`).all()).results
+  const canContent = staff || u.vai_tro===ROLES.KY_THUAT;
+  const scripts = canContent ? (await env.DB.prepare(`SELECT * FROM scripts ORDER BY updated_at DESC`).all()).results
     .map(r=>({ ...r, sections: JSON.parse(r.sections||'[]'), claim_flags: JSON.parse(r.claim_flags||'[]') })) : [];
+  // P6 — hàng đợi duyệt 2 cổng (Kỹ thuật cần thấy để duyệt cổng CLAIM)
+  const approvals = canContent ? (await env.DB.prepare(`SELECT * FROM approvals ORDER BY created_at DESC`).all()).results : [];
 
   return {
     me: rowUser(u),
@@ -375,7 +395,7 @@ async function bootstrap(env, u){
     post_seedings: posts, cmt_seedings: cmtsFull,
     filming_templates, project_filmings, guides, post_type_prefs, post_slots, media_library,
     san_pham, claim_cam, pillars, content_strategy,
-    frameworks, kenh, content_items, scripts,
+    frameworks, kenh, content_items, scripts, approvals,
     pricing: pricingRow, payouts: [], audit,
   };
 }
@@ -857,8 +877,59 @@ async function handleApi(request, env){
   if((m=path.match(/^\/scripts\/(.+)$/)) && method==='DELETE'){
     if(!isStaff(me)) return json({error:'Không có quyền'},403);
     await env.DB.prepare(`DELETE FROM script_versions WHERE script_id=?`).bind(m[1]).run();
+    await env.DB.prepare(`DELETE FROM approvals WHERE doi_tuong='SCRIPT' AND doi_tuong_id=?`).bind(m[1]).run();
     await env.DB.prepare(`DELETE FROM scripts WHERE id=?`).bind(m[1]).run();
     await logAudit(env,me,'xoá kịch bản','scripts',m[1]);
+    return json({ db: await bootstrap(env, me) });
+  }
+
+  // ===== CONTENT OS · P6 — Hàng đợi duyệt 2 cổng song song (NOI_DUNG + CLAIM) =====
+  if(path==='/approvals/submit' && method==='POST'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    const loai=String(body.doi_tuong||'').toUpperCase(); const tbl=APPROVAL_TARGETS[loai];
+    if(!tbl) return json({error:'Loại đối tượng không hợp lệ'},400);
+    const obj=await env.DB.prepare(`SELECT * FROM ${tbl} WHERE id=?`).bind(body.doi_tuong_id||'').first();
+    if(!obj) return json({error:'Không tìm thấy đối tượng'},404);
+    if(obj.trang_thai==='CHO_DUYET') return json({error:'Đối tượng đang chờ duyệt'},409);
+    // Guardrail: kịch bản còn cụm CHẶN thì không được gửi duyệt
+    if(loai==='SCRIPT'){
+      const claims=(await env.DB.prepare(`SELECT * FROM claim_cam WHERE active=1`).all()).results;
+      const flags=scanScriptClaims(scriptText({...obj, sections:JSON.parse(obj.sections||'[]')}), claims);
+      const blocked=flags.filter(f=>f.muc_do==='CHAN');
+      if(blocked.length) return json({error:'Còn cụm từ bị CHẶN, không thể gửi duyệt', blocked:blocked.map(b=>b.cum_tu)},422);
+    }
+    // gửi lại: xoá các cổng cũ rồi mở lại 2 cổng
+    await env.DB.prepare(`DELETE FROM approvals WHERE doi_tuong=? AND doi_tuong_id=?`).bind(loai,obj.id).run();
+    for(const cong of APPROVAL_GATES){
+      await env.DB.prepare(`INSERT INTO approvals (id,doi_tuong,doi_tuong_id,cong,trang_thai,nguoi_gui,nguoi_gui_ten,ghi_chu,created_at) VALUES (?,?,?,?,'CHO',?,?,'',?)`)
+        .bind(uid('ap'),loai,obj.id,cong,me.id,me.ho_ten,nowISO()).run();
+    }
+    await env.DB.prepare(`UPDATE ${tbl} SET trang_thai='CHO_DUYET', updated_at=? WHERE id=?`).bind(nowISO(),obj.id).run();
+    await logAudit(env,me,'gửi duyệt',tbl,obj.id,(obj.tieu_de||''));
+    return json({ db: await bootstrap(env, me) });
+  }
+  if((m=path.match(/^\/approvals\/(.+)\/decide$/)) && method==='POST'){
+    const id=m[1]; const ap=await env.DB.prepare(`SELECT * FROM approvals WHERE id=?`).bind(id).first();
+    if(!ap) return json({error:'Không tìm thấy'},404);
+    if(!canDecideGate(me, ap.cong)) return json({error:'Bạn không có quyền duyệt cổng này'},403);
+    if(ap.trang_thai!=='CHO') return json({error:'Cổng này đã được quyết'},409);
+    const pass = body.result==='DAT';
+    if(!pass && !String(body.ghi_chu||'').trim()) return json({error:'Trả lại phải nêu lý do'},400);
+    const tbl=APPROVAL_TARGETS[ap.doi_tuong]; if(!tbl) return json({error:'Loại đối tượng không hợp lệ'},400);
+    await env.DB.prepare(`UPDATE approvals SET trang_thai=?, nguoi_duyet=?, nguoi_duyet_ten=?, ghi_chu=?, decided_at=? WHERE id=?`)
+      .bind(pass?'DAT':'TRA_LAI', me.id, me.ho_ten, String(body.ghi_chu||'').trim(), nowISO(), id).run();
+    if(!pass){
+      // Một cổng trả lại → đối tượng về Nháp, cổng còn lại huỷ (khỏi duyệt thừa)
+      await env.DB.prepare(`UPDATE approvals SET trang_thai='HUY', decided_at=? WHERE doi_tuong=? AND doi_tuong_id=? AND trang_thai='CHO'`)
+        .bind(nowISO(),ap.doi_tuong,ap.doi_tuong_id).run();
+      await env.DB.prepare(`UPDATE ${tbl} SET trang_thai='NHAP', so_lan_tra=COALESCE(so_lan_tra,0)+1, updated_at=? WHERE id=?`).bind(nowISO(),ap.doi_tuong_id).run();
+    } else {
+      // Chỉ DUYỆT khi CẢ HAI cổng đều Đạt
+      const rest=(await env.DB.prepare(`SELECT * FROM approvals WHERE doi_tuong=? AND doi_tuong_id=?`).bind(ap.doi_tuong,ap.doi_tuong_id).all()).results;
+      if(rest.length && rest.every(r=>r.trang_thai==='DAT'))
+        await env.DB.prepare(`UPDATE ${tbl} SET trang_thai='DUYET', updated_at=? WHERE id=?`).bind(nowISO(),ap.doi_tuong_id).run();
+    }
+    await logAudit(env,me,(pass?'duyệt ':'trả lại ')+'cổng '+ap.cong,tbl,ap.doi_tuong_id,String(body.ghi_chu||'').trim());
     return json({ db: await bootstrap(env, me) });
   }
   if((m=path.match(/^\/posts\/(.+)\/review$/)) && method==='POST'){

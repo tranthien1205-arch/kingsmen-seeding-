@@ -517,6 +517,16 @@ function AppProvider({children}){
         else S.scripts.unshift({ id:uid('scr'), tieu_de:'', hook:'', sections:[], cta:'', framework_id:null, san_pham_id:null, kenh_id:null, brand_voice:'', trang_thai:'NHAP', version:1, claim_flags:flags, created_at:now(), created_by:meRef.current.id, created_by_name:meRef.current.ho_ten, updated_at:now(), ...o }); commit(); return {ok:true}; },
       deleteScript: async id=>{ S.scripts=(S.scripts||[]).filter(x=>x.id!==id); commit(); return true; },
       fetchScriptVersions: async id=>({ versions: [] }),
+      submitApproval: async (doi_tuong,doi_tuong_id)=>{ S.approvals ||= []; const arr = doi_tuong==='SCRIPT'?S.scripts:S.content_items; const o=(arr||[]).find(x=>x.id===doi_tuong_id); if(!o) return {ok:false,msg:'Không tìm thấy'};
+        S.approvals=(S.approvals||[]).filter(a=>!(a.doi_tuong===doi_tuong&&a.doi_tuong_id===doi_tuong_id));
+        ['NOI_DUNG','CLAIM'].forEach(cong=>S.approvals.unshift({ id:uid('ap'), doi_tuong, doi_tuong_id, cong, trang_thai:'CHO', nguoi_gui:meRef.current.id, nguoi_gui_ten:meRef.current.ho_ten, ghi_chu:'', created_at:now() }));
+        o.trang_thai='CHO_DUYET'; commit(); return {ok:true}; },
+      decideApproval: async (id,result,ghi_chu)=>{ const ap=(S.approvals||[]).find(a=>a.id===id); if(!ap) return false;
+        const arr = ap.doi_tuong==='SCRIPT'?S.scripts:S.content_items; const o=(arr||[]).find(x=>x.id===ap.doi_tuong_id);
+        Object.assign(ap,{ trang_thai:result==='DAT'?'DAT':'TRA_LAI', nguoi_duyet:meRef.current.id, nguoi_duyet_ten:meRef.current.ho_ten, ghi_chu:ghi_chu||'', decided_at:now() });
+        if(result!=='DAT'){ (S.approvals||[]).forEach(a=>{ if(a.doi_tuong===ap.doi_tuong&&a.doi_tuong_id===ap.doi_tuong_id&&a.trang_thai==='CHO'){ a.trang_thai='HUY'; a.decided_at=now(); } }); if(o){ o.trang_thai='NHAP'; o.so_lan_tra=(Number(o.so_lan_tra)||0)+1; } }
+        else { const rest=(S.approvals||[]).filter(a=>a.doi_tuong===ap.doi_tuong&&a.doi_tuong_id===ap.doi_tuong_id); if(rest.length&&rest.every(a=>a.trang_thai==='DAT')&&o) o.trang_thai='DUYET'; }
+        commit(); return true; },
       createLibImg: async o=>{ S.media_library ||= []; S.media_library.unshift({ id:uid('lib'), media_url:o.media_url, caption:o.caption||'', muc_dich:o.muc_dich||'CA_HAI', topic_id:o.topic_id||null, tags:o.tags||[], uploaded_by:meRef.current.id, uploaded_by_name:meRef.current.ho_ten, active:true, uploaded_at:now() }); commit(); return true; },
       patchLibImg: async (id, patch)=>{ const r=(S.media_library||[]).find(x=>x.id===id); if(r) Object.assign(r, patch); commit(); return true; },
       deleteLibImg: async id=>{ S.media_library=(S.media_library||[]).filter(x=>x.id!==id); commit(); return true; },
@@ -644,6 +654,9 @@ function AppProvider({children}){
       catch(e){ return {ok:false, blocked:e.blocked, msg:e.message}; } },
     deleteScript: id => mut('/scripts/'+id, {method:'DELETE'}),
     fetchScriptVersions: async id => { try { return await call('/scripts/'+id+'/versions'); } catch(e){ return {versions:[]}; } },
+    submitApproval: async (doi_tuong,doi_tuong_id) => { try { const r=await call('/approvals/submit',{method:'POST',body:{doi_tuong,doi_tuong_id}}); if(r&&r.db) setDb(r.db); return {ok:true}; }
+      catch(e){ return {ok:false, blocked:e.blocked, msg:e.message}; } },
+    decideApproval: (id,result,ghi_chu) => mut('/approvals/'+id+'/decide', {method:'POST', body:{result, ghi_chu}}),
     createCmtSeed: c => mut('/cmtseed', {method:'POST', body:c}),
     reviewCmtSeed: (id, result, reason) => mut(`/cmtseed/${id}/review`, {method:'POST', body:{result, reason}}),
     markPaid: (sales_id, ky) => mut('/markpaid', {method:'POST', body:{sales_id, ky}}),
@@ -850,6 +863,7 @@ const NAV_GROUPS = {
       {key:'strategy', label:'Chiến lược', icon:'🎯'},
       {key:'plan', label:'Kế hoạch nội dung', short:'Kế hoạch', icon:'🗓️'},
       {key:'studio', label:'Creative Studio', short:'Kịch bản', icon:'✍️'},
+      {key:'approve', label:'Hàng đợi duyệt', short:'Duyệt', icon:'🛂'},
       {key:'products', label:'Sản phẩm & Claim', short:'Sản phẩm', icon:'🧪'},
     ]},
     {key:'g_seeding', label:'Seeding', icon:'💬', items:[
@@ -870,6 +884,7 @@ const NAV_GROUPS = {
   ],
   [ROLES.KY_THUAT]: [
     {key:'g_content', label:'Content', icon:'✍️', items:[
+      {key:'approve', label:'Duyệt claim', short:'Duyệt', icon:'🛂'},
       {key:'products', label:'Sản phẩm & Claim', short:'Sản phẩm', icon:'🧪'},
     ]},
     {key:'g_seeding', label:'Seeding', icon:'💬', items:[
@@ -881,6 +896,7 @@ const NAV_GROUPS = {
       {key:'strategy', label:'Chiến lược', icon:'🎯'},
       {key:'plan', label:'Kế hoạch nội dung', short:'Kế hoạch', icon:'🗓️'},
       {key:'studio', label:'Creative Studio', short:'Kịch bản', icon:'✍️'},
+      {key:'approve', label:'Hàng đợi duyệt', short:'Duyệt', icon:'🛂'},
       {key:'products', label:'Sản phẩm & Claim', short:'Sản phẩm', icon:'🧪'},
     ]},
     {key:'g_seeding', label:'Seeding', icon:'💬', items:[
@@ -925,7 +941,7 @@ function ProfileModal({open, onClose}){
   </Modal>;
 }
 // Module đang NÂNG CẤP — chỉ tài khoản dev preview (is_dev) mới thấy
-const BETA_KEYS = new Set(['strategy','plan','products','studio']);
+const BETA_KEYS = new Set(['strategy','plan','products','studio','approve']);
 function Shell(){
   const { me, logout, db } = useApp();
   // Lọc module đang nâng cấp → bỏ nhóm rỗng
@@ -944,7 +960,9 @@ function Shell(){
   const pendingCount = db.post_seedings.filter(p=>p.trang_thai===ST.CHO_DUYET).length
                      + db.cmt_seedings.filter(c=>c.trang_thai===ST.CHO_DUYET).length;
   const pendingFilming = (db.project_filmings||[]).filter(f=>f.trang_thai===ST.CHO_DUYET).length;
-  const badgeFor = (k) => k==='queue' ? pendingCount : (k==='filming' && me.vai_tro===ROLES.MARKETING) ? pendingFilming : 0;
+  // P6 — chỉ đếm việc thuộc cổng mà chính người này được quyết
+  const pendingApprove = (db.approvals||[]).filter(a=>a.trang_thai==='CHO' && canDecideGateFE(me,a.cong)).length;
+  const badgeFor = (k) => k==='queue' ? pendingCount : k==='approve' ? pendingApprove : (k==='filming' && me.vai_tro===ROLES.MARKETING) ? pendingFilming : 0;
   const groupBadge = (g) => g.items.reduce((s,it)=>s+badgeFor(it.key),0);
   // mở nhóm: về module con đầu tiên (hoặc giữ nguyên nếu đang ở trong nhóm)
   const openGroup = (g) => { if(!g.items.some(it=>it.key===page)) setPage(g.items[0].key); };
@@ -964,6 +982,7 @@ function Shell(){
       case 'strategy': return <StrategyPillar/>;
       case 'plan': return <ContentPlan/>;
       case 'studio': return <CreativeStudio/>;
+      case 'approve': return <ApprovalQueue/>;
       case 'schedule': return <PostSchedule/>;
       case 'pay_report': return <MktPayReport/>;
       case 'users': return <UserManagement/>;
@@ -1977,6 +1996,8 @@ function ScriptEditor({init, onClose}){
     brand_voice:init.brand_voice||brandVoice0, trang_thai:init.trang_thai||'NHAP',
   }));
   const [angle,setAngle]=useState(''); const [busy,setBusy]=useState(false); const [vers,setVers]=useState(null);
+  // trạng thái lấy từ db (đổi theo kết quả duyệt), không lấy từ form
+  const curTrangThai = ((db.scripts||[]).find(s=>s.id===f.id)||{}).trang_thai || f.trang_thai;
   const product = (db.san_pham||[]).find(p=>p.id===f.san_pham_id);
   const framework = (db.frameworks||[]).find(x=>x.id===f.framework_id);
   const audience = (db.content_strategy||{}).audience||'';
@@ -2057,6 +2078,9 @@ function ScriptEditor({init, onClose}){
       </div>
     </div>
 
+    {/* P6 — trạng thái 2 cổng duyệt của kịch bản này */}
+    {f.id && <ApprovalStatus doi_tuong="SCRIPT" doi_tuong_id={f.id} trang_thai={curTrangThai} canSubmit={!blocked.length}/>}
+
     <div className="flex flex-wrap gap-2">
       <Btn variant="brand" className="flex-1 min-w-[140px]" onClick={save} disabled={busy||blocked.length>0}>{busy?'Đang lưu…':(blocked.length?'Gỡ cụm bị chặn để lưu':'💾 Lưu kịch bản')}</Btn>
       {f.id && <Btn variant="ghost" onClick={loadVers}>🕑 Phiên bản</Btn>}
@@ -2069,6 +2093,116 @@ function ScriptEditor({init, onClose}){
         <div className="flex items-center justify-between"><span className="text-xs font-semibold text-ink">v{v.version} · {v.created_by_name||''}</span><span className="text-[10px] text-slate-400">{fmtDate(v.created_at)}</span></div>
         <div className="text-xs text-slate-600 mt-1"><b>{(v.snapshot||{}).tieu_de||''}</b> — {(v.snapshot||{}).hook||''}</div>
       </div>)}</div>}
+    </Modal>}
+  </div>;
+}
+
+/* ============================================================
+   CONTENT OS · P6 — HÀNG ĐỢI DUYỆT 2 CỔNG (nội dung · claim)
+============================================================ */
+const GATE_LABEL = { NOI_DUNG:'Nội dung', CLAIM:'Claim (Kỹ thuật)' };
+const GATE_ICON  = { NOI_DUNG:'📝', CLAIM:'🧪' };
+const AP_ST = { CHO:'Chờ', DAT:'Đạt', TRA_LAI:'Trả lại', HUY:'Đã huỷ' };
+const AP_ST_STYLE = { CHO:'bg-amber-100 text-amber-700', DAT:'bg-emerald-100 text-emerald-700', TRA_LAI:'bg-rose-100 text-rose-700', HUY:'bg-slate-100 text-slate-400' };
+// Ai được quyết cổng nào — khớp canDecideGate ở worker
+function canDecideGateFE(me, cong){
+  if(!me) return false;
+  if(me.vai_tro===ROLES.ADMIN) return true;
+  if(cong==='NOI_DUNG') return me.vai_tro===ROLES.MARKETING;
+  if(cong==='CLAIM') return me.vai_tro===ROLES.KY_THUAT;
+  return false;
+}
+// Khối trạng thái 2 cổng + nút Gửi duyệt, nhúng trong trình soạn
+function ApprovalStatus({doi_tuong, doi_tuong_id, trang_thai, canSubmit}){
+  const { db, submitApproval, notify } = useApp();
+  const [busy,setBusy]=useState(false);
+  const gates=(db.approvals||[]).filter(a=>a.doi_tuong===doi_tuong && a.doi_tuong_id===doi_tuong_id);
+  const active=gates.filter(g=>g.trang_thai!=='HUY');
+  const send=async()=>{ if(!canSubmit) return notify('Còn cụm bị CHẶN, không gửi duyệt được','err');
+    setBusy(true); const r=await submitApproval(doi_tuong,doi_tuong_id); setBusy(false);
+    if(r&&r.ok) notify('Đã gửi duyệt — chờ 2 cổng: Nội dung & Claim');
+    else if(r&&r.blocked) notify('Bị chặn: '+r.blocked.join(', '),'err');
+    else if(r&&r.msg) notify(r.msg,'err'); };
+  const done = trang_thai==='DUYET';
+  return <div className="bg-white rounded-2xl border border-line shadow-card p-4">
+    <div className="flex items-center justify-between flex-wrap gap-2 mb-2">
+      <div className="text-sm font-semibold text-ink">Duyệt 2 cổng song song</div>
+      {done ? <span className="text-[11px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-semibold">✓ Đã duyệt</span>
+        : trang_thai==='CHO_DUYET' ? <span className="text-[11px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 font-semibold">Đang chờ duyệt</span>
+        : <Btn variant="brand" onClick={send} disabled={busy||!canSubmit}>{busy?'Đang gửi…':'📤 Gửi duyệt'}</Btn>}
+    </div>
+    {active.length===0 ? <div className="text-[11px] text-slate-400">Chưa gửi duyệt. Cả 2 cổng phải Đạt thì nội dung mới được duyệt.</div>
+      : <div className="grid sm:grid-cols-2 gap-2">{active.map(g=>
+        <div key={g.id} className="rounded-xl border border-line p-2">
+          <div className="flex items-center gap-1.5">
+            <span>{GATE_ICON[g.cong]}</span>
+            <span className="text-xs font-semibold text-ink flex-1">{GATE_LABEL[g.cong]}</span>
+            <span className={"text-[10px] px-1.5 py-0.5 rounded-full font-semibold "+(AP_ST_STYLE[g.trang_thai]||'')}>{AP_ST[g.trang_thai]}</span>
+          </div>
+          {g.nguoi_duyet_ten && <div className="text-[10px] text-slate-400 mt-1">{g.nguoi_duyet_ten} · {fmtDate(g.decided_at)}</div>}
+          {g.ghi_chu && <div className="text-[11px] text-rose-600 mt-1">“{g.ghi_chu}”</div>}
+        </div>)}
+      </div>}
+    {trang_thai==='NHAP' && gates.some(g=>g.trang_thai==='TRA_LAI') && <div className="text-[11px] text-rose-600 mt-2">Đã bị trả lại — sửa theo góp ý rồi bấm <b>Gửi duyệt</b> lại.</div>}
+  </div>;
+}
+// Màn hàng đợi: mỗi người chỉ thấy việc thuộc cổng mình có quyền
+function ApprovalQueue(){
+  const { db, me, decideApproval, notify } = useApp();
+  const [tab,setTab]=useState('toi');   // toi = việc của tôi · tat_ca = toàn bộ
+  const [reject,setReject]=useState(null); const [ly,setLy]=useState(''); const [busy,setBusy]=useState(false);
+  const objOf=(a)=> (a.doi_tuong==='SCRIPT' ? (db.scripts||[]) : (db.content_items||[])).find(x=>x.id===a.doi_tuong_id);
+  const pending=(db.approvals||[]).filter(a=>a.trang_thai==='CHO');
+  const mine=pending.filter(a=>canDecideGateFE(me,a.cong));
+  const list = tab==='toi' ? mine : pending;
+  const decide=async(a,result)=>{ if(result==='DAT'){ setBusy(true); const ok=await decideApproval(a.id,'DAT',''); setBusy(false); if(ok) notify('Đã duyệt cổng '+GATE_LABEL[a.cong]); }
+    else { setReject(a); setLy(''); } };
+  const doReject=async()=>{ if(!ly.trim()) return notify('Nhập lý do trả lại','warn');
+    setBusy(true); const ok=await decideApproval(reject.id,'TRA_LAI',ly.trim()); setBusy(false);
+    if(ok){ notify('Đã trả lại'); setReject(null); } };
+  return <div className="space-y-4">
+    <div className="flex items-center justify-between flex-wrap gap-2">
+      <h2 className="font-display text-lg font-bold text-ink">🛂 Hàng đợi duyệt</h2>
+      <div className="flex gap-1 bg-slate-100 rounded-xl p-1">
+        <button onClick={()=>setTab('toi')} className={"px-3 py-1 rounded-lg text-xs font-semibold "+(tab==='toi'?'bg-white text-ink shadow-sm':'text-slate-500')}>Việc của tôi ({mine.length})</button>
+        <button onClick={()=>setTab('tat_ca')} className={"px-3 py-1 rounded-lg text-xs font-semibold "+(tab==='tat_ca'?'bg-white text-ink shadow-sm':'text-slate-500')}>Tất cả ({pending.length})</button>
+      </div>
+    </div>
+    <div className="bg-white rounded-2xl border border-line shadow-card p-3 text-[11px] text-slate-500">
+      2 cổng chạy <b>song song</b>: <b>📝 Nội dung</b> (Marketing) và <b>🧪 Claim</b> (Kỹ thuật). <b>Cả hai Đạt</b> thì nội dung mới được duyệt; <b>một cổng trả lại</b> là quay về Nháp và cổng kia tự huỷ.
+    </div>
+    {list.length===0 ? <Empty>{tab==='toi'?'Không có việc nào chờ bạn duyệt. 🎉':'Không có việc nào đang chờ.'}</Empty> :
+      <div className="space-y-3">{list.map(a=>{ const o=objOf(a)||{}; const can=canDecideGateFE(me,a.cong);
+        const flags=(o.claim_flags||[]);
+        return <div key={a.id} className="bg-white rounded-2xl border border-line shadow-card p-3">
+          <div className="flex items-start gap-2 flex-wrap">
+            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-brand/10 text-brand-dark font-semibold">{GATE_ICON[a.cong]} {GATE_LABEL[a.cong]}</span>
+            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-600">{a.doi_tuong==='SCRIPT'?'Kịch bản':'Nội dung'}</span>
+            <span className="text-[10px] text-slate-400 ml-auto">{a.nguoi_gui_ten} gửi · {fmtDate(a.created_at)}</span>
+          </div>
+          <div className="font-display font-bold text-ink text-sm mt-2">{o.tieu_de||o.hook||'(không tên)'}</div>
+          {o.hook && o.tieu_de && <div className="text-xs text-slate-500 mt-0.5">{o.hook}</div>}
+          {Array.isArray(o.sections) && o.sections.length>0 && <div className="mt-2 space-y-1">
+            {o.sections.map((s,i)=><div key={i} className="text-xs"><span className="font-semibold text-brand-dark">{s.label}: </span><span className="text-slate-600">{s.text}</span></div>)}
+          </div>}
+          {o.cta && <div className="text-xs text-slate-600 mt-1"><b>CTA:</b> {o.cta}</div>}
+          {a.cong==='CLAIM' && <div className="mt-2 rounded-xl bg-slate-50 border border-line p-2">
+            <div className="text-[11px] font-semibold text-ink-muted mb-1">Rà claim:</div>
+            {flags.length===0 ? <div className="text-[11px] text-emerald-600">✓ Không chạm cụm từ cấm nào trong danh sách.</div>
+              : <ul className="space-y-0.5">{flags.map((x,i)=><li key={i} className="text-[11px] text-amber-700">⚠ “{x.cum_tu}”{x.ly_do?' — '+x.ly_do:''}</li>)}</ul>}
+          </div>}
+          {Number(o.so_lan_tra)>0 && <div className="text-[10px] text-rose-500 mt-1">Đã bị trả lại {o.so_lan_tra} lần</div>}
+          {can ? <div className="flex gap-2 mt-3">
+              <Btn variant="ghost" onClick={()=>decide(a,'TRA_LAI')} disabled={busy}>↩ Trả lại</Btn>
+              <Btn variant="brand" className="flex-1" onClick={()=>decide(a,'DAT')} disabled={busy}>✓ Duyệt cổng {GATE_LABEL[a.cong]}</Btn>
+            </div>
+            : <div className="text-[11px] text-slate-400 mt-3">Chờ {GATE_LABEL[a.cong]} duyệt — bạn không có quyền ở cổng này.</div>}
+        </div>; })}
+      </div>}
+    {reject && <Modal open={true} onClose={()=>setReject(null)} title="Trả lại — nêu lý do">
+      <p className="text-xs text-slate-500 mb-2">Lý do sẽ hiện cho người soạn để sửa. Cổng còn lại sẽ tự huỷ.</p>
+      <Textarea rows="3" value={ly} onChange={e=>setLy(e.target.value)} placeholder="VD: Thiếu căn cứ thông số, câu chốt thổi phồng…"/>
+      <div className="flex gap-2 mt-3"><Btn variant="ghost" onClick={()=>setReject(null)} disabled={busy}>Huỷ</Btn><Btn variant="brand" className="flex-1" onClick={doReject} disabled={busy}>{busy?'…':'Trả lại'}</Btn></div>
     </Modal>}
   </div>;
 }
