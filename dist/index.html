@@ -402,7 +402,7 @@ function seedDB(){
     frameworks: ['Chuẩn bán hàng','PAS','Phản biện comment','Test chất lượng','Hành trình thi công','Size / Combo','FOMO','Review KOC','"đừng..." Trend','Q&A khách hàng','So sánh kinh tế','Hướng dẫn thi công'].map((ten,i)=>({id:uid('fw'),ten,mo_ta:'',thu_tu:i+1,active:true,created_at:now()})),
     kenh: [['Fanpage Kingsmen','FANPAGE','Kingsmen'],['TikTok Kingsmen','TIKTOK','Kingsmen'],['YouTube Short Kingsmen','YOUTUBE','Kingsmen'],['Fanpage VKXD','FANPAGE','VKXD'],['TikTok VKXD','TIKTOK','VKXD'],['Shopee VKXD','SHOPEE','VKXD'],['Zalo OA','ZALO_OA','Kingsmen'],['CHÍNH - Vật liệu mới FINEX','TIKTOK','FINEX'],['AFF - Sơn sàn hiệu ứng','TIKTOK','FINEX'],['BC - Vật liệu hoàn thiện','TIKTOK','Kingsmen']].map(([ten,loai,th])=>({id:uid('kn'),ten,loai,thuong_hieu:th,active:true,created_at:now()})),
     content_items: [],
-    scripts: [], approvals: [], air_posts: [], air_checklist: AIR_CHECKLIST_FE, ket_qua: [], don_cho_gan: [], footage: [], shot_list: [], bai_hoc: [], min_mau: MIN_MAU, trends: [], trend_check: TREND_CHECK_FE, viec_ket: null,
+    scripts: [], approvals: [], air_posts: [], air_checklist: AIR_CHECKLIST_FE, ket_qua: [], don_cho_gan: [], footage: [], shot_list: [], bai_hoc: [], min_mau: MIN_MAU, trends: [], trend_check: TREND_CHECK_FE, viec_ket: null, seeding_theo_noi_dung: {},
     payouts: [],
     audit: [],
   };
@@ -443,7 +443,7 @@ function migrate(db){
   db.kenh ||= [];
   db.content_items ||= [];
   db.scripts ||= []; db.approvals ||= []; db.air_posts ||= []; db.air_checklist ||= AIR_CHECKLIST_FE;
-  db.ket_qua ||= []; db.don_cho_gan ||= []; db.footage ||= []; db.shot_list ||= []; db.bai_hoc ||= []; db.min_mau ||= MIN_MAU; db.trends ||= []; db.trend_check ||= TREND_CHECK_FE; db.viec_ket ||= null;
+  db.ket_qua ||= []; db.don_cho_gan ||= []; db.footage ||= []; db.shot_list ||= []; db.bai_hoc ||= []; db.min_mau ||= MIN_MAU; db.trends ||= []; db.trend_check ||= TREND_CHECK_FE; db.viec_ket ||= null; db.seeding_theo_noi_dung ||= {};
   db.post_seedings.forEach(p=>{ p.react ??= 0; p.so_cmt_seeding ??= 0; p.so_cmt_tu_nhien ??= 0; p.thanh_tien ??= 0; });
   db.cmt_seedings.forEach(c=>{ c.proofs ||= []; c.so_cmt_seeding ??= 0; c.react ??= 0; c.so_cmt_tu_nhien ??= 0; c.thanh_tien ??= 0; });
   db.groups.forEach(g=>{ g.uu_tien ??= false; });
@@ -676,6 +676,16 @@ function AppProvider({children}){
           created_at:now(), created_by_name:meRef.current.ho_ten, updated_at:now() });
         Object.assign(x,{trang_thai:'DA_TRIEN_KHAI',content_item_id:cid,decided_at:now()}); commit(); return {ok:true,content_item_id:cid}; },
       deleteTrend: async id=>{ S.trends=(S.trends||[]).filter(x=>x.id!==id); commit(); return true; },
+      daySangSeeding: async (id,o)=>{ const ci=(S.content_items||[]).find(x=>x.id===id); if(!ci) return {ok:false,msg:'Không tìm thấy nội dung'};
+        if(ci.trang_thai!=='DUYET') return {ok:false,msg:'Chỉ đẩy nội dung ĐÃ DUYỆT sang seeding'};
+        if((S.content_topics||[]).some(x=>x.content_item_id===id)) return {ok:false,msg:'Nội dung này đã có trong thư viện seeding'};
+        const sc=(S.scripts||[]).filter(x=>x.content_item_id===id && x.trang_thai==='DUYET')[0];
+        let noi_dung=''; if(sc) noi_dung=[sc.hook,...((sc.sections||[]).map(x=>(x&&x.text)||'')),sc.cta].filter(Boolean).join('\n\n');
+        if(!noi_dung) noi_dung=(ci.chi_tiet||{}).noi_dung||'';
+        const tid=uid('t');
+        S.content_topics.unshift({ id:tid, chu_de:ci.tieu_de||'', noi_dung, loai_bai:(o&&o.loai_bai)||'', muc_tieu:(o&&o.muc_tieu)||'',
+          tags:(o&&o.tags)||[], active:true, uu_tien:false, updated_at:now(), content_item_id:id });
+        commit(); return {ok:true,topic_id:tid}; },
       skipDon: async (id,ly_do)=>{ const d=(S.don_cho_gan||[]).find(x=>x.id===id); if(!d||d.trang_thai!=='CHO_GAN') return false;
         Object.assign(d,{trang_thai:'BO_QUA',decided_at:now(),decided_by_name:meRef.current.ho_ten}); commit(); return true; },
       decideApproval: async (id,result,ghi_chu)=>{ const ap=(S.approvals||[]).find(a=>a.id===id); if(!ap) return false;
@@ -851,6 +861,8 @@ function AppProvider({children}){
     trienKhaiTrend: async (id,o) => { try { const r=await call('/trends/'+id+'/trien-khai',{method:'POST',body:o||{}}); if(r&&r.db) setDb(r.db); return {ok:true,content_item_id:r.content_item_id}; }
       catch(e){ return {ok:false,msg:e.message}; } },
     deleteTrend: id => mut('/trends/'+id, {method:'DELETE'}),
+    daySangSeeding: async (id,o) => { try { const r=await call('/content/'+id+'/day-seeding',{method:'POST',body:o||{}}); if(r&&r.db) setDb(r.db); return {ok:true,topic_id:r.topic_id}; }
+      catch(e){ return {ok:false,msg:e.message}; } },
     createCmtSeed: c => mut('/cmtseed', {method:'POST', body:c}),
     reviewCmtSeed: (id, result, reason) => mut(`/cmtseed/${id}/review`, {method:'POST', body:{result, reason}}),
     markPaid: (sales_id, ky) => mut('/markpaid', {method:'POST', body:{sales_id, ky}}),
@@ -1504,6 +1516,7 @@ function SalesNewPost({go}){
               <div className="flex items-center gap-1.5 min-w-0">
                 {t.uu_tien && <PriBadge small/>}
                 <div className="font-medium text-sm text-ink truncate">{t.chu_de}</div>
+                {t.content_item_id && <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-semibold shrink-0" title="Nội dung đã qua 2 cổng duyệt (nội dung + claim) — dùng nguyên văn là an toàn">✓ đã duyệt claim</span>}
               </div>
               <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500 shrink-0">{t.loai_bai}</span>
             </div>
@@ -1860,7 +1873,7 @@ function ContentPlan(){
   const [view,setView]=useState('kanban');
   const [calMonth,setCalMonth]=useState(todayYMD().slice(0,7));
   const [fLoai,setFLoai]=useState(''); const [fKenh,setFKenh]=useState(''); const [fThang,setFThang]=useState(''); const [fPillar,setFPillar]=useState('');
-  const [edit,setEdit]=useState(null); const [imp,setImp]=useState(false);
+  const [edit,setEdit]=useState(null); const [imp,setImp]=useState(false); const [day,setDay]=useState(null);
   const nameOf=(arr,id)=>{ const x=(arr||[]).find(o=>o.id===id); return x?(x.ten||x.chu_de):''; };
   const filtered = items.filter(it=> (!fLoai||it.loai===fLoai) && (!fKenh||it.kenh_id===fKenh) && (!fThang||it.thang===fThang) && (!fPillar||it.pillar_id===fPillar));
   const blank = {loai:'SOCIAL',tieu_de:'',loai_muc_tieu:'BAN_HANG',pillar_id:'',framework_id:'',san_pham_id:'',kenh_id:'',thang:todayYMD().slice(0,7),trang_thai:'Y_TUONG',pic:{},chi_tiet:{},links:{}};
@@ -1957,17 +1970,56 @@ function ContentPlan(){
       :
       <div className="bg-white rounded-2xl border border-line shadow-card overflow-auto">
         <table className="w-full text-sm min-w-[820px]">
-          <thead className="bg-slate-50/70 text-[11px] uppercase text-ink-muted text-left"><tr><Th>Tiêu đề</Th><Th>Loại</Th><Th>Mục tiêu</Th><Th>Pillar</Th><Th>Kênh</Th><Th>Tháng</Th><Th>Giai đoạn</Th><Th></Th></tr></thead>
+          <thead className="bg-slate-50/70 text-[11px] uppercase text-ink-muted text-left"><tr><Th>Tiêu đề</Th><Th>Loại</Th><Th>Mục tiêu</Th><Th>Pillar</Th><Th>Kênh</Th><Th>Tháng</Th><Th>Giai đoạn</Th><Th>Seeding</Th><Th></Th></tr></thead>
           <tbody className="divide-y">{filtered.map(it=><tr key={it.id} className="hover:bg-slate-50">
             <Td>{it.tieu_de}</Td><Td>{it.loai}</Td><Td>{kpiLabel(it.loai_muc_tieu)}</Td><Td>{nameOf(pillars,it.pillar_id)}</Td><Td>{nameOf(kenhs,it.kenh_id)}</Td><Td>{it.thang}</Td>
             <Td><select value={it.trang_thai} onChange={e=>move(it,e.target.value)} className="text-xs border border-line rounded px-1 py-0.5">{PIPELINE.map(s=><option key={s.k} value={s.k}>{s.label}</option>)}</select></Td>
+            <Td><SeedingCell it={it} onDay={()=>setDay(it)}/></Td>
             <Td><button onClick={()=>setEdit(it)} className="text-xs text-blue-500 hover:underline">Sửa</button> <button onClick={()=>{ if(confirm('Xoá?')) deleteContentItem(it.id).then(ok=>ok&&notify('Đã xoá')); }} className="text-xs text-rose-500 hover:underline">Xoá</button></Td>
           </tr>)}</tbody>
         </table>
       </div>}
     {edit && <ContentItemModal edit={edit} onClose={()=>setEdit(null)}/>}
     {imp && <ContentImportModal onClose={()=>setImp(false)}/>}
+    {day && <DaySeedingModal it={day} onClose={()=>setDay(null)}/>}
   </div>;
+}
+// Ô "Seeding" trong bảng kế hoạch: đã đẩy thì hiện kết quả chảy về, chưa thì hiện nút đẩy
+function SeedingCell({it,onDay}){
+  const { db } = useApp();
+  const topic=(db.content_topics||[]).find(t=>t.content_item_id===it.id);
+  const st=(db.seeding_theo_noi_dung||{})[it.id];
+  if(!topic) return it.trang_thai==='DUYET'
+    ? <button onClick={onDay} className="text-[11px] px-2 py-0.5 rounded-full bg-brand/10 text-brand-dark font-semibold hover:bg-brand/20">↗ Đẩy sang seeding</button>
+    : <span className="text-[10px] text-slate-300">cần duyệt xong</span>;
+  return <div className="text-[11px]">
+    <span className="px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-semibold">✓ đã đẩy</span>
+    {st ? <div className="text-slate-500 mt-0.5">{st.so_bai_dat}/{st.so_bai} bài đạt · {st.react} react · {st.cmt} cmt</div>
+        : <div className="text-slate-400 mt-0.5">chưa có bài seeding</div>}
+  </div>;
+}
+function DaySeedingModal({it,onClose}){
+  const { daySangSeeding, notify } = useApp();
+  const [f,setF]=useState({loai_bai:'',muc_tieu:'',tags:''});
+  const [busy,setBusy]=useState(false);
+  const go=async()=>{ setBusy(true);
+    const r=await daySangSeeding(it.id,{...f, tags:f.tags.split(',').map(x=>x.trim()).filter(Boolean)});
+    setBusy(false);
+    if(r&&r.ok){ notify('Đã đẩy sang Thư viện seeding — Sales dùng được ngay'); onClose(); } else notify((r&&r.msg)||'Lỗi','err'); };
+  return <Modal open={true} onClose={onClose} title="Đẩy nội dung sang Thư viện seeding" wide>
+    <div className="rounded-xl bg-brand-bg border border-brand/30 p-2 mb-3 text-[11px] text-ink-soft leading-relaxed">
+      Nội dung này <b>đã qua 2 cổng duyệt</b> nên Sales seeding sẽ dùng đúng thông điệp <b>đã kiểm claim</b>, thay vì tự viết lại.
+      Nội dung bài lấy thẳng từ <b>kịch bản đã duyệt</b> (hook → thân → CTA) để Sales copy dùng ngay.
+      Kết quả seeding sau đó sẽ <b>chảy ngược về</b> chính nội dung này.
+    </div>
+    <div className="text-sm font-semibold text-ink mb-2">{it.tieu_de}</div>
+    <div className="grid sm:grid-cols-2 gap-2">
+      <Field label="Loại bài (cho seeding)"><Select value={f.loai_bai} onChange={e=>setF({...f,loai_bai:e.target.value})}><option value="">—</option>{LOAI_BAI.map(x=><option key={x} value={x}>{x}</option>)}</Select></Field>
+      <Field label="Mục tiêu"><Select value={f.muc_tieu} onChange={e=>setF({...f,muc_tieu:e.target.value})}><option value="">—</option>{MUC_TIEU.map(x=><option key={x} value={x}>{x}</option>)}</Select></Field>
+    </div>
+    <Field label="Thẻ (tag)"><Input value={f.tags} onChange={e=>setF({...f,tags:e.target.value})} placeholder="cách nhau bằng dấu phẩy"/></Field>
+    <div className="flex gap-2 mt-3"><Btn variant="ghost" onClick={onClose} disabled={busy}>Huỷ</Btn><Btn variant="brand" className="flex-1" onClick={go} disabled={busy}>{busy?'…':'↗ Đẩy sang seeding'}</Btn></div>
+  </Modal>;
 }
 function ContentItemModal({edit, onClose}){
   const { db, upsertContentItem, notify } = useApp();

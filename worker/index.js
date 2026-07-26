@@ -109,6 +109,8 @@ async function ensureSchema(env){
   try { await env.DB.prepare(`ALTER TABLE pricing ADD COLUMN sched_days TEXT DEFAULT '0,2,4,6'`).run(); } catch(e){}
   // P4 — brand voice (tông giọng thương hiệu) dùng cho Creative Studio
   try { await env.DB.prepare(`ALTER TABLE content_strategy ADD COLUMN brand_voice TEXT DEFAULT ''`).run(); } catch(e){}
+  // NỐI SEEDING ↔ CONTENT OS: chủ đề seeding biết mình sinh ra từ nội dung nào
+  try { await env.DB.prepare(`ALTER TABLE content_topics ADD COLUMN content_item_id TEXT`).run(); } catch(e){}
   // P6 — đếm số lần bị trả lại (chỉ số Process cho P9)
   try { await env.DB.prepare(`ALTER TABLE scripts ADD COLUMN so_lan_tra INTEGER DEFAULT 0`).run(); } catch(e){}
   try { await env.DB.prepare(`ALTER TABLE content_items ADD COLUMN so_lan_tra INTEGER DEFAULT 0`).run(); } catch(e){}
@@ -320,6 +322,28 @@ const TREND_CHECK = [
   {k:'lam_khac',    label:'Làm được khác biệt, không bắt chước y hệt', bat_buoc:false},
 ];
 const TREND_ST = { MOI:'Mới ghi nhận', DANH_GIA:'Đang đánh giá', DUYET:'Duyệt triển khai', TU_CHOI:'Bỏ qua', DA_TRIEN_KHAI:'Đã triển khai' };
+// NỐI SEEDING ↔ CONTENT OS: gom kết quả seeding về nội dung gốc.
+// CHỦ Ý: chỉ đếm số bài + tương tác. KHÔNG quy ra doanh thu — seeding không quy đơn được (§9).
+function gomSeedingTheoNoiDung(topics, posts, cmts){
+  const map={};
+  const topicToCi={};
+  (topics||[]).forEach(t=>{ if(t.content_item_id) topicToCi[t.id]=t.content_item_id; });
+  (posts||[]).forEach(p=>{
+    const ci=topicToCi[p.topic_id]; if(!ci) return;
+    (map[ci] ||= {so_bai:0, so_bai_dat:0, react:0, cmt:0});
+    map[ci].so_bai++;
+    if(p.trang_thai==='DAT'||p.trang_thai==='DA_CHI') map[ci].so_bai_dat++;
+    map[ci].react += Number(p.react)||0;
+    map[ci].cmt += (Number(p.so_cmt_seeding)||0)+(Number(p.so_cmt_tu_nhien)||0);
+  });
+  const postToCi={}; (posts||[]).forEach(p=>{ const ci=topicToCi[p.topic_id]; if(ci) postToCi[p.id]=ci; });
+  (cmts||[]).forEach(c=>{
+    const ci=postToCi[c.post_seeding_id]; if(!ci) return;
+    (map[ci] ||= {so_bai:0, so_bai_dat:0, react:0, cmt:0});
+    map[ci].cmt += Number(c.so_cmt_seeding)||0;
+  });
+  return map;
+}
 // NHẮC VIỆC — ngưỡng "để lâu quá" (ngày). Tính trực tiếp mỗi lần bootstrap nên KHÔNG BAO GIỜ LỆCH;
 // cron chỉ ghi nhật ký hằng ngày, không phải nguồn sự thật.
 const NGUONG_KET = { sua_lai:3, cho_duyet:2, chua_nhap_kq:14, trend_sap_het:7, don_cho_gan:3 };
@@ -489,6 +513,7 @@ async function bootstrap(env, u){
     ket_qua, don_cho_gan, muc_tin_cay:MUC_TIN_CAY, nguon_kq:NGUON_KQ,
     footage, shot_list, bai_hoc, min_mau:MIN_MAU_BANG_CHUNG, trends, trend_check:TREND_CHECK,
     viec_ket: canContent ? tinhViecKet({scripts,approvals,air_posts,ket_qua,trends,don_cho_gan}) : null,
+    seeding_theo_noi_dung: staff ? gomSeedingTheoNoiDung(topics, posts, cmts) : {},
     pricing: pricingRow, payouts: [], audit,
   };
 }
@@ -1416,6 +1441,31 @@ async function handleApi(request, env){
     if(!isStaff(me)) return json({error:'Không có quyền'},403);
     const r = await cleanupOldMedia(env);
     return json({ db: await bootstrap(env, me), cleaned:r });
+  }
+
+  // ===== NỐI SEEDING ↔ CONTENT OS: đẩy nội dung ĐÃ DUYỆT sang thư viện seeding =====
+  if((m=path.match(/^\/content\/(.+)\/day-seeding$/)) && method==='POST'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    const id=m[1]; const ci=await env.DB.prepare(`SELECT * FROM content_items WHERE id=?`).bind(id).first();
+    if(!ci) return json({error:'Không tìm thấy nội dung'},404);
+    // Chỉ đẩy nội dung ĐÃ QUA 2 CỔNG DUYỆT — đây chính là giá trị: Sales seeding nội dung đã kiểm claim
+    if(ci.trang_thai!=='DUYET') return json({error:'Chỉ đẩy nội dung ĐÃ DUYỆT (qua 2 cổng) sang seeding'},409);
+    const daCo=await env.DB.prepare(`SELECT id FROM content_topics WHERE content_item_id=?`).bind(id).first();
+    if(daCo) return json({error:'Nội dung này đã có trong thư viện seeding'},409);
+    // Lấy nội dung đầy đủ từ kịch bản đã duyệt (nếu có) để Sales copy dùng ngay
+    const sc=await env.DB.prepare(`SELECT * FROM scripts WHERE content_item_id=? AND trang_thai='DUYET' ORDER BY updated_at DESC LIMIT 1`).bind(id).first();
+    let noi_dung='';
+    if(sc){
+      const secs=JSON.parse(sc.sections||'[]');
+      noi_dung=[sc.hook, ...secs.map(x=>(x&&x.text)||''), sc.cta].filter(Boolean).join('\n\n');
+    }
+    if(!noi_dung){ const ct=JSON.parse(ci.chi_tiet||'{}'); noi_dung=ct.noi_dung||ct.brief||''; }
+    const tid=uid('t');
+    await env.DB.prepare(`INSERT INTO content_topics (id,chu_de,noi_dung,loai_bai,muc_tieu,tags,active,uu_tien,updated_at,content_item_id) VALUES (?,?,?,?,?,?,1,0,?,?)`)
+      .bind(tid, (ci.tieu_de||'').trim(), noi_dung, (body.loai_bai||'').trim(), (body.muc_tieu||'').trim(),
+        JSON.stringify(Array.isArray(body.tags)?body.tags:[]), nowISO(), id).run();
+    await logAudit(env,me,'đẩy nội dung sang seeding','content_topics',tid,(ci.tieu_de||'').trim());
+    return json({ db: await bootstrap(env, me), topic_id: tid });
   }
 
   // ===== CONTENT OS · TREND — nghiên cứu & triển khai =====
