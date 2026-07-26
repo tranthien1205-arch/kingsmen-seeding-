@@ -373,7 +373,7 @@ function seedDB(){
     frameworks: ['Chuẩn bán hàng','PAS','Phản biện comment','Test chất lượng','Hành trình thi công','Size / Combo','FOMO','Review KOC','"đừng..." Trend','Q&A khách hàng','So sánh kinh tế','Hướng dẫn thi công'].map((ten,i)=>({id:uid('fw'),ten,mo_ta:'',thu_tu:i+1,active:true,created_at:now()})),
     kenh: [['Fanpage Kingsmen','FANPAGE','Kingsmen'],['TikTok Kingsmen','TIKTOK','Kingsmen'],['YouTube Short Kingsmen','YOUTUBE','Kingsmen'],['Fanpage VKXD','FANPAGE','VKXD'],['TikTok VKXD','TIKTOK','VKXD'],['Shopee VKXD','SHOPEE','VKXD'],['Zalo OA','ZALO_OA','Kingsmen'],['CHÍNH - Vật liệu mới FINEX','TIKTOK','FINEX'],['AFF - Sơn sàn hiệu ứng','TIKTOK','FINEX'],['BC - Vật liệu hoàn thiện','TIKTOK','Kingsmen']].map(([ten,loai,th])=>({id:uid('kn'),ten,loai,thuong_hieu:th,active:true,created_at:now()})),
     content_items: [],
-    scripts: [], approvals: [], air_posts: [], air_checklist: AIR_CHECKLIST_FE, ket_qua: [], don_cho_gan: [],
+    scripts: [], approvals: [], air_posts: [], air_checklist: AIR_CHECKLIST_FE, ket_qua: [], don_cho_gan: [], footage: [], shot_list: [],
     payouts: [],
     audit: [],
   };
@@ -414,7 +414,7 @@ function migrate(db){
   db.kenh ||= [];
   db.content_items ||= [];
   db.scripts ||= []; db.approvals ||= []; db.air_posts ||= []; db.air_checklist ||= AIR_CHECKLIST_FE;
-  db.ket_qua ||= []; db.don_cho_gan ||= [];
+  db.ket_qua ||= []; db.don_cho_gan ||= []; db.footage ||= []; db.shot_list ||= [];
   db.post_seedings.forEach(p=>{ p.react ??= 0; p.so_cmt_seeding ??= 0; p.so_cmt_tu_nhien ??= 0; p.thanh_tien ??= 0; });
   db.cmt_seedings.forEach(c=>{ c.proofs ||= []; c.so_cmt_seeding ??= 0; c.react ??= 0; c.so_cmt_tu_nhien ??= 0; c.thanh_tien ??= 0; });
   db.groups.forEach(g=>{ g.uu_tien ??= false; });
@@ -581,6 +581,27 @@ function AppProvider({children}){
         const ap=(S.air_posts||[]).find(x=>x.id===air_post_id); if(!ap) return {ok:false,msg:'Chọn bài đăng để gán'};
         S.ket_qua.unshift({ id:uid('kq'), air_post_id:ap.id, muc_tin_cay:'GIAN_TIEP', nguon:d.nguon, ky:d.ky||'', doanh_thu:Number(d.doanh_thu)||0, so_don:Number(d.so_don)||0, luot_xem:0, luot_tuong_tac:0, luot_click:0, ma_theo_doi:d.ma_doi_soat||'', ghi_chu:'Gán tay từ hàng đợi', created_at:now(), created_by_name:meRef.current.ho_ten });
         Object.assign(d,{trang_thai:'DA_GAN',air_post_id:ap.id,decided_at:now(),decided_by_name:meRef.current.ho_ten}); commit(); return {ok:true}; },
+      createFootage: async o=>{ S.footage ||= []; if(!(o.media_url||'').trim()) return {ok:false,msg:'Cần file hoặc link media'};
+        const id=uid('ft'); S.footage.unshift({ id, ten:o.ten||'', mo_ta:o.mo_ta||'', media_url:o.media_url, media_type:o.media_type||'VIDEO',
+          tags:Array.isArray(o.tags)?o.tags:[], san_pham_id:o.san_pham_id||null, kenh_id:o.kenh_id||null, dia_diem:o.dia_diem||'', ngay_quay:o.ngay_quay||'',
+          nguoi_quay:o.nguoi_quay||'', active:true, created_at:now(), created_by_name:meRef.current.ho_ten }); commit(); return {ok:true,id}; },
+      patchFootage: async (id,patch)=>{ const f=(S.footage||[]).find(x=>x.id===id); if(f) Object.assign(f,patch); commit(); return true; },
+      deleteFootage: async id=>{ S.footage=(S.footage||[]).filter(x=>x.id!==id);
+        (S.shot_list||[]).forEach(sl=>{ if(sl.footage_id===id){ sl.footage_id=null; sl.trang_thai='CHUA_QUAY'; } }); commit(); return true; },
+      genShotList: async sid=>{ S.shot_list ||= []; const sc=(S.scripts||[]).find(x=>x.id===sid); if(!sc) return {ok:false,msg:'Không tìm thấy kịch bản'};
+        if((S.shot_list||[]).some(x=>x.script_id===sid)) return {ok:false,msg:'Kịch bản này đã có shot list'};
+        const rows=[]; if((sc.hook||'').trim()) rows.push(['Hook — '+String(sc.hook).slice(0,60),sc.hook]);
+        (sc.sections||[]).forEach((x,i)=>{ if(x&&(x.label||x.text)) rows.push([x.label||('Cảnh '+(i+1)),x.text||'']); });
+        if((sc.cta||'').trim()) rows.push(['CTA',sc.cta]);
+        if(!rows.length) return {ok:false,msg:'Kịch bản chưa có nội dung để tách cảnh'};
+        let so=1; rows.forEach(([ten,mo])=>S.shot_list.push({ id:uid('sl'), script_id:sid, thu_tu:so++, ten_canh:ten, mo_ta:mo, goc_may:'', thoi_luong:0, footage_id:null, trang_thai:'CHUA_QUAY', ghi_chu:'', created_at:now(), updated_at:now() }));
+        commit(); return {ok:true,created:rows.length}; },
+      addShot: async (sid,o)=>{ S.shot_list ||= []; const n=(S.shot_list||[]).filter(x=>x.script_id===sid).length;
+        S.shot_list.push({ id:uid('sl'), script_id:sid, thu_tu:n+1, ten_canh:(o&&o.ten_canh)||'Cảnh mới', mo_ta:'', goc_may:'', thoi_luong:0, footage_id:null, trang_thai:'CHUA_QUAY', ghi_chu:'', created_at:now(), updated_at:now() }); commit(); return true; },
+      patchShot: async (id,patch)=>{ const sl=(S.shot_list||[]).find(x=>x.id===id); if(!sl) return false;
+        if(patch.footage_id!==undefined && patch.trang_thai==null) patch.trang_thai = patch.footage_id?'DA_QUAY':'CHUA_QUAY';
+        Object.assign(sl,patch,{updated_at:now()}); commit(); return true; },
+      deleteShot: async id=>{ S.shot_list=(S.shot_list||[]).filter(x=>x.id!==id); commit(); return true; },
       skipDon: async (id,ly_do)=>{ const d=(S.don_cho_gan||[]).find(x=>x.id===id); if(!d||d.trang_thai!=='CHO_GAN') return false;
         Object.assign(d,{trang_thai:'BO_QUA',decided_at:now(),decided_by_name:meRef.current.ho_ten}); commit(); return true; },
       decideApproval: async (id,result,ghi_chu)=>{ const ap=(S.approvals||[]).find(a=>a.id===id); if(!ap) return false;
@@ -734,6 +755,15 @@ function AppProvider({children}){
     assignDon: async (id,air_post_id) => { try { const r=await call('/donchogan/'+id+'/assign',{method:'POST',body:{air_post_id}}); if(r&&r.db) setDb(r.db); return {ok:true}; }
       catch(e){ return {ok:false, msg:e.message}; } },
     skipDon: (id,ly_do) => mut('/donchogan/'+id+'/skip', {method:'POST', body:{ly_do}}),
+    createFootage: async o => { try { const r=await call('/footage',{method:'POST',body:o}); if(r&&r.db) setDb(r.db); return {ok:true,id:r.id}; }
+      catch(e){ return {ok:false,msg:e.message}; } },
+    patchFootage: (id,patch) => mut('/footage/'+id, {method:'PATCH', body:patch}),
+    deleteFootage: id => mut('/footage/'+id, {method:'DELETE'}),
+    genShotList: async script_id => { try { const r=await call('/shotlist/from-script/'+script_id,{method:'POST'}); if(r&&r.db) setDb(r.db); return {ok:true,created:r.created}; }
+      catch(e){ return {ok:false,msg:e.message}; } },
+    addShot: (script_id,o) => mut('/shotlist', {method:'POST', body:{script_id,...o}}),
+    patchShot: (id,patch) => mut('/shotlist/'+id, {method:'PATCH', body:patch}),
+    deleteShot: id => mut('/shotlist/'+id, {method:'DELETE'}),
     createCmtSeed: c => mut('/cmtseed', {method:'POST', body:c}),
     reviewCmtSeed: (id, result, reason) => mut(`/cmtseed/${id}/review`, {method:'POST', body:{result, reason}}),
     markPaid: (sales_id, ky) => mut('/markpaid', {method:'POST', body:{sales_id, ky}}),
@@ -942,6 +972,7 @@ const NAV_GROUPS = {
       {key:'studio', label:'Creative Studio', short:'Kịch bản', icon:'✍️'},
       {key:'approve', label:'Hàng đợi duyệt', short:'Duyệt', icon:'🛂'},
       {key:'air', label:'Đăng bài', short:'Đăng', icon:'🚀'},
+      {key:'footage', label:'Kho footage', short:'Footage', icon:'🎞'},
       {key:'ketqua', label:'Kết quả', short:'Kết quả', icon:'📈'},
       {key:'products', label:'Sản phẩm & Claim', short:'Sản phẩm', icon:'🧪'},
     ]},
@@ -977,6 +1008,7 @@ const NAV_GROUPS = {
       {key:'studio', label:'Creative Studio', short:'Kịch bản', icon:'✍️'},
       {key:'approve', label:'Hàng đợi duyệt', short:'Duyệt', icon:'🛂'},
       {key:'air', label:'Đăng bài', short:'Đăng', icon:'🚀'},
+      {key:'footage', label:'Kho footage', short:'Footage', icon:'🎞'},
       {key:'ketqua', label:'Kết quả', short:'Kết quả', icon:'📈'},
       {key:'products', label:'Sản phẩm & Claim', short:'Sản phẩm', icon:'🧪'},
     ]},
@@ -1022,7 +1054,7 @@ function ProfileModal({open, onClose}){
   </Modal>;
 }
 // Module đang NÂNG CẤP — chỉ tài khoản dev preview (is_dev) mới thấy
-const BETA_KEYS = new Set(['strategy','plan','products','studio','approve','air','ketqua']);
+const BETA_KEYS = new Set(['strategy','plan','products','studio','approve','air','ketqua','footage']);
 function Shell(){
   const { me, logout, db } = useApp();
   // Lọc module đang nâng cấp → bỏ nhóm rỗng
@@ -1065,6 +1097,7 @@ function Shell(){
       case 'studio': return <CreativeStudio/>;
       case 'approve': return <ApprovalQueue/>;
       case 'air': return <AirPosts/>;
+      case 'footage': return <FootageLib/>;
       case 'ketqua': return <KetQua/>;
       case 'schedule': return <PostSchedule/>;
       case 'pay_report': return <MktPayReport/>;
@@ -2455,6 +2488,179 @@ function AirEditor({post, onClose}){
       <Btn variant="brand" className="flex-1 min-w-[160px]" onClick={publish} disabled={busy}>{busy?'…':'✓ Đánh dấu ĐÃ ĐĂNG'}</Btn>
     </div>}
     {posted && <div className="text-[11px] text-slate-400">Đã đăng lúc {fmtDate(post.posted_at)} — khoá chỉnh sửa để giữ nguyên dữ liệu quy đơn.</div>}
+  </div>;
+}
+
+/* ============================================================
+   CONTENT OS · P5 — KHO FOOTAGE + SHOT LIST (mobile-first, R2)
+============================================================ */
+const SHOT_ST = { CHUA_QUAY:'Chưa quay', DA_QUAY:'Đã quay', DAT:'Đạt' };
+const SHOT_ST_STYLE = { CHUA_QUAY:'bg-slate-100 text-slate-500', DA_QUAY:'bg-amber-100 text-amber-700', DAT:'bg-emerald-100 text-emerald-700' };
+function FootageLib(){
+  const { db, createFootage, patchFootage, deleteFootage, uploadMedia, notify } = useApp();
+  const FT=db.footage||[];
+  const [tab,setTab]=useState('kho');
+  const [q,setQ]=useState(''); const [tag,setTag]=useState('');
+  const [edit,setEdit]=useState(null); const [up,setUp]=useState(0); const fileRef=useRef();
+  const allTags=[...new Set(FT.flatMap(f=>f.tags||[]))].sort();
+  const list=FT.filter(f=>f.active!==false)
+    .filter(f=>!tag || (f.tags||[]).includes(tag))
+    .filter(f=>!q || (f.ten||'').toLowerCase().includes(q.toLowerCase()) || (f.mo_ta||'').toLowerCase().includes(q.toLowerCase()) || (f.tags||[]).some(t=>t.toLowerCase().includes(q.toLowerCase())));
+  const onFile=async e=>{ const fl=e.target.files&&e.target.files[0]; e.target.value=''; if(!fl) return;
+    setUp(1);
+    try{ const r=await uploadMedia(fl,(p)=>setUp(Math.max(1,p)));
+      setUp(0);
+      if(r&&r.media_url) setEdit({ media_url:r.media_url, media_type:r.media_type||'VIDEO', ten:fl.name.replace(/\.[^.]+$/,''), tags:[] });
+    }catch(err){ setUp(0); notify(err.message||'Tải lên lỗi','err'); } };
+  if(tab==='shot') return <ShotListTab onBack={()=>setTab('kho')}/>;
+  return <div className="space-y-4">
+    <div className="flex items-center justify-between flex-wrap gap-2">
+      <h2 className="font-display text-lg font-bold text-ink">🎞 Kho footage</h2>
+      <div className="flex gap-2">
+        <Btn variant="ghost" onClick={()=>setEdit({media_url:'',media_type:'VIDEO',tags:[]})}>🔗 Dán link</Btn>
+        <Btn variant="brand" onClick={()=>fileRef.current&&fileRef.current.click()} disabled={up>0}>{up>0?('Đang tải '+up+'%'):'⬆ Tải lên'}</Btn>
+        <input ref={fileRef} type="file" accept="video/*,image/*" className="hidden" onChange={onFile}/>
+      </div>
+    </div>
+    <div className="flex gap-1 bg-slate-100 rounded-xl p-1 w-fit">
+      <button onClick={()=>setTab('kho')} className={"px-3 py-1 rounded-lg text-xs font-semibold "+(tab==='kho'?'bg-white text-ink shadow-sm':'text-slate-500')}>Kho ({FT.filter(f=>f.active!==false).length})</button>
+      <button onClick={()=>setTab('shot')} className="px-3 py-1 rounded-lg text-xs font-semibold text-slate-500">Shot list theo kịch bản</button>
+    </div>
+    <div className="bg-white rounded-2xl border border-line shadow-card p-3 text-[11px] text-slate-500">
+      Footage tải lên đây <b>dùng lại được cho nhiều kịch bản</b> — gắn thẻ (tag) để tìm nhanh thay vì quay lại từ đầu.
+    </div>
+    <div className="flex flex-wrap gap-2">
+      <Input value={q} onChange={e=>setQ(e.target.value)} placeholder="Tìm theo tên, mô tả, thẻ…" className="flex-1 min-w-[200px]"/>
+    </div>
+    {allTags.length>0 && <div className="flex flex-wrap gap-1">
+      <button onClick={()=>setTag('')} className={"text-[11px] px-2 py-0.5 rounded-full "+(!tag?'bg-brand text-white':'bg-slate-100 text-slate-600')}>Tất cả</button>
+      {allTags.map(t=><button key={t} onClick={()=>setTag(t===tag?'':t)} className={"text-[11px] px-2 py-0.5 rounded-full "+(t===tag?'bg-brand text-white':'bg-slate-100 text-slate-600')}>{t}</button>)}
+    </div>}
+    {list.length===0 ? <Empty>Chưa có footage nào.</Empty> :
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">{list.map(f=>
+        <div key={f.id} className="bg-white rounded-2xl border border-line shadow-card overflow-hidden">
+          <div className="bg-slate-900 aspect-video flex items-center justify-center">
+            {f.media_type==='IMAGE'
+              ? <img src={f.media_url} alt={f.ten} className="w-full h-full object-cover"/>
+              : <video src={f.media_url} className="w-full h-full object-cover" controls preload="metadata"/>}
+          </div>
+          <div className="p-2">
+            <div className="text-xs font-semibold text-ink truncate">{f.ten||'(chưa đặt tên)'}</div>
+            {f.dia_diem && <div className="text-[10px] text-slate-400 truncate">📍 {f.dia_diem}</div>}
+            <div className="flex flex-wrap gap-1 mt-1">{(f.tags||[]).slice(0,3).map((t,i)=><span key={i} className="text-[9px] px-1.5 py-0.5 rounded-full bg-brand/10 text-brand-dark">{t}</span>)}</div>
+            <div className="flex justify-between mt-2 pt-1.5 border-t border-line/60">
+              <button onClick={()=>setEdit(f)} className="text-[11px] text-blue-500 hover:underline">Sửa</button>
+              <button onClick={()=>{ if(confirm('Xoá footage này? Các cảnh đang dùng sẽ được gỡ liên kết.')) deleteFootage(f.id).then(ok=>ok&&notify('Đã xoá')); }} className="text-[11px] text-rose-400 hover:underline">Xoá</button>
+            </div>
+          </div>
+        </div>)}
+      </div>}
+    {edit && <FootageForm init={edit} onClose={()=>setEdit(null)}/>}
+  </div>;
+}
+function FootageForm({init,onClose}){
+  const { db, createFootage, patchFootage, notify } = useApp();
+  const [f,setF]=useState({ ten:init.ten||'', mo_ta:init.mo_ta||'', media_url:init.media_url||'', media_type:init.media_type||'VIDEO',
+    tags:(init.tags||[]).join(', '), san_pham_id:init.san_pham_id||'', dia_diem:init.dia_diem||'', ngay_quay:init.ngay_quay||'', nguoi_quay:init.nguoi_quay||'' });
+  const [busy,setBusy]=useState(false);
+  const save=async()=>{ if(!f.media_url.trim()) return notify('Cần file hoặc link media','warn');
+    const payload={ ...f, tags:f.tags.split(',').map(x=>x.trim()).filter(Boolean), san_pham_id:f.san_pham_id||null };
+    setBusy(true);
+    const r = init.id ? await patchFootage(init.id,payload) : await createFootage(payload);
+    setBusy(false);
+    if(r===true || (r&&r.ok)){ notify(init.id?'Đã lưu':'Đã thêm footage'); onClose(); } else notify((r&&r.msg)||'Lỗi','err'); };
+  return <Modal open={true} onClose={onClose} title={init.id?'Sửa footage':'Thêm footage'} wide>
+    {!init.id && <Field label="Link media" required hint="Tải lên xong sẽ tự điền; hoặc dán link Drive/R2">
+      <Input value={f.media_url} onChange={e=>setF({...f,media_url:e.target.value})} placeholder="/media/… hoặc https://…"/></Field>}
+    <div className="grid sm:grid-cols-2 gap-2">
+      <Field label="Tên cảnh"><Input value={f.ten} onChange={e=>setF({...f,ten:e.target.value})} placeholder="VD: Cận cảnh chít mạch"/></Field>
+      <Field label="Loại"><Select value={f.media_type} onChange={e=>setF({...f,media_type:e.target.value})}><option value="VIDEO">Video</option><option value="IMAGE">Ảnh</option></Select></Field>
+    </div>
+    <Field label="Thẻ (tag)" hint="Cách nhau bằng dấu phẩy — dùng để tìm lại nhanh">
+      <Input value={f.tags} onChange={e=>setF({...f,tags:e.target.value})} placeholder="chít mạch, cận cảnh, nhà tắm"/></Field>
+    <Field label="Mô tả"><Textarea rows="2" value={f.mo_ta} onChange={e=>setF({...f,mo_ta:e.target.value})}/></Field>
+    <div className="grid sm:grid-cols-3 gap-2">
+      <Field label="Sản phẩm"><Select value={f.san_pham_id} onChange={e=>setF({...f,san_pham_id:e.target.value})}><option value="">—</option>{(db.san_pham||[]).map(p=><option key={p.id} value={p.id}>{p.ten}</option>)}</Select></Field>
+      <Field label="Địa điểm"><Input value={f.dia_diem} onChange={e=>setF({...f,dia_diem:e.target.value})}/></Field>
+      <Field label="Ngày quay"><Input type="date" value={f.ngay_quay} onChange={e=>setF({...f,ngay_quay:e.target.value})}/></Field>
+    </div>
+    <Field label="Người quay"><Input value={f.nguoi_quay} onChange={e=>setF({...f,nguoi_quay:e.target.value})}/></Field>
+    <div className="flex gap-2 mt-3"><Btn variant="ghost" onClick={onClose} disabled={busy}>Huỷ</Btn><Btn variant="brand" className="flex-1" onClick={save} disabled={busy}>{busy?'…':'Lưu'}</Btn></div>
+  </Modal>;
+}
+function ShotListTab({onBack}){
+  const { db, genShotList, addShot, patchShot, deleteShot, notify } = useApp();
+  const [sid,setSid]=useState(''); const [pick,setPick]=useState(null); const [busy,setBusy]=useState(false);
+  const scripts=db.scripts||[];
+  const shots=(db.shot_list||[]).filter(s=>s.script_id===sid).sort((a,b)=>(a.thu_tu||0)-(b.thu_tu||0));
+  const ftById=id=>(db.footage||[]).find(f=>f.id===id);
+  const gen=async()=>{ if(!sid) return notify('Chọn kịch bản','warn');
+    setBusy(true); const r=await genShotList(sid); setBusy(false);
+    if(r&&r.ok) notify('Đã sinh '+r.created+' cảnh từ kịch bản'); else notify((r&&r.msg)||'Lỗi','err'); };
+  const done=shots.filter(s=>s.trang_thai!=='CHUA_QUAY').length;
+  return <div className="space-y-4">
+    <div className="flex items-center gap-2">
+      <button onClick={onBack} className="text-sm text-slate-500 hover:underline">← Kho footage</button>
+      <h2 className="font-display text-lg font-bold text-ink flex-1">🎬 Shot list</h2>
+    </div>
+    <div className="bg-white rounded-2xl border border-line shadow-card p-3 text-[11px] text-slate-500">
+      Sinh danh sách cảnh cần quay <b>thẳng từ kịch bản đã duyệt</b> (hook → từng phần → CTA), rồi gắn footage vào từng cảnh để biết còn thiếu gì.
+    </div>
+    <Field label="Kịch bản"><Select value={sid} onChange={e=>setSid(e.target.value)}>
+      <option value="">— Chọn kịch bản —</option>
+      {scripts.map(s=><option key={s.id} value={s.id}>{s.tieu_de||s.hook||'(không tên)'}</option>)}
+    </Select></Field>
+    {sid && <>
+      {shots.length===0
+        ? <div className="text-center py-8">
+            <Empty>Kịch bản này chưa có shot list.</Empty>
+            <Btn variant="brand" onClick={gen} disabled={busy}>{busy?'…':'✨ Sinh shot list từ kịch bản'}</Btn>
+          </div>
+        : <>
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <span className={"text-[11px] px-2 py-0.5 rounded-full font-semibold "+(done===shots.length?'bg-emerald-100 text-emerald-700':'bg-amber-100 text-amber-700')}>
+              {done}/{shots.length} cảnh đã có footage</span>
+            <Btn variant="ghost" onClick={()=>addShot(sid,{}).then(ok=>ok&&notify('Đã thêm cảnh'))}>＋ Thêm cảnh</Btn>
+          </div>
+          <div className="space-y-2">{shots.map(s=>{ const ft=ftById(s.footage_id);
+            return <div key={s.id} className="bg-white rounded-2xl border border-line shadow-card p-3">
+              <div className="flex items-start gap-2">
+                <span className="w-6 h-6 rounded-full bg-brand/10 text-brand-dark text-xs font-bold flex items-center justify-center shrink-0">{s.thu_tu}</span>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-semibold text-ink">{s.ten_canh}</div>
+                  {s.mo_ta && <div className="text-xs text-slate-500 mt-0.5">{s.mo_ta}</div>}
+                </div>
+                <span className={"text-[10px] px-1.5 py-0.5 rounded-full font-semibold shrink-0 "+(SHOT_ST_STYLE[s.trang_thai]||'')}>{SHOT_ST[s.trang_thai]||s.trang_thai}</span>
+              </div>
+              {ft && <div className="mt-2 flex items-center gap-2 rounded-xl bg-slate-50 border border-line p-2">
+                <div className="w-16 h-10 bg-slate-900 rounded overflow-hidden shrink-0">
+                  {ft.media_type==='IMAGE' ? <img src={ft.media_url} className="w-full h-full object-cover"/> : <video src={ft.media_url} className="w-full h-full object-cover" preload="metadata"/>}
+                </div>
+                <span className="text-xs text-ink flex-1 truncate">{ft.ten||'(footage)'}</span>
+                <button onClick={()=>patchShot(s.id,{footage_id:''}).then(ok=>ok&&notify('Đã gỡ'))} className="text-[11px] text-rose-400 hover:underline shrink-0">Gỡ</button>
+              </div>}
+              <div className="flex gap-2 mt-2">
+                <Btn variant="ghost" onClick={()=>setPick(s)}>{ft?'Đổi footage':'🎞 Gắn footage'}</Btn>
+                {s.trang_thai==='DA_QUAY' && <Btn variant="ghost" onClick={()=>patchShot(s.id,{trang_thai:'DAT'}).then(ok=>ok&&notify('Đã đánh dấu Đạt'))}>✓ Đạt</Btn>}
+                <button onClick={()=>{ if(confirm('Xoá cảnh này?')) deleteShot(s.id).then(ok=>ok&&notify('Đã xoá')); }} className="text-xs text-rose-400 hover:underline ml-auto">Xoá</button>
+              </div>
+            </div>; })}
+          </div>
+        </>}
+    </>}
+    {pick && <Modal open={true} onClose={()=>setPick(null)} title={'Gắn footage cho: '+pick.ten_canh} wide>
+      {(db.footage||[]).filter(f=>f.active!==false).length===0 ? <Empty>Kho footage đang trống.</Empty> :
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-96 overflow-y-auto">
+          {(db.footage||[]).filter(f=>f.active!==false).map(f=>
+            <button key={f.id} onClick={()=>{ patchShot(pick.id,{footage_id:f.id}).then(ok=>{ if(ok){ notify('Đã gắn footage'); setPick(null); } }); }}
+              className="rounded-xl border border-line overflow-hidden hover:border-brand transition text-left">
+              <div className="bg-slate-900 aspect-video">
+                {f.media_type==='IMAGE' ? <img src={f.media_url} className="w-full h-full object-cover"/> : <video src={f.media_url} className="w-full h-full object-cover" preload="metadata"/>}
+              </div>
+              <div className="p-1.5 text-[11px] font-semibold text-ink truncate">{f.ten||'(chưa đặt tên)'}</div>
+            </button>)}
+        </div>}
+    </Modal>}
   </div>;
 }
 

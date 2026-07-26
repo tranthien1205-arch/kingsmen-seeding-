@@ -83,6 +83,9 @@ async function ensureSchema(env){
     `CREATE TABLE IF NOT EXISTS ket_qua (id TEXT PRIMARY KEY, air_post_id TEXT, muc_tin_cay TEXT, nguon TEXT, ky TEXT, doanh_thu REAL DEFAULT 0, so_don INTEGER DEFAULT 0, luot_xem INTEGER DEFAULT 0, luot_tuong_tac INTEGER DEFAULT 0, luot_click INTEGER DEFAULT 0, ma_theo_doi TEXT, ghi_chu TEXT, created_at TEXT, created_by TEXT, created_by_name TEXT)`,
     // Đơn không khớp được 1 bài duy nhất → CHỜ GÁN TAY, KHÔNG chia đều (ràng buộc §9)
     `CREATE TABLE IF NOT EXISTS don_cho_gan (id TEXT PRIMARY KEY, nguon TEXT, ma_doi_soat TEXT, doanh_thu REAL DEFAULT 0, so_don INTEGER DEFAULT 0, ky TEXT, ly_do TEXT, trang_thai TEXT, air_post_id TEXT, created_at TEXT, decided_at TEXT, decided_by_name TEXT)`,
+    // CONTENT OS · P5 — Kho footage tái sử dụng + shot list bám theo kịch bản
+    `CREATE TABLE IF NOT EXISTS footage (id TEXT PRIMARY KEY, ten TEXT, mo_ta TEXT, media_url TEXT, media_type TEXT, tags TEXT, san_pham_id TEXT, kenh_id TEXT, dia_diem TEXT, ngay_quay TEXT, nguoi_quay TEXT, active INTEGER DEFAULT 1, created_at TEXT, created_by TEXT, created_by_name TEXT)`,
+    `CREATE TABLE IF NOT EXISTS shot_list (id TEXT PRIMARY KEY, script_id TEXT, thu_tu INTEGER, ten_canh TEXT, mo_ta TEXT, goc_may TEXT, thoi_luong INTEGER, footage_id TEXT, trang_thai TEXT, ghi_chu TEXT, created_at TEXT, updated_at TEXT)`,
   ];
   await env.DB.batch(stmts.map(s=>env.DB.prepare(s)));
   // thêm cột đơn giá quay công trình cho DB cũ (bỏ qua nếu đã có)
@@ -425,6 +428,10 @@ async function bootstrap(env, u){
   // P8 — kết quả 3 mức tin cậy + hàng đợi gán tay
   const ket_qua = canContent ? (await env.DB.prepare(`SELECT * FROM ket_qua ORDER BY created_at DESC`).all()).results : [];
   const don_cho_gan = canContent ? (await env.DB.prepare(`SELECT * FROM don_cho_gan ORDER BY created_at DESC`).all()).results : [];
+  // P5 — kho footage + shot list
+  const footage = canContent ? (await env.DB.prepare(`SELECT * FROM footage ORDER BY created_at DESC`).all()).results
+    .map(r=>({ ...r, active:uBool(r.active), tags: JSON.parse(r.tags||'[]') })) : [];
+  const shot_list = canContent ? (await env.DB.prepare(`SELECT * FROM shot_list ORDER BY thu_tu ASC, created_at ASC`).all()).results : [];
 
   return {
     me: rowUser(u),
@@ -434,6 +441,7 @@ async function bootstrap(env, u){
     san_pham, claim_cam, pillars, content_strategy,
     frameworks, kenh, content_items, scripts, approvals, air_posts, air_checklist:AIR_CHECKLIST,
     ket_qua, don_cho_gan, muc_tin_cay:MUC_TIN_CAY, nguon_kq:NGUON_KQ,
+    footage, shot_list,
     pricing: pricingRow, payouts: [], audit,
   };
 }
@@ -1362,6 +1370,90 @@ async function handleApi(request, env){
     const r = await cleanupOldMedia(env);
     return json({ db: await bootstrap(env, me), cleaned:r });
   }
+
+  // ===== CONTENT OS · P5 — Kho footage + shot list =====
+  if(path==='/footage' && method==='POST'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    if(!(body.media_url||'').trim()) return json({error:'Cần file hoặc link media'},400);
+    const id=uid('ft');
+    await env.DB.prepare(`INSERT INTO footage (id,ten,mo_ta,media_url,media_type,tags,san_pham_id,kenh_id,dia_diem,ngay_quay,nguoi_quay,active,created_at,created_by,created_by_name) VALUES (?,?,?,?,?,?,?,?,?,?,?,1,?,?,?)`)
+      .bind(id,(body.ten||'').trim(),(body.mo_ta||'').trim(),(body.media_url||'').trim(),(body.media_type||'VIDEO').trim(),
+        JSON.stringify(Array.isArray(body.tags)?body.tags:[]), body.san_pham_id||null, body.kenh_id||null,
+        (body.dia_diem||'').trim(),(body.ngay_quay||'').trim(),(body.nguoi_quay||'').trim(), nowISO(), me.id, me.ho_ten).run();
+    await logAudit(env,me,'thêm footage','footage',id,(body.ten||'').trim());
+    return json({ db: await bootstrap(env, me), id });
+  }
+  if((m=path.match(/^\/footage\/(.+)$/)) && method==='PATCH'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    const id=m[1]; const r=await env.DB.prepare(`SELECT * FROM footage WHERE id=?`).bind(id).first();
+    if(!r) return json({error:'Không tìm thấy'},404);
+    const g=(k,d)=> body[k]!=null?String(body[k]).trim():d;
+    await env.DB.prepare(`UPDATE footage SET ten=?, mo_ta=?, tags=?, san_pham_id=?, kenh_id=?, dia_diem=?, ngay_quay=?, nguoi_quay=?, active=? WHERE id=?`)
+      .bind(g('ten',r.ten),g('mo_ta',r.mo_ta), body.tags!=null?JSON.stringify(body.tags):r.tags,
+        body.san_pham_id!==undefined?(body.san_pham_id||null):r.san_pham_id, body.kenh_id!==undefined?(body.kenh_id||null):r.kenh_id,
+        g('dia_diem',r.dia_diem),g('ngay_quay',r.ngay_quay),g('nguoi_quay',r.nguoi_quay),
+        body.active!=null?bool(body.active):r.active, id).run();
+    return json({ db: await bootstrap(env, me) });
+  }
+  if((m=path.match(/^\/footage\/(.+)$/)) && method==='DELETE'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    const id=m[1]; const r=await env.DB.prepare(`SELECT * FROM footage WHERE id=?`).bind(id).first();
+    if(r) await deleteMediaObject(env, r.media_url);
+    // gỡ liên kết ở shot list để không trỏ vào footage đã xoá
+    await env.DB.prepare(`UPDATE shot_list SET footage_id=NULL, trang_thai='CHUA_QUAY' WHERE footage_id=?`).bind(id).run();
+    await env.DB.prepare(`DELETE FROM footage WHERE id=?`).bind(id).run();
+    await logAudit(env,me,'xoá footage','footage',id);
+    return json({ db: await bootstrap(env, me) });
+  }
+  // Sinh shot list TỪ kịch bản đã có: mỗi phần thân kịch bản → 1 cảnh cần quay
+  if((m=path.match(/^\/shotlist\/from-script\/(.+)$/)) && method==='POST'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    const sid=m[1]; const sc=await env.DB.prepare(`SELECT * FROM scripts WHERE id=?`).bind(sid).first();
+    if(!sc) return json({error:'Không tìm thấy kịch bản'},404);
+    const cur=(await env.DB.prepare(`SELECT COUNT(*) c FROM shot_list WHERE script_id=?`).bind(sid).first())?.c||0;
+    if(Number(cur)>0) return json({error:'Kịch bản này đã có shot list — xoá cảnh cũ trước nếu muốn sinh lại'},409);
+    const secs=JSON.parse(sc.sections||'[]');
+    const rows=[]; let so=1;
+    if((sc.hook||'').trim()) rows.push(['Hook — '+String(sc.hook).slice(0,60), sc.hook]);
+    secs.forEach(x=>{ if(x && (x.label||x.text)) rows.push([x.label||('Cảnh '+so), x.text||'']); });
+    if((sc.cta||'').trim()) rows.push(['CTA', sc.cta]);
+    if(!rows.length) return json({error:'Kịch bản chưa có nội dung để tách cảnh'},400);
+    for(const [ten,mo] of rows){
+      await env.DB.prepare(`INSERT INTO shot_list (id,script_id,thu_tu,ten_canh,mo_ta,goc_may,thoi_luong,footage_id,trang_thai,ghi_chu,created_at,updated_at) VALUES (?,?,?,?,?,'',0,NULL,'CHUA_QUAY','',?,?)`)
+        .bind(uid('sl'),sid,so++,String(ten).slice(0,120),String(mo).slice(0,500),nowISO(),nowISO()).run();
+    }
+    await logAudit(env,me,'sinh shot list','shot_list',sid,rows.length+' cảnh');
+    return json({ db: await bootstrap(env, me), created: rows.length });
+  }
+  if(path==='/shotlist' && method==='POST'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    if(!body.script_id) return json({error:'Cần kịch bản'},400);
+    const n=Number((await env.DB.prepare(`SELECT COUNT(*) c FROM shot_list WHERE script_id=?`).bind(body.script_id).first())?.c||0);
+    const id=uid('sl');
+    await env.DB.prepare(`INSERT INTO shot_list (id,script_id,thu_tu,ten_canh,mo_ta,goc_may,thoi_luong,footage_id,trang_thai,ghi_chu,created_at,updated_at) VALUES (?,?,?,?,?,?,?,NULL,'CHUA_QUAY','',?,?)`)
+      .bind(id, body.script_id, n+1, (body.ten_canh||'Cảnh mới').trim(), (body.mo_ta||'').trim(), (body.goc_may||'').trim(), Number(body.thoi_luong)||0, nowISO(), nowISO()).run();
+    return json({ db: await bootstrap(env, me), id });
+  }
+  if((m=path.match(/^\/shotlist\/(.+)$/)) && method==='PATCH'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    const id=m[1]; const r=await env.DB.prepare(`SELECT * FROM shot_list WHERE id=?`).bind(id).first();
+    if(!r) return json({error:'Không tìm thấy'},404);
+    // gắn footage vào cảnh → tự chuyển trạng thái ĐÃ QUAY (nếu chưa đặt tay)
+    let fid = body.footage_id!==undefined ? (body.footage_id||null) : r.footage_id;
+    if(fid){ const f=await env.DB.prepare(`SELECT id FROM footage WHERE id=?`).bind(fid).first(); if(!f) return json({error:'Footage không tồn tại'},404); }
+    const st = body.trang_thai!=null ? String(body.trang_thai).trim() : (body.footage_id!==undefined ? (fid?'DA_QUAY':'CHUA_QUAY') : r.trang_thai);
+    const g=(k,d)=> body[k]!=null?String(body[k]).trim():d;
+    await env.DB.prepare(`UPDATE shot_list SET ten_canh=?, mo_ta=?, goc_may=?, thoi_luong=?, footage_id=?, trang_thai=?, ghi_chu=?, thu_tu=?, updated_at=? WHERE id=?`)
+      .bind(g('ten_canh',r.ten_canh),g('mo_ta',r.mo_ta),g('goc_may',r.goc_may), body.thoi_luong!=null?Number(body.thoi_luong)||0:r.thoi_luong,
+        fid, st, g('ghi_chu',r.ghi_chu), body.thu_tu!=null?Number(body.thu_tu)||0:r.thu_tu, nowISO(), id).run();
+    return json({ db: await bootstrap(env, me) });
+  }
+  if((m=path.match(/^\/shotlist\/(.+)$/)) && method==='DELETE'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    await env.DB.prepare(`DELETE FROM shot_list WHERE id=?`).bind(m[1]).run();
+    return json({ db: await bootstrap(env, me) });
+  }
+
 
   return json({error:'Route không tồn tại: '+method+' '+path}, 404);
 }
