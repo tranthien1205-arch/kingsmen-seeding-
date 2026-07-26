@@ -66,6 +66,10 @@ async function ensureSchema(env){
     // CONTENT OS · P2 — Chiến lược & Pillar (trụ cột nội dung + OKR/Big Idea)
     `CREATE TABLE IF NOT EXISTS pillars (id TEXT PRIMARY KEY, ten TEXT, objective TEXT, point_of_difference TEXT, request TEXT, ty_trong REAL, thu_tu INTEGER, active INTEGER DEFAULT 1, created_at TEXT)`,
     `CREATE TABLE IF NOT EXISTS content_strategy (id INTEGER PRIMARY KEY, okr TEXT, big_idea TEXT, purpose TEXT, audience TEXT, swot TEXT, updated_at TEXT)`,
+    // CONTENT OS · P3 — Kế hoạch & lịch: nhóm kịch bản, kênh, và content_item (trung tâm)
+    `CREATE TABLE IF NOT EXISTS frameworks (id TEXT PRIMARY KEY, ten TEXT, mo_ta TEXT, thu_tu INTEGER, active INTEGER DEFAULT 1, created_at TEXT)`,
+    `CREATE TABLE IF NOT EXISTS kenh (id TEXT PRIMARY KEY, ten TEXT, loai TEXT, thuong_hieu TEXT, active INTEGER DEFAULT 1, created_at TEXT)`,
+    `CREATE TABLE IF NOT EXISTS content_items (id TEXT PRIMARY KEY, loai TEXT, tieu_de TEXT, loai_muc_tieu TEXT, pillar_id TEXT, framework_id TEXT, san_pham_id TEXT, kenh_id TEXT, thang TEXT, trang_thai TEXT, pic TEXT, chi_tiet TEXT, links TEXT, created_at TEXT, created_by TEXT, created_by_name TEXT, updated_at TEXT)`,
   ];
   await env.DB.batch(stmts.map(s=>env.DB.prepare(s)));
   // thêm cột đơn giá quay công trình cho DB cũ (bỏ qua nếu đã có)
@@ -144,6 +148,23 @@ async function ensureSchema(env){
   if(!anyStrat){
     await env.DB.prepare(`INSERT INTO content_strategy (id,okr,big_idea,purpose,audience,swot,updated_at) VALUES (1,?,?,?,?,?,?)`)
       .bind('Xây dựng nhận diện thương hiệu Kingsmen; tăng tiếp xúc & niềm tin với khách hàng.','Your satisfaction – Our quality – Persistence over time','Tăng độ nhận diện thương hiệu; tiếp xúc khách hàng, tạo niềm tin; thúc đẩy chuyển đổi.','','',nowISO()).run();
+  }
+
+  // CONTENT OS · P3 — seed 12 nhóm kịch bản THẬT (từ file ecom) + kênh thật
+  const anyFw = await env.DB.prepare(`SELECT id FROM frameworks LIMIT 1`).first();
+  if(!anyFw){
+    const FW = ['Chuẩn bán hàng','PAS','Phản biện comment','Test chất lượng','Hành trình thi công','Size / Combo','FOMO','Review KOC','"đừng..." Trend','Q&A khách hàng','So sánh kinh tế','Hướng dẫn thi công'];
+    let so=1;
+    for(const ten of FW) await env.DB.prepare(`INSERT INTO frameworks (id,ten,mo_ta,thu_tu,active,created_at) VALUES (?,?,?,?,1,?)`).bind(uid('fw'),ten,'',so++,nowISO()).run();
+  }
+  const anyKenh = await env.DB.prepare(`SELECT id FROM kenh LIMIT 1`).first();
+  if(!anyKenh){
+    const K = [
+      ['Fanpage Kingsmen','FANPAGE','Kingsmen'],['TikTok Kingsmen','TIKTOK','Kingsmen'],['YouTube Short Kingsmen','YOUTUBE','Kingsmen'],
+      ['Fanpage VKXD','FANPAGE','VKXD'],['TikTok VKXD','TIKTOK','VKXD'],['Shopee VKXD','SHOPEE','VKXD'],['Zalo OA','ZALO_OA','Kingsmen'],
+      ['CHÍNH - Vật liệu mới FINEX','TIKTOK','FINEX'],['AFF - Sơn sàn hiệu ứng','TIKTOK','FINEX'],['BC - Vật liệu hoàn thiện','TIKTOK','Kingsmen'],
+    ];
+    for(const [ten,loai,th] of K) await env.DB.prepare(`INSERT INTO kenh (id,ten,loai,thuong_hieu,active,created_at) VALUES (?,?,?,?,1,?)`).bind(uid('kn'),ten,loai,th,nowISO()).run();
   }
 
   SCHEMA_READY = true;
@@ -252,6 +273,14 @@ async function ensurePostSlots(env){
   }
 }
 
+// Content OS · P3 — chèn 1 content_item từ body (dùng chung cho tạo & import)
+async function insertContentItem(env, me, body){
+  const id=uid('ci');
+  await env.DB.prepare(`INSERT INTO content_items (id,loai,tieu_de,loai_muc_tieu,pillar_id,framework_id,san_pham_id,kenh_id,thang,trang_thai,pic,chi_tiet,links,created_at,created_by,created_by_name,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+    .bind(id, body.loai||'SOCIAL', (body.tieu_de||'').trim(), body.loai_muc_tieu||'', body.pillar_id||null, body.framework_id||null, body.san_pham_id||null, body.kenh_id||null, (body.thang||'').trim(), body.trang_thai||'Y_TUONG', JSON.stringify(body.pic||{}), JSON.stringify(body.chi_tiet||{}), JSON.stringify(body.links||{}), nowISO(), me.id, me.ho_ten, nowISO()).run();
+  return id;
+}
+
 // ---------- bootstrap: toàn bộ dữ liệu theo quyền ----------
 async function bootstrap(env, u){
   const staff = isStaff(u);
@@ -306,6 +335,10 @@ async function bootstrap(env, u){
   const pillars = (await env.DB.prepare(`SELECT * FROM pillars ORDER BY thu_tu ASC, created_at ASC`).all()).results
     .map(r=>({ ...r, active:uBool(r.active), ty_trong:r.ty_trong==null?0:Number(r.ty_trong) }));
   const content_strategy = (await env.DB.prepare(`SELECT * FROM content_strategy WHERE id=1`).first()) || { okr:'', big_idea:'', purpose:'', audience:'', swot:'' };
+  const frameworks = (await env.DB.prepare(`SELECT * FROM frameworks ORDER BY thu_tu ASC, created_at ASC`).all()).results.map(r=>({ ...r, active:uBool(r.active) }));
+  const kenh = (await env.DB.prepare(`SELECT * FROM kenh ORDER BY created_at ASC`).all()).results.map(r=>({ ...r, active:uBool(r.active) }));
+  const content_items = (await env.DB.prepare(`SELECT * FROM content_items ORDER BY created_at DESC`).all()).results
+    .map(r=>({ ...r, pic: JSON.parse(r.pic||'{}'), chi_tiet: JSON.parse(r.chi_tiet||'{}'), links: JSON.parse(r.links||'{}') }));
 
   return {
     me: rowUser(u),
@@ -313,6 +346,7 @@ async function bootstrap(env, u){
     post_seedings: posts, cmt_seedings: cmtsFull,
     filming_templates, project_filmings, guides, post_type_prefs, post_slots, media_library,
     san_pham, claim_cam, pillars, content_strategy,
+    frameworks, kenh, content_items,
     pricing: pricingRow, payouts: [], audit,
   };
 }
@@ -675,6 +709,76 @@ async function handleApi(request, env){
     await env.DB.prepare(`UPDATE content_strategy SET okr=?, big_idea=?, purpose=?, audience=?, swot=?, updated_at=? WHERE id=1`)
       .bind(g('okr'),g('big_idea'),g('purpose'),g('audience'),g('swot'),nowISO()).run();
     await logAudit(env,me,'sửa chiến lược','content_strategy','1');
+    return json({ db: await bootstrap(env, me) });
+  }
+
+  // ===== CONTENT OS · P3 — nhóm kịch bản (framework) + kênh =====
+  if(path==='/frameworks' && method==='POST'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    const id=uid('fw'); const n=Number((await env.DB.prepare(`SELECT COUNT(*) c FROM frameworks`).first())?.c||0);
+    await env.DB.prepare(`INSERT INTO frameworks (id,ten,mo_ta,thu_tu,active,created_at) VALUES (?,?,?,?,1,?)`).bind(id,(body.ten||'').trim(),(body.mo_ta||'').trim(),n+1,nowISO()).run();
+    return json({ db: await bootstrap(env, me) });
+  }
+  if((m=path.match(/^\/frameworks\/(.+)$/)) && method==='PATCH'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    const id=m[1]; const r=await env.DB.prepare(`SELECT * FROM frameworks WHERE id=?`).bind(id).first(); if(!r) return json({error:'Không tìm thấy'},404);
+    await env.DB.prepare(`UPDATE frameworks SET ten=?, mo_ta=?, active=? WHERE id=?`).bind(body.ten!=null?String(body.ten).trim():r.ten,body.mo_ta!=null?String(body.mo_ta).trim():r.mo_ta,body.active!=null?bool(body.active):r.active,id).run();
+    return json({ db: await bootstrap(env, me) });
+  }
+  if((m=path.match(/^\/frameworks\/(.+)$/)) && method==='DELETE'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    await env.DB.prepare(`DELETE FROM frameworks WHERE id=?`).bind(m[1]).run();
+    return json({ db: await bootstrap(env, me) });
+  }
+  if(path==='/kenh' && method==='POST'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    const id=uid('kn');
+    await env.DB.prepare(`INSERT INTO kenh (id,ten,loai,thuong_hieu,active,created_at) VALUES (?,?,?,?,1,?)`).bind(id,(body.ten||'').trim(),(body.loai||'FANPAGE').trim(),(body.thuong_hieu||'').trim(),nowISO()).run();
+    return json({ db: await bootstrap(env, me) });
+  }
+  if((m=path.match(/^\/kenh\/(.+)$/)) && method==='PATCH'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    const id=m[1]; const r=await env.DB.prepare(`SELECT * FROM kenh WHERE id=?`).bind(id).first(); if(!r) return json({error:'Không tìm thấy'},404);
+    await env.DB.prepare(`UPDATE kenh SET ten=?, loai=?, thuong_hieu=?, active=? WHERE id=?`).bind(body.ten!=null?String(body.ten).trim():r.ten,body.loai!=null?String(body.loai).trim():r.loai,body.thuong_hieu!=null?String(body.thuong_hieu).trim():r.thuong_hieu,body.active!=null?bool(body.active):r.active,id).run();
+    return json({ db: await bootstrap(env, me) });
+  }
+  if((m=path.match(/^\/kenh\/(.+)$/)) && method==='DELETE'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    await env.DB.prepare(`DELETE FROM kenh WHERE id=?`).bind(m[1]).run();
+    return json({ db: await bootstrap(env, me) });
+  }
+
+  // ===== CONTENT OS · P3 — content_item (trung tâm: kế hoạch nội dung) =====
+  if(path==='/content' && method==='POST'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    const id=await insertContentItem(env, me, body);
+    await logAudit(env,me,'thêm nội dung','content_items',id,(body.tieu_de||'').trim());
+    return json({ db: await bootstrap(env, me) });
+  }
+  if(path==='/content/import' && method==='POST'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    const items=Array.isArray(body.items)?body.items:[]; let n=0;
+    for(const it of items){ if(!(it.tieu_de||'').trim()) continue; await insertContentItem(env, me, it); n++; }
+    await logAudit(env,me,'import nội dung','content_items',n+' mục');
+    return json({ db: await bootstrap(env, me), imported:n });
+  }
+  if((m=path.match(/^\/content\/(.+)$/)) && method==='PATCH'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    const id=m[1]; const r=await env.DB.prepare(`SELECT * FROM content_items WHERE id=?`).bind(id).first();
+    if(!r) return json({error:'Không tìm thấy'},404);
+    const g=(k,d)=> body[k]!=null?String(body[k]).trim():d;
+    const pic = body.pic!=null?JSON.stringify(body.pic):r.pic;
+    const chi_tiet = body.chi_tiet!=null?JSON.stringify(body.chi_tiet):r.chi_tiet;
+    const links = body.links!=null?JSON.stringify(body.links):r.links;
+    await env.DB.prepare(`UPDATE content_items SET loai=?, tieu_de=?, loai_muc_tieu=?, pillar_id=?, framework_id=?, san_pham_id=?, kenh_id=?, thang=?, trang_thai=?, pic=?, chi_tiet=?, links=?, updated_at=? WHERE id=?`)
+      .bind(g('loai',r.loai),g('tieu_de',r.tieu_de),g('loai_muc_tieu',r.loai_muc_tieu),body.pillar_id!==undefined?(body.pillar_id||null):r.pillar_id,body.framework_id!==undefined?(body.framework_id||null):r.framework_id,body.san_pham_id!==undefined?(body.san_pham_id||null):r.san_pham_id,body.kenh_id!==undefined?(body.kenh_id||null):r.kenh_id,g('thang',r.thang),g('trang_thai',r.trang_thai),pic,chi_tiet,links,nowISO(),id).run();
+    await logAudit(env,me,'sửa nội dung','content_items',id);
+    return json({ db: await bootstrap(env, me) });
+  }
+  if((m=path.match(/^\/content\/(.+)$/)) && method==='DELETE'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    await env.DB.prepare(`DELETE FROM content_items WHERE id=?`).bind(m[1]).run();
+    await logAudit(env,me,'xoá nội dung','content_items',m[1]);
     return json({ db: await bootstrap(env, me) });
   }
   if((m=path.match(/^\/posts\/(.+)\/review$/)) && method==='POST'){

@@ -62,6 +62,25 @@ const DEMO = false;
 
 const ROLES = { MARKETING:'MARKETING', SALES:'SALES', ADMIN:'ADMIN', KY_THUAT:'KY_THUAT' };
 const ROLE_LABEL = { MARKETING:'Marketing', SALES:'Sales', ADMIN:'Admin / Kế toán', KY_THUAT:'Kỹ thuật' };
+// Content OS · P3 — kế hoạch nội dung
+const CONTENT_LOAI = { ECOM:'ECOM', SOCIAL:'SOCIAL' };
+const CONTENT_LOAI_LABEL = { ECOM:'Ecom (video bán hàng)', SOCIAL:'Social (thương hiệu)' };
+const PIPELINE = [
+  {k:'Y_TUONG', label:'Ý tưởng', icon:'💡'},
+  {k:'SCRIPT', label:'Script/Brief', icon:'✍️'},
+  {k:'QUAY', label:'Quay', icon:'🎥'},
+  {k:'DUNG', label:'Dựng', icon:'🛠'},
+  {k:'CHO_DUYET', label:'Chờ duyệt', icon:'⏳'},
+  {k:'DA_DANG', label:'Đã đăng', icon:'✅'},
+  {k:'DA_DO', label:'Đã đo', icon:'📊'},
+];
+const pipeLabel = k => (PIPELINE.find(s=>s.k===k)||{}).label||k;
+const LOAI_MUC_TIEU_KPI = [
+  {v:'BAN_HANG', label:'Bán hàng'}, {v:'THUONG_HIEU', label:'Thương hiệu'},
+  {v:'KY_THUAT', label:'Kỹ thuật'}, {v:'KENH_DAI_LY', label:'Kênh đại lý'},
+];
+const kpiLabel = v => (LOAI_MUC_TIEU_KPI.find(x=>x.v===v)||{}).label||'—';
+const KENH_LOAI = ['FANPAGE','TIKTOK','YOUTUBE','ZALO_OA','SHOPEE','WEBSITE'];
 // Content OS · P1 — dữ liệu nền
 const DONG_SP = ['Kingsmen grout','Terrazy','FINEX','Khác'];
 const CLAIM_MUC_DO = { CANH_BAO:'Cảnh báo', CHAN:'Chặn' };
@@ -296,6 +315,9 @@ function seedDB(){
       {id:uid('pil'),ten:'Interaction',objective:'Nội dung tương tác, chương trình ưu đãi thu hút khách hàng.',point_of_difference:'Ưu đãi · minigame',request:'Theo dịp/khuyến mãi.',ty_trong:5,thu_tu:4,active:true,created_at:now()},
     ],
     content_strategy: { okr:'Xây dựng nhận diện thương hiệu Kingsmen; tăng tiếp xúc & niềm tin.', big_idea:'Your satisfaction – Our quality – Persistence over time', purpose:'Tăng nhận diện; tạo niềm tin; thúc đẩy chuyển đổi.', audience:'', swot:'' },
+    frameworks: ['Chuẩn bán hàng','PAS','Phản biện comment','Test chất lượng','Hành trình thi công','Size / Combo','FOMO','Review KOC','"đừng..." Trend','Q&A khách hàng','So sánh kinh tế','Hướng dẫn thi công'].map((ten,i)=>({id:uid('fw'),ten,mo_ta:'',thu_tu:i+1,active:true,created_at:now()})),
+    kenh: [['Fanpage Kingsmen','FANPAGE','Kingsmen'],['TikTok Kingsmen','TIKTOK','Kingsmen'],['YouTube Short Kingsmen','YOUTUBE','Kingsmen'],['Fanpage VKXD','FANPAGE','VKXD'],['TikTok VKXD','TIKTOK','VKXD'],['Shopee VKXD','SHOPEE','VKXD'],['Zalo OA','ZALO_OA','Kingsmen'],['CHÍNH - Vật liệu mới FINEX','TIKTOK','FINEX'],['AFF - Sơn sàn hiệu ứng','TIKTOK','FINEX'],['BC - Vật liệu hoàn thiện','TIKTOK','Kingsmen']].map(([ten,loai,th])=>({id:uid('kn'),ten,loai,thuong_hieu:th,active:true,created_at:now()})),
+    content_items: [],
     payouts: [],
     audit: [],
   };
@@ -332,6 +354,9 @@ function migrate(db){
   db.claim_cam ||= [];
   db.pillars ||= [];
   db.content_strategy ||= { okr:'', big_idea:'', purpose:'', audience:'', swot:'' };
+  db.frameworks ||= [];
+  db.kenh ||= [];
+  db.content_items ||= [];
   db.post_seedings.forEach(p=>{ p.react ??= 0; p.so_cmt_seeding ??= 0; p.so_cmt_tu_nhien ??= 0; p.thanh_tien ??= 0; });
   db.cmt_seedings.forEach(c=>{ c.proofs ||= []; c.so_cmt_seeding ??= 0; c.react ??= 0; c.so_cmt_tu_nhien ??= 0; c.thanh_tien ??= 0; });
   db.groups.forEach(g=>{ g.uu_tien ??= false; });
@@ -440,6 +465,13 @@ function AppProvider({children}){
       upsertPillar: async o=>{ S.pillars ||= []; if(o.id){ const i=S.pillars.findIndex(x=>x.id===o.id); if(i>=0) S.pillars[i]={...S.pillars[i],...o}; } else { S.pillars.push({ id:uid('pil'), ten:'', objective:'', point_of_difference:'', request:'', ty_trong:0, thu_tu:(S.pillars.length+1), active:true, created_at:now(), ...o }); } commit(); return true; },
       deletePillar: async id=>{ S.pillars=(S.pillars||[]).filter(x=>x.id!==id); commit(); return true; },
       setStrategy: async o=>{ S.content_strategy={...(S.content_strategy||{}),...o}; commit(); return true; },
+      upsertContentItem: async o=>{ S.content_items ||= []; if(o.id){ const i=S.content_items.findIndex(x=>x.id===o.id); if(i>=0) S.content_items[i]={...S.content_items[i],...o, updated_at:now()}; } else { S.content_items.unshift({ id:uid('ci'), loai:'SOCIAL', tieu_de:'', loai_muc_tieu:'', pillar_id:null, framework_id:null, san_pham_id:null, kenh_id:null, thang:'', trang_thai:'Y_TUONG', pic:{}, chi_tiet:{}, links:{}, created_at:now(), created_by:meRef.current.id, created_by_name:meRef.current.ho_ten, updated_at:now(), ...o }); } commit(); return true; },
+      deleteContentItem: async id=>{ S.content_items=(S.content_items||[]).filter(x=>x.id!==id); commit(); return true; },
+      importContentItems: async items=>{ S.content_items ||= []; let n=0; (items||[]).forEach(it=>{ if(!(it.tieu_de||'').trim()) return; S.content_items.unshift({ id:uid('ci'), loai:'SOCIAL', trang_thai:'Y_TUONG', pic:{}, chi_tiet:{}, links:{}, created_at:now(), created_by:meRef.current.id, created_by_name:meRef.current.ho_ten, updated_at:now(), ...it }); n++; }); commit(); return n; },
+      upsertKenh: async o=>{ S.kenh ||= []; if(o.id){ const i=S.kenh.findIndex(x=>x.id===o.id); if(i>=0) S.kenh[i]={...S.kenh[i],...o}; } else S.kenh.push({id:uid('kn'),ten:'',loai:'FANPAGE',thuong_hieu:'',active:true,created_at:now(),...o}); commit(); return true; },
+      deleteKenh: async id=>{ S.kenh=(S.kenh||[]).filter(x=>x.id!==id); commit(); return true; },
+      upsertFramework: async o=>{ S.frameworks ||= []; if(o.id){ const i=S.frameworks.findIndex(x=>x.id===o.id); if(i>=0) S.frameworks[i]={...S.frameworks[i],...o}; } else S.frameworks.push({id:uid('fw'),ten:'',mo_ta:'',thu_tu:(S.frameworks.length+1),active:true,created_at:now(),...o}); commit(); return true; },
+      deleteFramework: async id=>{ S.frameworks=(S.frameworks||[]).filter(x=>x.id!==id); commit(); return true; },
       createLibImg: async o=>{ S.media_library ||= []; S.media_library.unshift({ id:uid('lib'), media_url:o.media_url, caption:o.caption||'', muc_dich:o.muc_dich||'CA_HAI', topic_id:o.topic_id||null, tags:o.tags||[], uploaded_by:meRef.current.id, uploaded_by_name:meRef.current.ho_ten, active:true, uploaded_at:now() }); commit(); return true; },
       patchLibImg: async (id, patch)=>{ const r=(S.media_library||[]).find(x=>x.id===id); if(r) Object.assign(r, patch); commit(); return true; },
       deleteLibImg: async id=>{ S.media_library=(S.media_library||[]).filter(x=>x.id!==id); commit(); return true; },
@@ -556,6 +588,13 @@ function AppProvider({children}){
     upsertPillar: o => mut(o.id?'/pillars/'+o.id:'/pillars', {method:o.id?'PATCH':'POST', body:o}),
     deletePillar: id => mut('/pillars/'+id, {method:'DELETE'}),
     setStrategy: o => mut('/strategy', {method:'PATCH', body:o}),
+    upsertContentItem: o => mut(o.id?'/content/'+o.id:'/content', {method:o.id?'PATCH':'POST', body:o}),
+    deleteContentItem: id => mut('/content/'+id, {method:'DELETE'}),
+    importContentItems: async items => { try { const r=await call('/content/import',{method:'POST',body:{items}}); if(r&&r.db) setDb(r.db); return r.imported||0; } catch(e){ notify(e.message,'err'); return 0; } },
+    upsertKenh: o => mut(o.id?'/kenh/'+o.id:'/kenh', {method:o.id?'PATCH':'POST', body:o}),
+    deleteKenh: id => mut('/kenh/'+id, {method:'DELETE'}),
+    upsertFramework: o => mut(o.id?'/frameworks/'+o.id:'/frameworks', {method:o.id?'PATCH':'POST', body:o}),
+    deleteFramework: id => mut('/frameworks/'+id, {method:'DELETE'}),
     createCmtSeed: c => mut('/cmtseed', {method:'POST', body:c}),
     reviewCmtSeed: (id, result, reason) => mut(`/cmtseed/${id}/review`, {method:'POST', body:{result, reason}}),
     markPaid: (sales_id, ky) => mut('/markpaid', {method:'POST', body:{sales_id, ky}}),
@@ -752,6 +791,7 @@ const NAV = {
   [ROLES.MARKETING]: [
     {key:'dash', label:'Dashboard', icon:'📊'},
     {key:'strategy', label:'Chiến lược', icon:'🎯'},
+    {key:'plan', label:'Kế hoạch nội dung', icon:'🗓️'},
     {key:'library', label:'Thư viện', icon:'📚'},
     {key:'products', label:'Sản phẩm & Claim', icon:'🧪'},
     {key:'filming', label:'Quay CT', icon:'🎬'},
@@ -767,6 +807,7 @@ const NAV = {
   [ROLES.ADMIN]: [
     {key:'users', label:'Người dùng', icon:'👥'},
     {key:'strategy', label:'Chiến lược', icon:'🎯'},
+    {key:'plan', label:'Kế hoạch nội dung', icon:'🗓️'},
     {key:'library', label:'Thư viện', icon:'📚'},
     {key:'products', label:'Sản phẩm & Claim', icon:'🧪'},
     {key:'filming', label:'Quay CT', icon:'🎬'},
@@ -825,6 +866,7 @@ function Shell(){
       case 'queue': return <MktQueue/>;
       case 'products': return <ProductClaimManager/>;
       case 'strategy': return <StrategyPillar/>;
+      case 'plan': return <ContentPlan/>;
       case 'schedule': return <PostSchedule/>;
       case 'pay_report': return <MktPayReport/>;
       case 'users': return <UserManagement/>;
@@ -1454,6 +1496,170 @@ function BreakdownCard({title, data}){
 /* ============================================================
    14. THƯ VIỆN CHUNG (Marketing/Admin)
 ============================================================ */
+/* ============================================================
+   CONTENT OS · P3 — KẾ HOẠCH NỘI DUNG (content_item · List/Kanban)
+============================================================ */
+function ContentPlan(){
+  const { db, upsertContentItem, deleteContentItem, notify } = useApp();
+  const items = db.content_items||[];
+  const pillars = (db.pillars||[]).filter(p=>p.active!==false);
+  const frameworks = (db.frameworks||[]).filter(f=>f.active!==false);
+  const kenhs = (db.kenh||[]).filter(k=>k.active!==false);
+  const [view,setView]=useState('kanban');
+  const [fLoai,setFLoai]=useState(''); const [fKenh,setFKenh]=useState(''); const [fThang,setFThang]=useState(''); const [fPillar,setFPillar]=useState('');
+  const [edit,setEdit]=useState(null); const [imp,setImp]=useState(false);
+  const nameOf=(arr,id)=>{ const x=(arr||[]).find(o=>o.id===id); return x?(x.ten||x.chu_de):''; };
+  const filtered = items.filter(it=> (!fLoai||it.loai===fLoai) && (!fKenh||it.kenh_id===fKenh) && (!fThang||it.thang===fThang) && (!fPillar||it.pillar_id===fPillar));
+  const blank = {loai:'SOCIAL',tieu_de:'',loai_muc_tieu:'BAN_HANG',pillar_id:'',framework_id:'',san_pham_id:'',kenh_id:'',thang:todayYMD().slice(0,7),trang_thai:'Y_TUONG',pic:{},chi_tiet:{},links:{}};
+  // cảnh báo lệch tỷ lệ pillar (chỉ khi ≥5 mục để có ý nghĩa)
+  const dist={}; filtered.forEach(it=>{ if(it.pillar_id) dist[it.pillar_id]=(dist[it.pillar_id]||0)+1; });
+  const withP=filtered.filter(it=>it.pillar_id).length;
+  const lech = pillars.map(p=>{ const actual= withP? (dist[p.id]||0)/withP*100 : 0; return {p, actual, diff:actual-(Number(p.ty_trong)||0)}; }).filter(x=>Math.abs(x.diff)>15);
+  const showLech = withP>=5 && lech.length>0;
+  const move=(it,st)=> upsertContentItem({id:it.id, trang_thai:st});
+  const Card=({it})=>{ const pil=pillars.find(p=>p.id===it.pillar_id); const kn=kenhs.find(k=>k.id===it.kenh_id); const pic=db.users.find(u=>u.id===(it.pic&&it.pic.chinh));
+    return <div className="bg-white rounded-xl border border-line p-2.5 shadow-card text-left">
+      <div className="flex items-start gap-1.5">
+        <span className={"text-[9px] px-1 py-0.5 rounded font-bold shrink-0 "+(it.loai==='ECOM'?'bg-brand/15 text-brand-dark':'bg-violet-100 text-violet-700')}>{it.loai==='ECOM'?'ECOM':'SOCIAL'}</span>
+        <div className="text-xs font-medium text-ink leading-snug flex-1 min-w-0">{it.tieu_de||'(chưa tên)'}</div>
+      </div>
+      <div className="flex flex-wrap gap-1 mt-1.5">
+        {pil && <span className="text-[9px] px-1 py-0.5 rounded-full bg-slate-100 text-slate-500">{pil.ten}</span>}
+        {it.loai_muc_tieu && <span className="text-[9px] px-1 py-0.5 rounded-full bg-emerald-50 text-emerald-700">{kpiLabel(it.loai_muc_tieu)}</span>}
+        {kn && <span className="text-[9px] px-1 py-0.5 rounded-full bg-sky-50 text-sky-700">{kn.ten}</span>}
+      </div>
+      <div className="flex items-center justify-between mt-1.5 gap-1">
+        <span className="text-[9px] text-slate-400 truncate">{pic?('👤 '+pic.ho_ten):(it.created_by_name||'')}</span>
+        <div className="flex gap-1 shrink-0">
+          <button onClick={()=>setEdit(it)} className="text-[10px] text-blue-500">Sửa</button>
+          <select value={it.trang_thai} onChange={e=>move(it,e.target.value)} className="text-[9px] border border-line rounded px-0.5 py-0.5 bg-white max-w-[70px]">
+            {PIPELINE.map(s=><option key={s.k} value={s.k}>{s.label}</option>)}
+          </select>
+        </div>
+      </div>
+    </div>;
+  };
+  return <div className="space-y-4">
+    <div className="flex items-center justify-between flex-wrap gap-2">
+      <h2 className="font-display text-lg font-bold text-ink">🗓️ Kế hoạch nội dung</h2>
+      <div className="flex gap-2">
+        <div className="flex rounded-lg overflow-hidden border border-line">
+          <button onClick={()=>setView('kanban')} className={"px-3 py-1.5 text-xs font-semibold "+(view==='kanban'?'bg-brand text-white':'bg-white text-slate-500')}>Kanban</button>
+          <button onClick={()=>setView('list')} className={"px-3 py-1.5 text-xs font-semibold "+(view==='list'?'bg-brand text-white':'bg-white text-slate-500')}>Danh sách</button>
+        </div>
+        <Btn variant="ghost" onClick={()=>setImp(true)}>⬆ Import</Btn>
+        <Btn variant="brand" onClick={()=>setEdit({...blank})}>＋ Thêm nội dung</Btn>
+      </div>
+    </div>
+    <div className="bg-white rounded-2xl border border-line shadow-card p-3 flex flex-wrap gap-2 items-center">
+      <Select value={fLoai} onChange={e=>setFLoai(e.target.value)} className="max-w-[140px]"><option value="">Mọi loại</option><option value="ECOM">Ecom</option><option value="SOCIAL">Social</option></Select>
+      <Select value={fKenh} onChange={e=>setFKenh(e.target.value)} className="max-w-[180px]"><option value="">Mọi kênh</option>{kenhs.map(k=><option key={k.id} value={k.id}>{k.ten}</option>)}</Select>
+      <Select value={fPillar} onChange={e=>setFPillar(e.target.value)} className="max-w-[150px]"><option value="">Mọi pillar</option>{pillars.map(p=><option key={p.id} value={p.id}>{p.ten}</option>)}</Select>
+      <Input type="month" value={fThang} onChange={e=>setFThang(e.target.value)} className="max-w-[150px]"/>
+      <span className="text-xs text-slate-400 ml-auto">{filtered.length} mục</span>
+    </div>
+    {showLech && <div className="bg-amber-50 border border-amber-300 rounded-2xl p-3 text-xs text-amber-800">
+      ⚠️ <b>Lệch tỷ lệ pillar &gt;15%:</b> {lech.map((x,i)=><span key={x.p.id}>{i>0?' · ':''}{x.p.ten} thực tế {Math.round(x.actual)}% (mục tiêu {x.p.ty_trong}%)</span>)}. Cân nhắc phân bổ lại nội dung theo trụ cột.
+    </div>}
+    {filtered.length===0 ? <Empty>Chưa có nội dung. Bấm "Thêm nội dung" hoặc "Import" 2 file kế hoạch.</Empty> :
+     view==='kanban' ?
+      <div className="grid grid-cols-3 md:grid-cols-4 xl:grid-cols-7 gap-2">
+        {PIPELINE.map(st=>{ const col=filtered.filter(it=>it.trang_thai===st.k);
+          return <div key={st.k} className="bg-slate-50 rounded-xl p-2 min-w-0">
+            <div className="text-[11px] font-bold text-slate-500 mb-2 flex items-center justify-between"><span>{st.icon} {st.label}</span><span className="text-slate-400">{col.length}</span></div>
+            <div className="space-y-2">{col.map(it=><Card key={it.id} it={it}/>)}</div>
+          </div>; })}
+      </div>
+      :
+      <div className="bg-white rounded-2xl border border-line shadow-card overflow-auto">
+        <table className="w-full text-sm min-w-[820px]">
+          <thead className="bg-slate-50/70 text-[11px] uppercase text-ink-muted text-left"><tr><Th>Tiêu đề</Th><Th>Loại</Th><Th>Mục tiêu</Th><Th>Pillar</Th><Th>Kênh</Th><Th>Tháng</Th><Th>Giai đoạn</Th><Th></Th></tr></thead>
+          <tbody className="divide-y">{filtered.map(it=><tr key={it.id} className="hover:bg-slate-50">
+            <Td>{it.tieu_de}</Td><Td>{it.loai}</Td><Td>{kpiLabel(it.loai_muc_tieu)}</Td><Td>{nameOf(pillars,it.pillar_id)}</Td><Td>{nameOf(kenhs,it.kenh_id)}</Td><Td>{it.thang}</Td>
+            <Td><select value={it.trang_thai} onChange={e=>move(it,e.target.value)} className="text-xs border border-line rounded px-1 py-0.5">{PIPELINE.map(s=><option key={s.k} value={s.k}>{s.label}</option>)}</select></Td>
+            <Td><button onClick={()=>setEdit(it)} className="text-xs text-blue-500 hover:underline">Sửa</button> <button onClick={()=>{ if(confirm('Xoá?')) deleteContentItem(it.id).then(ok=>ok&&notify('Đã xoá')); }} className="text-xs text-rose-500 hover:underline">Xoá</button></Td>
+          </tr>)}</tbody>
+        </table>
+      </div>}
+    {edit && <ContentItemModal edit={edit} onClose={()=>setEdit(null)}/>}
+    {imp && <ContentImportModal onClose={()=>setImp(false)}/>}
+  </div>;
+}
+function ContentItemModal({edit, onClose}){
+  const { db, upsertContentItem, notify } = useApp();
+  const [f,setF]=useState({...edit, pic:{...(edit.pic||{})}, chi_tiet:{...(edit.chi_tiet||{})}, links:{...(edit.links||{})}});
+  const set=(k,v)=>setF(p=>({...p,[k]:v}));
+  const setSub=(o,k,v)=>setF(p=>({...p,[o]:{...p[o],[k]:v}}));
+  const users=db.users.filter(u=>u.active);
+  const save=async()=>{
+    if(!f.tieu_de.trim()) return notify('Nhập tiêu đề','warn');
+    if(!f.loai_muc_tieu) return notify('Chọn mục tiêu (hệ KPI)','warn');
+    if(!f.pillar_id) return notify('Chọn pillar','warn');
+    if(!f.framework_id) return notify('Chọn nhóm kịch bản (framework)','warn');
+    if(!f.kenh_id) return notify('Chọn kênh','warn');
+    const ok=await upsertContentItem({...(edit.id?{id:edit.id}:{}), loai:f.loai, tieu_de:f.tieu_de.trim(), loai_muc_tieu:f.loai_muc_tieu, pillar_id:f.pillar_id, framework_id:f.framework_id, san_pham_id:f.san_pham_id||null, kenh_id:f.kenh_id, thang:f.thang, trang_thai:f.trang_thai, pic:f.pic, chi_tiet:f.chi_tiet, links:f.links});
+    if(ok){ notify(edit.id?'Đã lưu':'Đã thêm nội dung'); onClose(); }
+  };
+  return <Modal open={true} onClose={onClose} title={(edit.id?'Sửa ':'Thêm ')+'nội dung'} wide>
+    <div className="grid grid-cols-2 gap-2">
+      <Field label="Loại"><Select value={f.loai} onChange={e=>set('loai',e.target.value)}><option value="SOCIAL">Social (thương hiệu)</option><option value="ECOM">Ecom (video bán hàng)</option></Select></Field>
+      <Field label="Mục tiêu (hệ KPI)" required><Select value={f.loai_muc_tieu} onChange={e=>set('loai_muc_tieu',e.target.value)}>{LOAI_MUC_TIEU_KPI.map(x=><option key={x.v} value={x.v}>{x.label}</option>)}</Select></Field>
+    </div>
+    <Field label="Tiêu đề / tên nội dung" required><Input value={f.tieu_de} onChange={e=>set('tieu_de',e.target.value)}/></Field>
+    <div className="grid grid-cols-2 gap-2">
+      <Field label="Pillar (trụ cột)" required><Select value={f.pillar_id} onChange={e=>set('pillar_id',e.target.value)}><option value="">— chọn —</option>{(db.pillars||[]).map(p=><option key={p.id} value={p.id}>{p.ten}</option>)}</Select></Field>
+      <Field label="Nhóm kịch bản (framework)" required><Select value={f.framework_id} onChange={e=>set('framework_id',e.target.value)}><option value="">— chọn —</option>{(db.frameworks||[]).map(x=><option key={x.id} value={x.id}>{x.ten}</option>)}</Select></Field>
+      <Field label="Sản phẩm" hint="nên có để AI trích spec đúng"><Select value={f.san_pham_id} onChange={e=>set('san_pham_id',e.target.value)}><option value="">— chọn —</option>{(db.san_pham||[]).map(x=><option key={x.id} value={x.id}>{x.ten}</option>)}</Select></Field>
+      <Field label="Kênh" required><Select value={f.kenh_id} onChange={e=>set('kenh_id',e.target.value)}><option value="">— chọn —</option>{(db.kenh||[]).map(x=><option key={x.id} value={x.id}>{x.ten}</option>)}</Select></Field>
+      <Field label="Tháng"><Input type="month" value={f.thang} onChange={e=>set('thang',e.target.value)}/></Field>
+      <Field label="Giai đoạn"><Select value={f.trang_thai} onChange={e=>set('trang_thai',e.target.value)}>{PIPELINE.map(s=><option key={s.k} value={s.k}>{s.label}</option>)}</Select></Field>
+      <Field label="Người phụ trách"><Select value={(f.pic&&f.pic.chinh)||''} onChange={e=>setSub('pic','chinh',e.target.value)}><option value="">—</option>{users.map(u=><option key={u.id} value={u.id}>{u.ho_ten}</option>)}</Select></Field>
+      {f.loai==='SOCIAL' && <Field label="Format"><Input value={f.chi_tiet.format||''} onChange={e=>setSub('chi_tiet','format',e.target.value)} placeholder="Video / Multi-photos…"/></Field>}
+      {f.loai==='ECOM' && <Field label="Loại video"><Input value={f.chi_tiet.loai_video||''} onChange={e=>setSub('chi_tiet','loai_video',e.target.value)} placeholder="Gắn giỏ hàng…"/></Field>}
+    </div>
+    <Field label="Nội dung / brief / concept"><Textarea rows="2" value={f.chi_tiet.noi_dung||''} onChange={e=>setSub('chi_tiet','noi_dung',e.target.value)}/></Field>
+    <div className="grid grid-cols-2 gap-2">
+      <Field label="Link final (video/thiết kế)"><Input value={f.links.final||''} onChange={e=>setSub('links','final',e.target.value)}/></Field>
+      <Field label="Link đã đăng"><Input value={f.links.post||''} onChange={e=>setSub('links','post',e.target.value)}/></Field>
+    </div>
+    <div className="flex gap-2 mt-2"><Btn variant="ghost" onClick={onClose}>Huỷ</Btn><Btn variant="brand" className="flex-1" onClick={save}>{edit.id?'Lưu':'Thêm'}</Btn></div>
+  </Modal>;
+}
+function ContentImportModal({onClose}){
+  const { db, importContentItems, notify } = useApp();
+  const [txt,setTxt]=useState(''); const [busy,setBusy]=useState(false); const fileRef=useRef();
+  const HEAD=['Tiêu đề','Loại (ECOM/SOCIAL)','Mục tiêu','Pillar','Framework','Kênh','Sản phẩm','Tháng (YYYY-MM)'];
+  const dlTpl=()=>download('mau_ke_hoach_noi_dung.csv', toCSV([HEAD,['Review ColorMatch nền gạch trắng','SOCIAL','Thương hiệu','Branding','Review KOC','Fanpage Kingsmen','','2026-07']]));
+  const onFile=e=>{ const fl=e.target.files&&e.target.files[0]; e.target.value=''; if(!fl) return; const r=new FileReader(); r.onload=ev=>setTxt(String(ev.target.result||'')); r.readAsText(fl,'utf-8'); };
+  const findId=(arr,name,key)=>{ if(!name) return null; const n=name.trim().toLowerCase(); const x=(arr||[]).find(o=>String(o[key]||'').trim().toLowerCase()===n); return x?x.id:null; };
+  const kpiVal=(name)=>{ if(!name) return 'BAN_HANG'; const n=name.trim().toLowerCase(); const x=LOAI_MUC_TIEU_KPI.find(o=>o.label.toLowerCase()===n||o.v.toLowerCase()===n); return x?x.v:'BAN_HANG'; };
+  const doImport=async()=>{ const rows=parseTable(txt); if(!rows.length) return notify('Chưa có dữ liệu','warn');
+    if((rows[0][0]||'').toLowerCase()==='tiêu đề') rows.shift();
+    const items=rows.filter(c=>(c[0]||'').trim()).map(c=>({
+      tieu_de:(c[0]||'').trim(), loai:(c[1]||'').trim().toUpperCase()==='ECOM'?'ECOM':'SOCIAL', loai_muc_tieu:kpiVal(c[2]),
+      pillar_id:findId(db.pillars,c[3],'ten'), framework_id:findId(db.frameworks,c[4],'ten'), kenh_id:findId(db.kenh,c[5],'ten'),
+      san_pham_id:findId(db.san_pham,c[6],'ten'), thang:(c[7]||'').trim(), trang_thai:'Y_TUONG',
+    }));
+    setBusy(true); const n=await importContentItems(items); setBusy(false);
+    notify('Đã import '+n+' nội dung'); onClose();
+  };
+  return <Modal open={true} onClose={onClose} title="Import kế hoạch nội dung" wide>
+    <ol className="text-sm text-slate-600 list-decimal ml-4 space-y-1 mb-3">
+      <li>Bấm <b>Tải file mẫu</b> → mở Excel/Sheets, điền theo cột (tên Pillar/Framework/Kênh phải khớp danh sách trong app).</li>
+      <li>Lưu <b>.csv</b> → <b>Chọn file</b> → xem trước → <b>Import</b>. Hoặc copy từ Excel dán thẳng.</li>
+    </ol>
+    <div className="flex flex-wrap gap-2 mb-3">
+      <Btn variant="ghost" onClick={dlTpl}>⬇ Tải file mẫu</Btn>
+      <Btn variant="ghost" onClick={()=>fileRef.current&&fileRef.current.click()}>📄 Chọn file (.csv)</Btn>
+      <input ref={fileRef} type="file" accept=".csv,.tsv,.txt" className="hidden" onChange={onFile}/>
+    </div>
+    <div className="text-xs font-mono bg-slate-100 rounded-lg p-2 mb-1 overflow-x-auto whitespace-nowrap">{HEAD.join(' | ')}</div>
+    <p className="text-[11px] text-slate-400 mb-2">Loại: ECOM/SOCIAL · Mục tiêu: Bán hàng/Thương hiệu/Kỹ thuật/Kênh đại lý · Pillar/Framework/Kênh/Sản phẩm khớp theo tên (không khớp thì để trống, sửa sau).</p>
+    <Textarea rows="6" value={txt} onChange={e=>setTxt(e.target.value)} placeholder="Nội dung file hiện ở đây, hoặc dán từ Excel…"/>
+    <div className="flex gap-2 mt-3"><Btn variant="ghost" onClick={onClose} disabled={busy}>Huỷ</Btn><Btn variant="brand" className="flex-1" onClick={doImport} disabled={busy}>{busy?'Đang import…':'Import'}</Btn></div>
+  </Modal>;
+}
+
 /* ============================================================
    CONTENT OS · P2 — CHIẾN LƯỢC & PILLAR (trụ cột nội dung)
 ============================================================ */
