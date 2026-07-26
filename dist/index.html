@@ -218,7 +218,9 @@ const isUrl = u => /^https?:\/\/.+/i.test((u||'').trim());
 const kyOf = iso => { const d=new Date(iso||nowISO()); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); }; // kỳ = tháng
 
 function download(filename, text, mime='text/csv;charset=utf-8'){
-  const blob = new Blob(['﻿'+text], {type:mime}); // BOM để Excel đọc UTF-8
+  // BOM chỉ dành cho CSV (để Excel đọc đúng UTF-8). JSON có BOM là n8n/JSON.parse hỏng ngay.
+  const themBOM = /csv|text\/plain/.test(mime);
+  const blob = new Blob([(themBOM?'﻿':'')+text], {type:mime});
   const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=filename; a.click();
   setTimeout(()=>URL.revokeObjectURL(a.href),1000);
 }
@@ -3624,11 +3626,78 @@ function LichDangBox({post,onSaveFirst}){
   </div>;
 }
 // Quản lý kênh + cấu hình tự động đăng. Token KHÔNG nhập ở đây (xem giải thích trong màn).
+// Sinh workflow n8n import thẳng được — dùng node ổn định của n8n 1.x.
+function n8nWorkflow({token='DAN_N8N_TOKEN_VAO_DAY', path='kingsmen-dang-bai', kenhLoai=[]}={}){
+  const P=(x,y)=>[x,y]; const nodes=[]; const conn={};
+  const link=(from,to,idx=0)=>{ (conn[from] ||= {main:[]}); while(conn[from].main.length<=idx) conn[from].main.push([]);
+    conn[from].main[idx].push({node:to,type:'main',index:0}); };
+  nodes.push({ parameters:{ httpMethod:'POST', path, responseMode:'responseNode', options:{} },
+    type:'n8n-nodes-base.webhook', typeVersion:2, position:P(-620,300), id:'wh', name:'1. Nhận yêu cầu từ app', webhookId:path });
+  nodes.push({ parameters:{ jsCode:
+'// Kiểm tra app gọi đúng token, rồi làm phẳng dữ liệu cho dễ dùng ở các node sau.\n'+
+'const TOKEN = '+JSON.stringify(token)+';\n'+
+'const item = $input.first();\n'+
+'const headers = item.json.headers || {};\n'+
+'const b = item.json.body || {};\n'+
+"if ((headers['x-app-token'] || '') !== TOKEN) {\n"+
+"  throw new Error('Sai X-App-Token — chặn người lạ gọi webhook này');\n}\n"+
+'return [{ json: {\n'+
+'  air_post_id: b.air_post_id,\n'+
+"  kenh_ten:    (b.kenh && b.kenh.ten) || '',\n"+
+"  kenh_loai:   ((b.kenh && b.kenh.loai) || '').toUpperCase(),\n"+
+"  object_id:   (b.kenh && b.kenh.object_id) || '',\n"+
+"  tieu_de:     b.tieu_de || '',\n"+
+"  caption:     b.caption || b.tieu_de || '',\n"+
+"  media_url:   b.media_url || '',\n"+
+"  ma_theo_doi: b.ma_theo_doi || '',\n"+
+'  callback_url: b.callback_url,\n'+
+'  callback_token: TOKEN,\n}}];' },
+    type:'n8n-nodes-base.code', typeVersion:2, position:P(-400,300), id:'code', name:'2. Kiểm tra token & chuẩn hoá' });
+  nodes.push({ parameters:{ respondWith:'json', responseBody:'={{ JSON.stringify({ received: true }) }}', options:{} },
+    type:'n8n-nodes-base.respondToWebhook', typeVersion:1, position:P(-180,140), id:'resp', name:'3. Báo đã nhận việc' });
+  const loai=(kenhLoai&&kenhLoai.length)?kenhLoai:['TIKTOK','FANPAGE','YOUTUBE'];
+  nodes.push({ parameters:{ rules:{ values: loai.map(l=>({
+      conditions:{ options:{caseSensitive:true,leftValue:'',typeValidation:'loose'},
+        conditions:[{ id:'c_'+l, leftValue:'={{ $json.kenh_loai }}', rightValue:l, operator:{type:'string',operation:'equals'} }],
+        combinator:'and' }, outputKey:l })) },
+      options:{ fallbackOutput:'extra', renameFallbackOutput:'KHÁC' } },
+    type:'n8n-nodes-base.switch', typeVersion:3, position:P(-180,420), id:'sw', name:'4. Rẽ theo kênh' });
+  loai.forEach((l,i)=>{ const nm='ĐĂNG '+l+' (thay bằng node thật)';
+    nodes.push({ parameters:{}, type:'n8n-nodes-base.noOp', typeVersion:1, position:P(120,240+i*160), id:'post_'+l, name:nm });
+    link('4. Rẽ theo kênh',nm,i); link(nm,'5. Báo kết quả về app'); });
+  const nmO='ĐĂNG kênh khác (thay bằng node thật)';
+  nodes.push({ parameters:{}, type:'n8n-nodes-base.noOp', typeVersion:1, position:P(120,240+loai.length*160), id:'post_other', name:nmO });
+  link('4. Rẽ theo kênh',nmO,loai.length); link(nmO,'5. Báo kết quả về app');
+  nodes.push({ parameters:{ method:'POST', url:"={{ $('2. Kiểm tra token & chuẩn hoá').first().json.callback_url }}",
+      sendHeaders:true, headerParameters:{ parameters:[{name:'X-N8N-Token', value:"={{ $('2. Kiểm tra token & chuẩn hoá').first().json.callback_token }}"}] },
+      sendBody:true, specifyBody:'json',
+      jsonBody:"={{ JSON.stringify({ ok: true, link: $json.link || $json.permalink_url || '' }) }}", options:{} },
+    type:'n8n-nodes-base.httpRequest', typeVersion:4.2, position:P(420,420), id:'cb_ok', name:'5. Báo kết quả về app' });
+  nodes.push({ parameters:{ content:
+'## Cách dùng (3 bước)\n\n'+
+'**1.** Mở node **2. Kiểm tra token & chuẩn hoá** → sửa `TOKEN` cho khớp secret `N8N_TOKEN` đã cắm ở app.\n\n'+
+'**2.** Thay mỗi node **ĐĂNG ...** màu xám bằng node đăng thật của nền tảng, gắn credential của bạn.\n'+
+'Dữ liệu có sẵn: `{{ $json.caption }}`, `{{ $json.media_url }}`, `{{ $json.tieu_de }}`, `{{ $json.object_id }}`.\n\n'+
+'**3.** Bấm **Active**, copy URL node Webhook rồi cắm vào app:\n`wrangler secret put N8N_WEBHOOK_URL`\n\n---\n'+
+'⚠️ Đăng **thất bại** thì nhớ gọi callback với `{ ok:false, loi:"lý do" }` để app nhắc đăng tay — không thì app đợi 60 phút rồi tự chuyển sang "cần đăng tay".',
+      height:420, width:460 },
+    type:'n8n-nodes-base.stickyNote', typeVersion:1, position:P(-620,-180), id:'note', name:'HƯỚNG DẪN' });
+  link('1. Nhận yêu cầu từ app','2. Kiểm tra token & chuẩn hoá');
+  link('2. Kiểm tra token & chuẩn hoá','3. Báo đã nhận việc');
+  link('2. Kiểm tra token & chuẩn hoá','4. Rẽ theo kênh');
+  return { name:'Kingsmen — Đăng bài tự động', nodes, connections:conn, settings:{executionOrder:'v1'}, pinData:{} };
+}
 // Hướng dẫn dựng workflow n8n — kèm đúng payload app gửi, để không phải đoán
 function HuongDanN8N(){
-  const { db } = useApp();
+  const { db, notify } = useApp();
   const [mo,setMo]=useState(false);
+  const [tok,setTok]=useState('');
   const ok=db.n8n_san_sang;
+  const loaiKenh=[...new Set((db.kenh||[]).filter(k=>k.active!==false).map(k=>String(k.loai||'').toUpperCase()).filter(Boolean))];
+  const wfJson=()=>JSON.stringify(n8nWorkflow({token:tok.trim()||'DAN_N8N_TOKEN_VAO_DAY', kenhLoai:loaiKenh}),null,2);
+  const taiWf=()=>{ download('n8n-kingsmen-dang-bai.json', wfJson(), 'application/json'); notify('Đã tải — vào n8n bấm Import from File'); };
+  const copyWf=async()=>{ try{ await navigator.clipboard.writeText(wfJson()); notify('Đã copy — vào n8n bấm Ctrl+V ngay trên canvas'); }
+    catch(e){ notify('Trình duyệt chặn copy — dùng nút Tải file','warn'); } };
   const mau=JSON.stringify({
     air_post_id:'air_abc', kenh:{id:'kn_1',ten:'TikTok Kingsmen',loai:'TIKTOK',thuong_hieu:'Kingsmen',object_id:''},
     tieu_de:'Chống ố mạch gạch', caption:'Nội dung bài đăng…', media_url:'/media/filming/xyz.mp4',
@@ -3642,7 +3711,18 @@ function HuongDanN8N(){
       <span className="text-[11px] opacity-70">{mo?'Thu gọn ▲':'Xem ▼'}</span>
     </button>
     {mo && <div className="mt-2 space-y-2 text-[11px] text-ink-soft leading-relaxed">
-      <div><b>1.</b> Trong n8n tạo workflow bắt đầu bằng node <b>Webhook</b> (POST). Copy URL của nó.</div>
+      <div className="rounded-xl bg-white/80 border border-brand/30 p-2">
+        <div className="text-xs font-semibold text-ink mb-1">⚡ Cách nhanh nhất — khỏi dựng tay</div>
+        <div className="mb-2">Tải file workflow rồi vào n8n bấm <b>Import from File</b>. Toàn bộ khung đã dựng sẵn, bạn chỉ cắm node đăng + credential.</div>
+        <Field label="Token dùng chung (N8N_TOKEN)" hint="Nhập để app nhúng sẵn vào workflow — khỏi sửa tay">
+          <Input value={tok} onChange={e=>setTok(e.target.value)} placeholder="tự đặt một chuỗi bí mật"/></Field>
+        <div className="flex flex-wrap gap-2 mt-2">
+          <Btn variant="brand" onClick={taiWf}>⬇ Tải workflow n8n</Btn>
+          <Btn variant="ghost" onClick={copyWf}>📋 Copy JSON</Btn>
+        </div>
+        <p className="text-[10px] text-ink-muted mt-1">Sinh theo đúng các loại kênh bạn đang có ({loaiKenh.join(', ')||'chưa có kênh'}).</p>
+      </div>
+      <div className="pt-1"><b>Hoặc dựng tay —</b> <b>1.</b> Trong n8n tạo workflow bắt đầu bằng node <b>Webhook</b> (POST). Copy URL của nó.</div>
       <div><b>2.</b> Cắm 3 secret cho Worker:
         <div className="font-mono bg-white/70 rounded p-2 mt-1 overflow-x-auto whitespace-pre">{`wrangler secret put N8N_WEBHOOK_URL   # URL webhook n8n
 wrangler secret put N8N_TOKEN         # chuỗi bí mật tự đặt, để 2 bên tin nhau

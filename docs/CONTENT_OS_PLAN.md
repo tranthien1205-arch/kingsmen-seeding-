@@ -248,6 +248,8 @@ Bảng `bai_hoc` (loai, tieu_de, noi_dung, bang_chung JSON, so_mau, nguon_tu_don
 - **Chống treo:** `DANG_GUI` quá `N8N_TIMEOUT_PHUT=60` → cron chuyển `DEN_GIO` kèm lý do. n8n sập / HTTP lỗi → `LOI`, **không bao giờ tự đánh dấu đã đăng**.
 - Thêm `air_posts.media_url` (**bắt buộc để đăng thật** — trước đó thiếu, n8n không có gì để đăng); chọn từ Kho footage hoặc dán link.
 - UI `HuongDanN8N` in sẵn payload mẫu + lệnh cắm secret + mẫu node callback để khỏi đoán. (21 test)
+- **✅ SINH SẴN WORKFLOW n8n** (`n8nWorkflow()`): tải file .json hoặc copy → n8n **Import from File**/Ctrl+V. Khung dựng sẵn: Webhook → Code (kiểm `X-App-Token` + làm phẳng dữ liệu) → Respond ngay → Switch **rẽ theo đúng các loại kênh user đang có** → chỗ cắm node đăng (NoOp) → HTTP callback kèm `X-N8N-Token`. Kèm **Sticky Note hướng dẫn 3 bước ngay trong workflow**. Token nhúng sẵn nếu user nhập.
+- **⚠️ `download()` chèn BOM** — hợp cho CSV (Excel đọc UTF-8) nhưng **JSON có BOM là n8n import hỏng**. Đã sửa: chỉ thêm BOM khi mime là csv/text-plain. (12 kiểm tra bộ sinh)
 
 **⚠️ Bẫy đã dính khi làm, đừng lặp lại:**
 - Route đặt **trước** `let m` → TDZ `Cannot access 'm'`. Dùng biến riêng cho match ở vùng chưa đăng nhập.
@@ -281,7 +283,7 @@ Tokens Tailwind (inline config trong `seeding-app.html`): `ink #0b3543` (soft #1
   **Chảy ngược:** `gomSeedingTheoNoiDung()` gom số bài / bài đạt / react / cmt về từng `content_item`; hiện ở cột **Seeding** trong Kế hoạch nội dung. **CHỦ Ý chỉ đếm, KHÔNG quy ra doanh thu** — seeding không quy đơn được (§9), có test chặn hồi quy. (18 test)
 - ▶️ **Kế tiếp:** gỡ `BETA_KEYS` khi user duyệt xong; thêm `TRUONG_MKT`/`GIAM_DOC`; nâng P4 lên gợi ý AI khi có `ANTHROPIC_API_KEY`. Còn lại (giá trị thấp): `media_library` ↔ `footage`.
 - **P8** Nhập kết quả 3 mức tin cậy (25 test) · **P5** Kho footage & shot list (22 test) · **P9** Dashboard 4 hệ KPI + hiệu suất người (9 test) · **P10** Thư viện học + vòng lặp tự học (19 test).
-- 📌 **Tổng test đang xanh:** import 8 · Creative Studio 16 · Duyệt 22 · Đăng bài 21 · Kết quả 25 · Footage 22 · Thư viện học 19 · công cụ 13 · chống trùng seeding 13 = **253**.
+- 📌 **Tổng test đang xanh:** import 8 · Creative Studio 16 · Duyệt 22 · Đăng bài 21 · Kết quả 25 · Footage 22 · Thư viện học 19 · công cụ 13 · chống trùng seeding 13 = **267**.
 - ✅ **ĐÃ XONG TOÀN BỘ P1→P10.** Còn lại là các mảnh nhỏ: vai trò `TRUONG_MKT`/`GIAM_DOC` riêng, `can()` tập trung (P0), và nâng P4 lên gợi ý AI khi có `ANTHROPIC_API_KEY`.
 
 ### ⚙️ Quy trình deploy (CẬP NHẬT)
