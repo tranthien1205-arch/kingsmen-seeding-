@@ -60,8 +60,16 @@ const DEMO_MODE = true;
 // Khi deploy thật → đổi thành false để dùng API Worker + D1.
 const DEMO = false;
 
-const ROLES = { MARKETING:'MARKETING', SALES:'SALES', ADMIN:'ADMIN' };
-const ROLE_LABEL = { MARKETING:'Marketing', SALES:'Sales', ADMIN:'Admin / Kế toán' };
+const ROLES = { MARKETING:'MARKETING', SALES:'SALES', ADMIN:'ADMIN', KY_THUAT:'KY_THUAT' };
+const ROLE_LABEL = { MARKETING:'Marketing', SALES:'Sales', ADMIN:'Admin / Kế toán', KY_THUAT:'Kỹ thuật' };
+// Content OS · P1 — dữ liệu nền
+const DONG_SP = ['Kingsmen grout','Terrazy','FINEX','Khác'];
+const CLAIM_MUC_DO = { CANH_BAO:'Cảnh báo', CHAN:'Chặn' };
+// Quét văn bản với danh sách claim cấm → trả các cụm khớp (dùng lại cho Creative Studio P4)
+function scanClaims(text, claims){
+  const t=(text||'').toLowerCase();
+  return (claims||[]).filter(c=>c.active!==false && c.cum_tu && t.includes(c.cum_tu.toLowerCase()));
+}
 
 const ST = { NHAP:'NHAP', CHO_DUYET:'CHO_DUYET', DAT:'DAT', KHONG_DAT:'KHONG_DAT', DA_CHI:'DA_CHI' };
 const ST_LABEL = { NHAP:'Nháp', CHO_DUYET:'Chờ duyệt', DAT:'Đạt', KHONG_DAT:'Không đạt', DA_CHI:'Đã chi' };
@@ -279,6 +287,8 @@ function seedDB(){
     post_type_prefs: {},
     post_slots: [],
     media_library: [],
+    san_pham: [],
+    claim_cam: [],
     payouts: [],
     audit: [],
   };
@@ -311,6 +321,8 @@ function migrate(db){
   db.post_type_prefs ||= {};
   db.post_slots ||= [];
   db.media_library ||= [];
+  db.san_pham ||= [];
+  db.claim_cam ||= [];
   db.post_seedings.forEach(p=>{ p.react ??= 0; p.so_cmt_seeding ??= 0; p.so_cmt_tu_nhien ??= 0; p.thanh_tien ??= 0; });
   db.cmt_seedings.forEach(c=>{ c.proofs ||= []; c.so_cmt_seeding ??= 0; c.react ??= 0; c.so_cmt_tu_nhien ??= 0; c.thanh_tien ??= 0; });
   db.groups.forEach(g=>{ g.uu_tien ??= false; });
@@ -412,6 +424,10 @@ function AppProvider({children}){
         commit(); return true; },
       regenSchedule: async ()=>{ const today=todayYMD(); S.post_slots=(S.post_slots||[]).filter(s=>!(s.ngay>=today && !s.post_id)); ensureDemoSlots(S); commit(); return true; },
       reassignSlot: async (id, patch)=>{ const s=(S.post_slots||[]).find(x=>x.id===id); if(s){ if(patch.sales_id!==undefined) s.sales_id=patch.sales_id; if(patch.topic_id!==undefined) s.topic_id=patch.topic_id||null; } commit(); return true; },
+      upsertSanPham: async o=>{ S.san_pham ||= []; if(o.id){ const i=S.san_pham.findIndex(x=>x.id===o.id); if(i>=0) S.san_pham[i]={...S.san_pham[i],...o}; } else { S.san_pham.unshift({ id:uid('sp'), ma:'', ten:'', dong:'', thong_so:[], tieu_chuan:'', huong_dan:'', anh:'', active:true, created_at:now(), ...o }); } commit(); return true; },
+      deleteSanPham: async id=>{ S.san_pham=(S.san_pham||[]).filter(x=>x.id!==id); commit(); return true; },
+      upsertClaim: async o=>{ S.claim_cam ||= []; if(o.id){ const i=S.claim_cam.findIndex(x=>x.id===o.id); if(i>=0) S.claim_cam[i]={...S.claim_cam[i],...o}; } else { S.claim_cam.unshift({ id:uid('cc'), cum_tu:'', ly_do:'', muc_do:'CANH_BAO', active:true, created_at:now(), ...o }); } commit(); return true; },
+      deleteClaim: async id=>{ S.claim_cam=(S.claim_cam||[]).filter(x=>x.id!==id); commit(); return true; },
       createLibImg: async o=>{ S.media_library ||= []; S.media_library.unshift({ id:uid('lib'), media_url:o.media_url, caption:o.caption||'', muc_dich:o.muc_dich||'CA_HAI', topic_id:o.topic_id||null, tags:o.tags||[], uploaded_by:meRef.current.id, uploaded_by_name:meRef.current.ho_ten, active:true, uploaded_at:now() }); commit(); return true; },
       patchLibImg: async (id, patch)=>{ const r=(S.media_library||[]).find(x=>x.id===id); if(r) Object.assign(r, patch); commit(); return true; },
       deleteLibImg: async id=>{ S.media_library=(S.media_library||[]).filter(x=>x.id!==id); commit(); return true; },
@@ -521,6 +537,10 @@ function AppProvider({children}){
     patchLibImg: (id, patch) => mut('/library/'+id, {method:'PATCH', body:patch}),
     deleteLibImg: id => mut('/library/'+id, {method:'DELETE'}),
     bulkDeleteLibImg: ids => mut('/library/bulkdelete', {method:'POST', body:{ids}}),
+    upsertSanPham: o => mut(o.id?'/sanpham/'+o.id:'/sanpham', {method:o.id?'PATCH':'POST', body:o}),
+    deleteSanPham: id => mut('/sanpham/'+id, {method:'DELETE'}),
+    upsertClaim: o => mut(o.id?'/claimcam/'+o.id:'/claimcam', {method:o.id?'PATCH':'POST', body:o}),
+    deleteClaim: id => mut('/claimcam/'+id, {method:'DELETE'}),
     createCmtSeed: c => mut('/cmtseed', {method:'POST', body:c}),
     reviewCmtSeed: (id, result, reason) => mut(`/cmtseed/${id}/review`, {method:'POST', body:{result, reason}}),
     markPaid: (sales_id, ky) => mut('/markpaid', {method:'POST', body:{sales_id, ky}}),
@@ -717,15 +737,21 @@ const NAV = {
   [ROLES.MARKETING]: [
     {key:'dash', label:'Dashboard', icon:'📊'},
     {key:'library', label:'Thư viện', icon:'📚'},
+    {key:'products', label:'Sản phẩm & Claim', icon:'🧪'},
     {key:'filming', label:'Quay CT', icon:'🎬'},
     {key:'queue', label:'Nghiệm thu', icon:'✅'},
     {key:'schedule', label:'Lịch đăng', icon:'📅'},
     {key:'users', label:'Tài khoản', icon:'👥'},
     {key:'pay_report', label:'Thanh toán', icon:'📄'},
   ],
+  [ROLES.KY_THUAT]: [
+    {key:'products', label:'Sản phẩm & Claim', icon:'🧪'},
+    {key:'library', label:'Thư viện (xem)', icon:'📚'},
+  ],
   [ROLES.ADMIN]: [
     {key:'users', label:'Người dùng', icon:'👥'},
     {key:'library', label:'Thư viện', icon:'📚'},
+    {key:'products', label:'Sản phẩm & Claim', icon:'🧪'},
     {key:'filming', label:'Quay CT', icon:'🎬'},
     {key:'schedule', label:'Lịch đăng', icon:'📅'},
     {key:'pricing', label:'Đơn giá', icon:'⚙️'},
@@ -780,6 +806,7 @@ function Shell(){
       case 'dash': return <MktDashboard/>;
       case 'library': return <Library/>;
       case 'queue': return <MktQueue/>;
+      case 'products': return <ProductClaimManager/>;
       case 'schedule': return <PostSchedule/>;
       case 'pay_report': return <MktPayReport/>;
       case 'users': return <UserManagement/>;
@@ -1409,6 +1436,140 @@ function BreakdownCard({title, data}){
 /* ============================================================
    14. THƯ VIỆN CHUNG (Marketing/Admin)
 ============================================================ */
+/* ============================================================
+   CONTENT OS · P1 — DỮ LIỆU NỀN: Sản phẩm (spec thật) + Claim cấm
+============================================================ */
+function ProductClaimManager(){
+  const { db } = useApp();
+  const [tab,setTab]=useState('sp');
+  return <div className="space-y-4">
+    <h2 className="font-display text-lg font-bold text-ink">🧪 Dữ liệu nền — Sản phẩm &amp; Claim cấm</h2>
+    <div className="bg-brand/10 border border-brand/30 rounded-2xl p-2.5 text-[11px] text-brand-dark">Nguồn <b>spec thật</b> để AI (Creative Studio) chỉ được trích đúng thông số — không bịa; và danh sách <b>cụm từ cấm</b> để chặn claim rủi ro pháp lý trước khi đăng. Chủ sở hữu: <b>Kỹ thuật</b> · Marketing/Admin hỗ trợ. Mọi thay đổi ghi Nhật ký.</div>
+    <Tabs active={tab} onChange={setTab} tabs={[
+      {key:'sp', label:'Sản phẩm', count:(db.san_pham||[]).length},
+      {key:'cc', label:'Claim cấm', count:(db.claim_cam||[]).length},
+    ]}/>
+    {tab==='sp' ? <SanPhamTab/> : <ClaimTab/>}
+  </div>;
+}
+function SanPhamTab(){
+  const { db, upsertSanPham, deleteSanPham, notify } = useApp();
+  const list = db.san_pham||[];
+  const [edit,setEdit]=useState(null);
+  const fileRef=useRef();
+  const blank = {ma:'',ten:'',dong:DONG_SP[0],thong_so:[],tieu_chuan:'',huong_dan:'',anh:'',active:true};
+  const exportCSV=()=>{ const r=[['Mã','Tên','Dòng','Thông số (k=v; k=v)','Tiêu chuẩn','Hướng dẫn']];
+    list.forEach(p=>r.push([p.ma,p.ten,p.dong,(p.thong_so||[]).map(t=>t.k+'='+t.v).join('; '),p.tieu_chuan,p.huong_dan]));
+    download('san_pham.csv', toCSV(r)); };
+  const onImport=(e)=>{ const f=e.target.files&&e.target.files[0]; e.target.value=''; if(!f) return;
+    const rd=new FileReader(); rd.onload=async ev=>{ const rows=parseTable(String(ev.target.result||'')); if(!rows.length) return notify('File rỗng','warn');
+      if((rows[0][0]||'').toLowerCase()==='mã') rows.shift(); let n=0;
+      for(const c of rows){ if(!(c[1]||'').trim()) continue; const ts=(c[3]||'').split(/[;\n]/).map(s=>s.trim()).filter(Boolean).map(kv=>{ const i=kv.indexOf('='); return {k:(i>=0?kv.slice(0,i):kv).trim(), v:(i>=0?kv.slice(i+1):'').trim()}; });
+        await upsertSanPham({ma:(c[0]||'').trim(),ten:(c[1]||'').trim(),dong:(c[2]||'').trim()||DONG_SP[0],thong_so:ts,tieu_chuan:(c[4]||'').trim(),huong_dan:(c[5]||'').trim(),active:true}); n++; }
+      notify('Đã import '+n+' sản phẩm'); };
+    rd.readAsText(f,'utf-8'); };
+  return <div className="space-y-3">
+    <div className="flex gap-2 flex-wrap justify-end">
+      <Btn variant="ghost" onClick={exportCSV}>⬇ Xuất Excel</Btn>
+      <Btn variant="ghost" onClick={()=>fileRef.current&&fileRef.current.click()}>⬆ Import</Btn>
+      <input ref={fileRef} type="file" accept=".csv,.tsv,.txt" className="hidden" onChange={onImport}/>
+      <Btn variant="brand" onClick={()=>setEdit({...blank})}>＋ Thêm sản phẩm</Btn>
+    </div>
+    {list.length===0 ? <Empty>Chưa có sản phẩm. Bấm "Thêm sản phẩm" hoặc Import — nhập <b>thông số thật</b>, đừng bịa.</Empty> :
+      <div className="grid sm:grid-cols-2 gap-3">{list.map(p=>
+        <div key={p.id} className={"bg-white rounded-2xl border border-line shadow-card p-4 "+(p.active?'':'opacity-50')}>
+          <div className="flex items-start gap-3">
+            {p.anh ? <img src={p.anh} className="w-14 h-14 rounded-xl object-cover border border-line shrink-0"/> : <div className="w-14 h-14 rounded-xl bg-slate-100 flex items-center justify-center text-2xl shrink-0">🧴</div>}
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap"><span className="font-semibold text-sm text-ink">{p.ten||'(chưa tên)'}</span><HeChip he={p.dong}/></div>
+              {p.ma && <div className="text-[11px] text-slate-400">Mã: {p.ma}</div>}
+              {(p.thong_so||[]).length>0 && <div className="text-xs text-slate-500 mt-1 line-clamp-2">{(p.thong_so||[]).map(t=>t.k+': '+t.v).join(' · ')}</div>}
+              {p.tieu_chuan && <div className="text-[11px] text-brand-dark mt-0.5">TC: {p.tieu_chuan}</div>}
+            </div>
+          </div>
+          <div className="flex justify-end gap-2 mt-2">
+            <Toggle on={p.active} onClick={()=>upsertSanPham({id:p.id, active:!p.active})}/>
+            <button onClick={()=>setEdit(p)} className="text-xs text-blue-500 hover:underline">Sửa</button>
+            <button onClick={()=>{ if(confirm('Xoá sản phẩm "'+(p.ten||'')+'"?')) deleteSanPham(p.id).then(ok=>ok&&notify('Đã xoá')); }} className="text-xs text-rose-500 hover:underline">Xoá</button>
+          </div>
+        </div>)}
+      </div>}
+    <SanPhamModal edit={edit} onClose={()=>setEdit(null)}/>
+  </div>;
+}
+function SanPhamModal({edit,onClose}){
+  const { upsertSanPham, uploadMedia, notify } = useApp();
+  const [f,setF]=useState(null); const [busy,setBusy]=useState(false); const imgRef=useRef();
+  useEffect(()=>{ setF(edit?{...edit, thong_so:(edit.thong_so||[]).map(t=>({...t}))}:null); }, [edit]);
+  if(!edit||!f) return null;
+  const set=(k,v)=>setF(p=>({...p,[k]:v}));
+  const setTS=(i,k,v)=>setF(p=>{ const ts=p.thong_so.map((r,j)=>j===i?{...r,[k]:v}:r); return {...p,thong_so:ts}; });
+  const addTS=()=>setF(p=>({...p,thong_so:[...p.thong_so,{k:'',v:''}]}));
+  const delTS=(i)=>setF(p=>({...p,thong_so:p.thong_so.filter((_,j)=>j!==i)}));
+  const onImg=async e=>{ const file=e.target.files&&e.target.files[0]; e.target.value=''; if(!file) return; setBusy(true); try{ const b64=await compressImage(file); set('anh',b64); }catch(err){ notify('Lỗi ảnh','err'); } setBusy(false); };
+  const save=async()=>{ if(!f.ten.trim()) return notify('Nhập tên sản phẩm','warn');
+    const ts=f.thong_so.filter(t=>t.k.trim()||t.v.trim());
+    const ok=await upsertSanPham({...(edit.id?{id:edit.id}:{}), ma:f.ma.trim(), ten:f.ten.trim(), dong:f.dong, thong_so:ts, tieu_chuan:f.tieu_chuan.trim(), huong_dan:f.huong_dan.trim(), anh:f.anh, active:f.active!==false});
+    if(ok){ notify(edit.id?'Đã lưu':'Đã thêm sản phẩm'); onClose(); } };
+  return <Modal open={!!edit} onClose={onClose} title={(edit.id?'Sửa ':'Thêm ')+'sản phẩm'} wide>
+    <div className="grid grid-cols-2 gap-2">
+      <Field label="Mã sản phẩm"><Input value={f.ma} onChange={e=>set('ma',e.target.value)} placeholder="VD: KM-CG01"/></Field>
+      <Field label="Dòng"><Select value={f.dong} onChange={e=>set('dong',e.target.value)}>{DONG_SP.map(x=><option key={x}>{x}</option>)}</Select></Field>
+    </div>
+    <Field label="Tên sản phẩm" required><Input value={f.ten} onChange={e=>set('ten',e.target.value)} placeholder="VD: Keo chít mạch ColorMatch"/></Field>
+    <div className="mb-3">
+      <div className="text-[13px] font-semibold text-ink mb-1.5">Thông số kỹ thuật (thật) <span className="text-[11px] font-normal text-ink-muted">— AI chỉ trích từ đây</span></div>
+      <div className="space-y-1.5">{f.thong_so.map((t,i)=>
+        <div key={i} className="flex gap-1.5"><Input value={t.k} onChange={e=>setTS(i,'k',e.target.value)} placeholder="Chỉ tiêu (VD: Chống ố)" className="flex-1"/><Input value={t.v} onChange={e=>setTS(i,'v',e.target.value)} placeholder="Giá trị (VD: Có)" className="flex-1"/><button onClick={()=>delTS(i)} className="px-2 text-rose-400 hover:text-rose-600">✕</button></div>)}
+      </div>
+      <button onClick={addTS} className="text-xs text-brand-dark font-semibold mt-1.5">＋ Thêm chỉ tiêu</button>
+    </div>
+    <div className="grid grid-cols-2 gap-2">
+      <Field label="Tiêu chuẩn áp dụng"><Input value={f.tieu_chuan} onChange={e=>set('tieu_chuan',e.target.value)} placeholder="VD: TCVN…"/></Field>
+      <Field label="Ảnh sản phẩm"><div className="flex items-center gap-2">{f.anh && <img src={f.anh} className="w-10 h-10 rounded-lg object-cover border"/>}<Btn variant="ghost" onClick={()=>imgRef.current&&imgRef.current.click()} disabled={busy}>{busy?'…':(f.anh?'Đổi ảnh':'Tải ảnh')}</Btn><input ref={imgRef} type="file" accept="image/*" className="hidden" onChange={onImg}/></div></Field>
+    </div>
+    <Field label="Hướng dẫn thi công (tóm tắt)"><Textarea rows="2" value={f.huong_dan} onChange={e=>set('huong_dan',e.target.value)}/></Field>
+    <div className="flex gap-2 mt-2"><Btn variant="ghost" onClick={onClose}>Huỷ</Btn><Btn variant="brand" className="flex-1" onClick={save}>{edit.id?'Lưu':'Thêm'}</Btn></div>
+  </Modal>;
+}
+function ClaimTab(){
+  const { db, upsertClaim, deleteClaim, notify } = useApp();
+  const list = db.claim_cam||[];
+  const [edit,setEdit]=useState(null);
+  const blank={cum_tu:'',ly_do:'',muc_do:'CHAN',active:true};
+  return <div className="space-y-3">
+    <div className="flex justify-end"><Btn variant="brand" onClick={()=>setEdit({...blank})}>＋ Thêm claim cấm</Btn></div>
+    {list.length===0 ? <Empty>Chưa có cụm từ cấm. Thêm các cụm dễ vướng pháp lý (VD "tốt nhất", "100%", "chống thấm tuyệt đối").</Empty> :
+      <div className="bg-white rounded-2xl border border-line shadow-card divide-y">{list.map(c=>
+        <div key={c.id} className={"p-3 flex items-start gap-3 "+(c.active?'':'opacity-50')}>
+          <span className={"text-[10px] px-1.5 py-0.5 rounded-full font-semibold shrink-0 mt-0.5 "+(c.muc_do==='CHAN'?'bg-rose-100 text-rose-700':'bg-amber-100 text-amber-700')}>{c.muc_do==='CHAN'?'🔴 CHẶN':'🟡 CẢNH BÁO'}</span>
+          <div className="flex-1 min-w-0"><div className="text-sm font-medium text-ink">"{c.cum_tu}"</div>{c.ly_do && <div className="text-xs text-slate-500">{c.ly_do}</div>}</div>
+          <div className="flex items-center gap-2 shrink-0">
+            <Toggle on={c.active} onClick={()=>upsertClaim({id:c.id, active:!c.active})}/>
+            <button onClick={()=>setEdit(c)} className="text-xs text-blue-500 hover:underline">Sửa</button>
+            <button onClick={()=>{ if(confirm('Xoá cụm "'+c.cum_tu+'"?')) deleteClaim(c.id).then(ok=>ok&&notify('Đã xoá')); }} className="text-xs text-rose-500 hover:underline">Xoá</button>
+          </div>
+        </div>)}
+      </div>}
+    {edit && <Modal open={!!edit} onClose={()=>setEdit(null)} title={(edit.id?'Sửa ':'Thêm ')+'claim cấm'}>
+      <ClaimForm init={edit} onClose={()=>setEdit(null)}/>
+    </Modal>}
+  </div>;
+}
+function ClaimForm({init,onClose}){
+  const { upsertClaim, notify } = useApp();
+  const [f,setF]=useState({cum_tu:init.cum_tu||'',ly_do:init.ly_do||'',muc_do:init.muc_do||'CHAN',active:init.active!==false});
+  const save=async()=>{ if(!f.cum_tu.trim()) return notify('Nhập cụm từ cấm','warn');
+    const ok=await upsertClaim({...(init.id?{id:init.id}:{}), cum_tu:f.cum_tu.trim(), ly_do:f.ly_do.trim(), muc_do:f.muc_do, active:f.active});
+    if(ok){ notify(init.id?'Đã lưu':'Đã thêm'); onClose(); } };
+  return <>
+    <Field label="Cụm từ cấm" required hint="Khớp không phân biệt hoa/thường khi quét nội dung"><Input value={f.cum_tu} onChange={e=>setF({...f,cum_tu:e.target.value})} placeholder='VD: "tốt nhất thị trường"'/></Field>
+    <Field label="Mức độ"><Select value={f.muc_do} onChange={e=>setF({...f,muc_do:e.target.value})}><option value="CHAN">🔴 Chặn — không cho gửi duyệt</option><option value="CANH_BAO">🟡 Cảnh báo — nhắc nhưng vẫn cho</option></Select></Field>
+    <Field label="Lý do cấm"><Textarea rows="2" value={f.ly_do} onChange={e=>setF({...f,ly_do:e.target.value})} placeholder="VD: cam kết tuyệt đối, không kiểm chứng được → rủi ro pháp lý"/></Field>
+    <div className="flex gap-2 mt-2"><Btn variant="ghost" onClick={onClose}>Huỷ</Btn><Btn variant="brand" className="flex-1" onClick={save}>{init.id?'Lưu':'Thêm'}</Btn></div>
+  </>;
+}
+
 // Thư viện ảnh dùng chung — MKT & Sales cùng tải; MKT có chọn nhiều + xoá hàng loạt
 function ImageLibrary(){
   const { db, me, uploadMedia, createLibImg, deleteLibImg, bulkDeleteLibImg, notify } = useApp();

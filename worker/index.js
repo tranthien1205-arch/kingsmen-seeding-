@@ -5,7 +5,7 @@
 //  - Dữ liệu dùng chung trong Cloudflare D1 (binding DB)
 // ============================================================
 
-const ROLES = { MARKETING:'MARKETING', SALES:'SALES', ADMIN:'ADMIN' };
+const ROLES = { MARKETING:'MARKETING', SALES:'SALES', ADMIN:'ADMIN', KY_THUAT:'KY_THUAT' };
 const ST = { NHAP:'NHAP', CHO_DUYET:'CHO_DUYET', DAT:'DAT', KHONG_DAT:'KHONG_DAT', DA_CHI:'DA_CHI' };
 const CORS = { 'Access-Control-Allow-Origin':'*', 'Access-Control-Allow-Methods':'GET,POST,PATCH,DELETE,OPTIONS', 'Access-Control-Allow-Headers':'Content-Type,Authorization' };
 const json = (data, status=200) => new Response(JSON.stringify(data), { status, headers:{'Content-Type':'application/json; charset=utf-8', ...CORS} });
@@ -60,6 +60,9 @@ async function ensureSchema(env){
     `CREATE TABLE IF NOT EXISTS post_slots (id TEXT PRIMARY KEY, ngay TEXT UNIQUE, sales_id TEXT, topic_id TEXT, post_id TEXT, status TEXT, created_at TEXT)`,
     // Thư viện ảnh dùng chung (MKT + Sales cùng tải) để seeding POST/CMT
     `CREATE TABLE IF NOT EXISTS media_library (id TEXT PRIMARY KEY, media_url TEXT, caption TEXT, muc_dich TEXT, topic_id TEXT, tags TEXT, uploaded_by TEXT, uploaded_by_name TEXT, active INTEGER DEFAULT 1, uploaded_at TEXT)`,
+    // CONTENT OS · P1 — Dữ liệu nền: sản phẩm (spec thật) + cụm từ claim bị cấm
+    `CREATE TABLE IF NOT EXISTS san_pham (id TEXT PRIMARY KEY, ma TEXT, ten TEXT, dong TEXT, thong_so TEXT, tieu_chuan TEXT, huong_dan TEXT, anh TEXT, active INTEGER DEFAULT 1, created_at TEXT)`,
+    `CREATE TABLE IF NOT EXISTS claim_cam (id TEXT PRIMARY KEY, cum_tu TEXT, ly_do TEXT, muc_do TEXT, active INTEGER DEFAULT 1, created_at TEXT)`,
   ];
   await env.DB.batch(stmts.map(s=>env.DB.prepare(s)));
   // thêm cột đơn giá quay công trình cho DB cũ (bỏ qua nếu đã có)
@@ -181,6 +184,8 @@ async function getSession(env, req){
   return { token, user:u };
 }
 const isStaff = (u) => u && (u.vai_tro===ROLES.MARKETING || u.vai_tro===ROLES.ADMIN);
+// Content OS · dữ liệu nền (sản phẩm + claim cấm): chủ sở hữu Kỹ thuật, thêm Marketing/Admin
+const canBaseData = (u) => u && (u.vai_tro===ROLES.KY_THUAT || u.vai_tro===ROLES.MARKETING || u.vai_tro===ROLES.ADMIN);
 async function logAudit(env, u, action, entity, entity_id, detail=''){
   await env.DB.prepare(`INSERT INTO audit (id,at,by_id,by_name,action,entity,entity_id,detail) VALUES (?,?,?,?,?,?,?,?)`)
     .bind(uid('a'),nowISO(),u?.id||null,u?.ho_ten||'—',action,entity,String(entity_id||''),detail).run();
@@ -270,12 +275,17 @@ async function bootstrap(env, u){
   const post_slots = (await env.DB.prepare(`SELECT * FROM post_slots WHERE ngay>=? ORDER BY ngay ASC`).bind(slotSince).all()).results;
   const media_library = (await env.DB.prepare(`SELECT * FROM media_library ORDER BY uploaded_at DESC`).all()).results
     .map(r=>({ ...r, active:uBool(r.active), tags: JSON.parse(r.tags||'[]') }));
+  const san_pham = (await env.DB.prepare(`SELECT * FROM san_pham ORDER BY created_at DESC`).all()).results
+    .map(r=>({ ...r, active:uBool(r.active), thong_so: JSON.parse(r.thong_so||'[]') }));
+  const claim_cam = (await env.DB.prepare(`SELECT * FROM claim_cam ORDER BY created_at DESC`).all()).results
+    .map(r=>({ ...r, active:uBool(r.active) }));
 
   return {
     me: rowUser(u),
     users, groups, content_topics:topics, cmt_suggestions:cmtsug,
     post_seedings: posts, cmt_seedings: cmtsFull,
     filming_templates, project_filmings, guides, post_type_prefs, post_slots, media_library,
+    san_pham, claim_cam,
     pricing: pricingRow, payouts: [], audit,
   };
 }
@@ -546,6 +556,62 @@ async function handleApi(request, env){
     const id=m[1]; const r=await env.DB.prepare(`SELECT * FROM media_library WHERE id=?`).bind(id).first();
     if(r){ if(!isStaff(me) && r.uploaded_by!==me.id) return json({error:'Chỉ xoá ảnh của bạn'},403);
       await deleteMediaObject(env,r.media_url); await env.DB.prepare(`DELETE FROM media_library WHERE id=?`).bind(id).run(); await logAudit(env,me,'xoá ảnh thư viện','media_library',id); }
+    return json({ db: await bootstrap(env, me) });
+  }
+
+  // ===== CONTENT OS · P1 — SẢN PHẨM (spec thật · chủ sở hữu Kỹ thuật) =====
+  if(path==='/sanpham' && method==='POST'){
+    if(!canBaseData(me)) return json({error:'Không có quyền'},403);
+    const id=uid('sp'); const ts=Array.isArray(body.thong_so)?body.thong_so:[];
+    await env.DB.prepare(`INSERT INTO san_pham (id,ma,ten,dong,thong_so,tieu_chuan,huong_dan,anh,active,created_at) VALUES (?,?,?,?,?,?,?,?,1,?)`)
+      .bind(id,(body.ma||'').trim(),(body.ten||'').trim(),(body.dong||'').trim(),JSON.stringify(ts),(body.tieu_chuan||'').trim(),(body.huong_dan||'').trim(),(body.anh||'').trim(),nowISO()).run();
+    await logAudit(env,me,'thêm sản phẩm','san_pham',id,(body.ten||'').trim());
+    return json({ db: await bootstrap(env, me) });
+  }
+  if((m=path.match(/^\/sanpham\/(.+)$/)) && method==='PATCH'){
+    if(!canBaseData(me)) return json({error:'Không có quyền'},403);
+    const id=m[1]; const r=await env.DB.prepare(`SELECT * FROM san_pham WHERE id=?`).bind(id).first();
+    if(!r) return json({error:'Không tìm thấy'},404);
+    const g=(k,d)=> body[k]!=null?String(body[k]).trim():d;
+    const ts = body.thong_so!=null ? JSON.stringify(Array.isArray(body.thong_so)?body.thong_so:[]) : r.thong_so;
+    await env.DB.prepare(`UPDATE san_pham SET ma=?, ten=?, dong=?, thong_so=?, tieu_chuan=?, huong_dan=?, anh=?, active=? WHERE id=?`)
+      .bind(g('ma',r.ma),g('ten',r.ten),g('dong',r.dong),ts,g('tieu_chuan',r.tieu_chuan),g('huong_dan',r.huong_dan),g('anh',r.anh),body.active!=null?bool(body.active):r.active,id).run();
+    await logAudit(env,me,'sửa sản phẩm','san_pham',id);
+    return json({ db: await bootstrap(env, me) });
+  }
+  if((m=path.match(/^\/sanpham\/(.+)$/)) && method==='DELETE'){
+    if(!canBaseData(me)) return json({error:'Không có quyền'},403);
+    await env.DB.prepare(`DELETE FROM san_pham WHERE id=?`).bind(m[1]).run();
+    await logAudit(env,me,'xoá sản phẩm','san_pham',m[1]);
+    return json({ db: await bootstrap(env, me) });
+  }
+
+  // ===== CONTENT OS · P1 — CLAIM CẤM (mọi thay đổi ghi Nhật ký) =====
+  if(path==='/claimcam' && method==='POST'){
+    if(!canBaseData(me)) return json({error:'Không có quyền'},403);
+    const id=uid('cc');
+    await env.DB.prepare(`INSERT INTO claim_cam (id,cum_tu,ly_do,muc_do,active,created_at) VALUES (?,?,?,?,1,?)`)
+      .bind(id,(body.cum_tu||'').trim(),(body.ly_do||'').trim(),body.muc_do==='CHAN'?'CHAN':'CANH_BAO',nowISO()).run();
+    await logAudit(env,me,'thêm claim cấm','claim_cam',id,(body.cum_tu||'').trim());
+    return json({ db: await bootstrap(env, me) });
+  }
+  if((m=path.match(/^\/claimcam\/(.+)$/)) && method==='PATCH'){
+    if(!canBaseData(me)) return json({error:'Không có quyền'},403);
+    const id=m[1]; const r=await env.DB.prepare(`SELECT * FROM claim_cam WHERE id=?`).bind(id).first();
+    if(!r) return json({error:'Không tìm thấy'},404);
+    const cum=body.cum_tu!=null?String(body.cum_tu).trim():r.cum_tu;
+    const ly=body.ly_do!=null?String(body.ly_do).trim():r.ly_do;
+    const mu=body.muc_do!=null?(body.muc_do==='CHAN'?'CHAN':'CANH_BAO'):r.muc_do;
+    const ac=body.active!=null?bool(body.active):r.active;
+    await env.DB.prepare(`UPDATE claim_cam SET cum_tu=?, ly_do=?, muc_do=?, active=? WHERE id=?`).bind(cum,ly,mu,ac,id).run();
+    await logAudit(env,me,'sửa claim cấm','claim_cam',id,cum);
+    return json({ db: await bootstrap(env, me) });
+  }
+  if((m=path.match(/^\/claimcam\/(.+)$/)) && method==='DELETE'){
+    if(!canBaseData(me)) return json({error:'Không có quyền'},403);
+    const r=await env.DB.prepare(`SELECT cum_tu FROM claim_cam WHERE id=?`).bind(m[1]).first();
+    await env.DB.prepare(`DELETE FROM claim_cam WHERE id=?`).bind(m[1]).run();
+    await logAudit(env,me,'xoá claim cấm','claim_cam',m[1],r&&r.cum_tu);
     return json({ db: await bootstrap(env, me) });
   }
   if((m=path.match(/^\/posts\/(.+)\/review$/)) && method==='POST'){
