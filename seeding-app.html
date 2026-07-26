@@ -1993,7 +1993,8 @@ function LocVideoTool(){
     <div className="bg-white rounded-2xl border border-line shadow-card p-3">
       <div className="flex items-center justify-between flex-wrap gap-2">
         <div className="text-[11px] text-slate-500 flex-1 min-w-[220px]">
-          Công cụ chạy <b>ngay trên máy bạn</b> — video không tải lên server. Cần <b>Chrome/Edge trên máy tính</b> để chọn được folder.
+          Lọc source · chấm chất lượng · <b>dựng video</b> · AI tự học khi bạn sửa tay. Chạy <b>ngay trên máy bạn</b> — video không tải lên server.
+          Cần <b>Chrome/Edge trên máy tính</b> để chọn được folder.
         </div>
         <div className="flex gap-2 shrink-0">
           <Btn variant="ghost" onClick={()=>setFull(v=>!v)}>{full?'⤡ Thu nhỏ':'⤢ Toàn màn hình'}</Btn>
@@ -2018,12 +2019,12 @@ function CreativeStudio(){
   const filtered = scripts.filter(s=>!q || (s.tieu_de||'').toLowerCase().includes(q.toLowerCase()) || (s.hook||'').toLowerCase().includes(q.toLowerCase()));
   if(edit) return <ScriptEditor init={edit} onClose={()=>setEdit(null)}/>;
   const TabBar = <div className="flex gap-1 bg-slate-100 rounded-xl p-1 w-fit">
-    {[['kich_ban','✍️ Kịch bản'],['loc_video','🎬 Lọc video']].map(([k,l])=>
+    {[['kich_ban','✍️ Kịch bản'],['loc_video','🎬 Lọc & dựng video']].map(([k,l])=>
       <button key={k} onClick={()=>setTab(k)} className={"px-3 py-1 rounded-lg text-xs font-semibold whitespace-nowrap "+(tab===k?'bg-white text-ink shadow-sm':'text-slate-500')}>{l}</button>)}
   </div>;
   if(tab==='loc_video') return <div className="space-y-4">
     <div className="flex items-center justify-between flex-wrap gap-2">
-      <h2 className="font-display text-lg font-bold text-ink">🎬 Lọc video — chọn source tốt nhất</h2>
+      <h2 className="font-display text-lg font-bold text-ink">🎬 Lọc &amp; dựng video</h2>
     </div>
     {TabBar}
     <LocVideoTool/>

@@ -163,12 +163,13 @@ Bảng `air_posts` + **UNIQUE index `idx_air_ma` trên `ma_theo_doi`** (partial,
 - UI `AirPosts` (nav `air`): 2 tab Đang chuẩn bị / Đã đăng, chọn nội dung ĐÃ DUYỆT để đưa vào đăng (ẩn cái đã có bài), `AirEditor` có checklist tick + mã theo dõi + link; **đã đăng thì khoá sửa** để giữ nguyên dữ liệu quy đơn.
 - Test: **21/21**.
 
-### ✅ Công cụ Lọc video (gắn vào Creative Studio)
-Công cụ `tools/loc-video.html` (bản v4.0 do user cung cấp) — chạy **cục bộ trên máy**: File System Access API để gán video theo folder, chấm điểm chất lượng source, gom take trùng & chọn bản tốt nhất; AI chạy trong trình duyệt (Whisper ASR + CLIP qua WebGPU, tải từ CDN jsdelivr); tuỳ chọn Ollama/Gemini bằng key của người dùng.
-- **Cách gắn:** phục vụ tĩnh tại `/tools/loc-video.html` (copy `tools/` → `dist/tools/` khi deploy), Creative Studio thêm **tab "🎬 Lọc video"** nhúng iframe + nút *Toàn màn hình* / *Mở tab mới*. **KHÔNG nhúng thẳng vào `seeding-app.html`** vì file 232 KB sẽ phình bộ mã và CSS riêng của nó xung đột với Tailwind.
-- Thêm route công khai `GET /api/nhac` → `[]` (công cụ hỏi folder nhạc cục bộ; bản web không có nên trả rỗng thay vì 401/404). Đặt **trước cổng đăng nhập** vì iframe không gửi token; không lộ dữ liệu gì.
+### ✅ Công cụ Lọc & dựng video (gắn vào Creative Studio)
+Công cụ `tools/loc-video.html` — **bản v4.0** (user cung cấp, 415 KB) — chạy **cục bộ trên máy**: File System Access API gán video theo folder, chấm chất lượng source, gom take trùng & chọn bản tốt nhất, **dựng/kết xuất video**, và **"Dạy AI — càng dùng càng khôn"** (AI tự học mỗi khi người dùng sửa tay). AI chạy trong trình duyệt (Whisper ASR + CLIP qua WebGPU, model tải từ CDN jsdelivr); tuỳ chọn Ollama/Gemini bằng key của chính người dùng.
+- **Cách gắn:** phục vụ tĩnh tại `/tools/loc-video.html`, Creative Studio có **tab "🎬 Lọc & dựng video"** nhúng iframe + nút *Toàn màn hình* / *Mở tab mới*. **KHÔNG nhúng thẳng vào `seeding-app.html`** vì file 415 KB sẽ phình bộ mã và CSS riêng của nó xung đột với Tailwind.
+- **⚠️ ffmpeg PHẢI cùng origin:** công cụ nạp `FF_UMD = "vendor/ffmpeg/ffmpeg.js"` (đường dẫn **tương đối** → `/tools/vendor/ffmpeg/ffmpeg.js`), và bản UMD tự tạo worker từ **`814.ffmpeg.js` nằm cạnh nó**. Đã vendor sẵn 2 file từ `@ffmpeg/ffmpeg@0.12.15` vào `tools/vendor/ffmpeg/`. **Thiếu 2 file này là mất tính năng dựng video.** (Core wasm vẫn lấy từ CDN `@ffmpeg/core@0.12.10` — bản 1 luồng nên KHÔNG cần header COOP/COEP.)
+- Route công khai `GET /api/nhac` → `[]` (công cụ hỏi folder nhạc cục bộ; bản web không có nên trả rỗng thay vì 401/404). Đặt **trước cổng đăng nhập** vì iframe không gửi token; không lộ dữ liệu gì.
 - ⚠️ Cần Chrome/Edge desktop mới chọn được folder; nếu iframe chặn thì dùng **Mở tab mới**.
-- Test: **9/9** (phục vụ file, no-cache, `/api/nhac`, app chính không ảnh hưởng).
+- Test: **13/13** (phục vụ file, đúng bản v4.0, ffmpeg vendor cùng origin + đúng global `FFmpegWASM`, `/api/nhac`, app chính không ảnh hưởng).
 ### ⏳ P8 — Nhập kết quả (3 luồng, 3 mức tin cậy: TikTok Shop TRUC_TIEP / Shopee GIAN_TIEP + hàng đợi gán tay / chỉ số KHONG_QUY_DON)
 ### ⏳ P9 — Dashboard 4 hệ KPI riêng + 3 cột tin cậy (KHÔNG cộng dồn) + **Hiệu suất người phụ trách** (§6 Trụ A) → thêm GIAM_DOC
 ### ⏳ P10 — Thư viện học + **Vòng lặp AI tự học** (§6 Trụ B): kết quả chảy ngược framework×hook → nạp lại Studio (RAG)
@@ -232,9 +233,9 @@ Tokens Tailwind (inline config trong `seeding-app.html`): `ink #0b3543` (soft #1
 - **P6 Hàng đợi duyệt 2 cổng** — bảng `approvals` + `so_lan_tra`; cả 2 cổng Đạt mới duyệt, 1 cổng trả lại thì về Nháp + huỷ cổng kia; chặn gửi duyệt khi còn claim CHAN; phân quyền cổng khớp FE↔BE (22 test).
 - (Trước đó, Domain A: seeding/quay/lịch/thư viện ảnh/vinh danh/chống trùng… đã deploy.)
 - **P7 Đăng & checklist** — bảng `air_posts` + UNIQUE mã theo dõi (1 mã = 1 bài); chỉ đăng nội dung đã duyệt; checklist bắt buộc + link + mã mới cho đánh dấu Đã đăng; đã đăng thì khoá sửa (21 test).
-- **Công cụ Lọc video** gắn vào Creative Studio dạng tab (phục vụ tĩnh `/tools/loc-video.html` + route công khai `/api/nhac`) (9 test).
+- **Công cụ Lọc & dựng video v4.0** gắn vào Creative Studio dạng tab (phục vụ tĩnh `/tools/loc-video.html` + vendor ffmpeg cùng origin + route công khai `/api/nhac`) (13 test).
 - ▶️ **Kế tiếp:** **P8 — Nhập kết quả** (3 luồng, 3 mức tin cậy; dùng `ma_theo_doi` từ P7 để quy đơn) hoặc P5 (Kho footage). Khi có `ANTHROPIC_API_KEY` → nâng P4 lên gợi ý AI (giữ guardrail + không bịa số liệu).
-- 📌 **Tổng test đang xanh:** import 8 · Creative Studio 16 · Duyệt 2 cổng 22 · Đăng bài 21 · công cụ 9 · chống trùng seeding 13 = **89**.
+- 📌 **Tổng test đang xanh:** import 8 · Creative Studio 16 · Duyệt 2 cổng 22 · Đăng bài 21 · công cụ 13 · chống trùng seeding 13 = **93**.
 
 ### ⚙️ Quy trình deploy (CẬP NHẬT)
-`cp seeding-app.html dist/index.html` **và** `cp -r tools/. dist/tools/` → validate (`node --check worker/index.js` + Babel transform) → `rm -rf node_modules` → commit → push.
+`cp seeding-app.html dist/index.html` **và** `rm -rf dist/tools && mkdir -p dist/tools && cp -r tools/. dist/tools/` (giữ cả `tools/vendor/ffmpeg/`) → validate (`node --check worker/index.js` + Babel transform) → `rm -rf node_modules` → commit → push.
