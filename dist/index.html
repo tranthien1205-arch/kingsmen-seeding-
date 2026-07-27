@@ -166,8 +166,11 @@ const SX_MAP = [
   ['trạng thái tổng','tt_tong'],['pic tracking','pic_tracking'],
   ['gmv','s.gmv'],['đơn hàng','s.don_hang'],['views','s.views'],['lượt xem','s.views'],
   ['lượt thích','s.likes'],['bình luận','s.comments'],['chia sẻ','s.shares'],['lượt nhấp','s.clicks'],
+  ['tỷ lệ tương tác','s.ty_le_tuong_tac'],['tỷ lệ nhấp','s.ty_le_nhap'],
   ['ghi chú đánh giá','c.danh_gia'],
 ];
+// Excel lỗi công thức (#DIV/0!, #N/A…) — nhập vào thành 0 là TẠO RA SỐ GIẢ. Phải bỏ qua.
+const LOI_EXCEL=/^#(DIV\/0|N\/A|VALUE|REF|NAME|NUM|NULL)/i;
 const NGUONG_KET_FE = { sua_lai:3, cho_duyet:2, chua_nhap_kq:14, trend_sap_het:7, don_cho_gan:3 };
 function soNgayFE(iso){ if(!iso) return 0; const d=(Date.now()-new Date(iso).getTime())/864e5; return d>0?Math.floor(d):0; }
 function tinhViecKetFE(db){
@@ -444,7 +447,7 @@ function seedDB(){
     frameworks: ['Chuẩn bán hàng','PAS','Phản biện comment','Test chất lượng','Hành trình thi công','Size / Combo','FOMO','Review KOC','"đừng..." Trend','Q&A khách hàng','So sánh kinh tế','Hướng dẫn thi công'].map((ten,i)=>({id:uid('fw'),ten,mo_ta:'',thu_tu:i+1,active:true,created_at:now()})),
     kenh: [['Fanpage Kingsmen','FANPAGE','Kingsmen'],['TikTok Kingsmen','TIKTOK','Kingsmen'],['YouTube Short Kingsmen','YOUTUBE','Kingsmen'],['Fanpage VKXD','FANPAGE','VKXD'],['TikTok VKXD','TIKTOK','VKXD'],['Shopee VKXD','SHOPEE','VKXD'],['Zalo OA','ZALO_OA','Kingsmen'],['CHÍNH - Vật liệu mới FINEX','TIKTOK','FINEX'],['AFF - Sơn sàn hiệu ứng','TIKTOK','FINEX'],['BC - Vật liệu hoàn thiện','TIKTOK','Kingsmen']].map(([ten,loai,th])=>({id:uid('kn'),ten,loai,thuong_hieu:th,active:true,created_at:now()})),
     content_items: [],
-    scripts: [], approvals: [], air_posts: [], air_checklist: AIR_CHECKLIST_FE, ket_qua: [], don_cho_gan: [], footage: [], shot_list: [], bai_hoc: [], min_mau: MIN_MAU, trends: [], trend_check: TREND_CHECK_FE, viec_ket: null, seeding_theo_noi_dung: {}, kenh_tu_dong: KENH_TU_DONG_FE, kenh_san_sang: {}, n8n_san_sang: false, module_config: {}, can_cau_hinh: true, san_xuat: [], sx_khau: SX_KHAU_FE,
+    scripts: [], approvals: [], air_posts: [], air_checklist: AIR_CHECKLIST_FE, ket_qua: [], don_cho_gan: [], footage: [], shot_list: [], bai_hoc: [], min_mau: MIN_MAU, trends: [], trend_check: TREND_CHECK_FE, viec_ket: null, seeding_theo_noi_dung: {}, kenh_tu_dong: KENH_TU_DONG_FE, kenh_san_sang: {}, n8n_san_sang: false, module_config: {}, can_cau_hinh: true, san_xuat: [], sx_khau: SX_KHAU_FE, san_xuat_theo_noi_dung: {},
     payouts: [],
     audit: [],
   };
@@ -485,7 +488,7 @@ function migrate(db){
   db.kenh ||= [];
   db.content_items ||= [];
   db.scripts ||= []; db.approvals ||= []; db.air_posts ||= []; db.air_checklist ||= AIR_CHECKLIST_FE;
-  db.ket_qua ||= []; db.don_cho_gan ||= []; db.footage ||= []; db.shot_list ||= []; db.bai_hoc ||= []; db.min_mau ||= MIN_MAU; db.trends ||= []; db.trend_check ||= TREND_CHECK_FE; db.viec_ket ||= null; db.seeding_theo_noi_dung ||= {}; db.kenh_tu_dong ||= KENH_TU_DONG_FE; db.kenh_san_sang ||= {}; db.n8n_san_sang ||= false; db.module_config ||= {}; db.can_cau_hinh ??= true; db.san_xuat ||= []; db.sx_khau ||= SX_KHAU_FE;
+  db.ket_qua ||= []; db.don_cho_gan ||= []; db.footage ||= []; db.shot_list ||= []; db.bai_hoc ||= []; db.min_mau ||= MIN_MAU; db.trends ||= []; db.trend_check ||= TREND_CHECK_FE; db.viec_ket ||= null; db.seeding_theo_noi_dung ||= {}; db.kenh_tu_dong ||= KENH_TU_DONG_FE; db.kenh_san_sang ||= {}; db.n8n_san_sang ||= false; db.module_config ||= {}; db.can_cau_hinh ??= true; db.san_xuat ||= []; db.sx_khau ||= SX_KHAU_FE; db.san_xuat_theo_noi_dung ||= {};
   db.post_seedings.forEach(p=>{ p.react ??= 0; p.so_cmt_seeding ??= 0; p.so_cmt_tu_nhien ??= 0; p.thanh_tien ??= 0; });
   db.cmt_seedings.forEach(c=>{ c.proofs ||= []; c.so_cmt_seeding ??= 0; c.react ??= 0; c.so_cmt_tu_nhien ??= 0; c.thanh_tien ??= 0; });
   db.groups.forEach(g=>{ g.uu_tien ??= false; });
@@ -2065,10 +2068,11 @@ function ContentPlan(){
       :
       <div className="bg-white rounded-2xl border border-line shadow-card overflow-auto">
         <table className="w-full text-sm min-w-[820px]">
-          <thead className="bg-slate-50/70 text-[11px] uppercase text-ink-muted text-left"><tr><Th>Tiêu đề</Th><Th>Loại</Th><Th>Mục tiêu</Th><Th>Pillar</Th><Th>Kênh</Th><Th>Tháng</Th><Th>Giai đoạn</Th><Th>Seeding</Th><Th></Th></tr></thead>
+          <thead className="bg-slate-50/70 text-[11px] uppercase text-ink-muted text-left"><tr><Th>Tiêu đề</Th><Th>Loại</Th><Th>Mục tiêu</Th><Th>Pillar</Th><Th>Kênh</Th><Th>Tháng</Th><Th>Giai đoạn</Th><Th>Sản xuất</Th><Th>Seeding</Th><Th></Th></tr></thead>
           <tbody className="divide-y">{filtered.map(it=><tr key={it.id} className="hover:bg-slate-50">
             <Td>{it.tieu_de}</Td><Td>{it.loai}</Td><Td>{kpiLabel(it.loai_muc_tieu)}</Td><Td>{nameOf(pillars,it.pillar_id)}</Td><Td>{nameOf(kenhs,it.kenh_id)}</Td><Td>{it.thang}</Td>
             <Td><select value={it.trang_thai} onChange={e=>move(it,e.target.value)} className="text-xs border border-line rounded px-1 py-0.5">{PIPELINE.map(s=><option key={s.k} value={s.k}>{s.label}</option>)}</select></Td>
+            <Td><SanXuatCell it={it}/></Td>
             <Td><SeedingCell it={it} onDay={()=>setDay(it)}/></Td>
             <Td><button onClick={()=>setEdit(it)} className="text-xs text-blue-500 hover:underline">Sửa</button> <button onClick={()=>{ if(confirm('Xoá?')) deleteContentItem(it.id).then(ok=>ok&&notify('Đã xoá')); }} className="text-xs text-rose-500 hover:underline">Xoá</button></Td>
           </tr>)}</tbody>
@@ -2077,6 +2081,16 @@ function ContentPlan(){
     {edit && <ContentItemModal edit={edit} onClose={()=>setEdit(null)}/>}
     {imp && <ContentImportModal onClose={()=>setImp(false)}/>}
     {day && <DaySeedingModal it={day} onClose={()=>setDay(null)}/>}
+  </div>;
+}
+// Ô "Sản xuất" trong bảng kế hoạch — cho biết nội dung này đang ở khâu nào
+function SanXuatCell({it}){
+  const { db } = useApp();
+  const st=(db.san_xuat_theo_noi_dung||{})[it.id];
+  if(!st) return <span className="text-[10px] text-slate-300">chưa có</span>;
+  return <div className="text-[11px]">
+    <span className={"px-1.5 py-0.5 rounded-full font-semibold "+(st.tre>0?'bg-rose-100 text-rose-700':'bg-brand/10 text-brand-dark')}>{st.khau}</span>
+    <div className="text-slate-400 mt-0.5">{st.so_dong} dòng{st.tre>0?(' · '+st.tre+' trễ'):''}</div>
   </div>;
 }
 // Ô "Seeding" trong bảng kế hoạch: đã đẩy thì hiện kết quả chảy về, chưa thì hiện nút đẩy
@@ -3064,6 +3078,9 @@ function SanXuat(){
         Theo dõi <b>6 khâu</b>: {KHAU.map(k=>k.ten).join(' → ')}. Mỗi khâu có <b>người phụ trách, hạn, trạng thái</b> riêng —
         thay cho file Excel sản xuất đang dùng.
       </div>
+      {list.filter(x=>!x.content_item_id).length>0 && <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3 text-[11px] text-amber-800">
+        ⚠ <b>{list.filter(x=>!x.content_item_id).length} dòng chưa nối về Kế hoạch nội dung</b> — tiến độ của chúng không hiện ở Kế hoạch và Dashboard. Mở từng dòng chọn “Thuộc mục kế hoạch nào”.
+      </div>}
       {soTre>0 && <div className="rounded-2xl border border-rose-200 bg-rose-50 p-3 text-[11px] text-rose-700">
         ⏰ <b>{soTre} dòng đang trễ hạn</b> ở ít nhất một khâu — lọc cột “Khâu hiện tại” để xử lý trước.
       </div>}
@@ -3136,6 +3153,12 @@ function SanXuatModal({init,onClose}){
       <F label="Loại video" k="loai_video"/>
     </div>
     <Field label="Tên nội dung / Kịch bản" required><Input value={f.tieu_de||''} onChange={e=>set('tieu_de',e.target.value)}/></Field>
+    <Field label="Thuộc mục kế hoạch nào" hint="Nối để tiến độ sản xuất hiện ở Kế hoạch nội dung và Dashboard">
+      <Select value={f.content_item_id||''} onChange={e=>set('content_item_id',e.target.value||null)}>
+        <option value="">— Chưa nối —</option>
+        {(db.content_items||[]).map(c=><option key={c.id} value={c.id}>{(c.tieu_de||'(không tên)')+(c.thang?(' · '+c.thang):'')}</option>)}
+      </Select></Field>
+    {!f.content_item_id && <div className="text-[11px] text-amber-600 -mt-1">⚠ Chưa nối → dòng này không hiện tiến độ ở Kế hoạch nội dung.</div>}
     <div className="flex gap-1 bg-slate-100 rounded-xl p-1 overflow-x-auto no-scrollbar my-2">
       {KHAU.map(k=><button key={k.k} onClick={()=>setKhau(k.k)} className={"px-3 py-1 rounded-lg text-xs font-semibold whitespace-nowrap "+(khau===k.k?'bg-white text-ink shadow-sm':'text-slate-500')}>{k.ten}</button>)}
     </div>
@@ -3174,7 +3197,7 @@ function SanXuatImport({onClose}){
   const { db, importSanXuat, notify } = useApp();
   const [raw,setRaw]=useState(null); const [sheets,setSheets]=useState([]); const [sheet,setSheet]=useState('');
   const [rows,setRows]=useState([]); const [hi,setHi]=useState(0); const [thang,setThang]=useState('');
-  const [dangDoc,setDangDoc]=useState(false); const [busy,setBusy]=useState(false); const fileRef=useRef();
+  const [dangDoc,setDangDoc]=useState(false); const [busy,setBusy]=useState(false); const [taoKH,setTaoKH]=useState(true); const fileRef=useRef();
   const onFile=e=>{ const fl=e.target.files&&e.target.files[0]; e.target.value=''; if(!fl) return;
     if(typeof XLSX==='undefined') return notify('Thư viện đọc Excel chưa nạp — tải lại trang','err');
     const r=new FileReader();
@@ -3204,6 +3227,7 @@ function SanXuatImport({onClose}){
       const o={chi_tiet:{},so_lieu:{}};
       Object.entries(cot).forEach(([k,i])=>{
         let v=r[i]; if(v==null||String(v).trim()==='') return;
+        if(LOI_EXCEL.test(String(v).trim())) return;   // ô lỗi công thức → BỎ QUA, không hoá thành 0
         if(k.startsWith('c.')) o.chi_tiet[k.slice(2)]=String(v).trim();
         else if(k.startsWith('s.')) o.so_lieu[k.slice(2)]=Number(String(v).replace(/[^\d.-]/g,''))||0;
         else if(k==='_san_pham') o.san_pham_id=findId(db.san_pham,v);
@@ -3217,8 +3241,8 @@ function SanXuatImport({onClose}){
   const items=raw&&rows.length?dung():[];
   const soCotKhop=(()=>{ const H=header.map(h=>impNorm(h)); return H.filter(h=>h&&SX_MAP.some(([tu])=>h.includes(tu))).length; })();
   const chay=async()=>{ if(!items.length) return notify('Không có dòng hợp lệ','warn');
-    setBusy(true); const r=await importSanXuat({thang,rows:items}); setBusy(false);
-    if(r&&r.ok){ notify('Đã nạp '+r.imported+' dòng'+(r.bo_qua?(' · bỏ '+r.bo_qua+' dòng thiếu tên'):'')); onClose(); }
+    setBusy(true); const r=await importSanXuat({thang,rows:items,tao_ke_hoach:taoKH}); setBusy(false);
+    if(r&&r.ok){ notify('Nạp '+r.imported+' dòng · nối kế hoạch '+(r.noi_ke_hoach||0)+(r.tao_moi?(' · tạo mới '+r.tao_moi):'')+(r.bo_qua?(' · bỏ '+r.bo_qua):'')); onClose(); }
     else notify((r&&r.msg)||'Lỗi','err'); };
   return <Modal open={true} onClose={onClose} title="Import file quản lý sản xuất ECOM" wide>
     <div className="rounded-xl bg-brand-bg border border-brand/30 p-2 mb-3 text-[11px] text-ink-soft">
@@ -3233,6 +3257,11 @@ function SanXuatImport({onClose}){
       <Field label="Dòng tiêu đề"><Select value={hi} onChange={e=>setHi(Number(e.target.value))}>{rows.slice(0,15).map((r,i)=><option key={i} value={i}>Dòng {i+1}</option>)}</Select></Field>
       <Field label="Tháng (nếu file không có)"><Input value={thang} onChange={e=>setThang(e.target.value)} placeholder="2026-07"/></Field>
     </div>}
+    {sheets.length>0 && <label className="flex items-start gap-2 mt-2 cursor-pointer rounded-xl border border-line p-2">
+      <input type="checkbox" checked={taoKH} onChange={e=>setTaoKH(e.target.checked)} className="mt-0.5 w-4 h-4 accent-brand shrink-0"/>
+      <span className="text-[11px] text-ink-soft">Tạo luôn mục trong <b>Kế hoạch nội dung</b> cho dòng chưa có.
+        <span className="block text-slate-400">Dòng trùng tên + tháng sẽ nối vào mục sẵn có, không tạo trùng. Bỏ tick thì chỉ nối cái nào đã khớp.</span></span>
+    </label>}
     {rows.length>0 && <div className="mt-2 text-xs text-slate-600">
       Nhận ra <b className="text-brand-dark">{soCotKhop}</b> cột · đọc được <b className="text-brand-dark">{items.length}</b> dòng có tên nội dung.
       {items[0] && <div className="text-[11px] text-slate-400 mt-1">VD dòng đầu: “{(items[0].tieu_de||'').slice(0,60)}” — PIC quay: {items[0].pic_quay||'—'}</div>}

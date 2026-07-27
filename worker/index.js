@@ -407,6 +407,22 @@ const SX_COT = ['content_item_id','stt','thang','tieu_de','loai_video','san_pham
   'deadline_brief','deadline_sx','ngay_quay_dk','ngay_quay_tt','ngay_dang','gio_dang',
   'tt_brief','tt_quay','tt_san_xuat','tt_air','tt_tong',
   'link_kich_ban','link_source','link_final','link_air'];
+// Gom tiến độ sản xuất về từng nội dung: đang ở khâu nào, có trễ không
+function gomSanXuatTheoNoiDung(list){
+  const xong=v=>{ const t=String(v||'').toLowerCase(); return !!t && !/chưa|đang|nháp|mới/.test(t); };
+  const hn=new Date().toISOString().slice(0,10);
+  const map={};
+  (list||[]).forEach(x=>{
+    if(!x.content_item_id) return;
+    let khau=SX_KHAU[SX_KHAU.length-1];
+    for(const k of SX_KHAU){ if(k.tt && !xong(x[k.tt])){ khau=k; break; } }
+    const tre=SX_KHAU.some(k=>k.deadline && k.tt && x[k.deadline] && x[k.deadline]<hn && !xong(x[k.tt]));
+    const m=(map[x.content_item_id] ||= {so_dong:0, tre:0, khau:khau.ten});
+    m.so_dong++; if(tre) m.tre++;
+    m.khau=khau.ten;
+  });
+  return map;
+}
 function rowSX(r){ return { ...r, chi_tiet:JSON.parse(r.chi_tiet||'{}'), so_lieu:JSON.parse(r.so_lieu||'{}') }; }
 async function luuSanXuat(env, me, body, id){
   const g=k=> body[k]!=null ? (typeof body[k]==='number'?body[k]:String(body[k]).trim()) : null;
@@ -781,6 +797,7 @@ async function bootstrap(env, u){
     ai_san_sang: staff ? !!env.ANTHROPIC_API_KEY : false,
     module_config: cfg, can_cau_hinh: canCauHinh(u),
     san_xuat, sx_khau: SX_KHAU,
+    san_xuat_theo_noi_dung: canContent ? gomSanXuatTheoNoiDung(san_xuat) : {},
     footage, shot_list, bai_hoc, min_mau:(cfg.hoc&&cfg.hoc.min_mau)||MIN_MAU_BANG_CHUNG, trends, trend_check:(cfg.trend&&cfg.trend.checklist)||TREND_CHECK,
     viec_ket: canContent ? tinhViecKet({scripts,approvals,air_posts,ket_qua,trends,don_cho_gan,nguong:cfg.viec_ket}) : null,
     seeding_theo_noi_dung: staff ? gomSeedingTheoNoiDung(topics, posts, cmts) : {},
@@ -1830,13 +1847,28 @@ async function handleApi(request, env){
   if(path==='/sanxuat/import' && method==='POST'){
     if(!isStaff(me)) return json({error:'Không có quyền'},403);
     const rows=Array.isArray(body.rows)?body.rows:[];
-    let n=0, bo=0;
+    const taoKH = bool(body.tao_ke_hoach);
+    // Nối về Kế hoạch nội dung: khớp theo tên + tháng. Không khớp thì tạo mới nếu user chọn.
+    const cis=(await env.DB.prepare(`SELECT id,tieu_de,thang FROM content_items`).all()).results;
+    const khoa=(t,th)=>String(t||'').trim().toLowerCase()+'|'+String(th||'').trim();
+    const banDo={}; cis.forEach(c=>{ banDo[khoa(c.tieu_de,c.thang)]=c.id; });
+    let n=0, bo=0, noi=0, moi=0;
     for(const r of rows){
-      if(!(r.tieu_de||'').trim()){ bo++; continue; }
-      await luuSanXuat(env, me, {...r, thang: r.thang||body.thang||''}, null); n++;
+      const ten=(r.tieu_de||'').trim();
+      if(!ten){ bo++; continue; }
+      const th=r.thang||body.thang||'';
+      let ciId=banDo[khoa(ten,th)] || null;
+      if(!ciId && taoKH){
+        ciId=await insertContentItem(env, me, { loai:'ECOM', tieu_de:ten, loai_muc_tieu:'BAN_HANG',
+          san_pham_id:r.san_pham_id||null, kenh_id:r.kenh_id||null, framework_id:r.framework_id||null,
+          thang:th, trang_thai:'SAN_XUAT', chi_tiet:{ tu_san_xuat:true } });
+        banDo[khoa(ten,th)]=ciId; moi++;
+      }
+      if(ciId) noi++;
+      await luuSanXuat(env, me, {...r, thang:th, content_item_id:ciId}, null); n++;
     }
-    await logAudit(env,me,'import sản xuất','san_xuat',String(n),'nhận '+n+' · bỏ '+bo);
-    return json({ db: await bootstrap(env, me), imported:n, bo_qua:bo });
+    await logAudit(env,me,'import sản xuất','san_xuat',String(n),'nhận '+n+' · nối kế hoạch '+noi+' · tạo mới '+moi+' · bỏ '+bo);
+    return json({ db: await bootstrap(env, me), imported:n, bo_qua:bo, noi_ke_hoach:noi, tao_moi:moi });
   }
   if((m=path.match(/^\/sanxuat\/(.+)$/)) && method==='PATCH'){
     if(!isStaff(me)) return json({error:'Không có quyền'},403);

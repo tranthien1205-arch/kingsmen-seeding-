@@ -76,6 +76,16 @@ App hiện tại KHÔNG phải Next.js/Supabase như brief gốc. Ta **thích �
 
 ---
 
+### ✅ QUẢN LÝ SẢN XUẤT (`san_xuat`) — thay file ECOM 51 cột
+6 khâu `SX_KHAU`: Kế hoạch → Brief → Quay → Dựng → Đăng → Đo lường; mỗi khâu có PIC / deadline / trạng thái / link riêng. Cột phụ vào `chi_tiet` JSON, số đo vào `so_lieu` JSON.
+- **Nối về `content_items`** qua `san_xuat.content_item_id`. Import khớp theo **tên + tháng**; không khớp thì (tuỳ chọn) **tạo mục kế hoạch mới** rồi nối — import lại **không nhân đôi**.
+- `gomSanXuatTheoNoiDung()` → cột **Sản xuất** trong Kế hoạch nội dung (đang ở khâu nào, mấy dòng trễ). Cảnh báo dòng **chưa nối** vì chúng không lên Dashboard.
+- **Auto-map 51/51 cột** file thật, đọc 139 dòng. **`LOI_EXCEL` bỏ qua ô `#DIV/0!`/`#N/A`…** — file thật có **53 ô lỗi**, nếu để `Number()` xử lý sẽ thành **0 giả**. (15 + 12 test)
+
+### ⚠️ VÌ SAO TRƯỚC ĐÂY KHÔNG IMPORT ĐƯỢC (đã sửa — đừng lặp lại)
+1. **SheetJS nạp từ `cdn.sheetjs.com`** → CDN bị chặn/chậm là `XLSX` không bao giờ tồn tại, user không import được lần nào. **Nay TỰ HOST `/vendor/xlsx.full.min.js`** (giống `tools/vendor/ffmpeg/`). **Không dùng CDN bên thứ ba cho thư viện sống-còn.**
+2. **Parse cả workbook** để lấy 1 sheet → file Social 1.8 MB / 36 sheet treo giao diện. **Nay `bookSheets:true` lấy tên sheet trước, rồi `{sheets:sn}` parse đúng 1 sheet** (nhanh ~4.6×), có báo "đang đọc".
+
 ## 4. REGISTRY BẢNG D1 (nguồn sự thật schema)
 **Nền tảng & Seeding (Domain A — ĐANG CHẠY, không đụng):**
 `users, sessions, groups, content_topics, cmt_suggestions, post_seedings, cmt_seedings, cmt_proofs, audit, pricing, filming_templates, filming_phases, filming_shots, project_filmings, filming_uploads, guides, post_type_prefs, post_slots, media_library`
@@ -294,7 +304,7 @@ Tokens Tailwind (inline config trong `seeding-app.html`): `ink #0b3543` (soft #1
   **Chảy ngược:** `gomSeedingTheoNoiDung()` gom số bài / bài đạt / react / cmt về từng `content_item`; hiện ở cột **Seeding** trong Kế hoạch nội dung. **CHỦ Ý chỉ đếm, KHÔNG quy ra doanh thu** — seeding không quy đơn được (§9), có test chặn hồi quy. (18 test)
 - ▶️ **Kế tiếp:** gỡ `BETA_KEYS` khi user duyệt xong; thêm `TRUONG_MKT`/`GIAM_DOC`; nâng P4 lên gợi ý AI khi có `ANTHROPIC_API_KEY`. Còn lại (giá trị thấp): `media_library` ↔ `footage`.
 - **P8** Nhập kết quả 3 mức tin cậy (25 test) · **P5** Kho footage & shot list (22 test) · **P9** Dashboard 4 hệ KPI + hiệu suất người (9 test) · **P10** Thư viện học + vòng lặp tự học (19 test).
-- 📌 **Tổng test đang xanh:** import 8 · Creative Studio 16 · Duyệt 22 · Đăng bài 21 · Kết quả 25 · Footage 22 · Thư viện học 19 · công cụ 13 · chống trùng seeding 13 = **309**.
+- 📌 **Tổng test đang xanh:** import 8 · Creative Studio 16 · Duyệt 22 · Đăng bài 21 · Kết quả 25 · Footage 22 · Thư viện học 19 · công cụ 13 · chống trùng seeding 13 = **351**.
 - ✅ **ĐÃ XONG TOÀN BỘ P1→P10.** Còn lại là các mảnh nhỏ: vai trò `TRUONG_MKT`/`GIAM_DOC` riêng, `can()` tập trung (P0), và nâng P4 lên gợi ý AI khi có `ANTHROPIC_API_KEY`.
 
 ### ⚙️ Quy trình deploy (CẬP NHẬT)
