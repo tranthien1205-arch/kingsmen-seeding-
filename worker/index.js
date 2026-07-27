@@ -86,6 +86,14 @@ async function ensureSchema(env){
     // CONTENT OS · P5 — Kho footage tái sử dụng + shot list bám theo kịch bản
     `CREATE TABLE IF NOT EXISTS footage (id TEXT PRIMARY KEY, ten TEXT, mo_ta TEXT, media_url TEXT, media_type TEXT, tags TEXT, san_pham_id TEXT, kenh_id TEXT, dia_diem TEXT, ngay_quay TEXT, nguoi_quay TEXT, active INTEGER DEFAULT 1, created_at TEXT, created_by TEXT, created_by_name TEXT)`,
     `CREATE TABLE IF NOT EXISTS shot_list (id TEXT PRIMARY KEY, script_id TEXT, thu_tu INTEGER, ten_canh TEXT, mo_ta TEXT, goc_may TEXT, thoi_luong INTEGER, footage_id TEXT, trang_thai TEXT, ghi_chu TEXT, created_at TEXT, updated_at TEXT)`,
+    // QUẢN LÝ SẢN XUẤT — bám đúng 6 khâu trong file "QUẢN LÝ SẢN XUẤT NỘI DUNG ECOM"
+    `CREATE TABLE IF NOT EXISTS san_xuat (id TEXT PRIMARY KEY, content_item_id TEXT, stt INTEGER, thang TEXT,
+      tieu_de TEXT, loai_video TEXT, san_pham_id TEXT, kenh_id TEXT, framework_id TEXT, ngay_giao TEXT,
+      pic_ke_hoach TEXT, pic_brief TEXT, pic_quay TEXT, pic_san_xuat TEXT, editor TEXT, pic_dang TEXT, pic_tracking TEXT,
+      deadline_brief TEXT, deadline_sx TEXT, ngay_quay_dk TEXT, ngay_quay_tt TEXT, ngay_dang TEXT, gio_dang TEXT,
+      tt_brief TEXT, tt_quay TEXT, tt_san_xuat TEXT, tt_air TEXT, tt_tong TEXT,
+      link_kich_ban TEXT, link_source TEXT, link_final TEXT, link_air TEXT,
+      chi_tiet TEXT, so_lieu TEXT, created_at TEXT, updated_at TEXT)`,
     // CẤU HÌNH THEO MODULE — để admin/quản lý đổi ngưỡng mà KHÔNG phải sửa code + deploy
     `CREATE TABLE IF NOT EXISTS module_config (id TEXT PRIMARY KEY, cau_hinh TEXT, updated_at TEXT, updated_by_name TEXT)`,
     // CONTENT OS · TREND — nghiên cứu & triển khai. KHÔNG scrape (ToS): người tự ghi nhận + đánh giá.
@@ -385,11 +393,45 @@ function tinhViecKet({scripts,approvals,air_posts,ket_qua,trends,don_cho_gan,ngu
   return { sua_lai:suaLai, cho_duyet:choDuyet, chua_nhap_kq:chuaNhapKQ, trend_gap:trendGap, don_ket:donKet, den_gio:denGio,
     tong: suaLai.length+choDuyet.length+chuaNhapKQ.length+trendGap.length+donKet.length+denGio.length, nguong:NGUONG_KET };
 }
+// ===== QUẢN LÝ SẢN XUẤT — 6 khâu =====
+const SX_KHAU = [
+  {k:'KE_HOACH', ten:'Kế hoạch', pic:'pic_ke_hoach', tt:null,            deadline:null},
+  {k:'BRIEF',    ten:'Brief',    pic:'pic_brief',    tt:'tt_brief',      deadline:'deadline_brief'},
+  {k:'QUAY',     ten:'Quay',     pic:'pic_quay',     tt:'tt_quay',       deadline:'ngay_quay_dk'},
+  {k:'SAN_XUAT', ten:'Dựng',     pic:'pic_san_xuat', tt:'tt_san_xuat',   deadline:'deadline_sx'},
+  {k:'AIR',      ten:'Đăng',     pic:'pic_dang',     tt:'tt_air',        deadline:'ngay_dang'},
+  {k:'TRACKING', ten:'Đo lường', pic:'pic_tracking', tt:null,            deadline:null},
+];
+const SX_COT = ['content_item_id','stt','thang','tieu_de','loai_video','san_pham_id','kenh_id','framework_id','ngay_giao',
+  'pic_ke_hoach','pic_brief','pic_quay','pic_san_xuat','editor','pic_dang','pic_tracking',
+  'deadline_brief','deadline_sx','ngay_quay_dk','ngay_quay_tt','ngay_dang','gio_dang',
+  'tt_brief','tt_quay','tt_san_xuat','tt_air','tt_tong',
+  'link_kich_ban','link_source','link_final','link_air'];
+function rowSX(r){ return { ...r, chi_tiet:JSON.parse(r.chi_tiet||'{}'), so_lieu:JSON.parse(r.so_lieu||'{}') }; }
+async function luuSanXuat(env, me, body, id){
+  const g=k=> body[k]!=null ? (typeof body[k]==='number'?body[k]:String(body[k]).trim()) : null;
+  if(id){
+    const cu=await env.DB.prepare(`SELECT * FROM san_xuat WHERE id=?`).bind(id).first();
+    if(!cu) return null;
+    const sets=[], vals=[];
+    SX_COT.forEach(c=>{ if(body[c]!==undefined){ sets.push(c+'=?'); vals.push(g(c)); } });
+    if(body.chi_tiet!==undefined){ sets.push('chi_tiet=?'); vals.push(JSON.stringify(body.chi_tiet||{})); }
+    if(body.so_lieu!==undefined){ sets.push('so_lieu=?'); vals.push(JSON.stringify(body.so_lieu||{})); }
+    sets.push('updated_at=?'); vals.push(nowISO()); vals.push(id);
+    if(sets.length>1) await env.DB.prepare(`UPDATE san_xuat SET ${sets.join(', ')} WHERE id=?`).bind(...vals).run();
+    return id;
+  }
+  const nid=uid('sx');
+  await env.DB.prepare(`INSERT INTO san_xuat (id,${SX_COT.join(',')},chi_tiet,so_lieu,created_at,updated_at) VALUES (?${',?'.repeat(SX_COT.length)},?,?,?,?)`)
+    .bind(nid, ...SX_COT.map(c=>g(c)), JSON.stringify(body.chi_tiet||{}), JSON.stringify(body.so_lieu||{}), nowISO(), nowISO()).run();
+  return nid;
+}
 // ===== CẤU HÌNH THEO MODULE =====
 // Ai được sửa cấu hình: Admin và Marketing (quản lý). Kỹ thuật/Sales KHÔNG.
 function canCauHinh(u){ return !!u && (u.vai_tro===ROLES.ADMIN || u.vai_tro===ROLES.MARKETING); }
 // Giá trị mặc định — cũng là "nguồn sự thật" khi chưa ai cấu hình gì
 const CONFIG_MAC_DINH = {
+  sanxuat: { canh_bao_tre:0 },
   air:     { checklist: null },                       // null = dùng AIR_CHECKLIST gốc
   trend:   { checklist: null },
   viec_ket:{ sua_lai:3, cho_duyet:2, chua_nhap_kq:14, trend_sap_het:7, don_cho_gan:3 },
@@ -704,6 +746,7 @@ async function bootstrap(env, u){
   // P6 — hàng đợi duyệt 2 cổng (Kỹ thuật cần thấy để duyệt cổng CLAIM)
   const approvals = canContent ? (await env.DB.prepare(`SELECT * FROM approvals ORDER BY created_at DESC`).all()).results : [];
   const cfg = await docCauHinh(env);
+  const san_xuat = canContent ? (await env.DB.prepare(`SELECT * FROM san_xuat ORDER BY stt ASC, created_at ASC`).all()).results.map(rowSX) : [];
   // P7 — bài đăng (checklist thủ công + mã theo dõi)
   const air_posts = canContent ? (await env.DB.prepare(`SELECT * FROM air_posts ORDER BY created_at DESC`).all()).results
     .map(r=>({ ...r, checklist: JSON.parse(r.checklist||'{}') })) : [];
@@ -737,6 +780,7 @@ async function bootstrap(env, u){
     n8n_san_sang: staff ? (!!env.N8N_WEBHOOK_URL && !!env.N8N_TOKEN) : false,
     ai_san_sang: staff ? !!env.ANTHROPIC_API_KEY : false,
     module_config: cfg, can_cau_hinh: canCauHinh(u),
+    san_xuat, sx_khau: SX_KHAU,
     footage, shot_list, bai_hoc, min_mau:(cfg.hoc&&cfg.hoc.min_mau)||MIN_MAU_BANG_CHUNG, trends, trend_check:(cfg.trend&&cfg.trend.checklist)||TREND_CHECK,
     viec_ket: canContent ? tinhViecKet({scripts,approvals,air_posts,ket_qua,trends,don_cho_gan,nguong:cfg.viec_ket}) : null,
     seeding_theo_noi_dung: staff ? gomSeedingTheoNoiDung(topics, posts, cmts) : {},
@@ -1775,6 +1819,38 @@ async function handleApi(request, env){
     await logAudit(env,me,'khôi phục cấu hình mặc định','module_config',m[1]);
     return json({ db: await bootstrap(env, me) });
   }
+  // ===== QUẢN LÝ SẢN XUẤT =====
+  if(path==='/sanxuat' && method==='POST'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    if(!(body.tieu_de||'').trim()) return json({error:'Nhập tên nội dung / kịch bản'},400);
+    const id=await luuSanXuat(env, me, body, null);
+    await logAudit(env,me,'thêm dòng sản xuất','san_xuat',id,(body.tieu_de||'').trim());
+    return json({ db: await bootstrap(env, me), id });
+  }
+  if(path==='/sanxuat/import' && method==='POST'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    const rows=Array.isArray(body.rows)?body.rows:[];
+    let n=0, bo=0;
+    for(const r of rows){
+      if(!(r.tieu_de||'').trim()){ bo++; continue; }
+      await luuSanXuat(env, me, {...r, thang: r.thang||body.thang||''}, null); n++;
+    }
+    await logAudit(env,me,'import sản xuất','san_xuat',String(n),'nhận '+n+' · bỏ '+bo);
+    return json({ db: await bootstrap(env, me), imported:n, bo_qua:bo });
+  }
+  if((m=path.match(/^\/sanxuat\/(.+)$/)) && method==='PATCH'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    const id=await luuSanXuat(env, me, body, m[1]);
+    if(!id) return json({error:'Không tìm thấy'},404);
+    return json({ db: await bootstrap(env, me) });
+  }
+  if((m=path.match(/^\/sanxuat\/(.+)$/)) && method==='DELETE'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    await env.DB.prepare(`DELETE FROM san_xuat WHERE id=?`).bind(m[1]).run();
+    await logAudit(env,me,'xoá dòng sản xuất','san_xuat',m[1]);
+    return json({ db: await bootstrap(env, me) });
+  }
+
   if(path==='/n8n/sinh-workflow' && method==='POST'){
     if(!isStaff(me)) return json({error:'Không có quyền'},403);
     const r=await aiSinhWorkflow(env,{ mo_ta:body.mo_ta, kenh_loai:body.kenh_loai, token:body.token, app_base:env.APP_BASE_URL||'' });

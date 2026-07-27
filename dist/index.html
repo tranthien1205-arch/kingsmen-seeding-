@@ -8,7 +8,8 @@
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 <script src="https://cdn.tailwindcss.com"></script>
-<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+<!-- Đọc Excel: TỰ HOST, không phụ thuộc CDN bên thứ ba (CDN bị chặn = không import được lần nào) -->
+<script src="/vendor/xlsx.full.min.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600;700;800;900&family=Maven+Pro:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script>
@@ -139,6 +140,33 @@ const AIR_CHECKLIST_FE = [
   {k:'media_ty_le',    label:'Ảnh/video đúng tỉ lệ, không vỡ nét', bat_buoc:false},
   {k:'hashtag_cta',    label:'Hashtag & CTA đầy đủ', bat_buoc:false},
   {k:'hen_gio',        label:'Đã hẹn giờ / canh khung giờ đăng', bat_buoc:false},
+];
+const SX_KHAU_FE = [
+  {k:'KE_HOACH',ten:'Kế hoạch',pic:'pic_ke_hoach',tt:null,deadline:null},
+  {k:'BRIEF',ten:'Brief',pic:'pic_brief',tt:'tt_brief',deadline:'deadline_brief'},
+  {k:'QUAY',ten:'Quay',pic:'pic_quay',tt:'tt_quay',deadline:'ngay_quay_dk'},
+  {k:'SAN_XUAT',ten:'Dựng',pic:'pic_san_xuat',tt:'tt_san_xuat',deadline:'deadline_sx'},
+  {k:'AIR',ten:'Đăng',pic:'pic_dang',tt:'tt_air',deadline:'ngay_dang'},
+  {k:'TRACKING',ten:'Đo lường',pic:'pic_tracking',tt:null,deadline:null},
+];
+// Auto-map 51 cột của file "QUẢN LÝ SẢN XUẤT NỘI DUNG ECOM" → trường trong app
+const SX_MAP = [
+  ['stt','stt'],['ngày giao','ngay_giao'],['sản phẩm','_san_pham'],['loại video','loai_video'],['kênh','_kenh'],
+  ['nhóm kịch bản','_framework'],['tên nội dung','tieu_de'],
+  ['pic kế hoạch','pic_ke_hoach'],['pic brief','pic_brief'],['deadline brief','deadline_brief'],
+  ['concept','c.concept'],['link kịch bản','link_kich_ban'],['trạng thái brief','tt_brief'],
+  ['pic quay','pic_quay'],['ngày quay dự kiến','ngay_quay_dk'],['ngày quay thực tế','ngay_quay_tt'],
+  ['địa điểm','c.dia_diem'],['loại bối cảnh','c.boi_canh'],['mc','c.mc'],['số lượng','c.so_luong'],
+  ['trạng thái quay','tt_quay'],['link source','link_source'],['ghi chú sự cố','c.su_co_quay'],
+  ['pic sản xuất','pic_san_xuat'],['editor','editor'],['deadline sản xuất','deadline_sx'],
+  ['trạng thái sản xuất','tt_san_xuat'],['link final','link_final'],['double check','c.double_check'],
+  ['pic đăng','pic_dang'],['id sản phẩm','c.ma_san_pham'],['ngày đăng','ngay_dang'],['giờ đăng','gio_dang'],
+  ['trạng thái air','tt_air'],['link video đã air','link_air'],['reup shopee','c.reup'],
+  ['trạng thái reup','c.tt_reup'],['note lịch air','c.note_air'],['ghi chú','c.ghi_chu'],
+  ['trạng thái tổng','tt_tong'],['pic tracking','pic_tracking'],
+  ['gmv','s.gmv'],['đơn hàng','s.don_hang'],['views','s.views'],['lượt xem','s.views'],
+  ['lượt thích','s.likes'],['bình luận','s.comments'],['chia sẻ','s.shares'],['lượt nhấp','s.clicks'],
+  ['ghi chú đánh giá','c.danh_gia'],
 ];
 const NGUONG_KET_FE = { sua_lai:3, cho_duyet:2, chua_nhap_kq:14, trend_sap_het:7, don_cho_gan:3 };
 function soNgayFE(iso){ if(!iso) return 0; const d=(Date.now()-new Date(iso).getTime())/864e5; return d>0?Math.floor(d):0; }
@@ -416,7 +444,7 @@ function seedDB(){
     frameworks: ['Chuẩn bán hàng','PAS','Phản biện comment','Test chất lượng','Hành trình thi công','Size / Combo','FOMO','Review KOC','"đừng..." Trend','Q&A khách hàng','So sánh kinh tế','Hướng dẫn thi công'].map((ten,i)=>({id:uid('fw'),ten,mo_ta:'',thu_tu:i+1,active:true,created_at:now()})),
     kenh: [['Fanpage Kingsmen','FANPAGE','Kingsmen'],['TikTok Kingsmen','TIKTOK','Kingsmen'],['YouTube Short Kingsmen','YOUTUBE','Kingsmen'],['Fanpage VKXD','FANPAGE','VKXD'],['TikTok VKXD','TIKTOK','VKXD'],['Shopee VKXD','SHOPEE','VKXD'],['Zalo OA','ZALO_OA','Kingsmen'],['CHÍNH - Vật liệu mới FINEX','TIKTOK','FINEX'],['AFF - Sơn sàn hiệu ứng','TIKTOK','FINEX'],['BC - Vật liệu hoàn thiện','TIKTOK','Kingsmen']].map(([ten,loai,th])=>({id:uid('kn'),ten,loai,thuong_hieu:th,active:true,created_at:now()})),
     content_items: [],
-    scripts: [], approvals: [], air_posts: [], air_checklist: AIR_CHECKLIST_FE, ket_qua: [], don_cho_gan: [], footage: [], shot_list: [], bai_hoc: [], min_mau: MIN_MAU, trends: [], trend_check: TREND_CHECK_FE, viec_ket: null, seeding_theo_noi_dung: {}, kenh_tu_dong: KENH_TU_DONG_FE, kenh_san_sang: {}, n8n_san_sang: false, module_config: {}, can_cau_hinh: true,
+    scripts: [], approvals: [], air_posts: [], air_checklist: AIR_CHECKLIST_FE, ket_qua: [], don_cho_gan: [], footage: [], shot_list: [], bai_hoc: [], min_mau: MIN_MAU, trends: [], trend_check: TREND_CHECK_FE, viec_ket: null, seeding_theo_noi_dung: {}, kenh_tu_dong: KENH_TU_DONG_FE, kenh_san_sang: {}, n8n_san_sang: false, module_config: {}, can_cau_hinh: true, san_xuat: [], sx_khau: SX_KHAU_FE,
     payouts: [],
     audit: [],
   };
@@ -457,7 +485,7 @@ function migrate(db){
   db.kenh ||= [];
   db.content_items ||= [];
   db.scripts ||= []; db.approvals ||= []; db.air_posts ||= []; db.air_checklist ||= AIR_CHECKLIST_FE;
-  db.ket_qua ||= []; db.don_cho_gan ||= []; db.footage ||= []; db.shot_list ||= []; db.bai_hoc ||= []; db.min_mau ||= MIN_MAU; db.trends ||= []; db.trend_check ||= TREND_CHECK_FE; db.viec_ket ||= null; db.seeding_theo_noi_dung ||= {}; db.kenh_tu_dong ||= KENH_TU_DONG_FE; db.kenh_san_sang ||= {}; db.n8n_san_sang ||= false; db.module_config ||= {}; db.can_cau_hinh ??= true;
+  db.ket_qua ||= []; db.don_cho_gan ||= []; db.footage ||= []; db.shot_list ||= []; db.bai_hoc ||= []; db.min_mau ||= MIN_MAU; db.trends ||= []; db.trend_check ||= TREND_CHECK_FE; db.viec_ket ||= null; db.seeding_theo_noi_dung ||= {}; db.kenh_tu_dong ||= KENH_TU_DONG_FE; db.kenh_san_sang ||= {}; db.n8n_san_sang ||= false; db.module_config ||= {}; db.can_cau_hinh ??= true; db.san_xuat ||= []; db.sx_khau ||= SX_KHAU_FE;
   db.post_seedings.forEach(p=>{ p.react ??= 0; p.so_cmt_seeding ??= 0; p.so_cmt_tu_nhien ??= 0; p.thanh_tien ??= 0; });
   db.cmt_seedings.forEach(c=>{ c.proofs ||= []; c.so_cmt_seeding ??= 0; c.react ??= 0; c.so_cmt_tu_nhien ??= 0; c.thanh_tien ??= 0; });
   db.groups.forEach(g=>{ g.uu_tien ??= false; });
@@ -708,6 +736,13 @@ function AppProvider({children}){
           created_at:now(), created_by_name:meRef.current.ho_ten, updated_at:now() });
         Object.assign(x,{trang_thai:'DA_TRIEN_KHAI',content_item_id:cid,decided_at:now()}); commit(); return {ok:true,content_item_id:cid}; },
       deleteTrend: async id=>{ S.trends=(S.trends||[]).filter(x=>x.id!==id); commit(); return true; },
+      upsertSanXuat: async (id,o)=>{ S.san_xuat ||= []; if(id){ const x=S.san_xuat.find(y=>y.id===id); if(x) Object.assign(x,o,{updated_at:now()}); return {ok:true,id}; }
+        if(!(o.tieu_de||'').trim()) return {ok:false,msg:'Nhập tên nội dung'};
+        const nid=uid('sx'); S.san_xuat.push({id:nid,chi_tiet:{},so_lieu:{},created_at:now(),updated_at:now(),...o}); commit(); return {ok:true,id:nid}; },
+      deleteSanXuat: async id=>{ S.san_xuat=(S.san_xuat||[]).filter(x=>x.id!==id); commit(); return true; },
+      importSanXuat: async o=>{ S.san_xuat ||= []; let n=0,bo=0;
+        (o.rows||[]).forEach(r=>{ if(!(r.tieu_de||'').trim()){bo++;return;} S.san_xuat.push({id:uid('sx'),chi_tiet:{},so_lieu:{},created_at:now(),updated_at:now(),...r,thang:r.thang||o.thang||''}); n++; });
+        commit(); return {ok:true,imported:n,bo_qua:bo}; },
       setModuleConfig: async (key,cau_hinh)=>{ S.module_config ||= {}; S.module_config[key]={...(S.module_config[key]||{}),...cau_hinh};
         if(key==='air'&&cau_hinh.checklist) S.air_checklist=cau_hinh.checklist;
         if(key==='trend'&&cau_hinh.checklist) S.trend_check=cau_hinh.checklist;
@@ -905,6 +940,11 @@ function AppProvider({children}){
     trienKhaiTrend: async (id,o) => { try { const r=await call('/trends/'+id+'/trien-khai',{method:'POST',body:o||{}}); if(r&&r.db) setDb(r.db); return {ok:true,content_item_id:r.content_item_id}; }
       catch(e){ return {ok:false,msg:e.message}; } },
     deleteTrend: id => mut('/trends/'+id, {method:'DELETE'}),
+    upsertSanXuat: async (id,o) => { try { const r=await call(id?'/sanxuat/'+id:'/sanxuat',{method:id?'PATCH':'POST',body:o}); if(r&&r.db) setDb(r.db); return {ok:true,id:r.id}; }
+      catch(e){ return {ok:false,msg:e.message}; } },
+    deleteSanXuat: id => mut('/sanxuat/'+id, {method:'DELETE'}),
+    importSanXuat: async o => { try { const r=await call('/sanxuat/import',{method:'POST',body:o}); if(r&&r.db) setDb(r.db); return {ok:true,imported:r.imported,bo_qua:r.bo_qua}; }
+      catch(e){ return {ok:false,msg:e.message}; } },
     setModuleConfig: async (key,cau_hinh) => { try { const r=await call('/module-config/'+key,{method:'PATCH',body:{cau_hinh}}); if(r&&r.db) setDb(r.db); return {ok:true}; }
       catch(e){ return {ok:false,msg:e.message}; } },
     resetModuleConfig: key => mut('/module-config/'+key+'/reset', {method:'POST'}),
@@ -1118,6 +1158,7 @@ const NAV_GROUPS = {
       {key:'strategy', label:'Chiến lược', icon:'🎯'},
       {key:'plan', label:'Kế hoạch nội dung', short:'Kế hoạch', icon:'🗓️'},
       {key:'studio', label:'Creative Studio', short:'Kịch bản', icon:'✍️'},
+      {key:'sanxuat', label:'Quản lý sản xuất', short:'Sản xuất', icon:'🏭'},
       {key:'approve', label:'Hàng đợi duyệt', short:'Duyệt', icon:'🛂'},
       {key:'air', label:'Đăng bài', short:'Đăng', icon:'🚀'},
       {key:'footage', label:'Kho footage', short:'Footage', icon:'🎞'},
@@ -1158,6 +1199,7 @@ const NAV_GROUPS = {
       {key:'strategy', label:'Chiến lược', icon:'🎯'},
       {key:'plan', label:'Kế hoạch nội dung', short:'Kế hoạch', icon:'🗓️'},
       {key:'studio', label:'Creative Studio', short:'Kịch bản', icon:'✍️'},
+      {key:'sanxuat', label:'Quản lý sản xuất', short:'Sản xuất', icon:'🏭'},
       {key:'approve', label:'Hàng đợi duyệt', short:'Duyệt', icon:'🛂'},
       {key:'air', label:'Đăng bài', short:'Đăng', icon:'🚀'},
       {key:'footage', label:'Kho footage', short:'Footage', icon:'🎞'},
@@ -1210,7 +1252,7 @@ function ProfileModal({open, onClose}){
   </Modal>;
 }
 // Module đang NÂNG CẤP — chỉ tài khoản dev preview (is_dev) mới thấy
-const BETA_KEYS = new Set(['strategy','plan','products','studio','approve','air','ketqua','footage','cdash','hoc','trend','kenh']);
+const BETA_KEYS = new Set(['strategy','plan','products','studio','approve','air','ketqua','footage','cdash','hoc','trend','kenh','sanxuat']);
 function Shell(){
   const { me, logout, db } = useApp();
   // Lọc module đang nâng cấp → bỏ nhóm rỗng
@@ -1251,6 +1293,7 @@ function Shell(){
       case 'strategy': return <StrategyPillar/>;
       case 'plan': return <ContentPlan/>;
       case 'studio': return <CreativeStudio/>;
+      case 'sanxuat': return <SanXuat/>;
       case 'approve': return <ApprovalQueue/>;
       case 'air': return <AirPosts/>;
       case 'footage': return <FootageLib/>;
@@ -2152,7 +2195,9 @@ function ContentImportModal({onClose}){
   const { db, importContentItems, notify } = useApp();
   const [busy,setBusy]=useState(false); const fileRef=useRef();
   const [txt,setTxt]=useState('');                 // CSV / dán tay
-  const [wb,setWb]=useState(null);                 // workbook .xlsx (SheetJS)
+  const [wb,setWb]=useState(null);                 // chỉ giữ danh sách sheet
+  const [raw,setRaw]=useState(null);               // buffer gốc để parse lại từng sheet
+  const [dangDoc,setDangDoc]=useState(false);
   const [sheet,setSheet]=useState('');             // sheet đang chọn
   const [rows,setRows]=useState([]);               // rows sheet_to_json header:1
   const [hi,setHi]=useState(0);                    // dòng tiêu đề
@@ -2162,14 +2207,27 @@ function ContentImportModal({onClose}){
   const dlTpl=()=>download('mau_ke_hoach_noi_dung.csv', toCSV([HEAD,['Review ColorMatch nền gạch trắng','SOCIAL','Thương hiệu','Branding','Review KOC','Fanpage Kingsmen','','2026-07']]));
   const findId=(arr,name,key)=>{ if(!name) return null; const n=String(name).trim().toLowerCase(); if(!n) return null; let x=(arr||[]).find(o=>String(o[key]||'').trim().toLowerCase()===n); if(!x) x=(arr||[]).find(o=>{const v=String(o[key]||'').trim().toLowerCase(); return v&&(n.includes(v)||v.includes(n));}); return x?x.id:null; };
   const kpiVal=(name)=>{ if(!name) return 'BAN_HANG'; const n=String(name).trim().toLowerCase(); const x=LOAI_MUC_TIEU_KPI.find(o=>o.label.toLowerCase()===n||o.v.toLowerCase()===n); return x?x.v:'BAN_HANG'; };
-  const resetXlsx=()=>{ setWb(null); setSheet(''); setRows([]); setHi(0); setMap({}); };
-  const pickSheet=(w,sn)=>{ setSheet(sn); const rr=XLSX.utils.sheet_to_json(w.Sheets[sn],{header:1,blankrows:false}); setRows(rr); const h=impDetectHeader(rr); setHi(h); setMap(impAutoMap(rr[h]||[])); };
+  const resetXlsx=()=>{ setWb(null); setRaw(null); setSheet(''); setRows([]); setHi(0); setMap({}); };
+  // Parse ĐÚNG 1 sheet được chọn — nhanh hơn nhiều lần so với đọc cả workbook
+  const pickSheet=(buf,sn)=>{ setSheet(sn); setDangDoc(true);
+    setTimeout(()=>{ try{
+      const w1=XLSX.read(buf,{type:'array',sheets:sn,cellDates:true});
+      const rr=XLSX.utils.sheet_to_json(w1.Sheets[sn]||{},{header:1,blankrows:false});
+      setRows(rr); const h=impDetectHeader(rr); setHi(h); setMap(impAutoMap(rr[h]||[]));
+    }catch(e){ notify('Không đọc được sheet: '+e.message,'err'); } finally { setDangDoc(false); } }, 30); };
   const changeHeader=(idx)=>{ setHi(idx); setMap(impAutoMap(rows[idx]||[])); };
   const onFile=e=>{ const fl=e.target.files&&e.target.files[0]; e.target.value=''; if(!fl) return;
     if(/\.(xlsx|xls)$/i.test(fl.name)){
       if(typeof XLSX==='undefined') return notify('Thư viện đọc Excel chưa tải xong, thử lại sau vài giây','warn');
       const r=new FileReader();
-      r.onload=ev=>{ try{ const w=XLSX.read(ev.target.result,{type:'array',cellDates:true}); setTxt(''); setWb(w); pickSheet(w, w.SheetNames[0]); }catch(err){ notify('Không đọc được file: '+err.message,'err'); } };
+      r.onload=ev=>{ try{
+        const buf=ev.target.result;
+        // Chỉ lấy DANH SÁCH SHEET trước — file 36 sheet parse hết sẽ treo giao diện
+        const wNames=XLSX.read(buf,{type:'array',bookSheets:true});
+        setRaw(buf); setTxt(''); setWb({SheetNames:wNames.SheetNames});
+        pickSheet(buf, wNames.SheetNames[0]);
+      }catch(err){ notify('Không đọc được file: '+err.message,'err'); } };
+      r.onerror=()=>notify('Không đọc được file (trình duyệt từ chối)','err');
       r.readAsArrayBuffer(fl);
     } else { resetXlsx(); const r=new FileReader(); r.onload=ev=>setTxt(String(ev.target.result||'')); r.readAsText(fl,'utf-8'); }
   };
@@ -2210,11 +2268,12 @@ function ContentImportModal({onClose}){
       {wb && <Btn variant="ghost" onClick={resetXlsx}>✕ Bỏ file Excel</Btn>}
       <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv,.tsv,.txt" className="hidden" onChange={onFile}/>
     </div>
-    {!xlsxReady && <div className="text-[11px] text-amber-600 mb-2">Đang tải thư viện đọc Excel… nếu chọn .xlsx báo lỗi, chờ vài giây rồi thử lại.</div>}
+    {!xlsxReady && <div className="text-[11px] text-rose-600 mb-2">Không nạp được thư viện đọc Excel. Hãy tải lại trang (Ctrl/Cmd+Shift+R). Nếu vẫn lỗi, báo kỹ thuật.</div>}
+    {dangDoc && <div className="text-[11px] text-brand-dark mb-2 font-semibold">Đang đọc sheet… file nhiều sheet có thể mất vài giây.</div>}
 
     {wb ? <div className="space-y-3">
       <div className="grid sm:grid-cols-2 gap-2">
-        <Field label="Sheet"><Select value={sheet} onChange={e=>pickSheet(wb,e.target.value)}>{wb.SheetNames.map(n=><option key={n} value={n}>{n}</option>)}</Select></Field>
+        <Field label="Sheet"><Select value={sheet} onChange={e=>pickSheet(raw,e.target.value)} disabled={dangDoc}>{wb.SheetNames.map(n=><option key={n} value={n}>{n}</option>)}</Select></Field>
         <Field label="Dòng tiêu đề"><Select value={hi} onChange={e=>changeHeader(Number(e.target.value))}>{rows.slice(0,15).map((r,i)=><option key={i} value={i}>Dòng {i+1} — {(r||[]).map(x=>String(x==null?'':x).trim()).filter(Boolean).slice(0,3).join(' / ').slice(0,40)}</option>)}</Select></Field>
       </div>
       <div className="rounded-xl border border-line p-3">
@@ -2979,10 +3038,217 @@ function TrendTrienKhai({trend,onClose,onDone}){
 }
 
 /* ============================================================
+   QUẢN LÝ SẢN XUẤT — 6 khâu, bám đúng file ECOM thật
+============================================================ */
+function SanXuat(){
+  const { db, deleteSanXuat, notify } = useApp();
+  const SX=db.san_xuat||[]; const KHAU=db.sx_khau||SX_KHAU_FE;
+  const [view,setView]=useState('bang'); const [edit,setEdit]=useState(null); const [imp,setImp]=useState(false);
+  const [fThang,setFThang]=useState(''); const [fPic,setFPic]=useState(''); const [q,setQ]=useState('');
+  const thangs=[...new Set(SX.map(x=>x.thang).filter(Boolean))].sort().reverse();
+  const pics=[...new Set(SX.flatMap(x=>KHAU.map(k=>x[k.pic])).filter(Boolean))].sort();
+  const list=SX.filter(x=>(!fThang||x.thang===fThang))
+    .filter(x=>!fPic||KHAU.some(k=>x[k.pic]===fPic))
+    .filter(x=>!q||(x.tieu_de||'').toLowerCase().includes(q.toLowerCase()));
+  // Khâu hiện tại = khâu đầu tiên chưa xong (trạng thái rỗng hoặc chưa/đang)
+  const xong=(v)=>{ const t=String(v||'').toLowerCase(); return !!t && !/chưa|đang|nháp|mới/.test(t); };
+  const khauHienTai=(x)=>{ for(const k of KHAU){ if(k.tt && !xong(x[k.tt])) return k; } return KHAU[KHAU.length-1]; };
+  const treHan=(x)=>{ const hn=new Date().toISOString().slice(0,10);
+    return KHAU.some(k=>k.deadline && k.tt && x[k.deadline] && x[k.deadline]<hn && !xong(x[k.tt])); };
+  const soTre=list.filter(treHan).length;
+  return <ModuleShell moduleKey="sanxuat" title="🏭 Quản lý sản xuất" right={<div className="flex gap-2">
+      <Btn variant="ghost" onClick={()=>setImp(true)}>⬆ Import file ECOM</Btn>
+      <Btn variant="brand" onClick={()=>setEdit({})}>＋ Thêm dòng</Btn></div>}>
+    <div className="space-y-4">
+      <div className="bg-white rounded-2xl border border-line shadow-card p-3 text-[11px] text-slate-500">
+        Theo dõi <b>6 khâu</b>: {KHAU.map(k=>k.ten).join(' → ')}. Mỗi khâu có <b>người phụ trách, hạn, trạng thái</b> riêng —
+        thay cho file Excel sản xuất đang dùng.
+      </div>
+      {soTre>0 && <div className="rounded-2xl border border-rose-200 bg-rose-50 p-3 text-[11px] text-rose-700">
+        ⏰ <b>{soTre} dòng đang trễ hạn</b> ở ít nhất một khâu — lọc cột “Khâu hiện tại” để xử lý trước.
+      </div>}
+      <div className="bg-white rounded-2xl border border-line shadow-card p-3 flex flex-wrap gap-2 items-center">
+        <Select value={fThang} onChange={e=>setFThang(e.target.value)} className="max-w-[140px]"><option value="">Mọi tháng</option>{thangs.map(t=><option key={t} value={t}>{t}</option>)}</Select>
+        <Select value={fPic} onChange={e=>setFPic(e.target.value)} className="max-w-[160px]"><option value="">Mọi người phụ trách</option>{pics.map(p=><option key={p} value={p}>{p}</option>)}</Select>
+        <Input value={q} onChange={e=>setQ(e.target.value)} placeholder="Tìm tên nội dung…" className="flex-1 min-w-[160px]"/>
+        <div className="flex rounded-lg overflow-hidden border border-line">
+          <button onClick={()=>setView('bang')} className={"px-3 py-1.5 text-xs font-semibold "+(view==='bang'?'bg-brand text-white':'bg-white text-slate-500')}>Bảng</button>
+          <button onClick={()=>setView('khau')} className={"px-3 py-1.5 text-xs font-semibold "+(view==='khau'?'bg-brand text-white':'bg-white text-slate-500')}>Theo khâu</button>
+        </div>
+        <span className="text-xs text-slate-400">{list.length} dòng</span>
+      </div>
+      {list.length===0 ? <Empty>Chưa có dòng sản xuất nào. Bấm “Import file ECOM” để nạp từ file Excel đang dùng.</Empty>
+      : view==='khau' ?
+        <div className="flex gap-2 overflow-x-auto pb-2">{KHAU.map(k=>{ const col=list.filter(x=>khauHienTai(x).k===k.k);
+          return <div key={k.k} className="bg-slate-50 rounded-xl p-2 w-[76vw] max-w-[230px] sm:w-auto sm:flex-1 sm:min-w-0 shrink-0">
+            <div className="text-[11px] font-bold text-slate-500 mb-2 flex justify-between"><span>{k.ten}</span><span className="text-slate-400">{col.length}</span></div>
+            <div className="space-y-2">{col.map(x=>
+              <button key={x.id} onClick={()=>setEdit(x)} className={"w-full text-left bg-white rounded-xl border p-2 hover:border-brand transition "+(treHan(x)?'border-rose-300':'border-line')}>
+                <div className="text-xs font-semibold text-ink line-clamp-2">{x.tieu_de}</div>
+                <div className="text-[10px] text-slate-400 mt-0.5">{x[k.pic]||'chưa giao'}{k.deadline&&x[k.deadline]?(' · hạn '+x[k.deadline]):''}</div>
+                {treHan(x)&&<div className="text-[10px] text-rose-600 font-semibold mt-0.5">trễ hạn</div>}
+              </button>)}
+            </div>
+          </div>; })}
+        </div>
+      : <div className="bg-white rounded-2xl border border-line shadow-card overflow-auto">
+          <table className="w-full text-sm min-w-[900px]">
+            <thead className="bg-slate-50/70 text-[11px] uppercase text-ink-muted text-left"><tr>
+              <Th>STT</Th><Th>Tên nội dung</Th><Th>Khâu hiện tại</Th><Th>Phụ trách</Th><Th>Hạn</Th><Th>Trạng thái tổng</Th><Th>Tháng</Th><Th></Th></tr></thead>
+            <tbody className="divide-y">{list.map(x=>{ const k=khauHienTai(x); const tre=treHan(x);
+              return <tr key={x.id} className={"hover:bg-slate-50 "+(tre?'bg-rose-50/40':'')}>
+                <Td>{x.stt||''}</Td>
+                <Td><span className="font-medium text-ink">{x.tieu_de}</span>{x.loai_video&&<span className="block text-[10px] text-slate-400">{x.loai_video}</span>}</Td>
+                <Td><span className="text-[10px] px-1.5 py-0.5 rounded-full bg-brand/10 text-brand-dark font-semibold">{k.ten}</span></Td>
+                <Td>{x[k.pic]||<span className="text-slate-300">—</span>}</Td>
+                <Td>{k.deadline&&x[k.deadline] ? <span className={tre?'text-rose-600 font-semibold':''}>{x[k.deadline]}</span> : <span className="text-slate-300">—</span>}</Td>
+                <Td className="text-xs">{x.tt_tong||<span className="text-slate-300">—</span>}</Td>
+                <Td className="text-xs">{x.thang||''}</Td>
+                <Td><button onClick={()=>setEdit(x)} className="text-xs text-blue-500 hover:underline">Mở</button>{' '}
+                  <button onClick={()=>{ if(confirm('Xoá dòng này?')) deleteSanXuat(x.id).then(ok=>ok&&notify('Đã xoá')); }} className="text-xs text-rose-500 hover:underline">Xoá</button></Td>
+              </tr>; })}
+            </tbody>
+          </table>
+        </div>}
+    </div>
+    {edit && <SanXuatModal init={edit} onClose={()=>setEdit(null)}/>}
+    {imp && <SanXuatImport onClose={()=>setImp(false)}/>}
+  </ModuleShell>;
+}
+function SanXuatModal({init,onClose}){
+  const { db, upsertSanXuat, notify } = useApp();
+  const KHAU=db.sx_khau||SX_KHAU_FE;
+  const [f,setF]=useState(()=>({...init, chi_tiet:{...(init.chi_tiet||{})}, so_lieu:{...(init.so_lieu||{})}}));
+  const [khau,setKhau]=useState(KHAU[0].k);
+  const [busy,setBusy]=useState(false);
+  const set=(k,v)=>setF(o=>({...o,[k]:v}));
+  const setC=(k,v)=>setF(o=>({...o,chi_tiet:{...o.chi_tiet,[k]:v}}));
+  const setS=(k,v)=>setF(o=>({...o,so_lieu:{...o.so_lieu,[k]:v}}));
+  const luu=async()=>{ if(!(f.tieu_de||'').trim()) return notify('Nhập tên nội dung','warn');
+    setBusy(true); const r=await upsertSanXuat(init.id||null,f); setBusy(false);
+    if(r&&r.ok){ notify(init.id?'Đã lưu':'Đã thêm dòng'); onClose(); } else notify((r&&r.msg)||'Lỗi','err'); };
+  const F=({label,k,type})=><Field label={label}><Input type={type} value={f[k]||''} onChange={e=>set(k,e.target.value)}/></Field>;
+  const FC=({label,k})=><Field label={label}><Input value={(f.chi_tiet||{})[k]||''} onChange={e=>setC(k,e.target.value)}/></Field>;
+  return <Modal open={true} onClose={onClose} title={init.id?'Dòng sản xuất':'Thêm dòng sản xuất'} wide>
+    <div className="grid sm:grid-cols-3 gap-2">
+      <Field label="STT"><Input type="number" className="no-spin" value={f.stt||''} onChange={e=>set('stt',Number(e.target.value)||null)}/></Field>
+      <Field label="Tháng"><Input value={f.thang||''} onChange={e=>set('thang',e.target.value)} placeholder="2026-07"/></Field>
+      <F label="Loại video" k="loai_video"/>
+    </div>
+    <Field label="Tên nội dung / Kịch bản" required><Input value={f.tieu_de||''} onChange={e=>set('tieu_de',e.target.value)}/></Field>
+    <div className="flex gap-1 bg-slate-100 rounded-xl p-1 overflow-x-auto no-scrollbar my-2">
+      {KHAU.map(k=><button key={k.k} onClick={()=>setKhau(k.k)} className={"px-3 py-1 rounded-lg text-xs font-semibold whitespace-nowrap "+(khau===k.k?'bg-white text-ink shadow-sm':'text-slate-500')}>{k.ten}</button>)}
+    </div>
+    <div className="rounded-xl border border-line p-3">
+      {khau==='KE_HOACH' && <div className="grid sm:grid-cols-2 gap-2"><F label="Ngày giao task" k="ngay_giao" type="date"/><F label="PIC kế hoạch" k="pic_ke_hoach"/></div>}
+      {khau==='BRIEF' && <><div className="grid sm:grid-cols-3 gap-2"><F label="PIC brief" k="pic_brief"/><F label="Deadline brief" k="deadline_brief" type="date"/><F label="Trạng thái brief" k="tt_brief"/></div>
+        <FC label="Concept" k="concept"/><F label="Link kịch bản" k="link_kich_ban"/></>}
+      {khau==='QUAY' && <><div className="grid sm:grid-cols-3 gap-2"><F label="PIC quay" k="pic_quay"/><F label="Ngày quay dự kiến" k="ngay_quay_dk" type="date"/><F label="Ngày quay thực tế" k="ngay_quay_tt" type="date"/></div>
+        <div className="grid sm:grid-cols-3 gap-2"><FC label="Địa điểm" k="dia_diem"/><FC label="Loại bối cảnh" k="boi_canh"/><FC label="MC" k="mc"/></div>
+        <div className="grid sm:grid-cols-2 gap-2"><FC label="Số lượng" k="so_luong"/><F label="Trạng thái quay" k="tt_quay"/></div>
+        <F label="Link source đã lọc" k="link_source"/><FC label="Ghi chú sự cố quay" k="su_co_quay"/></>}
+      {khau==='SAN_XUAT' && <><div className="grid sm:grid-cols-3 gap-2"><F label="PIC sản xuất" k="pic_san_xuat"/><F label="Editor" k="editor"/><F label="Deadline sản xuất" k="deadline_sx" type="date"/></div>
+        <div className="grid sm:grid-cols-2 gap-2"><F label="Trạng thái sản xuất" k="tt_san_xuat"/><FC label="ECOM double check" k="double_check"/></div>
+        <F label="Link Final" k="link_final"/></>}
+      {khau==='AIR' && <><div className="grid sm:grid-cols-3 gap-2"><F label="PIC đăng" k="pic_dang"/><F label="Ngày đăng" k="ngay_dang" type="date"/><F label="Giờ đăng" k="gio_dang"/></div>
+        <div className="grid sm:grid-cols-2 gap-2"><F label="Trạng thái air" k="tt_air"/><FC label="Tên/ID sản phẩm" k="ma_san_pham"/></div>
+        <F label="Link video đã air" k="link_air"/>
+        <div className="grid sm:grid-cols-2 gap-2"><FC label="Reup Shopee" k="reup"/><FC label="Trạng thái Reup" k="tt_reup"/></div>
+        <FC label="Note lịch air" k="note_air"/></>}
+      {khau==='TRACKING' && <><F label="PIC tracking" k="pic_tracking"/>
+        <div className="grid sm:grid-cols-4 gap-2">
+          {[['gmv','GMV'],['don_hang','Đơn hàng'],['views','Lượt xem'],['likes','Lượt thích'],['comments','Bình luận'],['shares','Chia sẻ'],['clicks','Nhấp sản phẩm']].map(([k,l])=>
+            <Field key={k} label={l}><Input type="number" className="no-spin" value={(f.so_lieu||{})[k]||''} onChange={e=>setS(k,Number(e.target.value)||0)}/></Field>)}
+        </div>
+        <FC label="Ghi chú đánh giá" k="danh_gia"/></>}
+    </div>
+    <div className="grid sm:grid-cols-2 gap-2 mt-2">
+      <F label="Trạng thái tổng" k="tt_tong"/>
+      <FC label="Ghi chú" k="ghi_chu"/>
+    </div>
+    <div className="flex gap-2 mt-3"><Btn variant="ghost" onClick={onClose} disabled={busy}>Đóng</Btn><Btn variant="brand" className="flex-1" onClick={luu} disabled={busy}>{busy?'…':'Lưu'}</Btn></div>
+  </Modal>;
+}
+
+function SanXuatImport({onClose}){
+  const { db, importSanXuat, notify } = useApp();
+  const [raw,setRaw]=useState(null); const [sheets,setSheets]=useState([]); const [sheet,setSheet]=useState('');
+  const [rows,setRows]=useState([]); const [hi,setHi]=useState(0); const [thang,setThang]=useState('');
+  const [dangDoc,setDangDoc]=useState(false); const [busy,setBusy]=useState(false); const fileRef=useRef();
+  const onFile=e=>{ const fl=e.target.files&&e.target.files[0]; e.target.value=''; if(!fl) return;
+    if(typeof XLSX==='undefined') return notify('Thư viện đọc Excel chưa nạp — tải lại trang','err');
+    const r=new FileReader();
+    r.onload=ev=>{ try{ const buf=ev.target.result; const w=XLSX.read(buf,{type:'array',bookSheets:true});
+      setRaw(buf); setSheets(w.SheetNames);
+      const goiY=w.SheetNames.find(n=>/NỘI DUNG|NOI DUNG/i.test(n))||w.SheetNames[0];
+      docSheet(buf,goiY);
+    }catch(err){ notify('Không đọc được file: '+err.message,'err'); } };
+    r.onerror=()=>notify('Không đọc được file','err');
+    r.readAsArrayBuffer(fl); };
+  const docSheet=(buf,sn)=>{ setSheet(sn); setDangDoc(true);
+    setTimeout(()=>{ try{ const w=XLSX.read(buf,{type:'array',sheets:sn,cellDates:true});
+      const rr=XLSX.utils.sheet_to_json(w.Sheets[sn]||{},{header:1,blankrows:false});
+      setRows(rr); setHi(impDetectHeader(rr));
+    }catch(e){ notify('Không đọc được sheet: '+e.message,'err'); } finally{ setDangDoc(false); } },30); };
+  const header=rows[hi]||[];
+  const chuanNgay=v=>{ if(v==null||v==='') return ''; if(v instanceof Date) return v.toISOString().slice(0,10);
+    const d=new Date(v); return isNaN(d.getTime())?String(v).trim():d.toISOString().slice(0,10); };
+  const dung=()=>{ const H=header.map(h=>impNorm(h).replace(/\s+/g,' '));
+    const cot={}; H.forEach((h,i)=>{ if(!h) return;
+      const hit=SX_MAP.find(([tu])=>h.includes(tu)); if(hit && cot[hit[1]]===undefined) cot[hit[1]]=i; });
+    const findId=(arr,name)=>{ const n=String(name||'').trim().toLowerCase(); if(!n) return null;
+      const x=(arr||[]).find(o=>String(o.ten||'').trim().toLowerCase()===n)||(arr||[]).find(o=>{const v=String(o.ten||'').trim().toLowerCase(); return v&&(n.includes(v)||v.includes(n));});
+      return x?x.id:null; };
+    const laNgay=k=>/ngay_|deadline/.test(k);
+    return rows.slice(hi+1).map(r=>{
+      const o={chi_tiet:{},so_lieu:{}};
+      Object.entries(cot).forEach(([k,i])=>{
+        let v=r[i]; if(v==null||String(v).trim()==='') return;
+        if(k.startsWith('c.')) o.chi_tiet[k.slice(2)]=String(v).trim();
+        else if(k.startsWith('s.')) o.so_lieu[k.slice(2)]=Number(String(v).replace(/[^\d.-]/g,''))||0;
+        else if(k==='_san_pham') o.san_pham_id=findId(db.san_pham,v);
+        else if(k==='_kenh') o.kenh_id=findId(db.kenh,v);
+        else if(k==='_framework') o.framework_id=findId(db.frameworks,v);
+        else if(k==='stt') o.stt=Number(v)||null;
+        else o[k]= laNgay(k)?chuanNgay(v):String(v).trim();
+      });
+      return o;
+    }).filter(o=>(o.tieu_de||'').trim()); };
+  const items=raw&&rows.length?dung():[];
+  const soCotKhop=(()=>{ const H=header.map(h=>impNorm(h)); return H.filter(h=>h&&SX_MAP.some(([tu])=>h.includes(tu))).length; })();
+  const chay=async()=>{ if(!items.length) return notify('Không có dòng hợp lệ','warn');
+    setBusy(true); const r=await importSanXuat({thang,rows:items}); setBusy(false);
+    if(r&&r.ok){ notify('Đã nạp '+r.imported+' dòng'+(r.bo_qua?(' · bỏ '+r.bo_qua+' dòng thiếu tên'):'')); onClose(); }
+    else notify((r&&r.msg)||'Lỗi','err'); };
+  return <Modal open={true} onClose={onClose} title="Import file quản lý sản xuất ECOM" wide>
+    <div className="rounded-xl bg-brand-bg border border-brand/30 p-2 mb-3 text-[11px] text-ink-soft">
+      Chọn thẳng file Excel đang dùng — app tự nhận <b>51 cột</b> của bảng sản xuất (PIC từng khâu, deadline, trạng thái, link, số liệu).
+      Cột nào không nhận ra thì bỏ qua, <b>không làm hỏng dữ liệu</b>.
+    </div>
+    <Btn variant="ghost" onClick={()=>fileRef.current&&fileRef.current.click()}>📄 Chọn file .xlsx</Btn>
+    <input ref={fileRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={onFile}/>
+    {dangDoc && <div className="text-[11px] text-brand-dark font-semibold mt-2">Đang đọc sheet…</div>}
+    {sheets.length>0 && <div className="grid sm:grid-cols-3 gap-2 mt-3">
+      <Field label="Sheet"><Select value={sheet} onChange={e=>docSheet(raw,e.target.value)} disabled={dangDoc}>{sheets.map(n=><option key={n} value={n}>{n}</option>)}</Select></Field>
+      <Field label="Dòng tiêu đề"><Select value={hi} onChange={e=>setHi(Number(e.target.value))}>{rows.slice(0,15).map((r,i)=><option key={i} value={i}>Dòng {i+1}</option>)}</Select></Field>
+      <Field label="Tháng (nếu file không có)"><Input value={thang} onChange={e=>setThang(e.target.value)} placeholder="2026-07"/></Field>
+    </div>}
+    {rows.length>0 && <div className="mt-2 text-xs text-slate-600">
+      Nhận ra <b className="text-brand-dark">{soCotKhop}</b> cột · đọc được <b className="text-brand-dark">{items.length}</b> dòng có tên nội dung.
+      {items[0] && <div className="text-[11px] text-slate-400 mt-1">VD dòng đầu: “{(items[0].tieu_de||'').slice(0,60)}” — PIC quay: {items[0].pic_quay||'—'}</div>}
+    </div>}
+    <div className="flex gap-2 mt-3"><Btn variant="ghost" onClick={onClose} disabled={busy}>Huỷ</Btn>
+      <Btn variant="brand" className="flex-1" onClick={chay} disabled={busy||!items.length}>{busy?'Đang nạp…':'Nạp '+(items.length||'')+' dòng'}</Btn></div>
+  </Modal>;
+}
+
+/* ============================================================
    KHUNG MODULE DÙNG CHUNG — mỗi module có tab nội dung + tab ⚙️ Cấu hình
    Thêm cấu hình cho module mới: chỉ khai báo thêm 1 mục trong CONFIG_SCHEMA.
 ============================================================ */
 const CONFIG_SCHEMA = {
+  sanxuat: { ten:'Quản lý sản xuất', truong:[
+    {k:'canh_bao_tre', loai:'so', label:'Cảnh báo trễ hạn trước (ngày)', hint:'0 = chỉ báo khi đã quá hạn'} ]},
   air: { ten:'Đăng bài', truong:[
     {k:'checklist', loai:'checklist', label:'Checklist trước khi đăng', hint:'Mục "bắt buộc" phải tick hết mới cho đánh dấu đã đăng'} ]},
   trend: { ten:'Trend', truong:[
