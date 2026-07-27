@@ -754,6 +754,7 @@ function AppProvider({children}){
       resetModuleConfig: async key=>{ if(S.module_config) delete S.module_config[key];
         if(key==='air') S.air_checklist=AIR_CHECKLIST_FE; if(key==='trend') S.trend_check=TREND_CHECK_FE;
         commit(); return true; },
+      aiDanhGiaTrend: async id=>({ok:false, thieu_key:true, loi:'Chế độ offline không gọi AI được'}),
       aiSinhKichBan: async o=>({ok:false, thieu_key:true, loi:'Chế độ offline không gọi AI được'}),
       aiChat: async m=>({ok:false, thieu_key:true, loi:'Chế độ offline không gọi AI được'}),
       sinhWorkflowAI: async o=>({ok:false, thieu_key:true, loi:'Chế độ offline không gọi AI được'}),
@@ -953,6 +954,7 @@ function AppProvider({children}){
     setModuleConfig: async (key,cau_hinh) => { try { const r=await call('/module-config/'+key,{method:'PATCH',body:{cau_hinh}}); if(r&&r.db) setDb(r.db); return {ok:true}; }
       catch(e){ return {ok:false,msg:e.message}; } },
     resetModuleConfig: key => mut('/module-config/'+key+'/reset', {method:'POST'}),
+    aiDanhGiaTrend: async id => { try { const r=await call('/trends/'+id+'/ai-danh-gia',{method:'POST',body:{}}); if(r&&r.db) setDb(r.db); return r; } catch(e){ return {ok:false,loi:e.message}; } },
     aiSinhKichBan: async o => { try { return await call('/scripts/ai-sinh',{method:'POST',body:o}); } catch(e){ return {ok:false,loi:e.message}; } },
     aiChat: async messages => { try { return await call('/ai/chat',{method:'POST',body:{messages}}); } catch(e){ return {ok:false,loi:e.message}; } },
     sinhWorkflowAI: async o => { try { return await call('/n8n/sinh-workflow',{method:'POST',body:o}); }
@@ -3089,10 +3091,16 @@ function TrendForm({onClose}){
   </Modal>;
 }
 function TrendDetail({trend,onClose}){
-  const { db, patchTrend, decideTrend, trienKhaiTrend, deleteTrend, notify } = useApp();
+  const { db, patchTrend, decideTrend, trienKhaiTrend, deleteTrend, aiDanhGiaTrend, notify } = useApp();
   const CHK=db.trend_check||TREND_CHECK_FE;
   const [dg,setDg]=useState(trend.danh_gia||{});
   const [reject,setReject]=useState(false); const [ly,setLy]=useState(''); const [tk,setTk]=useState(false); const [busy,setBusy]=useState(false);
+  const [ai,setAi]=useState(null); const [aiBusy,setAiBusy]=useState(false);
+  const cfgTrend=(db.module_config||{}).trend||{};
+  const goiAI=async()=>{ setAiBusy(true); const r=await aiDanhGiaTrend(trend.id); setAiBusy(false);
+    if(!r||r.ok!==true){ setAi(null); return notify(r&&r.thieu_key?'Chưa cắm ANTHROPIC_API_KEY — vào Hệ thống để xem hướng dẫn':((r&&r.loi)||'Gọi AI thất bại'),'err'); }
+    setAi(r); setDg(r.danh_gia||{});
+    notify(r.tu_duyet?'AI đã chấm đủ mục và tự duyệt — vẫn nên đọc lại lý do bên dưới':'AI đã chấm sẵn checklist — bạn đọc lý do rồi quyết'); };
   const thieu=CHK.filter(c=>c.bat_buoc&&!dg[c.k]);
   const t=(db.trends||[]).find(x=>x.id===trend.id)||trend;
   const tick=async(k,v)=>{ const n={...dg,[k]:v}; setDg(n); await patchTrend(t.id,{danh_gia:n}); };
@@ -3119,6 +3127,14 @@ function TrendDetail({trend,onClose}){
       {t.ly_do && <div className="text-[11px] text-rose-600 mt-1">Lý do bỏ qua: “{t.ly_do}”</div>}
     </div>
 
+    {ai && <div className={"rounded-2xl border p-3 space-y-1 "+(ai.tu_duyet?'border-emerald-200 bg-emerald-50':'border-line bg-slate-50')}>
+      <div className="text-[11px] font-semibold text-ink">{ai.tu_duyet?'🤖 AI đã chấm đủ mục và tự duyệt':'🤖 AI đã chấm sẵn — bạn quyết'}</div>
+      {ai.tom_tat && <div className="text-[11px] text-ink-soft"><b>Tóm tắt:</b> {ai.tom_tat}</div>}
+      {ai.rui_ro_claim && <div className="text-[11px] text-amber-700">⚠ AI thấy trend này <b>dễ buộc phải nói quá / chạm cụm từ cấm</b>.</div>}
+      {!ai.tu_duyet && ai.vi_sao_khong_tu_duyet && <div className="text-[11px] text-slate-500">Không tự duyệt vì: {ai.vi_sao_khong_tu_duyet}.</div>}
+      <div className="text-[10px] text-slate-400">AI chấm dựa trên trụ cột, sản phẩm thật và danh sách cụm từ cấm trong hệ thống — <b>không đoán trend có viral hay không</b>. Bạn sửa lại được từng ô; quyết định cuối vẫn là của bạn.</div>
+    </div>}
+
     {['MOI','DANH_GIA'].includes(t.trang_thai) && <div className="bg-white rounded-2xl border border-line shadow-card p-4">
       <div className="flex items-center justify-between mb-2">
         <div className="text-sm font-semibold text-ink">Đánh giá trước khi làm</div>
@@ -3128,15 +3144,24 @@ function TrendDetail({trend,onClose}){
       <div className="space-y-1">{CHK.map(c=>
         <label key={c.k} className="flex items-start gap-2 rounded-xl p-2 hover:bg-slate-50 cursor-pointer">
           <input type="checkbox" checked={!!dg[c.k]} onChange={e=>tick(c.k,e.target.checked)} className="mt-0.5 w-4 h-4 accent-brand shrink-0"/>
-          <span className="text-sm text-ink flex-1">{c.label}</span>
+          <span className="flex-1 min-w-0">
+            <span className="block text-sm text-ink">{c.label}</span>
+            {ai && ai.ly_do && ai.ly_do[c.k] && <span className="block text-[11px] text-slate-500 mt-0.5 leading-relaxed">🤖 {ai.ly_do[c.k]}</span>}
+          </span>
           {c.bat_buoc && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-rose-50 text-rose-500 shrink-0">bắt buộc</span>}
         </label>)}
       </div>
-      <div className="text-[10px] text-slate-400 mt-2">Cố ý <b>không có mục chấm điểm khả năng viral</b> — không ai đoán được, và đoán sai sẽ dẫn tới quyết định sai.</div>
-      <div className="flex gap-2 mt-3">
+      <div className="text-[10px] text-slate-400 mt-2">Cố ý <b>không có mục chấm điểm khả năng viral</b> — không ai đoán được, và đoán sai sẽ dẫn tới quyết định sai. AI cũng <b>không được phép đoán</b> — nó chỉ trả lời các câu hỏi có căn cứ.</div>
+      <div className="flex gap-2 mt-3 flex-wrap">
         <Btn variant="ghost" onClick={()=>{ setReject(true); setLy(''); }}>Bỏ qua trend</Btn>
+        {db.ai_san_sang && <Btn variant="ghost" onClick={goiAI} disabled={aiBusy}>{aiBusy?'AI đang đọc…':'🤖 Nhờ AI chấm trước'}</Btn>}
         <Btn variant="brand" className="flex-1" onClick={duyet} disabled={busy||thieu.length>0}>{thieu.length?'Tick đủ mục bắt buộc để duyệt':'✓ Duyệt triển khai'}</Btn>
       </div>
+      {db.ai_san_sang && <div className="text-[10px] text-slate-400 mt-2">
+        {cfgTrend.tu_dong_duyet
+          ? <span><b>Đang bật AI tự duyệt</b> — khi AI chấm đủ mục bắt buộc và không thấy rủi ro claim, trend sẽ tự chuyển “Duyệt triển khai”. Tắt trong tab ⚙️ Cấu hình.</span>
+          : <span>AI chỉ chấm sẵn để bạn đọc — <b>không tự duyệt</b>. Muốn cho tự duyệt thì bật trong tab ⚙️ Cấu hình của module Trend.</span>}
+      </div>}
     </div>}
 
     {t.trang_thai==='DUYET' && <div className="bg-white rounded-2xl border border-line shadow-card p-4">
@@ -3410,7 +3435,13 @@ const CONFIG_SCHEMA = {
   air: { ten:'Đăng bài', truong:[
     {k:'checklist', loai:'checklist', label:'Checklist trước khi đăng', hint:'Mục "bắt buộc" phải tick hết mới cho đánh dấu đã đăng'} ]},
   trend: { ten:'Trend', truong:[
-    {k:'checklist', loai:'checklist', label:'Checklist đánh giá trend', hint:'Cố ý KHÔNG nên thêm mục dự đoán viral — không ai đoán được'} ]},
+    {k:'checklist', loai:'checklist', label:'Checklist đánh giá trend', hint:'Cố ý KHÔNG nên thêm mục dự đoán viral — không ai đoán được'},
+    {k:'tu_dong_duyet', loai:'bat', label:'Cho AI tự duyệt trend',
+      hint:'TẮT (khuyến nghị): AI chỉ chấm sẵn checklist kèm lý do, bạn đọc rồi bấm duyệt. BẬT: khi AI chấm đủ mục bắt buộc và không thấy rủi ro claim thì trend tự chuyển “Duyệt triển khai”. Dù bật, AI vẫn không được bỏ qua bất kỳ mục bắt buộc nào.'},
+    {k:'chan_khi_rui_ro', loai:'bat', label:'Có rủi ro claim thì luôn chờ người xác nhận',
+      hint:'Nên để BẬT. Trend dễ buộc phải nói quá về sản phẩm là chỗ rủi ro thương hiệu nhất.'},
+    {k:'tu_dong_het_han', loai:'bat', label:'Trend quá hạn tự chuyển “Bỏ qua”',
+      hint:'Chạy 1 lần mỗi ngày. Đây là dữ kiện xác định (so ngày), không phải AI phán.'} ]},
   viec_ket: { ten:'Nhắc việc', truong:[
     {k:'sua_lai', loai:'so', label:'Kịch bản bị trả — nhắc sau (ngày)'},
     {k:'cho_duyet', loai:'so', label:'Cổng duyệt tồn — nhắc sau (ngày)'},
@@ -3451,10 +3482,13 @@ function CauHinhModule({moduleKey}){
   const sch=CONFIG_SCHEMA[moduleKey]; if(!sch) return null;
   const goc=(db.module_config||{})[moduleKey]||{};
   const macDinhCL = moduleKey==='air' ? (db.air_checklist||[]) : moduleKey==='trend' ? (db.trend_check||[]) : [];
-  const [f,setF]=useState(()=>{ const o={}; sch.truong.forEach(t=>{ o[t.k]= t.loai==='checklist' ? (goc[t.k]||macDinhCL).map(x=>({...x})) : (goc[t.k]??''); }); return o; });
+  const [f,setF]=useState(()=>{ const o={}; sch.truong.forEach(t=>{
+    o[t.k]= t.loai==='checklist' ? (goc[t.k]||macDinhCL).map(x=>({...x}))
+          : t.loai==='bat' ? !!goc[t.k] : (goc[t.k]??''); }); return o; });
   const [busy,setBusy]=useState(false);
   const luu=async()=>{ setBusy(true);
-    const payload={}; sch.truong.forEach(t=>{ if(t.loai==='so'){ const n=Number(f[t.k]); if(isFinite(n)) payload[t.k]=n; } else payload[t.k]=f[t.k]; });
+    const payload={}; sch.truong.forEach(t=>{ if(t.loai==='so'){ const n=Number(f[t.k]); if(isFinite(n)) payload[t.k]=n; }
+      else if(t.loai==='bat') payload[t.k]=!!f[t.k]; else payload[t.k]=f[t.k]; });
     const r=await setModuleConfig(moduleKey,payload); setBusy(false);
     if(r&&r.ok) notify('Đã lưu cấu hình — áp dụng ngay, không cần deploy'); else notify((r&&r.msg)||'Lỗi','err'); };
   const khoiPhuc=async()=>{ if(!confirm('Khôi phục cấu hình mặc định cho '+sch.ten+'?')) return;
@@ -3467,6 +3501,14 @@ function CauHinhModule({moduleKey}){
     <div className="bg-white rounded-2xl border border-line shadow-card p-4 space-y-3">
       {sch.truong.map(t=> t.loai==='so'
         ? <Field key={t.k} label={t.label} hint={t.hint}><Input type="number" className="no-spin" value={f[t.k]} onChange={e=>setF({...f,[t.k]:e.target.value})}/></Field>
+        : t.loai==='bat'
+        ? <label key={t.k} className="flex items-start gap-2 rounded-xl border border-line p-3 cursor-pointer hover:bg-slate-50">
+            <input type="checkbox" checked={!!f[t.k]} onChange={e=>setF({...f,[t.k]:e.target.checked})} className="mt-0.5 w-4 h-4 accent-brand shrink-0"/>
+            <span className="min-w-0">
+              <span className="block text-sm font-semibold text-ink">{t.label}</span>
+              {t.hint && <span className="block text-[11px] text-slate-500 mt-0.5 leading-relaxed">{t.hint}</span>}
+            </span>
+          </label>
         : <div key={t.k}>
             <div className="text-[11px] font-semibold text-ink-muted uppercase tracking-wide mb-1">{t.label}</div>
             {t.hint && <div className="text-[11px] text-slate-400 mb-2">{t.hint}</div>}

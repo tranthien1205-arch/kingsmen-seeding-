@@ -449,7 +449,8 @@ function canCauHinh(u){ return !!u && (u.vai_tro===ROLES.ADMIN || u.vai_tro===RO
 const CONFIG_MAC_DINH = {
   sanxuat: { canh_bao_tre:0 },
   air:     { checklist: null },                       // null = dùng AIR_CHECKLIST gốc
-  trend:   { checklist: null },
+  // AI chỉ được TỰ QUYẾT khi người bật công tắc — mặc định TẮT, AI chỉ chấm sẵn để người xem.
+  trend:   { checklist: null, tu_dong_duyet:false, tu_dong_het_han:true, chan_khi_rui_ro:true },
   viec_ket:{ sua_lai:3, cho_duyet:2, chua_nhap_kq:14, trend_sap_het:7, don_cho_gan:3 },
   hoc:     { min_mau:5 },
   dash:    { min_mau:5, lech_pillar:15 },
@@ -599,6 +600,45 @@ const AI_NGUYEN_TAC =
   '5. Tránh mọi cụm từ trong danh sách cấm.\n'+
   '6. Trả lời bằng tiếng Việt, ngắn gọn, đi thẳng vào việc.';
 
+// AI đánh giá trend: CHỈ trả lời được/không cho từng mục checklist kèm lý do.
+// KHÔNG hỏi AI "trend này có viral không" — không ai đoán được, và đoán sai dẫn tới quyết định sai.
+async function aiDanhGiaTrend(env, me, tr){
+  const cfgAll=await docCauHinh(env);
+  const chk=(cfgAll.trend&&cfgAll.trend.checklist)||TREND_CHECK;
+  const pil=(await env.DB.prepare(`SELECT ten,objective,request FROM pillars WHERE active=1`).all()).results;
+  const sp=(await env.DB.prepare(`SELECT ten,dong,thong_so,tieu_chuan FROM san_pham WHERE active=1`).all()).results;
+  const cc=(await env.DB.prepare(`SELECT cum_tu,ly_do,muc_do FROM claim_cam WHERE active=1`).all()).results;
+  const strat=await env.DB.prepare(`SELECT * FROM content_strategy WHERE id=1`).first()||{};
+  const hnStr=new Date().toISOString().slice(0,10);
+  const sys='Bạn thẩm định một trend mạng xã hội xem thương hiệu vật liệu xây dựng Kingsmen CÓ NÊN LÀM hay không.\n'+AI_NGUYEN_TAC+'\n'+
+    'Bạn CHỈ đánh giá các câu hỏi trả lời được bằng dữ kiện. TUYỆT ĐỐI KHÔNG dự đoán trend sẽ viral hay đạt bao nhiêu view.\n'+
+    'Với mỗi mục checklist, trả true/false kèm lý do NGẮN dựa trên dữ liệu được cung cấp. Không chắc thì trả false và nói rõ vì sao chưa đủ căn cứ.\n'+
+    'CHỈ trả về JSON thuần: {"danh_gia":{"<mã mục>":true|false,...},"ly_do":{"<mã mục>":"..."},"rui_ro_claim":true|false,"tom_tat":"1-2 câu"}\n'+
+    'rui_ro_claim = true nếu làm trend này dễ buộc phải nói quá, chạm cụm từ cấm, hoặc gây hiểu nhầm về sản phẩm.';
+  const usr='TREND: '+(tr.ten||'')+'\n'+
+    'Nguồn: '+(tr.nguon||'')+' · Hạn dùng: '+(tr.han_dung||'(chưa đặt)')+' · Hôm nay: '+hnStr+'\n'+
+    'Mô tả: '+(tr.mo_ta||'(không có)')+'\n'+
+    'Rủi ro người dùng tự ghi: '+(tr.rui_ro||'(không có)')+'\n\n'+
+    'ĐỊNH HƯỚNG THƯƠNG HIỆU: '+(strat.big_idea||'')+' | Đối tượng: '+(strat.audience||'')+'\n'+
+    'TRỤ CỘT NỘI DUNG: '+JSON.stringify(pil.map(p=>({ten:p.ten,dinh_huong:p.objective})))+'\n'+
+    'SẢN PHẨM THẬT: '+JSON.stringify(sp.map(x=>({ten:x.ten,dong:x.dong,thong_so:JSON.parse(x.thong_so||'[]'),tieu_chuan:x.tieu_chuan})))+'\n'+
+    'CỤM TỪ CẤM: '+JSON.stringify(cc.map(c=>({cum_tu:c.cum_tu,muc_do:c.muc_do})))+'\n\n'+
+    'CHECKLIST CẦN CHẤM: '+JSON.stringify(chk.map(c=>({ma:c.k,noi_dung:c.label,bat_buoc:!!c.bat_buoc})));
+  const r=await goiAI(env,{system:sys, messages:[{role:'user',content:usr}], max_tokens:1500});
+  if(!r.ok) return r;
+  let txt=r.text.replace(/^```(?:json)?\s*/i,'').replace(/```\s*$/,'').trim();
+  const i=txt.indexOf('{'), k=txt.lastIndexOf('}');
+  if(i<0||k<0) return {ok:false, loi:'AI không trả về JSON'};
+  let o; try{ o=JSON.parse(txt.slice(i,k+1)); }catch(e){ return {ok:false, loi:'JSON từ AI hỏng: '+e.message}; }
+  if(!o || typeof o.danh_gia!=='object' || !o.danh_gia) return {ok:false, loi:'AI không trả về phần đánh giá'};
+  // Chỉ nhận đúng các mã mục có thật — AI bịa thêm mục thì bỏ
+  const dg={}, ld={};
+  chk.forEach(c=>{ dg[c.k]= o.danh_gia[c.k]===true; if(o.ly_do&&o.ly_do[c.k]) ld[c.k]=String(o.ly_do[c.k]).slice(0,300); });
+  // Hạn dùng là dữ kiện xác định — KHÔNG để AI phán, tự tính
+  const conKip = !tr.han_dung || tr.han_dung>=hnStr;
+  if(chk.some(c=>c.k==='kip_thoi')){ dg.kip_thoi=conKip; ld.kip_thoi = conKip?('Còn hạn tới '+(tr.han_dung||'(không đặt hạn)')):('Đã quá hạn '+tr.han_dung); }
+  return {ok:true, danh_gia:dg, ly_do:ld, rui_ro_claim:o.rui_ro_claim===true, tom_tat:String(o.tom_tat||'').slice(0,400)};
+}
 // ===== AI dựng workflow n8n =====
 // Kiểm tra workflow do AI sinh ra có dùng được không. KHÔNG BAO GIỜ trả JSON hỏng cho người dùng.
 function kiemTraWorkflow(wf){
@@ -2037,6 +2077,32 @@ async function handleApi(request, env){
     return json({ db: await bootstrap(env, me), topic_id: tid });
   }
 
+  // ===== AI ĐÁNH GIÁ TREND =====
+  // AI tick sẵn checklist + nêu lý do. Có tự duyệt hay không do CẤU HÌNH quyết, mặc định TẮT.
+  if((m=path.match(/^\/trends\/(.+)\/ai-danh-gia$/)) && method==='POST'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    const id=m[1]; const tr=await env.DB.prepare(`SELECT * FROM trends WHERE id=?`).bind(id).first();
+    if(!tr) return json({error:'Không tìm thấy trend'},404);
+    if(tr.trang_thai==='DA_TRIEN_KHAI') return json({error:'Trend này đã triển khai'},409);
+    const r=await aiDanhGiaTrend(env, me, tr);
+    if(!r.ok) return json({ok:false, thieu_key:!!r.thieu_key, loi:r.loi},200);
+    const cfgAll=await docCauHinh(env);
+    const cfg=cfgAll.trend||{};
+    const chk=cfg.checklist||TREND_CHECK;
+    const batBuoc=chk.filter(c=>c.bat_buoc);
+    const duA=batBuoc.every(c=>r.danh_gia[c.k]===true);
+    const rui_ro = !!r.rui_ro_claim;
+    // Tự duyệt CHỈ khi: bật cấu hình + đủ mục bắt buộc + không có rủi ro claim
+    const tuDuyet = !!cfg.tu_dong_duyet && duA && !(cfg.chan_khi_rui_ro!==false && rui_ro);
+    const tt = tuDuyet ? 'DUYET' : 'DANH_GIA';
+    await env.DB.prepare(`UPDATE trends SET danh_gia=?, trang_thai=?, ly_do=?, nguoi_duyet_ten=?, decided_at=? WHERE id=?`)
+      .bind(JSON.stringify(r.danh_gia), tt, r.tom_tat||'', tuDuyet?('AI tự duyệt (bật trong Cấu hình)'):null, tuDuyet?nowISO():null, id).run();
+    await logAudit(env,me,tuDuyet?'AI tự duyệt trend':'AI đánh giá trend','trends',id,(tr.ten||'')+' · '+(r.tom_tat||'').slice(0,120));
+    return json({ ok:true, db: await bootstrap(env, me), danh_gia:r.danh_gia, ly_do:r.ly_do, tom_tat:r.tom_tat,
+      rui_ro_claim:rui_ro, du_dieu_kien:duA, tu_duyet:tuDuyet,
+      vi_sao_khong_tu_duyet: tuDuyet?null:(!cfg.tu_dong_duyet?'Chưa bật tự duyệt trong Cấu hình':(!duA?'Chưa đủ mục bắt buộc':'Có rủi ro claim nên phải người xác nhận')) });
+  }
+
   // ===== CONTENT OS · TREND — nghiên cứu & triển khai =====
   if(path==='/trends' && method==='POST'){
     if(!isStaff(me)) return json({error:'Không có quyền'},403);
@@ -2275,6 +2341,17 @@ async function deleteMediaObject(env, media_url){
 // Dọn media của công trình CHƯA ĐƯỢC DUYỆT quá 30 ngày (chạy theo cron)
 // Cron hằng ngày: chụp lại tình trạng việc kẹt vào nhật ký để có dấu vết theo thời gian.
 // Nguồn sự thật vẫn là bootstrap (tính tươi); đây chỉ là bản ghi lịch sử.
+// Trend quá hạn mà chưa triển khai → tự chuyển Bỏ qua. Đây là dữ kiện xác định, không cần AI phán.
+async function tuDongHetHanTrend(env){
+  try{
+    await ensureSchema(env);
+    const cfg=(await docCauHinh(env)).trend||{};
+    if(cfg.tu_dong_het_han===false) return;
+    const hn=new Date().toISOString().slice(0,10);
+    await env.DB.prepare(`UPDATE trends SET trang_thai='TU_CHOI', ly_do=?, nguoi_duyet_ten='Hệ thống', decided_at=? WHERE han_dung IS NOT NULL AND han_dung<>'' AND han_dung<? AND trang_thai IN ('MOI','DANH_GIA','DUYET')`)
+      .bind('Tự bỏ qua: đã quá hạn dùng, trend nguội thì làm cũng ít tác dụng', nowISO(), hn).run();
+  }catch(e){}
+}
 async function ghiNhatKyViecKet(env){
   try{
     await ensureSchema(env);
@@ -2326,6 +2403,7 @@ export default {
     } else {
       ctx.waitUntil(cleanupOldMedia(env));        // dọn media quá hạn
       ctx.waitUntil(ghiNhatKyViecKet(env));       // chụp tình trạng việc kẹt
+      ctx.waitUntil(tuDongHetHanTrend(env));      // trend quá hạn → tự bỏ qua
       ctx.waitUntil(chayLichDang(env));           // chạy kèm cho chắc, phòng lịch 15' lỗi
     }
   },

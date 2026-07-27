@@ -90,8 +90,22 @@ App hiện tại KHÔNG phải Next.js/Supabase như brief gốc. Ta **thích �
 **Hạ tầng chung:** `goiAI()` gọi Anthropic; `boiCanhAI()` dựng ảnh chụp dữ liệu THẬT; `AI_NGUYEN_TAC` là system prompt ép 6 nguyên tắc (không bịa số · **không cộng dồn 3 mức tin cậy** · không dự đoán viral · chỉ trích spec thật · tránh cụm cấm · trả lời tiếng Việt). Thiếu key → `thieu_key:true`, **không bao giờ giả vờ trả lời**.
 1. **AI viết kịch bản** `POST /scripts/ai-sinh` — prompt kèm **thông số/tiêu chuẩn thật** của sản phẩm + brand voice + **danh sách cụm cấm** + **bài học đã duyệt (RAG)**. Output **quét lại claim**: chạm mức CHẶN → **từ chối, không đưa cho user**. Nút "🤖 Nhờ AI viết" cạnh nút sinh theo khuôn.
 2. **Chatbot** `POST /ai/chat` (nút nổi, chỉ MKT/ADMIN) — hỏi đáp trên dữ liệu thật. Bối cảnh gửi đi có `ket_qua_TACH_3_MUC` nên **AI không thể cộng nhầm**; **không gửi mật khẩu/dữ liệu nhạy cảm**.
-3. **AI CHẠY TRÊN MÁY — MIỄN PHÍ** (`BocLoiThoai`): Whisper qua transformers.js, tách âm bằng WebAudio, bóc lời thoại video → điền caption bài đăng / mô tả footage. **Video không rời máy, không gọi API, không tốn phí.** Nạp thư viện theo yêu cầu (lazy) vì nặng.
+3. **AI chấm trend** `POST /trends/:id/ai-danh-gia` — xem mục "AI đánh giá trend" bên dưới.
+4. **AI CHẠY TRÊN MÁY — MIỄN PHÍ** (`BocLoiThoai`): Whisper qua transformers.js, tách âm bằng WebAudio, bóc lời thoại video → điền caption bài đăng / mô tả footage. **Video không rời máy, không gọi API, không tốn phí.** Nạp thư viện theo yêu cầu (lazy) vì nặng.
 - Test: 20/20 (gồm AI lỡ viết cụm CHẶN → chặn; AI trả rác; thiếu key; RBAC).
+
+### ✅ AI ĐÁNH GIÁ TREND — "AI chấm sẵn, người quyết" (mặc định KHÔNG tự duyệt)
+**Vì sao không cho AI tự quyết ngay:** trend là chỗ **rủi ro thương hiệu cao nhất**, và "trend này có đáng làm không" về bản chất là **dự đoán** — thứ đã thống nhất không giao cho AI (§ranh giới). Nên thiết kế là: **AI chấm sẵn checklist kèm lý do từng mục → người đọc rồi bấm duyệt**. Ai muốn tự động hơn thì **tự bật công tắc**, có ràng buộc.
+- `POST /trends/:id/ai-danh-gia` (Marketing/Admin; Sales 403; trend `DA_TRIEN_KHAI` → 409). Prompt gửi kèm **trụ cột, định hướng thương hiệu, thông số/tiêu chuẩn THẬT của sản phẩm, danh sách cụm cấm**; system prompt **cấm dự đoán viral/%view**.
+- **Ba chốt chặn AI bịa:**
+  1. Chỉ nhận **đúng mã mục có trong checklist** — AI bịa thêm mục thì **bỏ**, không ghi vào.
+  2. Mục `kip_thoi` **hệ thống tự tính** từ `han_dung` vs hôm nay — **không nghe AI**, kể cả khi AI bảo "còn kịp".
+  3. AI trả rác / thiếu phần đánh giá → **báo lỗi rõ, giữ nguyên trạng thái trend**, không ghi bừa.
+- **Tự duyệt (mặc định TẮT)** — chỉ xảy ra khi **cả ba** đều đúng: bật `tu_dong_duyet` + AI chấm **đủ mọi mục bắt buộc** + **không có `rui_ro_claim`** (khi `chan_khi_rui_ro` bật). Không đủ thì trả `vi_sao_khong_tu_duyet` nói rõ vướng ở đâu. Tự duyệt ghi `nguoi_duyet_ten = "AI tự duyệt (bật trong Cấu hình)"` — **không mạo danh người thật** — và audit tách riêng `AI tự duyệt trend` vs `AI đánh giá trend`.
+- **Trend quá hạn tự Bỏ qua** (`tuDongHetHanTrend`, cron hằng ngày, tắt được bằng `tu_dong_het_han`): so ngày thuần **không gọi AI**; ghi `nguoi_duyet_ten = "Hệ thống"`; không đụng trend đã triển khai / còn hạn / không đặt hạn.
+- **Cấu hình nằm chung tab ⚙️ của module Trend** (`module_config.trend`): checklist + 3 công tắc trong một chỗ, sửa cái này không mất cái kia. `CauHinhModule` có thêm kiểu trường `bat` (công tắc bật/tắt kèm giải thích).
+- UI: nút **"🤖 Nhờ AI chấm trước"** trong `TrendDetail` (chỉ hiện khi `db.ai_san_sang`); lý do từng mục hiện ngay dưới mục đó; thẻ tóm tắt nổi lên trên nên **vẫn đọc được sau khi AI tự duyệt**; dòng chú thích luôn nói rõ đang bật hay tắt tự duyệt.
+- Test: **40/40** (thiếu key · RBAC · AI bịa mục · `kip_thoi` tự tính · chặn tự duyệt khi thiếu mục / có rủi ro claim · cron hết hạn · checklist sửa rồi AI chấm theo bản mới · công tắc và checklist không đè nhau).
 
 ## 4. REGISTRY BẢNG D1 (nguồn sự thật schema)
 **Nền tảng & Seeding (Domain A — ĐANG CHẠY, không đụng):**
@@ -311,7 +325,7 @@ Tokens Tailwind (inline config trong `seeding-app.html`): `ink #0b3543` (soft #1
   **Chảy ngược:** `gomSeedingTheoNoiDung()` gom số bài / bài đạt / react / cmt về từng `content_item`; hiện ở cột **Seeding** trong Kế hoạch nội dung. **CHỦ Ý chỉ đếm, KHÔNG quy ra doanh thu** — seeding không quy đơn được (§9), có test chặn hồi quy. (18 test)
 - ▶️ **Kế tiếp:** gỡ `BETA_KEYS` khi user duyệt xong; thêm `TRUONG_MKT`/`GIAM_DOC`; nâng P4 lên gợi ý AI khi có `ANTHROPIC_API_KEY`. Còn lại (giá trị thấp): `media_library` ↔ `footage`.
 - **P8** Nhập kết quả 3 mức tin cậy (25 test) · **P5** Kho footage & shot list (22 test) · **P9** Dashboard 4 hệ KPI + hiệu suất người (9 test) · **P10** Thư viện học + vòng lặp tự học (19 test).
-- 📌 **Tổng test đang xanh:** import 8 · Creative Studio 16 · Duyệt 22 · Đăng bài 21 · Kết quả 25 · Footage 22 · Thư viện học 19 · công cụ 13 · chống trùng seeding 13 = **371**.
+- 📌 **Tổng test đang xanh: 469** (toàn bộ `scratchpad/test_*.mjs`), trong đó AI đánh giá trend 40.
 - ✅ **ĐÃ XONG TOÀN BỘ P1→P10.** Còn lại là các mảnh nhỏ: vai trò `TRUONG_MKT`/`GIAM_DOC` riêng, `can()` tập trung (P0), và nâng P4 lên gợi ý AI khi có `ANTHROPIC_API_KEY`.
 
 ### ⚙️ Quy trình deploy (CẬP NHẬT)
