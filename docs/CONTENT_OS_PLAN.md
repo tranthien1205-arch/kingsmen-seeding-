@@ -325,7 +325,8 @@ Tokens Tailwind (inline config trong `seeding-app.html`): `ink #0b3543` (soft #1
   **Chảy ngược:** `gomSeedingTheoNoiDung()` gom số bài / bài đạt / react / cmt về từng `content_item`; hiện ở cột **Seeding** trong Kế hoạch nội dung. **CHỦ Ý chỉ đếm, KHÔNG quy ra doanh thu** — seeding không quy đơn được (§9), có test chặn hồi quy. (18 test)
 - ▶️ **Kế tiếp:** gỡ `BETA_KEYS` khi user duyệt xong; thêm `TRUONG_MKT`/`GIAM_DOC`; nâng P4 lên gợi ý AI khi có `ANTHROPIC_API_KEY`. Còn lại (giá trị thấp): `media_library` ↔ `footage`.
 - **P8** Nhập kết quả 3 mức tin cậy (25 test) · **P5** Kho footage & shot list (22 test) · **P9** Dashboard 4 hệ KPI + hiệu suất người (9 test) · **P10** Thư viện học + vòng lặp tự học (19 test).
-- 📌 **Tổng test đang xanh: 469** (toàn bộ `scratchpad/test_*.mjs`), trong đó AI đánh giá trend 40.
+- ✅ **Hiện mật khẩu khi đăng nhập** — component dùng chung `PasswordInput` (nút 👁️ bên trong ô). **Mặc định vẫn ẨN**, chỉ hiện khi người dùng chủ động bấm; `type="button"` + `onMouseDown preventDefault` để không submit nhầm và không mất con trỏ đang gõ; giữ `autoComplete` đúng nên trình quản lý mật khẩu vẫn nhận ô. Áp cho **màn Đăng nhập** (mọi tài khoản, mọi vai trò) và **ô đổi mật khẩu trong Hồ sơ**. Ô mật khẩu trong form Admin tạo/sửa người dùng **cố ý để nguyên dạng hiện** — admin cần đọc lại mật khẩu vừa đặt để bàn giao. (12 test)
+- 📌 **Tổng test đang xanh: 481** (toàn bộ `scratchpad/test_*.mjs`), trong đó AI đánh giá trend 40.
 - ✅ **ĐÃ XONG TOÀN BỘ P1→P10.** Còn lại là các mảnh nhỏ: vai trò `TRUONG_MKT`/`GIAM_DOC` riêng, `can()` tập trung (P0), và nâng P4 lên gợi ý AI khi có `ANTHROPIC_API_KEY`.
 
 ### ⚙️ Quy trình deploy (CẬP NHẬT)

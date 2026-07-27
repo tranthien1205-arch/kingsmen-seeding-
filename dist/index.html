@@ -1037,6 +1037,19 @@ function Field({label, children, hint, required}){
 }
 const inputCls = "w-full px-3.5 py-2.5 rounded-xl border border-line text-sm text-ink placeholder:text-slate-400 focus:outline-none focus:ring-4 focus:ring-brand/15 focus:border-brand bg-white transition";
 function Input(p){ return <input {...p} className={inputCls+" "+(p.className||'')}/>; }
+// Ô mật khẩu có nút con mắt để xem lại vừa gõ gì — gõ sai mà không thấy là nguyên nhân
+// đăng nhập hỏng phổ biến nhất, nhất là trên điện thoại. Mặc định vẫn ẨN.
+function PasswordInput({className, ...p}){
+  const [hien,setHien]=useState(false);
+  return <div className="relative">
+    <input {...p} type={hien?'text':'password'} className={inputCls+" pr-11 "+(className||'')}/>
+    <button type="button" tabIndex={-1} onMouseDown={e=>e.preventDefault()} onClick={()=>setHien(v=>!v)}
+      aria-label={hien?'Ẩn mật khẩu':'Hiện mật khẩu'} title={hien?'Ẩn mật khẩu':'Hiện mật khẩu'}
+      className="absolute right-1 top-1/2 -translate-y-1/2 px-2.5 py-1.5 rounded-lg text-base leading-none text-slate-400 hover:text-ink hover:bg-slate-100 transition">
+      {hien?'🙈':'👁️'}
+    </button>
+  </div>;
+}
 function Textarea(p){ return <textarea {...p} className={inputCls+" "+(p.className||'')}/>; }
 function Select({children, ...p}){ return <select {...p} className={inputCls+" "+(p.className||'')}>{children}</select>; }
 
@@ -1124,8 +1137,8 @@ function Login(){
 
         <Field label="Email"><Input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="email@congty.com"
           onKeyDown={e=>e.key==='Enter'&&doLogin()}/></Field>
-        <Field label="Mật khẩu"><Input type="password" value={pw} onChange={e=>setPw(e.target.value)} placeholder="••••••"
-          onKeyDown={e=>e.key==='Enter'&&doLogin()}/></Field>
+        <Field label="Mật khẩu" hint="Bấm 👁️ để xem lại mật khẩu vừa gõ"><PasswordInput value={pw} onChange={e=>setPw(e.target.value)} placeholder="••••••"
+          autoComplete="current-password" onKeyDown={e=>e.key==='Enter'&&doLogin()}/></Field>
         <Btn variant="brand" className="w-full mt-1 py-3" onClick={doLogin} disabled={busy}>{busy?'Đang đăng nhập…':'Đăng nhập →'}</Btn>
 
         {DEMO && <div className="mt-4 pt-3 border-t border-line">
@@ -1308,7 +1321,7 @@ function ProfileModal({open, onClose}){
       <Input value={name} onChange={e=>setName(e.target.value)}/></Field>
     <Field label="Email (đăng nhập)"><Input value={me.email} disabled/></Field>
     <Field label="Đổi mật khẩu" hint="Để trống nếu không đổi">
-      <Input type="password" value={pw} onChange={e=>setPw(e.target.value)} placeholder="Mật khẩu mới"/></Field>
+      <PasswordInput value={pw} onChange={e=>setPw(e.target.value)} placeholder="Mật khẩu mới" autoComplete="new-password"/></Field>
     <div className="flex gap-2 mt-2"><Btn variant="ghost" onClick={onClose}>Huỷ</Btn><Btn variant="brand" className="flex-1" onClick={save} disabled={busy}>{busy?'Đang lưu…':'Lưu'}</Btn></div>
   </Modal>;
 }
