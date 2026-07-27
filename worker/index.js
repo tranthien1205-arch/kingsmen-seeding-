@@ -534,6 +534,71 @@ async function dangLenNenTang(env, kenh, post){
     return {ok:false, loi:'Chưa hiện thực bộ đăng cho '+cap.ten+' — hiện phải đăng tay'};
   }catch(e){ return {ok:false, loi:'Lỗi gọi API: '+(e.message||e)}; }
 }
+// ===== HẠ TẦNG AI DÙNG CHUNG =====
+const AI_MODEL_MAC_DINH='claude-sonnet-4-5';
+async function goiAI(env, {system, messages, max_tokens=4000}){
+  const key=env.ANTHROPIC_API_KEY;
+  if(!key) return {ok:false, thieu_key:true, loi:'Chưa cắm ANTHROPIC_API_KEY'};
+  try{
+    const res=await fetch('https://api.anthropic.com/v1/messages',{ method:'POST',
+      headers:{ 'content-type':'application/json', 'x-api-key':key, 'anthropic-version':'2023-06-01' },
+      body: JSON.stringify({ model: env.ANTHROPIC_MODEL||AI_MODEL_MAC_DINH, max_tokens, system, messages }) });
+    const j=await res.json().catch(()=>({}));
+    if(!res.ok) return {ok:false, loi:'AI trả lỗi: '+((j.error&&j.error.message)||('HTTP '+res.status))};
+    const txt=((j.content||[]).map(c=>c.text||'').join('')||'').trim();
+    if(!txt) return {ok:false, loi:'AI trả về rỗng'};
+    return {ok:true, text:txt};
+  }catch(e){ return {ok:false, loi:'Không gọi được AI: '+(e.message||e)}; }
+}
+// Bảng dữ liệu THẬT đưa cho AI. Chỉ gửi số đã có; KHÔNG bịa, không suy diễn.
+async function boiCanhAI(env, me){
+  const q=async(sql)=>(await env.DB.prepare(sql).all()).results;
+  const [sp,cc,pil,fw,kn,ci,scr,ap,air,kq,tr,sx,bh]=await Promise.all([
+    q(`SELECT ten,dong,thong_so,tieu_chuan,huong_dan FROM san_pham WHERE active=1`),
+    q(`SELECT cum_tu,ly_do,muc_do FROM claim_cam WHERE active=1`),
+    q(`SELECT ten,ty_trong,objective FROM pillars WHERE active=1`),
+    q(`SELECT ten FROM frameworks WHERE active=1`),
+    q(`SELECT ten,loai FROM kenh WHERE active=1`),
+    q(`SELECT trang_thai,loai,thang FROM content_items`),
+    q(`SELECT trang_thai,so_lan_tra,created_by_name FROM scripts`),
+    q(`SELECT cong,trang_thai FROM approvals`),
+    q(`SELECT trang_thai,tieu_de FROM air_posts`),
+    q(`SELECT muc_tin_cay,doanh_thu,so_don,luot_xem,ky FROM ket_qua`),
+    q(`SELECT ten,trang_thai,han_dung FROM trends`),
+    q(`SELECT tieu_de,tt_brief,tt_quay,tt_san_xuat,tt_air,pic_quay,deadline_brief,deadline_sx FROM san_xuat`),
+    q(`SELECT tieu_de,loai,trang_thai,so_mau FROM bai_hoc WHERE trang_thai='DA_DUYET'`),
+  ]);
+  const dem=(arr,f)=>{ const m={}; arr.forEach(x=>{ const k=f(x)||'(trống)'; m[k]=(m[k]||0)+1; }); return m; };
+  const tong=(arr,f)=>arr.reduce((s,x)=>s+(Number(f(x))||0),0);
+  const strat=await env.DB.prepare(`SELECT * FROM content_strategy WHERE id=1`).first()||{};
+  return {
+    chien_luoc:{ okr:strat.okr||'', big_idea:strat.big_idea||'', doi_tuong:strat.audience||'', brand_voice:strat.brand_voice||'' },
+    tru_cot: pil.map(p=>({ten:p.ten, muc_tieu_phan_tram:p.ty_trong, dinh_huong:p.objective})),
+    san_pham: sp.map(x=>({ten:x.ten, dong:x.dong, thong_so:JSON.parse(x.thong_so||'[]'), tieu_chuan:x.tieu_chuan, huong_dan:x.huong_dan})),
+    cum_tu_cam: cc.map(c=>({cum_tu:c.cum_tu, ly_do:c.ly_do, muc_do:c.muc_do})),
+    framework: fw.map(x=>x.ten), kenh: kn.map(x=>({ten:x.ten,loai:x.loai})),
+    ke_hoach:{ tong:ci.length, theo_giai_doan:dem(ci,x=>x.trang_thai), theo_thang:dem(ci,x=>x.thang) },
+    kich_ban:{ tong:scr.length, theo_trang_thai:dem(scr,x=>x.trang_thai), tong_lan_bi_tra:tong(scr,x=>x.so_lan_tra), theo_nguoi:dem(scr,x=>x.created_by_name) },
+    duyet:{ dang_cho:ap.filter(a=>a.trang_thai==='CHO').length, theo_cong:dem(ap.filter(a=>a.trang_thai==='CHO'),x=>x.cong) },
+    dang_bai:{ tong:air.length, theo_trang_thai:dem(air,x=>x.trang_thai) },
+    ket_qua_TACH_3_MUC:{
+      truc_tiep:{ doanh_thu:tong(kq.filter(k=>k.muc_tin_cay==='TRUC_TIEP'),x=>x.doanh_thu), so_don:tong(kq.filter(k=>k.muc_tin_cay==='TRUC_TIEP'),x=>x.so_don) },
+      gian_tiep:{ doanh_thu:tong(kq.filter(k=>k.muc_tin_cay==='GIAN_TIEP'),x=>x.doanh_thu), so_don:tong(kq.filter(k=>k.muc_tin_cay==='GIAN_TIEP'),x=>x.so_don) },
+      khong_quy_don:{ luot_xem:tong(kq.filter(k=>k.muc_tin_cay==='KHONG_QUY_DON'),x=>x.luot_xem) } },
+    trend: tr.map(t=>({ten:t.ten, trang_thai:t.trang_thai, han_dung:t.han_dung})),
+    san_xuat:{ tong:sx.length, theo_tt_quay:dem(sx,x=>x.tt_quay), theo_pic_quay:dem(sx,x=>x.pic_quay) },
+    bai_hoc_da_duyet: bh.map(b=>({tieu_de:b.tieu_de, loai:b.loai, so_mau:b.so_mau})),
+  };
+}
+const AI_NGUYEN_TAC =
+  'NGUYÊN TẮC BẮT BUỘC:\n'+
+  '1. CHỈ dùng số liệu có trong DỮ LIỆU được cung cấp. Không có thì nói thẳng "chưa có dữ liệu" — TUYỆT ĐỐI KHÔNG bịa số, không ước lượng, không suy đoán.\n'+
+  '2. Ba mức tin cậy (Trực tiếp / Gián tiếp / Không quy đơn) KHÔNG BAO GIỜ được cộng lại thành một con số doanh thu. Luôn nói tách bạch kèm mức tin cậy.\n'+
+  '3. KHÔNG dự đoán khả năng viral, %view, hay bài nào sẽ thành công. Chỉ mô tả cái đã xảy ra.\n'+
+  '4. Khi nói về sản phẩm, CHỈ trích dẫn thông số/tiêu chuẩn có thật trong dữ liệu. Không có căn cứ thì không khẳng định.\n'+
+  '5. Tránh mọi cụm từ trong danh sách cấm.\n'+
+  '6. Trả lời bằng tiếng Việt, ngắn gọn, đi thẳng vào việc.';
+
 // ===== AI dựng workflow n8n =====
 // Kiểm tra workflow do AI sinh ra có dùng được không. KHÔNG BAO GIỜ trả JSON hỏng cho người dùng.
 function kiemTraWorkflow(wf){
@@ -1881,6 +1946,62 @@ async function handleApi(request, env){
     await env.DB.prepare(`DELETE FROM san_xuat WHERE id=?`).bind(m[1]).run();
     await logAudit(env,me,'xoá dòng sản xuất','san_xuat',m[1]);
     return json({ db: await bootstrap(env, me) });
+  }
+
+  // ===== AI viết kịch bản (P4) =====
+  if(path==='/scripts/ai-sinh' && method==='POST'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    const fw=body.framework_id ? await env.DB.prepare(`SELECT * FROM frameworks WHERE id=?`).bind(body.framework_id).first() : null;
+    if(!fw) return json({error:'Chọn framework trước'},400);
+    const sp=body.san_pham_id ? await env.DB.prepare(`SELECT * FROM san_pham WHERE id=?`).bind(body.san_pham_id).first() : null;
+    const kn=body.kenh_id ? await env.DB.prepare(`SELECT * FROM kenh WHERE id=?`).bind(body.kenh_id).first() : null;
+    const strat=await env.DB.prepare(`SELECT * FROM content_strategy WHERE id=1`).first()||{};
+    const claims=(await env.DB.prepare(`SELECT * FROM claim_cam WHERE active=1`).all()).results;
+    const bh=(await env.DB.prepare(`SELECT tieu_de,noi_dung FROM bai_hoc WHERE trang_thai='DA_DUYET' LIMIT 5`).all()).results;
+    const thongSo = sp ? JSON.parse(sp.thong_so||'[]') : [];
+    const sys='Bạn viết kịch bản video ngắn cho thương hiệu vật liệu xây dựng Kingsmen.\n'+AI_NGUYEN_TAC+'\n'+
+      'CHỈ trả về JSON thuần dạng {"tieu_de":"...","hook":"...","sections":[{"label":"...","text":"..."}],"cta":"..."} — không giải thích, không markdown fence.\n'+
+      'Nếu thiếu dữ kiện để nói một điều gì đó, viết "[điền …]" thay vì bịa.';
+    const usr='FRAMEWORK: '+fw.ten+(fw.mo_ta?(' — '+fw.mo_ta):'')+'\n'+
+      'SẢN PHẨM: '+(sp?sp.ten:'(chưa chọn)')+'\n'+
+      'THÔNG SỐ THẬT (chỉ được dùng những cái này): '+(thongSo.length?JSON.stringify(thongSo):'(chưa có)')+'\n'+
+      'TIÊU CHUẨN: '+((sp&&sp.tieu_chuan)||'(chưa có)')+'\n'+
+      'HƯỚNG DẪN DÙNG: '+((sp&&sp.huong_dan)||'(chưa có)')+'\n'+
+      'KÊNH: '+(kn?(kn.ten+' ('+kn.loai+')'):'(chưa chọn)')+'\n'+
+      'TÔNG GIỌNG: '+(strat.brand_voice||'(chưa đặt)')+'\n'+
+      'ĐỐI TƯỢNG: '+(strat.audience||'(chưa đặt)')+'\n'+
+      'CỤM TỪ CẤM (tuyệt đối tránh): '+JSON.stringify(claims.map(c=>c.cum_tu))+'\n'+
+      (bh.length?('BÀI HỌC ĐÃ DUYỆT TỪ DỮ LIỆU THẬT:\n'+bh.map(b=>'- '+b.tieu_de+': '+String(b.noi_dung||'').slice(0,200)).join('\n')+'\n'):'')+
+      'GÓC NHÌN: '+((body.angle||'').trim()||'(tự chọn góc phù hợp framework)');
+    const r=await goiAI(env,{system:sys, messages:[{role:'user',content:usr}], max_tokens:2000});
+    if(!r.ok) return json({ok:false, thieu_key:!!r.thieu_key, loi:r.loi},200);
+    let txt=r.text.replace(/^```(?:json)?\s*/i,'').replace(/```\s*$/,'').trim();
+    const i=txt.indexOf('{'), k=txt.lastIndexOf('}');
+    if(i<0||k<0) return json({ok:false, loi:'AI không trả về JSON'},200);
+    let kb; try{ kb=JSON.parse(txt.slice(i,k+1)); }catch(e){ return json({ok:false, loi:'JSON từ AI hỏng: '+e.message},200); }
+    if(!kb || (!kb.hook && !kb.tieu_de)) return json({ok:false, loi:'AI trả kịch bản rỗng'},200);
+    kb.sections=Array.isArray(kb.sections)?kb.sections.filter(x=>x&&(x.label||x.text)):[];
+    // Guardrail: AI vẫn có thể lỡ dùng cụm cấm → kiểm lại, mức CHẶN thì TỪ CHỐI
+    const flags=scanScriptClaims(scriptText(kb), claims);
+    const chan=flags.filter(f=>f.muc_do==='CHAN');
+    if(chan.length) return json({ok:false, loi:'AI viết trúng cụm bị CHẶN ('+chan.map(c=>c.cum_tu).join(', ')+') — hãy thử lại hoặc sửa góc nhìn', blocked:chan.map(c=>c.cum_tu)},200);
+    return json({ok:true, kich_ban:kb, canh_bao:flags.filter(f=>f.muc_do!=='CHAN')});
+  }
+
+  // ===== CHATBOT AI — hỏi đáp trên dữ liệu thật của chính mình =====
+  if(path==='/ai/chat' && method==='POST'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    const msgs=Array.isArray(body.messages)?body.messages.filter(m2=>m2&&m2.role&&m2.content).slice(-12):[];
+    if(!msgs.length) return json({error:'Chưa có câu hỏi'},400);
+    const bc=await boiCanhAI(env, me);
+    const sys='Bạn là trợ lý vận hành nội dung của Kingsmen (Masfico Việt Nam), nói chuyện với '+me.ho_ten+' (vai trò '+me.vai_tro+').\n'+
+      AI_NGUYEN_TAC+'\n'+
+      'Bạn giúp: tra cứu tình hình, giải thích số liệu, gợi ý việc nên làm tiếp, tư vấn hướng nội dung.\n'+
+      'Khi được hỏi con số, trả lời đúng con số trong DỮ LIỆU. Nếu dữ liệu không có, nói rõ là chưa có và gợi ý cần nhập ở đâu.\n'+
+      'DỮ LIỆU THẬT CỦA HỆ THỐNG (JSON):\n'+JSON.stringify(bc);
+    const r=await goiAI(env,{system:sys, messages:msgs, max_tokens:1500});
+    if(!r.ok) return json({ok:false, thieu_key:!!r.thieu_key, loi:r.loi},200);
+    return json({ok:true, tra_loi:r.text});
   }
 
   if(path==='/n8n/sinh-workflow' && method==='POST'){

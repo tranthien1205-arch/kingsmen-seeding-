@@ -754,6 +754,8 @@ function AppProvider({children}){
       resetModuleConfig: async key=>{ if(S.module_config) delete S.module_config[key];
         if(key==='air') S.air_checklist=AIR_CHECKLIST_FE; if(key==='trend') S.trend_check=TREND_CHECK_FE;
         commit(); return true; },
+      aiSinhKichBan: async o=>({ok:false, thieu_key:true, loi:'Chế độ offline không gọi AI được'}),
+      aiChat: async m=>({ok:false, thieu_key:true, loi:'Chế độ offline không gọi AI được'}),
       sinhWorkflowAI: async o=>({ok:false, thieu_key:true, loi:'Chế độ offline không gọi AI được'}),
       daySangSeeding: async (id,o)=>{ const ci=(S.content_items||[]).find(x=>x.id===id); if(!ci) return {ok:false,msg:'Không tìm thấy nội dung'};
         if(ci.trang_thai!=='DUYET') return {ok:false,msg:'Chỉ đẩy nội dung ĐÃ DUYỆT sang seeding'};
@@ -951,6 +953,8 @@ function AppProvider({children}){
     setModuleConfig: async (key,cau_hinh) => { try { const r=await call('/module-config/'+key,{method:'PATCH',body:{cau_hinh}}); if(r&&r.db) setDb(r.db); return {ok:true}; }
       catch(e){ return {ok:false,msg:e.message}; } },
     resetModuleConfig: key => mut('/module-config/'+key+'/reset', {method:'POST'}),
+    aiSinhKichBan: async o => { try { return await call('/scripts/ai-sinh',{method:'POST',body:o}); } catch(e){ return {ok:false,loi:e.message}; } },
+    aiChat: async messages => { try { return await call('/ai/chat',{method:'POST',body:{messages}}); } catch(e){ return {ok:false,loi:e.message}; } },
     sinhWorkflowAI: async o => { try { return await call('/n8n/sinh-workflow',{method:'POST',body:o}); }
       catch(e){ return {ok:false, loi:e.message}; } },
     daySangSeeding: async (id,o) => { try { const r=await call('/content/'+id+'/day-seeding',{method:'POST',body:o||{}}); if(r&&r.db) setDb(r.db); return {ok:true,topic_id:r.topic_id}; }
@@ -1231,6 +1235,58 @@ const NAV_GROUPS = {
   ],
 };
 
+// Chatbot — hỏi đáp trên DỮ LIỆU THẬT của chính hệ thống, không phải chatbot chung chung
+function ChatBot(){
+  const { db, aiChat, me } = useApp();
+  const [mo,setMo]=useState(false);
+  const [msgs,setMsgs]=useState([]);
+  const [txt,setTxt]=useState(''); const [busy,setBusy]=useState(false);
+  const cuoiRef=useRef();
+  useEffect(()=>{ if(cuoiRef.current) cuoiRef.current.scrollIntoView({block:'end'}); },[msgs,busy]);
+  const goiY=['Hôm nay tôi nên làm gì trước?','Còn bao nhiêu bài chờ duyệt?','Tháng này kế hoạch đạt bao nhiêu %?','Ai đang trễ nhiều nhất?'];
+  const gui=async(noiDung)=>{ const q=(noiDung||txt).trim(); if(!q||busy) return;
+    const moi=[...msgs,{role:'user',content:q}];
+    setMsgs(moi); setTxt(''); setBusy(true);
+    const r=await aiChat(moi.map(m=>({role:m.role,content:m.content})));
+    setBusy(false);
+    if(r&&r.ok) setMsgs([...moi,{role:'assistant',content:r.tra_loi}]);
+    else setMsgs([...moi,{role:'assistant',content:'⚠ '+(r&&r.thieu_key?'Chưa cắm ANTHROPIC_API_KEY nên tôi chưa trả lời được. Nhờ kỹ thuật chạy: wrangler secret put ANTHROPIC_API_KEY':((r&&r.loi)||'Không gọi được AI')),loi:true}]); };
+  if(!mo) return <button onClick={()=>setMo(true)}
+    className="fixed right-4 bottom-20 sm:bottom-6 z-30 w-12 h-12 rounded-full bg-brand text-white shadow-lift flex items-center justify-center text-xl hover:scale-105 transition"
+    title="Hỏi trợ lý">🤖</button>;
+  return <div className="fixed inset-x-2 bottom-20 sm:inset-x-auto sm:right-4 sm:bottom-6 sm:w-96 z-30 bg-white rounded-2xl border border-line shadow-lift flex flex-col max-h-[70vh]">
+    <div className="flex items-center justify-between px-3 py-2 border-b border-line">
+      <div className="text-sm font-semibold text-ink">🤖 Trợ lý Kingsmen</div>
+      <div className="flex gap-2">
+        {msgs.length>0 && <button onClick={()=>setMsgs([])} className="text-[11px] text-slate-400 hover:underline">Xoá</button>}
+        <button onClick={()=>setMo(false)} className="text-slate-400 text-sm">✕</button>
+      </div>
+    </div>
+    <div className="flex-1 overflow-y-auto p-3 space-y-2 min-h-[160px]">
+      {msgs.length===0 && <div className="space-y-2">
+        <div className="text-[11px] text-slate-500 leading-relaxed">
+          Tôi đọc được <b>dữ liệu thật</b> trong app: kế hoạch, kịch bản, duyệt, đăng, kết quả, sản xuất, trend.
+          <span className="block mt-1 text-slate-400">Không có số thì tôi nói chưa có — không đoán, không bịa.</span>
+        </div>
+        <div className="flex flex-wrap gap-1">{goiY.map(g=>
+          <button key={g} onClick={()=>gui(g)} className="text-[11px] px-2 py-1 rounded-full bg-slate-100 text-slate-600 hover:bg-brand/10 hover:text-brand-dark">{g}</button>)}
+        </div>
+      </div>}
+      {msgs.map((m,i)=>
+        <div key={i} className={"text-sm "+(m.role==='user'?'text-right':'')}>
+          <div className={"inline-block rounded-2xl px-3 py-1.5 max-w-[90%] whitespace-pre-wrap text-left "+
+            (m.role==='user'?'bg-brand text-white':(m.loi?'bg-rose-50 text-rose-700 border border-rose-200':'bg-slate-100 text-ink'))}>{m.content}</div>
+        </div>)}
+      {busy && <div className="text-xs text-slate-400">Đang xem dữ liệu…</div>}
+      <div ref={cuoiRef}></div>
+    </div>
+    <div className="p-2 border-t border-line flex gap-2">
+      <input value={txt} onChange={e=>setTxt(e.target.value)} onKeyDown={e=>{ if(e.key==='Enter') gui(); }}
+        placeholder="Hỏi về tình hình nội dung…" className="flex-1 min-w-0 text-sm border border-line rounded-xl px-3 py-2 focus:outline-none focus:border-brand"/>
+      <Btn variant="brand" onClick={()=>gui()} disabled={busy||!txt.trim()}>Gửi</Btn>
+    </div>
+  </div>;
+}
 function ProfileModal({open, onClose}){
   const { me, updateProfile, notify } = useApp();
   const [name, setName] = useState('');
@@ -1391,6 +1447,7 @@ function Shell(){
     </nav>
 
     <ProfileModal open={profileOpen} onClose={()=>setProfileOpen(false)}/>
+    {(me.vai_tro===ROLES.MARKETING||me.vai_tro===ROLES.ADMIN) && <ChatBot/>}
   </div>;
 }
 
@@ -2359,6 +2416,62 @@ function LocVideoTool(){
     <CauNoiFootage/>
   </div>;
 }
+// AI CHẠY NGAY TRÊN MÁY — miễn phí, không gọi API, video không rời máy bạn.
+// Nạp transformers.js theo yêu cầu (không nạp sẵn vì thư viện nặng).
+const TJS_URL='https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.0.2';
+let _tjs=null, _asr=null;
+async function napTJS(){ if(_tjs) return _tjs; _tjs=await import(TJS_URL); return _tjs; }
+async function napWhisper(model, onTien){
+  if(_asr && _asr._id===model) return _asr;
+  const t=await napTJS();
+  const p=await t.pipeline('automatic-speech-recognition', model, { progress_callback: onTien });
+  p._id=model; _asr=p; return p;
+}
+// Tách âm thanh từ video/ảnh động bằng WebAudio (không cần ffmpeg cho bước này)
+async function layPCM(file){
+  const buf=await file.arrayBuffer();
+  const AC=window.AudioContext||window.webkitAudioContext;
+  const ctx=new AC({sampleRate:16000});
+  const audio=await ctx.decodeAudioData(buf);
+  const ch=audio.numberOfChannels>1
+    ? (()=>{ const a=audio.getChannelData(0), b=audio.getChannelData(1), o=new Float32Array(a.length);
+             for(let i=0;i<a.length;i++) o[i]=(a[i]+b[i])/2; return o; })()
+    : audio.getChannelData(0);
+  ctx.close&&ctx.close();
+  return ch;
+}
+function BocLoiThoai({onXong}){
+  const { notify } = useApp();
+  const [busy,setBusy]=useState(false); const [tien,setTien]=useState(''); const [model,setModel]=useState('onnx-community/whisper-base');
+  const fileRef=useRef();
+  const chay=async e=>{ const fl=e.target.files&&e.target.files[0]; e.target.value=''; if(!fl) return;
+    setBusy(true); setTien('Đang nạp mô hình (lần đầu tải vài trăm MB, sau đó dùng lại offline)…');
+    try{
+      const asr=await napWhisper(model, p=>{ if(p&&p.status==='progress'&&p.file) setTien('Tải '+p.file+' — '+Math.round(p.progress||0)+'%'); });
+      setTien('Đang tách âm thanh…');
+      const pcm=await layPCM(fl);
+      setTien('Đang nghe và ghi lời thoại…');
+      const kq=await asr(pcm, {language:'vietnamese', task:'transcribe', chunk_length_s:30, stride_length_s:5});
+      const text=String((kq&&kq.text)||'').trim();
+      if(!text){ notify('Không nghe được lời thoại nào trong file này','warn'); }
+      else { onXong&&onXong(text); notify('Đã bóc '+text.length+' ký tự lời thoại'); }
+    }catch(err){ notify('Không bóc được lời thoại: '+(err.message||err),'err'); }
+    finally{ setBusy(false); setTien(''); } };
+  return <div className="rounded-xl border border-line p-2 bg-slate-50">
+    <div className="text-[11px] font-semibold text-ink mb-1">🎧 Bóc lời thoại từ video (AI chạy trên máy — miễn phí)</div>
+    <div className="text-[10px] text-slate-500 mb-2">Video <b>không rời máy bạn</b>, không gọi API, không tốn phí. Cần Chrome/Edge trên máy tính.</div>
+    <div className="flex flex-wrap gap-2 items-end">
+      <Field label="Mô hình"><Select value={model} onChange={e=>setModel(e.target.value)} disabled={busy}>
+        <option value="onnx-community/whisper-tiny">Nhanh nhất (~80 MB) — nghe tiếng Việt kém</option>
+        <option value="onnx-community/whisper-base">Cân bằng (~200 MB)</option>
+        <option value="onnx-community/whisper-small">Chính xác nhất (~500 MB) — chậm</option>
+      </Select></Field>
+      <Btn variant="ghost" onClick={()=>fileRef.current&&fileRef.current.click()} disabled={busy}>{busy?'Đang xử lý…':'🎬 Chọn video'}</Btn>
+      <input ref={fileRef} type="file" accept="video/*,audio/*" className="hidden" onChange={chay}/>
+    </div>
+    {tien && <div className="text-[11px] text-brand-dark mt-2 font-semibold">{tien}</div>}
+  </div>;
+}
 // Cầu nối: lọc xong ở công cụ → kéo thẳng file đã chọn vào kho footage (gắn thẻ chung 1 lần)
 function CauNoiFootage(){
   const { db, createFootage, uploadMedia, notify } = useApp();
@@ -2485,7 +2598,7 @@ function CreativeStudio(){
   </div>;
 }
 function ScriptEditor({init, onClose}){
-  const { db, upsertScript, deleteScript, fetchScriptVersions, notify } = useApp();
+  const { db, upsertScript, deleteScript, fetchScriptVersions, aiSinhKichBan, notify } = useApp();
   const brandVoice0 = (db.content_strategy||{}).brand_voice||'';
   const [f,setF]=useState(()=>({
     id:init.id, framework_id:init.framework_id||'', san_pham_id:init.san_pham_id||'', kenh_id:init.kenh_id||'', content_item_id:init.content_item_id||'',
@@ -2493,6 +2606,7 @@ function ScriptEditor({init, onClose}){
     brand_voice:init.brand_voice||brandVoice0, trang_thai:init.trang_thai||'NHAP',
   }));
   const [angle,setAngle]=useState(''); const [busy,setBusy]=useState(false); const [vers,setVers]=useState(null);
+  const [aiBusy,setAiBusy]=useState(false); const [aiLoi,setAiLoi]=useState('');
   // trạng thái lấy từ db (đổi theo kết quả duyệt), không lấy từ form
   const curTrangThai = ((db.scripts||[]).find(s=>s.id===f.id)||{}).trang_thai || f.trang_thai;
   const product = (db.san_pham||[]).find(p=>p.id===f.san_pham_id);
@@ -2507,6 +2621,15 @@ function ScriptEditor({init, onClose}){
   const warns = flags.filter(x=>x.muc_do!=='CHAN');
   const specArr = product && Array.isArray(product.thong_so) ? product.thong_so.filter(Boolean) : [];
 
+  const aiViet=async()=>{ if(!f.framework_id) return notify('Chọn framework trước','warn');
+    setAiBusy(true); setAiLoi('');
+    const r=await aiSinhKichBan({framework_id:f.framework_id, san_pham_id:f.san_pham_id||null, kenh_id:f.kenh_id||null, angle});
+    setAiBusy(false);
+    if(r&&r.ok&&r.kich_ban){ const kb=r.kich_ban;
+      setF(v=>({...v, tieu_de:kb.tieu_de||v.tieu_de, hook:kb.hook||'', sections:kb.sections||[], cta:kb.cta||''}));
+      notify((r.canh_bao&&r.canh_bao.length)?('AI viết xong — có '+r.canh_bao.length+' cụm cần rà lại'):'AI viết xong — hãy đọc và sửa cho đúng thực tế');
+      return; }
+    setAiLoi(r&&r.thieu_key ? 'Chưa cắm ANTHROPIC_API_KEY nên chưa dùng được AI — bấm “Sinh nháp theo khuôn” để làm tiếp.' : ((r&&r.loi)||'AI không viết được')); };
   const gen=()=>{ if(!framework) return notify('Chọn framework trước','warn');
     const g=generateScript({framework, product, angle, audience});
     setF(v=>({...v, hook:g.hook, sections:g.sections, cta:g.cta, tieu_de:v.tieu_de||((product&&product.ten||'')+' — '+(angle||framework.ten)) }));
@@ -2564,7 +2687,12 @@ function ScriptEditor({init, onClose}){
           {specArr.length===0 && !product.tieu_chuan && <span className="text-[11px] text-amber-600">Sản phẩm chưa có thông số — nên bổ sung ở mục Sản phẩm & Claim.</span>}
         </div>
       </div>}
-      <Btn variant="brand" onClick={gen}>✨ Sinh nháp theo framework</Btn>
+      <div className="flex flex-wrap gap-2">
+        <Btn variant="brand" onClick={aiViet} disabled={aiBusy}>{aiBusy?'AI đang viết…':'🤖 Nhờ AI viết'}</Btn>
+        <Btn variant="ghost" onClick={gen}>✨ Sinh nháp theo khuôn</Btn>
+      </div>
+      {aiLoi && <div className="rounded-lg bg-rose-50 border border-rose-200 p-2 text-[11px] text-rose-700">{aiLoi}</div>}
+      <p className="text-[10px] text-slate-400">AI chỉ được dùng thông số thật của sản phẩm; nếu viết trúng cụm bị chặn thì hệ thống từ chối, không đưa ra cho bạn.</p>
     </div>
 
     {/* Guardrail */}
@@ -2833,7 +2961,8 @@ function AirEditor({post, onClose}){
           <Input value={f.media_url} onChange={e=>setF({...f,media_url:e.target.value})} placeholder="/media/… hoặc https://…" disabled={posted}/>
           {!posted && <Btn variant="ghost" onClick={()=>setPickFt(true)}>🎞 Kho</Btn>}
         </div></Field>
-      <Field label="Ghi chú"><Textarea rows="2" value={f.ghi_chu} onChange={e=>setF({...f,ghi_chu:e.target.value})} disabled={posted}/></Field>
+      <Field label="Ghi chú / Caption"><Textarea rows="3" value={f.ghi_chu} onChange={e=>setF({...f,ghi_chu:e.target.value})} disabled={posted}/></Field>
+      {!posted && <BocLoiThoai onXong={t=>setF(v=>({...v, ghi_chu:(v.ghi_chu?v.ghi_chu+'\n\n':'')+t}))}/>}
     </div>
 
     <div className="bg-white rounded-2xl border border-line shadow-card p-4">
@@ -3876,6 +4005,7 @@ function FootageForm({init,onClose}){
     <Field label="Thẻ (tag)" hint="Cách nhau bằng dấu phẩy — dùng để tìm lại nhanh">
       <Input value={f.tags} onChange={e=>setF({...f,tags:e.target.value})} placeholder="chít mạch, cận cảnh, nhà tắm"/></Field>
     <Field label="Mô tả"><Textarea rows="2" value={f.mo_ta} onChange={e=>setF({...f,mo_ta:e.target.value})}/></Field>
+    <BocLoiThoai onXong={t=>setF(v=>({...v, mo_ta:(v.mo_ta?v.mo_ta+'\n\n':'')+t}))}/>
     <div className="grid sm:grid-cols-3 gap-2">
       <Field label="Sản phẩm"><Select value={f.san_pham_id} onChange={e=>setF({...f,san_pham_id:e.target.value})}><option value="">—</option>{(db.san_pham||[]).map(p=><option key={p.id} value={p.id}>{p.ten}</option>)}</Select></Field>
       <Field label="Địa điểm"><Input value={f.dia_diem} onChange={e=>setF({...f,dia_diem:e.target.value})}/></Field>

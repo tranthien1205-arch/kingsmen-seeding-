@@ -86,6 +86,13 @@ App hiện tại KHÔNG phải Next.js/Supabase như brief gốc. Ta **thích �
 1. **SheetJS nạp từ `cdn.sheetjs.com`** → CDN bị chặn/chậm là `XLSX` không bao giờ tồn tại, user không import được lần nào. **Nay TỰ HOST `/vendor/xlsx.full.min.js`** (giống `tools/vendor/ffmpeg/`). **Không dùng CDN bên thứ ba cho thư viện sống-còn.**
 2. **Parse cả workbook** để lấy 1 sheet → file Social 1.8 MB / 36 sheet treo giao diện. **Nay `bookSheets:true` lấy tên sheet trước, rồi `{sheets:sn}` parse đúng 1 sheet** (nhanh ~4.6×), có báo "đang đọc".
 
+### ✅ AI TRONG APP (3 mảng)
+**Hạ tầng chung:** `goiAI()` gọi Anthropic; `boiCanhAI()` dựng ảnh chụp dữ liệu THẬT; `AI_NGUYEN_TAC` là system prompt ép 6 nguyên tắc (không bịa số · **không cộng dồn 3 mức tin cậy** · không dự đoán viral · chỉ trích spec thật · tránh cụm cấm · trả lời tiếng Việt). Thiếu key → `thieu_key:true`, **không bao giờ giả vờ trả lời**.
+1. **AI viết kịch bản** `POST /scripts/ai-sinh` — prompt kèm **thông số/tiêu chuẩn thật** của sản phẩm + brand voice + **danh sách cụm cấm** + **bài học đã duyệt (RAG)**. Output **quét lại claim**: chạm mức CHẶN → **từ chối, không đưa cho user**. Nút "🤖 Nhờ AI viết" cạnh nút sinh theo khuôn.
+2. **Chatbot** `POST /ai/chat` (nút nổi, chỉ MKT/ADMIN) — hỏi đáp trên dữ liệu thật. Bối cảnh gửi đi có `ket_qua_TACH_3_MUC` nên **AI không thể cộng nhầm**; **không gửi mật khẩu/dữ liệu nhạy cảm**.
+3. **AI CHẠY TRÊN MÁY — MIỄN PHÍ** (`BocLoiThoai`): Whisper qua transformers.js, tách âm bằng WebAudio, bóc lời thoại video → điền caption bài đăng / mô tả footage. **Video không rời máy, không gọi API, không tốn phí.** Nạp thư viện theo yêu cầu (lazy) vì nặng.
+- Test: 20/20 (gồm AI lỡ viết cụm CHẶN → chặn; AI trả rác; thiếu key; RBAC).
+
 ## 4. REGISTRY BẢNG D1 (nguồn sự thật schema)
 **Nền tảng & Seeding (Domain A — ĐANG CHẠY, không đụng):**
 `users, sessions, groups, content_topics, cmt_suggestions, post_seedings, cmt_seedings, cmt_proofs, audit, pricing, filming_templates, filming_phases, filming_shots, project_filmings, filming_uploads, guides, post_type_prefs, post_slots, media_library`
@@ -304,7 +311,7 @@ Tokens Tailwind (inline config trong `seeding-app.html`): `ink #0b3543` (soft #1
   **Chảy ngược:** `gomSeedingTheoNoiDung()` gom số bài / bài đạt / react / cmt về từng `content_item`; hiện ở cột **Seeding** trong Kế hoạch nội dung. **CHỦ Ý chỉ đếm, KHÔNG quy ra doanh thu** — seeding không quy đơn được (§9), có test chặn hồi quy. (18 test)
 - ▶️ **Kế tiếp:** gỡ `BETA_KEYS` khi user duyệt xong; thêm `TRUONG_MKT`/`GIAM_DOC`; nâng P4 lên gợi ý AI khi có `ANTHROPIC_API_KEY`. Còn lại (giá trị thấp): `media_library` ↔ `footage`.
 - **P8** Nhập kết quả 3 mức tin cậy (25 test) · **P5** Kho footage & shot list (22 test) · **P9** Dashboard 4 hệ KPI + hiệu suất người (9 test) · **P10** Thư viện học + vòng lặp tự học (19 test).
-- 📌 **Tổng test đang xanh:** import 8 · Creative Studio 16 · Duyệt 22 · Đăng bài 21 · Kết quả 25 · Footage 22 · Thư viện học 19 · công cụ 13 · chống trùng seeding 13 = **351**.
+- 📌 **Tổng test đang xanh:** import 8 · Creative Studio 16 · Duyệt 22 · Đăng bài 21 · Kết quả 25 · Footage 22 · Thư viện học 19 · công cụ 13 · chống trùng seeding 13 = **371**.
 - ✅ **ĐÃ XONG TOÀN BỘ P1→P10.** Còn lại là các mảnh nhỏ: vai trò `TRUONG_MKT`/`GIAM_DOC` riêng, `can()` tập trung (P0), và nâng P4 lên gợi ý AI khi có `ANTHROPIC_API_KEY`.
 
 ### ⚙️ Quy trình deploy (CẬP NHẬT)
