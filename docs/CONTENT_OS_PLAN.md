@@ -369,7 +369,14 @@ Tokens Tailwind (inline config trong `seeding-app.html`): `ink #0b3543` (soft #1
   - `soTien()` gác đầu vào: ô trống/rác → `null` chứ không phải 0; hiểu được cả `"1.089.000"` (phân cách nghìn) lẫn `"8,5"` (thập phân) mà không lẫn lộn.
   - **Ranh giới AI — cố ý bất đối xứng:** chatbot nội bộ **ĐƯỢC** biết giá niêm yết (nhân viên hay hỏi); còn `/scripts/ai-sinh` (kịch bản đăng công khai) **KHÔNG** nhận giá và system prompt cấm thẳng việc nêu giá — *bảng giá đổi theo đợt, video đã đăng thì nằm đó mãi với con số cũ*. Ngược lại **bảo hành thì được trích** vì đó là cam kết chính thức, bền theo thời gian.
   - UI: thẻ sản phẩm hiện giá sau thuế hoặc chữ **"chưa có giá"** (màu cảnh báo, không phải "0 ₫"); form nhập có cảnh báo lệch giá trước/sau thuế nhưng **chỉ nhắc, không tự sửa số người nhập**; xuất/nhập CSV kèm đủ cột giá. (41 test backend + 17 test UI)
-- 📌 **Tổng test đang xanh: 700** (toàn bộ `scratchpad/test_*.mjs`), trong đó AI đánh giá trend 40.
+- ✅ **CREATIVE STUDIO DÙNG CHUNG KEY GEMINI với công cụ Lọc & dựng video** — trước đây hai chỗ chạy hai hệ AI khác nhau (Creative Studio = Anthropic ở server; Lọc video = Gemini bằng key người dùng lưu trong trình duyệt), nên cắm key ở một chỗ mà chỗ kia vẫn báo thiếu key.
+  - Tách `/scripts/ai-sinh` thành **2 hàm dùng chung**: `promptKichBan()` (dựng prompt từ định hướng thương hiệu) và `duyetKichBanAI()` (thẩm định kết quả: parse JSON, khớp bước có thật, quét cụm từ cấm). Mọi đường gọi AI đều đi qua đúng 2 hàm này.
+  - 2 endpoint mới: `POST /scripts/ai-sinh/prompt` (server dựng prompt) và `POST /scripts/ai-sinh/ket-qua` (server thẩm định văn bản AI trả về). Trình duyệt kẹp ở giữa: tự gọi Gemini bằng key đọc từ `localStorage['locvideo_vision']` — cùng origin nên dùng lại được key đã cắm ở công cụ Lọc video.
+  - **Key không rời máy người dùng:** không gửi lên server, không vào D1 — đúng nguyên tắc token đã áp cho `N8N_TOKEN`/`YOUTUBE_API_KEY`. Có test quét mã chứng minh không request nào mang key lên server.
+  - **Đường Gemini KHÔNG lỏng hơn đường Anthropic:** `/ket-qua` luôn đọc lại `claim_cam` từ DB, **không nhận danh sách cụm cấm do trình duyệt gửi lên** (có test thử lách bằng `claims:[]` → vô hiệu). Có test đối chứng: cùng một văn bản AI, hai đường trả kết quả **giống hệt nhau**.
+  - UI: nút "🤖 Nhờ AI viết" **tự rơi sang Gemini** khi app chưa cắm `ANTHROPIC_API_KEY` mà máy đã có key Gemini — không bắt bấm lại, và báo rõ kịch bản này do key của họ viết. Chưa có key nào thì chỉ thẳng chỗ cắm thay vì chỉ báo lỗi.
+  - Lỗi Gemini được dịch ra việc cần làm: hết quota (429) → gợi ý đổi model flash / bật thanh toán; key sai → chỉ đúng chỗ sửa. (16 test backend + 15 test frontend)
+- 📌 **Tổng test đang xanh: 731** (toàn bộ `scratchpad/test_*.mjs`), trong đó AI đánh giá trend 40.
 - ✅ **ĐÃ XONG TOÀN BỘ P1→P10.** Còn lại là các mảnh nhỏ: vai trò `TRUONG_MKT`/`GIAM_DOC` riêng, `can()` tập trung (P0), và nâng P4 lên gợi ý AI khi có `ANTHROPIC_API_KEY`.
 
 ### ⚙️ Quy trình deploy (CẬP NHẬT)

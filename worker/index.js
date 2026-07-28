@@ -1110,6 +1110,64 @@ function scanScriptClaims(text, claims){
   return (claims||[]).filter(c=>c.cum_tu && t.includes(String(c.cum_tu).toLowerCase()))
     .map(c=>({ cum_tu:c.cum_tu, ly_do:c.ly_do||'', muc_do:c.muc_do||'CANH_BAO' }));
 }
+// P4 — DỰNG PROMPT KỊCH BẢN. Một nguồn duy nhất cho mọi đường gọi AI (Anthropic ở server
+// HAY Gemini chạy trong trình duyệt bằng key riêng của người dùng) — đổi luật ở đây là
+// đổi cho tất cả, không có đường nào lách được guardrail.
+async function promptKichBan(env, body){
+  const fw=body.framework_id ? await env.DB.prepare(`SELECT * FROM frameworks WHERE id=?`).bind(body.framework_id).first() : null;
+  if(!fw) return {ok:false, loi:'Chọn framework trước'};
+  const sp=body.san_pham_id ? await env.DB.prepare(`SELECT * FROM san_pham WHERE id=?`).bind(body.san_pham_id).first() : null;
+  const kn=body.kenh_id ? await env.DB.prepare(`SELECT * FROM kenh WHERE id=?`).bind(body.kenh_id).first() : null;
+  const strat=await env.DB.prepare(`SELECT * FROM content_strategy WHERE id=1`).first()||{};
+  const claims=(await env.DB.prepare(`SELECT * FROM claim_cam WHERE active=1`).all()).results;
+  const bh=(await env.DB.prepare(`SELECT tieu_de,noi_dung FROM bai_hoc WHERE trang_thai='DA_DUYET' LIMIT 5`).all()).results;
+  const thongSo = sp ? JSON.parse(sp.thong_so||'[]') : [];
+  // Danh sách bước quay CÓ THẬT trong nguồn footage đã import (vd từ công cụ Lọc video) —
+  // khi có, bắt AI viết ĐÚNG những bước này, không bịa cảnh không có source.
+  const cacBuoc=Array.isArray(body.cac_buoc)?body.cac_buoc.map(s=>String(s||'').trim()).filter(Boolean).slice(0,60):[];
+  const sys='Bạn viết kịch bản video ngắn cho thương hiệu vật liệu xây dựng Kingsmen.\n'+AI_NGUYEN_TAC+'\n'+
+    'KHÔNG nêu giá bán, khuyến mãi hay con số tiền nào — bảng giá thay đổi theo đợt còn video đã đăng thì nằm đó mãi. Cần nói về giá thì viết "[điền giá]".\n'+
+    (cacBuoc.length
+      ? '7. Nguồn quay THẬT chỉ có các bước liệt kê trong "CÁC BƯỚC CÓ SẴN" — mỗi mục sections BẮT BUỘC gắn field "buoc" bằng ĐÚNG NGUYÊN VĂN một tên trong danh sách đó (copy y hệt, không đổi chữ). KHÔNG viết cảnh nào không có bước tương ứng trong danh sách. Nếu là hook mở đầu hoặc CTA không cần cảnh quay riêng thì để "buoc":null.\n'
+      : '')+
+    'CHỈ trả về JSON thuần dạng {"tieu_de":"...","hook":"...","sections":[{"label":"...","buoc":'+(cacBuoc.length?'"<tên bước nguyên văn hoặc null>"':'null')+',"text":"..."}],"cta":"..."} — không giải thích, không markdown fence.\n'+
+    'Nếu thiếu dữ kiện để nói một điều gì đó, viết "[điền …]" thay vì bịa.';
+  const usr='FRAMEWORK: '+fw.ten+(fw.mo_ta?(' — '+fw.mo_ta):'')+'\n'+
+    'SẢN PHẨM: '+(sp?sp.ten:'(chưa chọn)')+'\n'+
+    'THÔNG SỐ THẬT (chỉ được dùng những cái này): '+(thongSo.length?JSON.stringify(thongSo):'(chưa có)')+'\n'+
+    'TIÊU CHUẨN: '+((sp&&sp.tieu_chuan)||'(chưa có)')+'\n'+
+    // Bảo hành là cam kết chính thức trong bảng giá → được trích. GIÁ thì KHÔNG gửi:
+    // bảng giá đổi theo đợt, còn video đã đăng thì sống mãi với con số cũ.
+    'BẢO HÀNH (cam kết chính thức, được trích nguyên văn): '+((sp&&sp.bao_hanh)||'(chưa có)')+'\n'+
+    'HƯỚNG DẪN DÙNG: '+((sp&&sp.huong_dan)||'(chưa có)')+'\n'+
+    'KÊNH: '+(kn?(kn.ten+' ('+kn.loai+')'):'(chưa chọn)')+'\n'+
+    'TÔNG GIỌNG: '+(strat.brand_voice||'(chưa đặt)')+'\n'+
+    'ĐỐI TƯỢNG: '+(strat.audience||'(chưa đặt)')+'\n'+
+    'CỤM TỪ CẤM (tuyệt đối tránh): '+JSON.stringify(claims.map(c=>c.cum_tu))+'\n'+
+    (bh.length?('BÀI HỌC ĐÃ DUYỆT TỪ DỮ LIỆU THẬT:\n'+bh.map(b=>'- '+b.tieu_de+': '+String(b.noi_dung||'').slice(0,200)).join('\n')+'\n'):'')+
+    (cacBuoc.length?('CÁC BƯỚC CÓ SẴN TRONG NGUỒN QUAY (theo đúng thứ tự, chỉ được dùng những bước này):\n'+cacBuoc.map((b,idx)=>(idx+1)+'. '+b).join('\n')+'\n'):'')+
+    'GÓC NHÌN: '+((body.angle||'').trim()||'(tự chọn góc phù hợp framework)');
+  return {ok:true, sys, usr, cacBuoc, claims};
+}
+// P4 — THẨM ĐỊNH kết quả AI trả về. Dùng chung cho mọi nhà cung cấp AI: bất kể văn bản này
+// do Anthropic hay Gemini sinh ra, nó đều phải qua đúng bộ kiểm này mới tới tay người dùng.
+function duyetKichBanAI(text, cacBuoc, claims){
+  let txt=String(text||'').replace(/^```(?:json)?\s*/i,'').replace(/```\s*$/,'').trim();
+  const i=txt.indexOf('{'), k=txt.lastIndexOf('}');
+  if(i<0||k<0) return {ok:false, loi:'AI không trả về JSON'};
+  let kb; try{ kb=JSON.parse(txt.slice(i,k+1)); }catch(e){ return {ok:false, loi:'JSON từ AI hỏng: '+e.message}; }
+  if(!kb || (!kb.hook && !kb.tieu_de)) return {ok:false, loi:'AI trả kịch bản rỗng'};
+  const ds=Array.isArray(cacBuoc)?cacBuoc:[];
+  kb.sections=Array.isArray(kb.sections)?kb.sections.filter(x=>x&&(x.label||x.text)).map(x=>({
+    label:x.label||'', text:x.text||'',
+    // AI tự xưng một bước không có trong nguồn → gạt về null, không tin theo AI
+    buoc:(ds.length && x.buoc && ds.includes(String(x.buoc).trim())) ? String(x.buoc).trim() : null,
+  })):[];
+  const flags=scanScriptClaims(scriptText(kb), claims);
+  const chan=flags.filter(f=>f.muc_do==='CHAN');
+  if(chan.length) return {ok:false, loi:'AI viết trúng cụm bị CHẶN ('+chan.map(c=>c.cum_tu).join(', ')+') — hãy thử lại hoặc sửa góc nhìn', blocked:chan.map(c=>c.cum_tu)};
+  return {ok:true, kich_ban:kb, canh_bao:flags.filter(f=>f.muc_do!=='CHAN')};
+}
 async function insertContentItem(env, me, body){
   const id=uid('ci');
   await env.DB.prepare(`INSERT INTO content_items (id,loai,tieu_de,loai_muc_tieu,pillar_id,framework_id,san_pham_id,kenh_id,thang,trang_thai,pic,chi_tiet,links,created_at,created_by,created_by_name,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
@@ -2339,55 +2397,29 @@ async function handleApi(request, env){
   }
   if(path==='/scripts/ai-sinh' && method==='POST'){
     if(!isStaff(me)) return json({error:'Không có quyền'},403);
-    const fw=body.framework_id ? await env.DB.prepare(`SELECT * FROM frameworks WHERE id=?`).bind(body.framework_id).first() : null;
-    if(!fw) return json({error:'Chọn framework trước'},400);
-    const sp=body.san_pham_id ? await env.DB.prepare(`SELECT * FROM san_pham WHERE id=?`).bind(body.san_pham_id).first() : null;
-    const kn=body.kenh_id ? await env.DB.prepare(`SELECT * FROM kenh WHERE id=?`).bind(body.kenh_id).first() : null;
-    const strat=await env.DB.prepare(`SELECT * FROM content_strategy WHERE id=1`).first()||{};
-    const claims=(await env.DB.prepare(`SELECT * FROM claim_cam WHERE active=1`).all()).results;
-    const bh=(await env.DB.prepare(`SELECT tieu_de,noi_dung FROM bai_hoc WHERE trang_thai='DA_DUYET' LIMIT 5`).all()).results;
-    const thongSo = sp ? JSON.parse(sp.thong_so||'[]') : [];
-    // Danh sách bước quay CÓ THẬT trong nguồn footage đã import (vd từ công cụ Lọc video) —
-    // khi có, bắt AI viết ĐÚNG những bước này, không bịa cảnh không có source.
-    const cacBuoc=Array.isArray(body.cac_buoc)?body.cac_buoc.map(s=>String(s||'').trim()).filter(Boolean).slice(0,60):[];
-    const sys='Bạn viết kịch bản video ngắn cho thương hiệu vật liệu xây dựng Kingsmen.\n'+AI_NGUYEN_TAC+'\n'+
-      'KHÔNG nêu giá bán, khuyến mãi hay con số tiền nào — bảng giá thay đổi theo đợt còn video đã đăng thì nằm đó mãi. Cần nói về giá thì viết "[điền giá]".\n'+
-      (cacBuoc.length
-        ? '7. Nguồn quay THẬT chỉ có các bước liệt kê trong "CÁC BƯỚC CÓ SẴN" — mỗi mục sections BẮT BUỘC gắn field "buoc" bằng ĐÚNG NGUYÊN VĂN một tên trong danh sách đó (copy y hệt, không đổi chữ). KHÔNG viết cảnh nào không có bước tương ứng trong danh sách. Nếu là hook mở đầu hoặc CTA không cần cảnh quay riêng thì để "buoc":null.\n'
-        : '')+
-      'CHỈ trả về JSON thuần dạng {"tieu_de":"...","hook":"...","sections":[{"label":"...","buoc":'+(cacBuoc.length?'"<tên bước nguyên văn hoặc null>"':'null')+',"text":"..."}],"cta":"..."} — không giải thích, không markdown fence.\n'+
-      'Nếu thiếu dữ kiện để nói một điều gì đó, viết "[điền …]" thay vì bịa.';
-    const usr='FRAMEWORK: '+fw.ten+(fw.mo_ta?(' — '+fw.mo_ta):'')+'\n'+
-      'SẢN PHẨM: '+(sp?sp.ten:'(chưa chọn)')+'\n'+
-      'THÔNG SỐ THẬT (chỉ được dùng những cái này): '+(thongSo.length?JSON.stringify(thongSo):'(chưa có)')+'\n'+
-      'TIÊU CHUẨN: '+((sp&&sp.tieu_chuan)||'(chưa có)')+'\n'+
-      // Bảo hành là cam kết chính thức trong bảng giá → được trích. GIÁ thì KHÔNG gửi:
-      // bảng giá đổi theo đợt, còn video đã đăng thì sống mãi với con số cũ.
-      'BẢO HÀNH (cam kết chính thức, được trích nguyên văn): '+((sp&&sp.bao_hanh)||'(chưa có)')+'\n'+
-      'HƯỚNG DẪN DÙNG: '+((sp&&sp.huong_dan)||'(chưa có)')+'\n'+
-      'KÊNH: '+(kn?(kn.ten+' ('+kn.loai+')'):'(chưa chọn)')+'\n'+
-      'TÔNG GIỌNG: '+(strat.brand_voice||'(chưa đặt)')+'\n'+
-      'ĐỐI TƯỢNG: '+(strat.audience||'(chưa đặt)')+'\n'+
-      'CỤM TỪ CẤM (tuyệt đối tránh): '+JSON.stringify(claims.map(c=>c.cum_tu))+'\n'+
-      (bh.length?('BÀI HỌC ĐÃ DUYỆT TỪ DỮ LIỆU THẬT:\n'+bh.map(b=>'- '+b.tieu_de+': '+String(b.noi_dung||'').slice(0,200)).join('\n')+'\n'):'')+
-      (cacBuoc.length?('CÁC BƯỚC CÓ SẴN TRONG NGUỒN QUAY (theo đúng thứ tự, chỉ được dùng những bước này):\n'+cacBuoc.map((b,idx)=>(idx+1)+'. '+b).join('\n')+'\n'):'')+
-      'GÓC NHÌN: '+((body.angle||'').trim()||'(tự chọn góc phù hợp framework)');
-    const r=await goiAI(env,{system:sys, messages:[{role:'user',content:usr}], max_tokens:2000});
+    const p=await promptKichBan(env, body);
+    if(!p.ok) return json({error:p.loi},400);
+    const r=await goiAI(env,{system:p.sys, messages:[{role:'user',content:p.usr}], max_tokens:2000});
     if(!r.ok) return json({ok:false, thieu_key:!!r.thieu_key, loi:r.loi},200);
-    let txt=r.text.replace(/^```(?:json)?\s*/i,'').replace(/```\s*$/,'').trim();
-    const i=txt.indexOf('{'), k=txt.lastIndexOf('}');
-    if(i<0||k<0) return json({ok:false, loi:'AI không trả về JSON'},200);
-    let kb; try{ kb=JSON.parse(txt.slice(i,k+1)); }catch(e){ return json({ok:false, loi:'JSON từ AI hỏng: '+e.message},200); }
-    if(!kb || (!kb.hook && !kb.tieu_de)) return json({ok:false, loi:'AI trả kịch bản rỗng'},200);
-    kb.sections=Array.isArray(kb.sections)?kb.sections.filter(x=>x&&(x.label||x.text)).map(x=>({
-      label:x.label||'', text:x.text||'',
-      buoc:(cacBuoc.length && x.buoc && cacBuoc.includes(String(x.buoc).trim())) ? String(x.buoc).trim() : null,
-    })):[];
-    // Guardrail: AI vẫn có thể lỡ dùng cụm cấm → kiểm lại, mức CHẶN thì TỪ CHỐI
-    const flags=scanScriptClaims(scriptText(kb), claims);
-    const chan=flags.filter(f=>f.muc_do==='CHAN');
-    if(chan.length) return json({ok:false, loi:'AI viết trúng cụm bị CHẶN ('+chan.map(c=>c.cum_tu).join(', ')+') — hãy thử lại hoặc sửa góc nhìn', blocked:chan.map(c=>c.cum_tu)},200);
-    return json({ok:true, kich_ban:kb, canh_bao:flags.filter(f=>f.muc_do!=='CHAN')});
+    return json(duyetKichBanAI(r.text, p.cacBuoc, p.claims),200);
+  }
+  // ĐƯỜNG AI CỦA NGƯỜI DÙNG (vd Gemini bằng key riêng lưu trong trình duyệt, giống công cụ
+  // Lọc video). Trình duyệt tự gọi nhà cung cấp AI — key KHÔNG đi qua server, KHÔNG vào D1.
+  // Server vẫn giữ 2 việc quan trọng: dựng prompt (đúng định hướng thương hiệu) và thẩm định
+  // kết quả (claim cấm, khớp bước) — nên đường này không hề lỏng hơn đường Anthropic.
+  if(path==='/scripts/ai-sinh/prompt' && method==='POST'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    const p=await promptKichBan(env, body);
+    if(!p.ok) return json({error:p.loi},400);
+    return json({ok:true, system:p.sys, user:p.usr, cac_buoc:p.cacBuoc});
+  }
+  if(path==='/scripts/ai-sinh/ket-qua' && method==='POST'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    if(!String(body.text||'').trim()) return json({error:'Thiếu nội dung AI trả về'},400);
+    // Claim cấm LUÔN đọc lại từ DB — không nhận theo lời trình duyệt gửi lên.
+    const claims=(await env.DB.prepare(`SELECT * FROM claim_cam WHERE active=1`).all()).results;
+    const cacBuoc=Array.isArray(body.cac_buoc)?body.cac_buoc.map(s=>String(s||'').trim()).filter(Boolean).slice(0,60):[];
+    return json(duyetKichBanAI(body.text, cacBuoc, claims),200);
   }
 
   // ===== CHATBOT AI — hỏi đáp trên dữ liệu thật của chính mình =====

@@ -87,6 +87,36 @@ const KENH_LOAI = ['FANPAGE','TIKTOK','YOUTUBE','ZALO_OA','SHOPEE','WEBSITE'];
 // Content OS · P1 — dữ liệu nền
 const DONG_SP = ['Kingsmen grout','Terrazy','FINEX','Khác'];
 const NHOM_SP = { CHINH:'Sản phẩm chính', PHU_TRO:'Phụ trợ / dụng cụ' };
+// Key Gemini người dùng đã cắm ở công cụ Lọc & dựng video (/tools/loc-video.html).
+// Cùng origin nên đọc chung được localStorage — khỏi bắt cắm key hai lần.
+// Key CHỈ nằm trong trình duyệt: không gửi lên server, không vào D1.
+const LS_VISION='locvideo_vision';
+function keyGemini(){
+  try { const v=JSON.parse(localStorage.getItem(LS_VISION)||'{}');
+    return (v.geminiKey||'').trim() ? {key:v.geminiKey.trim(), model:v.geminiModel||'gemini-2.5-flash'} : null;
+  } catch(e){ return null; }
+}
+async function goiGemini({key, model}, system, user){
+  try {
+    const res=await fetch('https://generativelanguage.googleapis.com/v1beta/models/'+encodeURIComponent(model)+':generateContent?key='+encodeURIComponent(key),
+      { method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ systemInstruction:{parts:[{text:system}]},
+          contents:[{role:'user',parts:[{text:user}]}],
+          generationConfig:{temperature:0.7, maxOutputTokens:2400} }) });
+    const j=await res.json().catch(()=>({}));
+    if(!res.ok){
+      const m=(j.error&&j.error.message)||('HTTP '+res.status);
+      if(res.status===429) return {ok:false, loi:'Gemini báo hết hạn mức: '+m+' — đổi sang model flash hoặc bật thanh toán ở Google AI Studio.'};
+      if(res.status===400 && /API key/i.test(m)) return {ok:false, loi:'Key Gemini không hợp lệ — kiểm lại ở công cụ Lọc & dựng video.'};
+      return {ok:false, loi:'Gemini trả lỗi: '+m};
+    }
+    const c=(j.candidates||[])[0];
+    if(!c) return {ok:false, loi:'Gemini không trả về nội dung'+(j.promptFeedback&&j.promptFeedback.blockReason?(' (bị chặn: '+j.promptFeedback.blockReason+')'):'')};
+    const txt=((c.content&&c.content.parts)||[]).map(p=>p.text||'').join('').trim();
+    if(!txt) return {ok:false, loi:'Gemini trả về rỗng'+(c.finishReason?(' — '+c.finishReason):'')};
+    return {ok:true, text:txt};
+  } catch(e){ return {ok:false, loi:'Không gọi được Gemini: '+(e.message||e)}; }
+}
 // Giá chưa công bố phải hiện chữ, KHÔNG hiện "0 ₫" — 0đ người đọc hiểu thành miễn phí.
 const tien = v => (v==null||v==='') ? null : Number(v).toLocaleString('vi-VN')+' ₫';
 const CLAIM_MUC_DO = { CANH_BAO:'Cảnh báo', CHAN:'Chặn' };
@@ -760,6 +790,7 @@ function AppProvider({children}){
       chayThuAgent: async ()=>({ok:false, loi:'Chế độ offline không chạy agent được'}),
       aiDanhGiaTrend: async id=>({ok:false, thieu_key:true, loi:'Chế độ offline không gọi AI được'}),
       aiSinhKichBan: async o=>({ok:false, thieu_key:true, loi:'Chế độ offline không gọi AI được'}),
+      aiSinhKichBanGemini: async o=>({ok:false, loi:'Chế độ offline không gọi AI được'}),
       aiChat: async m=>({ok:false, thieu_key:true, loi:'Chế độ offline không gọi AI được'}),
       sinhWorkflowAI: async o=>({ok:false, thieu_key:true, loi:'Chế độ offline không gọi AI được'}),
       daySangSeeding: async (id,o)=>{ const ci=(S.content_items||[]).find(x=>x.id===id); if(!ci) return {ok:false,msg:'Không tìm thấy nội dung'};
@@ -961,6 +992,19 @@ function AppProvider({children}){
     chayThuAgent: async () => { try { const r=await call('/trends/agent/chay-thu',{method:'POST',body:{}}); if(r&&r.db) setDb(r.db); return r; } catch(e){ return {ok:false,loi:e.message}; } },
     aiDanhGiaTrend: async id => { try { const r=await call('/trends/'+id+'/ai-danh-gia',{method:'POST',body:{}}); if(r&&r.db) setDb(r.db); return r; } catch(e){ return {ok:false,loi:e.message}; } },
     aiSinhKichBan: async o => { try { return await call('/scripts/ai-sinh',{method:'POST',body:o}); } catch(e){ return {ok:false,loi:e.message}; } },
+    // Đường AI riêng của người dùng: server dựng prompt → trình duyệt tự gọi Gemini bằng key
+    // đã cắm sẵn ở công cụ Lọc video → server thẩm định lại. Key không rời máy người dùng.
+    aiSinhKichBanGemini: async o => {
+      const kg=keyGemini();
+      if(!kg) return {ok:false, loi:'Chưa cắm key Gemini ở công cụ Lọc & dựng video'};
+      try {
+        const p=await call('/scripts/ai-sinh/prompt',{method:'POST',body:o});
+        if(!p||!p.ok) return {ok:false, loi:(p&&p.error)||'Không dựng được prompt'};
+        const t=await goiGemini(kg, p.system, p.user);
+        if(!t.ok) return t;
+        return await call('/scripts/ai-sinh/ket-qua',{method:'POST',body:{text:t.text, cac_buoc:p.cac_buoc}});
+      } catch(e){ return {ok:false,loi:e.message}; }
+    },
     aiChat: async messages => { try { return await call('/ai/chat',{method:'POST',body:{messages}}); } catch(e){ return {ok:false,loi:e.message}; } },
     sinhWorkflowAI: async o => { try { return await call('/n8n/sinh-workflow',{method:'POST',body:o}); }
       catch(e){ return {ok:false, loi:e.message}; } },
@@ -2631,7 +2675,7 @@ function CreativeStudio(){
   </div>;
 }
 function ScriptEditor({init, onClose}){
-  const { db, upsertScript, deleteScript, fetchScriptVersions, aiSinhKichBan, notify } = useApp();
+  const { db, upsertScript, deleteScript, fetchScriptVersions, aiSinhKichBan, aiSinhKichBanGemini, notify } = useApp();
   const brandVoice0 = (db.content_strategy||{}).brand_voice||'';
   const [f,setF]=useState(()=>({
     id:init.id, framework_id:init.framework_id||'', san_pham_id:init.san_pham_id||'', kenh_id:init.kenh_id||'', content_item_id:init.content_item_id||'',
@@ -2654,15 +2698,23 @@ function ScriptEditor({init, onClose}){
   const warns = flags.filter(x=>x.muc_do!=='CHAN');
   const specArr = product && Array.isArray(product.thong_so) ? product.thong_so.filter(Boolean) : [];
 
+  const geminiSanSang=useMemo(()=>keyGemini(),[]);
   const aiViet=async()=>{ if(!f.framework_id) return notify('Chọn framework trước','warn');
     setAiBusy(true); setAiLoi('');
-    const r=await aiSinhKichBan({framework_id:f.framework_id, san_pham_id:f.san_pham_id||null, kenh_id:f.kenh_id||null, angle});
+    const o={framework_id:f.framework_id, san_pham_id:f.san_pham_id||null, kenh_id:f.kenh_id||null, angle};
+    let r=await aiSinhKichBan(o), quaGemini=false;
+    // Chưa cắm ANTHROPIC_API_KEY mà máy này đã có key Gemini (cắm ở công cụ Lọc & dựng video)
+    // thì dùng luôn key đó — cùng prompt, cùng bộ thẩm định, chỉ khác nhà cung cấp AI.
+    if(r && r.ok!==true && r.thieu_key && keyGemini()){ quaGemini=true; r=await aiSinhKichBanGemini(o); }
     setAiBusy(false);
     if(r&&r.ok&&r.kich_ban){ const kb=r.kich_ban;
       setF(v=>({...v, tieu_de:kb.tieu_de||v.tieu_de, hook:kb.hook||'', sections:kb.sections||[], cta:kb.cta||''}));
-      notify((r.canh_bao&&r.canh_bao.length)?('AI viết xong — có '+r.canh_bao.length+' cụm cần rà lại'):'AI viết xong — hãy đọc và sửa cho đúng thực tế');
+      notify((quaGemini?'Gemini (key của bạn) ':'AI ')+'viết xong — '+
+        ((r.canh_bao&&r.canh_bao.length)?('có '+r.canh_bao.length+' cụm cần rà lại'):'hãy đọc và sửa cho đúng thực tế'));
       return; }
-    setAiLoi(r&&r.thieu_key ? 'Chưa cắm ANTHROPIC_API_KEY nên chưa dùng được AI — bấm “Sinh nháp theo khuôn” để làm tiếp.' : ((r&&r.loi)||'AI không viết được')); };
+    setAiLoi(r&&r.thieu_key
+      ? 'Chưa cắm ANTHROPIC_API_KEY, mà máy này cũng chưa có key Gemini. Cách nhanh nhất: mở Creative Studio › Lọc & dựng video › 🧠 chọn Gemini và dán key — Creative Studio sẽ dùng chung key đó. Hoặc bấm “Sinh nháp theo khuôn” để làm tiếp không cần AI.'
+      : ((r&&r.loi)||'AI không viết được')); };
   const gen=()=>{ if(!framework) return notify('Chọn framework trước','warn');
     const g=generateScript({framework, product, angle, audience});
     setF(v=>({...v, hook:g.hook, sections:g.sections, cta:g.cta, tieu_de:v.tieu_de||((product&&product.ten||'')+' — '+(angle||framework.ten)) }));
@@ -2720,9 +2772,11 @@ function ScriptEditor({init, onClose}){
           {specArr.length===0 && !product.tieu_chuan && <span className="text-[11px] text-amber-600">Sản phẩm chưa có thông số — nên bổ sung ở mục Sản phẩm & Claim.</span>}
         </div>
       </div>}
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap gap-2 items-center">
         <Btn variant="brand" onClick={aiViet} disabled={aiBusy}>{aiBusy?'AI đang viết…':'🤖 Nhờ AI viết'}</Btn>
         <Btn variant="ghost" onClick={gen}>✨ Sinh nháp theo khuôn</Btn>
+        {geminiSanSang && <span className="text-[10px] text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-2 py-0.5">
+          dùng chung key Gemini của bạn ({geminiSanSang.model}) nếu app chưa cắm key riêng</span>}
       </div>
       {aiLoi && <div className="rounded-lg bg-rose-50 border border-rose-200 p-2 text-[11px] text-rose-700">{aiLoi}</div>}
       <p className="text-[10px] text-slate-400">AI chỉ được dùng thông số thật của sản phẩm; nếu viết trúng cụm bị chặn thì hệ thống từ chối, không đưa ra cho bạn.</p>
