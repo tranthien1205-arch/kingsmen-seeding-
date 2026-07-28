@@ -21,4 +21,4 @@ bucket_name = "kingsmen-media"
 
 # Cron: mỗi ngày dọn media của công trình chưa duyệt quá 30 ngày
 [triggers]
-crons = ["0 18 * * *"]
+crons = ["0 18 * * *", "*/15 * * * *"]

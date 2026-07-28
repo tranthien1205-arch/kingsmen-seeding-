@@ -32,6 +32,105 @@ async function verifyPassword(pw, stored){
   }catch(e){ return false; }
 }
 
+// ---------- BẢNG GIÁ NIÊM YẾT KINGSMEN (Masfico Việt Nam phân phối độc quyền) ----------
+// Chép NGUYÊN VĂN từ bảng giá áp dụng 01/05/2026. `gia` = trước thuế, `gia_sau` = sau thuế
+// — cố ý chép CẢ HAI thay vì tính ra, để test bắt được lỗi gõ nhầm ở một trong hai cột.
+// Hai dụng cụ cuối bảng chưa công bố giá → để null, KHÔNG điền 0 (0đ đọc thành "miễn phí").
+const GIA_AP_DUNG_TU = '2026-05-01';
+const VAT_BANG_GIA = 8;
+const BANG_GIA_KINGSMEN = [
+  // I — KEO RON GẠCH
+  { ma:'G3000', ten:'Kingsmen G3000 (Tiêu chuẩn)', dong:'Kingsmen grout', nhom:'CHINH', don_vi:'Chai', gia:220000, gia_sau:237600,
+    bao_hanh:'1 năm chống ố vàng, bạc màu · 30 năm chống thấm bền vật liệu',
+    thong_so:[{k:'Phân hạng',v:'Tiêu chuẩn'},{k:'Phạm vi sử dụng',v:'Trong nhà'},
+      {k:'Đặc tính',v:'Chống thấm bám vượt trội, bám dính ổn định, phù hợp mọi công trình trong nhà với chi phí tối ưu'}] },
+  { ma:'G5000', ten:'Kingsmen G5000 (Cao cấp)', dong:'Kingsmen grout', nhom:'CHINH', don_vi:'Chai', gia:330000, gia_sau:356400,
+    bao_hanh:'3 năm chống ố vàng, bạc màu · 30 năm chống thấm bền vật liệu',
+    thong_so:[{k:'Phân hạng',v:'Cao cấp'},{k:'Phạm vi sử dụng',v:'Trong nhà'},
+      {k:'Đặc tính',v:'Bám dính mạnh hơn 50%, dành cho công trình nội thất yêu cầu chất lượng vượt trội và độ bền lâu dài'}] },
+  { ma:'G6000', ten:'Kingsmen G6000 (Chống UV)', dong:'Kingsmen grout', nhom:'CHINH', don_vi:'Chai', gia:484000, gia_sau:522720,
+    bao_hanh:'10 năm chống ố vàng, bạc màu · 30 năm chống thấm bền vật liệu',
+    thong_so:[{k:'Phân hạng',v:'Chống UV'},{k:'Phạm vi sử dụng',v:'Trong nhà và ngoài trời'},{k:'Gốc hoá học',v:'Polyurea'},
+      {k:'Đặc tính',v:'Gốc polyurea bền màu dưới nắng, chịu thời tiết và chống đứt gãy, phù hợp khu vực bán ngoài trời'}] },
+  { ma:'G7000', ten:'Kingsmen G7000 (Chống UV Plus)', dong:'Kingsmen grout', nhom:'CHINH', don_vi:'Chai', gia:891000, gia_sau:962280,
+    bao_hanh:'30 năm chống ố vàng, bạc màu · 30 năm chống thấm bền vật liệu',
+    thong_so:[{k:'Phân hạng',v:'Chống UV Plus'},{k:'Phạm vi sử dụng',v:'Trong nhà và ngoài trời'},{k:'Gốc hoá học',v:'Polyurea cao cấp nhất'},
+      {k:'Đặc tính',v:'Tăng cường 50% hoạt chất chống UV, giữ màu 30 năm, siêu bền dưới nắng gắt và biến đổi nhiệt độ, tối ưu cho công trình ngoài trời cao cấp'}] },
+  { ma:'G9000', ten:'Kingsmen G9000 (Chuyên dụng hồ bơi)', dong:'Kingsmen grout', nhom:'CHINH', don_vi:'Chai', gia:1089000, gia_sau:1176120,
+    bao_hanh:'10 năm chống ố vàng, bạc màu · 30 năm chống thấm bền vật liệu',
+    thong_so:[{k:'Phân hạng',v:'Chuyên dụng hồ bơi'},{k:'Gốc hoá học',v:'Polyurea'},
+      {k:'Đặc tính',v:'Chuyên dụng chịu áp lực nước cao, chống chịu tốt Clo, ổn định trong môi trường ngập nước hằng ngày'}] },
+  { ma:'GS200', ten:'Kingsmen GS200 (Chuyên dụng gạch mosaic)', dong:'Kingsmen grout', nhom:'CHINH', don_vi:'Xô 3,5kg', gia:3190000, gia_sau:3445200,
+    bao_hanh:'3 năm chống ố vàng, bạc màu · 30 năm chống thấm bền vật liệu',
+    thong_so:[{k:'Phân hạng',v:'Chuyên dụng gạch mosaic'},{k:'Gốc hoá học',v:'Epoxy gốc nước'},
+      {k:'Đặc tính',v:'Hỗ trợ liên kết mạnh mẽ cho gạch và đường ron bền chắc nhất'}] },
+  { ma:'ColorMatch G', ten:'Kingsmen ColorMatch G (Tuỳ chỉnh màu ron)', dong:'Kingsmen grout', nhom:'CHINH', don_vi:'Chai', gia:539000, gia_sau:582120,
+    bao_hanh:'3 năm chống ố vàng, bạc màu · 30 năm chống thấm bền vật liệu',
+    thong_so:[{k:'Phân hạng',v:'Tuỳ chỉnh màu ron'},{k:'Phạm vi sử dụng',v:'Trong nhà'},{k:'Độ đồng màu với gạch',v:'Đến 97%'},
+      {k:'Đặc tính',v:'Công nghệ tuỳ chỉnh màu ron đồng màu với gạch đến 97%, tạo bề mặt đồng nhất thẩm mỹ và độ bền lâu dài'}] },
+  { ma:'ColorMatch GS', ten:'Kingsmen ColorMatch GS (Gốc nước — tuỳ chỉnh màu ron)', dong:'Kingsmen grout', nhom:'CHINH', don_vi:'Xô 3,5kg', gia:5170000, gia_sau:5583600,
+    bao_hanh:'3 năm chống ố vàng, bạc màu · 30 năm chống thấm bền vật liệu',
+    thong_so:[{k:'Phân hạng',v:'Tuỳ chỉnh màu ron'},{k:'Phạm vi sử dụng',v:'Trong nhà và ngoài trời'},{k:'Gốc hoá học',v:'Epoxy gốc nước cao cấp'},{k:'Độ đồng màu với gạch',v:'Đến 97%'},
+      {k:'Đặc tính',v:'Áp dụng phương pháp thi công đánh bóng tạo mặt phẳng liền mạch như không ron'}] },
+  // II — SÀN TỰ PHẲNG TERRAZY (4 quy cách, cùng mô tả; bảng giá KHÔNG ghi bảo hành → để trống)
+  { ma:'TERAZZY-1KG', ten:'Kingsmen Terazzy 1kg', dong:'Terrazy', nhom:'CHINH', don_vi:'Bộ 1kg', gia:385000, gia_sau:415800, bao_hanh:'',
+    thong_so:[{k:'Quy cách',v:'Bộ 1kg'},{k:'Đặc tính',v:'Sàn tự phẳng thông minh thế hệ mới, chuyên dụng để cải tạo sàn không cần đục phá. Thi công nhanh gọn chỉ với 4 bước, cho mặt sàn liền mạch dễ lau chùi, chống thấm và nấm mốc, bền đẹp như terrazzo cao cấp'}] },
+  { ma:'TERAZZY-3.5KG', ten:'Kingsmen Terazzy 3,5kg', dong:'Terrazy', nhom:'CHINH', don_vi:'Bộ 3,5kg', gia:1386000, gia_sau:1496880, bao_hanh:'',
+    thong_so:[{k:'Quy cách',v:'Bộ 3,5kg'},{k:'Đặc tính',v:'Sàn tự phẳng thông minh thế hệ mới, chuyên dụng để cải tạo sàn không cần đục phá. Thi công nhanh gọn chỉ với 4 bước, cho mặt sàn liền mạch dễ lau chùi, chống thấm và nấm mốc, bền đẹp như terrazzo cao cấp'}] },
+  { ma:'TERAZZY-7KG', ten:'Kingsmen Terazzy 7kg', dong:'Terrazy', nhom:'CHINH', don_vi:'Bộ 7kg', gia:2552000, gia_sau:2756160, bao_hanh:'',
+    thong_so:[{k:'Quy cách',v:'Bộ 7kg'},{k:'Đặc tính',v:'Sàn tự phẳng thông minh thế hệ mới, chuyên dụng để cải tạo sàn không cần đục phá. Thi công nhanh gọn chỉ với 4 bước, cho mặt sàn liền mạch dễ lau chùi, chống thấm và nấm mốc, bền đẹp như terrazzo cao cấp'}] },
+  { ma:'TERAZZY-21KG', ten:'Kingsmen Terazzy 21kg', dong:'Terrazy', nhom:'CHINH', don_vi:'Bộ 21kg', gia:6930000, gia_sau:7484400, bao_hanh:'',
+    thong_so:[{k:'Quy cách',v:'Bộ 21kg'},{k:'Đặc tính',v:'Sàn tự phẳng thông minh thế hệ mới, chuyên dụng để cải tạo sàn không cần đục phá. Thi công nhanh gọn chỉ với 4 bước, cho mặt sàn liền mạch dễ lau chùi, chống thấm và nấm mốc, bền đẹp như terrazzo cao cấp'}] },
+  // PHỤ TRỢ I — DỤNG CỤ KEO RON GẠCH
+  { ma:'KT700', ten:'Bộ dụng cụ thi công KT700', dong:'Kingsmen grout', nhom:'PHU_TRO', don_vi:'Bộ', gia:295000, gia_sau:318600, bao_hanh:'', thong_so:[] },
+  { ma:'KT800', ten:'Bộ dụng cụ thi công KT800', dong:'Kingsmen grout', nhom:'PHU_TRO', don_vi:'Bộ', gia:459000, gia_sau:495720, bao_hanh:'', thong_so:[] },
+  { ma:'SUNGTROLUC', ten:'Súng trợ lực bắn ron gạch Kingsmen', dong:'Kingsmen grout', nhom:'PHU_TRO', don_vi:'Cái', gia:300000, gia_sau:324000, bao_hanh:'', thong_so:[] },
+  { ma:'SUNGCO', ten:'Súng bắn ron gạch Kingsmen', dong:'Kingsmen grout', nhom:'PHU_TRO', don_vi:'Cái', gia:165000, gia_sau:178200, bao_hanh:'', thong_so:[] },
+  { ma:'SUNGDIEN', ten:'Súng bắn keo ron gạch Kingsmen bằng pin 21V', dong:'Kingsmen grout', nhom:'PHU_TRO', don_vi:'Cái', gia:4500000, gia_sau:4860000, bao_hanh:'',
+    thong_so:[{k:'Nguồn',v:'Pin 21V'}] },
+  { ma:'BICAU', ten:'Bi cầu di ron gạch', dong:'Kingsmen grout', nhom:'PHU_TRO', don_vi:'Bộ', gia:45000, gia_sau:48600, bao_hanh:'', thong_so:[] },
+  { ma:'BICAU4', ten:'Bi cầu 4 cây di ron gạch', dong:'Kingsmen grout', nhom:'PHU_TRO', don_vi:'Bộ', gia:45000, gia_sau:48600, bao_hanh:'', thong_so:[] },
+  { ma:'VITNAO', ten:'Vít nạo vét ron gạch', dong:'Kingsmen grout', nhom:'PHU_TRO', don_vi:'Cái', gia:50000, gia_sau:54000, bao_hanh:'', thong_so:[] },
+  { ma:'DAOSUI6', ten:'Dao sủi keo KT6', dong:'Kingsmen grout', nhom:'PHU_TRO', don_vi:'Cái', gia:125000, gia_sau:135000, bao_hanh:'', thong_so:[] },
+  { ma:'DAOSUI', ten:'Dao sủi keo KT3', dong:'Kingsmen grout', nhom:'PHU_TRO', don_vi:'Cái', gia:90000, gia_sau:97200, bao_hanh:'', thong_so:[] },
+  { ma:'SAP', ten:'Hũ sáp', dong:'Kingsmen grout', nhom:'PHU_TRO', don_vi:'Hộp', gia:50000, gia_sau:54000, bao_hanh:'', thong_so:[] },
+  { ma:'THANHMR-A', ten:'Thanh miết ron gạch loại thẳng', dong:'Kingsmen grout', nhom:'PHU_TRO', don_vi:'Cái', gia:680000, gia_sau:734400, bao_hanh:'',
+    thong_so:[{k:'Chất liệu',v:'Vonfram cao cấp'},{k:'Loại',v:'Thẳng'}] },
+  { ma:'THANHMR-B', ten:'Thanh miết ron góc', dong:'Kingsmen grout', nhom:'PHU_TRO', don_vi:'Cái', gia:620000, gia_sau:669600, bao_hanh:'',
+    thong_so:[{k:'Chất liệu',v:'Vonfram cao cấp'},{k:'Loại',v:'Góc'}] },
+  // PHỤ TRỢ II — SẢN PHẨM PHỤ TRỢ SÀN TERRAZY
+  { ma:'KEP100-0.5L', ten:'Kingsmen KEP100 Primer 0,5L', dong:'Terrazy', nhom:'PHU_TRO', don_vi:'Bộ 0,5L', gia:240000, gia_sau:259200, bao_hanh:'',
+    thong_so:[{k:'Loại',v:'Primer epoxy 2 thành phần gốc dung môi'},{k:'Đóng rắn',v:'Polyamide'},
+      {k:'Đặc tính',v:'Dạng sealer thẩm thấu/khoá nền; khô nhanh, kháng nước & hoá chất, bám dính tốt, giúp chống bụi – cố định bề mặt và tăng liên kết cho lớp epoxy tự phẳng/lớp phủ kế tiếp'}] },
+  { ma:'KEP100-2L', ten:'Kingsmen KEP100 Primer 2L', dong:'Terrazy', nhom:'PHU_TRO', don_vi:'Bộ 2L', gia:820000, gia_sau:885600, bao_hanh:'',
+    thong_so:[{k:'Loại',v:'Primer epoxy 2 thành phần gốc dung môi'},{k:'Đóng rắn',v:'Polyamide'},
+      {k:'Đặc tính',v:'Dạng sealer thẩm thấu/khoá nền; khô nhanh, kháng nước & hoá chất, bám dính tốt, giúp chống bụi – cố định bề mặt và tăng liên kết cho lớp epoxy tự phẳng/lớp phủ kế tiếp'}] },
+  { ma:'RULOVAI15', ten:'Rulo vải 15cm', dong:'Terrazy', nhom:'PHU_TRO', don_vi:'Cái', gia:30000, gia_sau:32400, bao_hanh:'',
+    thong_so:[{k:'Công dụng',v:'Lăn primer'}] },
+  { ma:'LANGAI-TERRAZY', ten:'Con lăn gai 15cm', dong:'Terrazy', nhom:'PHU_TRO', don_vi:'Cái', gia:120000, gia_sau:129600, bao_hanh:'',
+    thong_so:[{k:'Công dụng',v:'Phá bọt khí, phẳng bề mặt sơn Terrazy'}] },
+  { ma:'LANGAI-22CM', ten:'Con lăn gai 22cm', dong:'Terrazy', nhom:'PHU_TRO', don_vi:'Cái', gia:150000, gia_sau:162000, bao_hanh:'',
+    thong_so:[{k:'Công dụng',v:'Phá bọt khí, phẳng bề mặt sơn Terrazy'}] },
+  { ma:'GIAYDINH', ten:'Giày đinh thi công sơn Terrazy', dong:'Terrazy', nhom:'PHU_TRO', don_vi:'Đôi', gia:180000, gia_sau:194400, bao_hanh:'', thong_so:[] },
+  // Bảng giá liệt kê nhưng BỎ TRỐNG đơn vị và giá — giữ nguyên trống, chờ công bố.
+  { ma:'BANGATTHEP-30', ten:'Bàn gạt thép răng cưa 30cm', dong:'Terrazy', nhom:'PHU_TRO', don_vi:'', gia:null, gia_sau:null, bao_hanh:'', thong_so:[] },
+  { ma:'GATNHUA-QUEKHUAY', ten:'Gạt nhựa răng cưa + que khuấy sơn (lớn)', dong:'Terrazy', nhom:'PHU_TRO', don_vi:'', gia:null, gia_sau:null, bao_hanh:'', thong_so:[] },
+];
+// Nạp bảng giá: CHỈ thêm mã chưa có. Cố ý KHÔNG ghi đè sản phẩm đã tồn tại —
+// người dùng có thể đã sửa tay, seed chạy mỗi lần khởi động isolate không được đạp lên.
+async function seedBangGia(env){
+  const co=(await env.DB.prepare(`SELECT ma,ten FROM san_pham`).all()).results;
+  const daCo=new Set(co.map(r=>String(r.ma||r.ten||'').trim().toLowerCase()).filter(Boolean));
+  const them=BANG_GIA_KINGSMEN.filter(p=>!daCo.has(String(p.ma||p.ten).trim().toLowerCase()));
+  if(!them.length) return 0;
+  await env.DB.batch(them.map(p=>env.DB.prepare(
+    `INSERT INTO san_pham (id,ma,ten,dong,nhom,don_vi,gia_truoc_thue,thue_vat,gia_sau_thue,bao_hanh,gia_ap_dung_tu,thong_so,tieu_chuan,huong_dan,anh,active,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,'','','',1,?)`)
+    .bind(uid('sp'), p.ma||'', p.ten, p.dong, p.nhom, p.don_vi||'',
+          p.gia==null?null:p.gia, p.gia==null?null:VAT_BANG_GIA, p.gia==null?null:p.gia_sau,
+          p.bao_hanh||'', GIA_AP_DUNG_TU, JSON.stringify(p.thong_so||[]), nowISO())));
+  return them.length;
+}
+
 // ---------- khởi tạo schema + seed ----------
 let SCHEMA_READY = false;
 async function ensureSchema(env){
@@ -70,6 +169,38 @@ async function ensureSchema(env){
     `CREATE TABLE IF NOT EXISTS frameworks (id TEXT PRIMARY KEY, ten TEXT, mo_ta TEXT, thu_tu INTEGER, active INTEGER DEFAULT 1, created_at TEXT)`,
     `CREATE TABLE IF NOT EXISTS kenh (id TEXT PRIMARY KEY, ten TEXT, loai TEXT, thuong_hieu TEXT, active INTEGER DEFAULT 1, created_at TEXT)`,
     `CREATE TABLE IF NOT EXISTS content_items (id TEXT PRIMARY KEY, loai TEXT, tieu_de TEXT, loai_muc_tieu TEXT, pillar_id TEXT, framework_id TEXT, san_pham_id TEXT, kenh_id TEXT, thang TEXT, trang_thai TEXT, pic TEXT, chi_tiet TEXT, links TEXT, created_at TEXT, created_by TEXT, created_by_name TEXT, updated_at TEXT)`,
+    // CONTENT OS · P4 — Creative Studio: kịch bản có guardrail (chỉ trích spec thật, chặn claim cấm) + lịch sử phiên bản
+    `CREATE TABLE IF NOT EXISTS scripts (id TEXT PRIMARY KEY, content_item_id TEXT, framework_id TEXT, san_pham_id TEXT, kenh_id TEXT, tieu_de TEXT, hook TEXT, sections TEXT, cta TEXT, brand_voice TEXT, claim_flags TEXT, trang_thai TEXT, version INTEGER DEFAULT 1, created_at TEXT, created_by TEXT, created_by_name TEXT, updated_at TEXT)`,
+    `CREATE TABLE IF NOT EXISTS script_versions (id TEXT PRIMARY KEY, script_id TEXT, version INTEGER, snapshot TEXT, created_at TEXT, created_by_name TEXT)`,
+    // CONTENT OS · P6 — Hàng đợi duyệt 2 CỔNG SONG SONG: NOI_DUNG (Marketing) + CLAIM (Kỹ thuật)
+    `CREATE TABLE IF NOT EXISTS approvals (id TEXT PRIMARY KEY, doi_tuong TEXT, doi_tuong_id TEXT, cong TEXT, trang_thai TEXT, nguoi_gui TEXT, nguoi_gui_ten TEXT, nguoi_duyet TEXT, nguoi_duyet_ten TEXT, ghi_chu TEXT, created_at TEXT, decided_at TEXT)`,
+    // CONTENT OS · P7 — Đăng thủ công theo checklist (KHÔNG auto-post) + khoá mã theo dõi (1 mã = 1 bài, khoá cho P8)
+    `CREATE TABLE IF NOT EXISTS air_posts (id TEXT PRIMARY KEY, content_item_id TEXT, script_id TEXT, kenh_id TEXT, tieu_de TEXT, ngay_dang TEXT, link_bai TEXT, ma_theo_doi TEXT, loai_ma TEXT, checklist TEXT, ghi_chu TEXT, trang_thai TEXT, nguoi_dang TEXT, nguoi_dang_ten TEXT, created_at TEXT, updated_at TEXT, posted_at TEXT)`,
+    // 1 mã theo dõi chỉ thuộc 1 bài → tránh "1 voucher nhiều video" làm P8 không quy đơn được
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_air_ma ON air_posts(ma_theo_doi) WHERE ma_theo_doi IS NOT NULL AND ma_theo_doi<>''`,
+    // CONTENT OS · P8 — Kết quả với 3 MỨC TIN CẬY (TUYỆT ĐỐI KHÔNG cộng dồn 3 mức thành "doanh thu từ content")
+    `CREATE TABLE IF NOT EXISTS ket_qua (id TEXT PRIMARY KEY, air_post_id TEXT, muc_tin_cay TEXT, nguon TEXT, ky TEXT, doanh_thu REAL DEFAULT 0, so_don INTEGER DEFAULT 0, luot_xem INTEGER DEFAULT 0, luot_tuong_tac INTEGER DEFAULT 0, luot_click INTEGER DEFAULT 0, ma_theo_doi TEXT, ghi_chu TEXT, created_at TEXT, created_by TEXT, created_by_name TEXT)`,
+    // Đơn không khớp được 1 bài duy nhất → CHỜ GÁN TAY, KHÔNG chia đều (ràng buộc §9)
+    `CREATE TABLE IF NOT EXISTS don_cho_gan (id TEXT PRIMARY KEY, nguon TEXT, ma_doi_soat TEXT, doanh_thu REAL DEFAULT 0, so_don INTEGER DEFAULT 0, ky TEXT, ly_do TEXT, trang_thai TEXT, air_post_id TEXT, created_at TEXT, decided_at TEXT, decided_by_name TEXT)`,
+    // CONTENT OS · P5 — Kho footage tái sử dụng + shot list bám theo kịch bản
+    `CREATE TABLE IF NOT EXISTS footage (id TEXT PRIMARY KEY, ten TEXT, mo_ta TEXT, media_url TEXT, media_type TEXT, tags TEXT, san_pham_id TEXT, kenh_id TEXT, dia_diem TEXT, ngay_quay TEXT, nguoi_quay TEXT, active INTEGER DEFAULT 1, created_at TEXT, created_by TEXT, created_by_name TEXT)`,
+    `CREATE TABLE IF NOT EXISTS shot_list (id TEXT PRIMARY KEY, script_id TEXT, thu_tu INTEGER, ten_canh TEXT, mo_ta TEXT, goc_may TEXT, thoi_luong INTEGER, footage_id TEXT, trang_thai TEXT, ghi_chu TEXT, created_at TEXT, updated_at TEXT)`,
+    // QUẢN LÝ SẢN XUẤT — bám đúng 6 khâu trong file "QUẢN LÝ SẢN XUẤT NỘI DUNG ECOM"
+    `CREATE TABLE IF NOT EXISTS san_xuat (id TEXT PRIMARY KEY, content_item_id TEXT, stt INTEGER, thang TEXT,
+      tieu_de TEXT, loai_video TEXT, san_pham_id TEXT, kenh_id TEXT, framework_id TEXT, ngay_giao TEXT,
+      pic_ke_hoach TEXT, pic_brief TEXT, pic_quay TEXT, pic_san_xuat TEXT, editor TEXT, pic_dang TEXT, pic_tracking TEXT,
+      deadline_brief TEXT, deadline_sx TEXT, ngay_quay_dk TEXT, ngay_quay_tt TEXT, ngay_dang TEXT, gio_dang TEXT,
+      tt_brief TEXT, tt_quay TEXT, tt_san_xuat TEXT, tt_air TEXT, tt_tong TEXT,
+      link_kich_ban TEXT, link_source TEXT, link_final TEXT, link_air TEXT,
+      chi_tiet TEXT, so_lieu TEXT, created_at TEXT, updated_at TEXT)`,
+    // CẤU HÌNH THEO MODULE — để admin/quản lý đổi ngưỡng mà KHÔNG phải sửa code + deploy
+    `CREATE TABLE IF NOT EXISTS module_config (id TEXT PRIMARY KEY, cau_hinh TEXT, updated_at TEXT, updated_by_name TEXT)`,
+    // CONTENT OS · TREND — nghiên cứu & triển khai. KHÔNG scrape (ToS): người tự ghi nhận + đánh giá.
+    `CREATE TABLE IF NOT EXISTS trends (id TEXT PRIMARY KEY, ten TEXT, nguon TEXT, link TEXT, mo_ta TEXT, phat_hien_ngay TEXT, han_dung TEXT, pillar_id TEXT, san_pham_id TEXT, danh_gia TEXT, rui_ro TEXT, trang_thai TEXT, ly_do TEXT, nguoi_de_xuat TEXT, nguoi_duyet_ten TEXT, content_item_id TEXT, script_id TEXT, created_at TEXT, decided_at TEXT)`,
+    // CONTENT OS · P10 — Thư viện học. ĐỀ XUẤT do máy rút ra nhưng PHẢI người duyệt mới thành quy tắc.
+    // Nhật ký AGENT — chạy không có người ngồi xem, nên PHẢI để lại dấu vết đọc được.
+    `CREATE TABLE IF NOT EXISTS agent_log (id TEXT PRIMARY KEY, at TEXT, loai TEXT, ngay TEXT, ok INTEGER, tom_tat TEXT, chi_tiet TEXT)`,
+    `CREATE TABLE IF NOT EXISTS bai_hoc (id TEXT PRIMARY KEY, loai TEXT, tieu_de TEXT, noi_dung TEXT, bang_chung TEXT, so_mau INTEGER DEFAULT 0, nguon_tu_dong INTEGER DEFAULT 0, trang_thai TEXT, nguoi_duyet_ten TEXT, ghi_chu TEXT, created_at TEXT, decided_at TEXT)`,
   ];
   await env.DB.batch(stmts.map(s=>env.DB.prepare(s)));
   // thêm cột đơn giá quay công trình cho DB cũ (bỏ qua nếu đã có)
@@ -87,8 +218,37 @@ async function ensureSchema(env){
   try { await env.DB.prepare(`ALTER TABLE pricing ADD COLUMN sched_on INTEGER DEFAULT 0`).run(); } catch(e){}
   try { await env.DB.prepare(`ALTER TABLE pricing ADD COLUMN sched_enforce INTEGER DEFAULT 1`).run(); } catch(e){}
   try { await env.DB.prepare(`ALTER TABLE pricing ADD COLUMN sched_days TEXT DEFAULT '0,2,4,6'`).run(); } catch(e){}
+  // P4 — brand voice (tông giọng thương hiệu) dùng cho Creative Studio
+  try { await env.DB.prepare(`ALTER TABLE content_strategy ADD COLUMN brand_voice TEXT DEFAULT ''`).run(); } catch(e){}
+  // LỊCH ĐĂNG TỰ ĐỘNG
+  try { await env.DB.prepare(`ALTER TABLE air_posts ADD COLUMN lich_dang TEXT`).run(); } catch(e){}
+  try { await env.DB.prepare(`ALTER TABLE air_posts ADD COLUMN tu_dong INTEGER DEFAULT 0`).run(); } catch(e){}
+  try { await env.DB.prepare(`ALTER TABLE air_posts ADD COLUMN lan_thu INTEGER DEFAULT 0`).run(); } catch(e){}
+  try { await env.DB.prepare(`ALTER TABLE air_posts ADD COLUMN loi TEXT`).run(); } catch(e){}
+  // Media để đăng — không có cái này thì n8n/API không đăng video được
+  try { await env.DB.prepare(`ALTER TABLE air_posts ADD COLUMN media_url TEXT`).run(); } catch(e){}
+  try { await env.DB.prepare(`ALTER TABLE air_posts ADD COLUMN gui_luc TEXT`).run(); } catch(e){}
+  // Kênh: bật tự động + định danh trên nền tảng. TOKEN KHÔNG lưu ở DB (xem §bảo mật dưới).
+  try { await env.DB.prepare(`ALTER TABLE kenh ADD COLUMN tu_dong_dang INTEGER DEFAULT 0`).run(); } catch(e){}
+  try { await env.DB.prepare(`ALTER TABLE kenh ADD COLUMN api_ma TEXT`).run(); } catch(e){}
+  try { await env.DB.prepare(`ALTER TABLE kenh ADD COLUMN api_object_id TEXT`).run(); } catch(e){}
+  try { await env.DB.prepare(`ALTER TABLE kenh ADD COLUMN cach_dang TEXT DEFAULT 'API'`).run(); } catch(e){}
+  // NỐI SEEDING ↔ CONTENT OS: chủ đề seeding biết mình sinh ra từ nội dung nào
+  try { await env.DB.prepare(`ALTER TABLE content_topics ADD COLUMN content_item_id TEXT`).run(); } catch(e){}
+  // P6 — đếm số lần bị trả lại (chỉ số Process cho P9)
+  try { await env.DB.prepare(`ALTER TABLE scripts ADD COLUMN so_lan_tra INTEGER DEFAULT 0`).run(); } catch(e){}
+  try { await env.DB.prepare(`ALTER TABLE content_items ADD COLUMN so_lan_tra INTEGER DEFAULT 0`).run(); } catch(e){}
   // cờ DEV PREVIEW: chỉ tài khoản is_dev=1 thấy các module đang nâng cấp
   try { await env.DB.prepare(`ALTER TABLE users ADD COLUMN is_dev INTEGER DEFAULT 0`).run(); } catch(e){}
+  // BẢNG GIÁ NIÊM YẾT — giá/đơn vị/bảo hành. Giá để REAL không DEFAULT: hàng cũ và hàng
+  // chưa công bố giá phải là NULL ("chưa có giá"), KHÔNG được rơi về 0 thành giá thật.
+  try { await env.DB.prepare(`ALTER TABLE san_pham ADD COLUMN nhom TEXT DEFAULT 'CHINH'`).run(); } catch(e){}
+  try { await env.DB.prepare(`ALTER TABLE san_pham ADD COLUMN don_vi TEXT DEFAULT ''`).run(); } catch(e){}
+  try { await env.DB.prepare(`ALTER TABLE san_pham ADD COLUMN gia_truoc_thue REAL`).run(); } catch(e){}
+  try { await env.DB.prepare(`ALTER TABLE san_pham ADD COLUMN thue_vat REAL`).run(); } catch(e){}
+  try { await env.DB.prepare(`ALTER TABLE san_pham ADD COLUMN gia_sau_thue REAL`).run(); } catch(e){}
+  try { await env.DB.prepare(`ALTER TABLE san_pham ADD COLUMN bao_hanh TEXT DEFAULT ''`).run(); } catch(e){}
+  try { await env.DB.prepare(`ALTER TABLE san_pham ADD COLUMN gia_ap_dung_tu TEXT DEFAULT ''`).run(); } catch(e){}
 
   // seed pricing
   const pr = await env.DB.prepare(`SELECT id FROM pricing WHERE id=1`).first();
@@ -151,6 +311,9 @@ async function ensureSchema(env){
     await env.DB.prepare(`INSERT INTO content_strategy (id,okr,big_idea,purpose,audience,swot,updated_at) VALUES (1,?,?,?,?,?,?)`)
       .bind('Xây dựng nhận diện thương hiệu Kingsmen; tăng tiếp xúc & niềm tin với khách hàng.','Your satisfaction – Our quality – Persistence over time','Tăng độ nhận diện thương hiệu; tiếp xúc khách hàng, tạo niềm tin; thúc đẩy chuyển đổi.','','',nowISO()).run();
   }
+
+  // CONTENT OS · P1 — nạp bảng giá niêm yết Kingsmen (chỉ thêm mã còn thiếu)
+  try { await seedBangGia(env); } catch(e){}
 
   // CONTENT OS · P3 — seed 12 nhóm kịch bản THẬT (từ file ecom) + kênh thật
   const anyFw = await env.DB.prepare(`SELECT id FROM frameworks LIMIT 1`).first();
@@ -222,6 +385,17 @@ async function seedFilming(env){
 // ---------- helpers ----------
 const bool = v => v?1:0;
 const uBool = v => !!v;
+// Tiền: ô trống / rác → null ("chưa có giá"), KHÔNG rơi về 0 — 0đ đọc thành "miễn phí".
+function soTien(v){
+  if(v==null || v==='') return null;
+  if(typeof v==='number') return Number.isFinite(v)&&v>=0 ? v : null;
+  let s=String(v).trim().replace(/\s/g,'');
+  // "1.089.000" / "1,089,000" = phân cách nghìn → bỏ hết. Còn "8,5" = thập phân → giữ.
+  if(/^\d{1,3}([.,]\d{3})+$/.test(s)) s=s.replace(/[.,]/g,'');
+  else s=s.replace(/,/g,'.');
+  const n=Number(s);
+  return Number.isFinite(n) && n>=0 ? n : null;
+}
 function rowUser(u){ if(!u) return null; return { id:u.id, ho_ten:u.ho_ten, email:u.email, vai_tro:u.vai_tro, active:uBool(u.active), is_dev:uBool(u.is_dev), created_at:u.created_at }; }
 function rowGroup(g){ return { ...g, active:uBool(g.active), uu_tien:uBool(g.uu_tien) }; }
 function rowTopic(t){ return { ...t, active:uBool(t.active), uu_tien:uBool(t.uu_tien), tags: JSON.parse(t.tags||'[]') }; }
@@ -284,6 +458,716 @@ async function ensurePostSlots(env){
 }
 
 // Content OS · P3 — chèn 1 content_item từ body (dùng chung cho tạo & import)
+// TREND — Checklist đánh giá do NGƯỜI tick. Cố ý KHÔNG có mục "dự đoán % viral":
+// app không đoán trend sẽ nổ hay không, chỉ giúp kiểm tra có nên làm và có kịp không.
+const TREND_CHECK = [
+  {k:'hop_pillar',  label:'Gắn được vào trụ cột nội dung / định vị thương hiệu', bat_buoc:true},
+  {k:'co_goc_sp',   label:'Có sản phẩm hoặc góc nhìn thật để gắn vào', bat_buoc:true},
+  {k:'khong_claim', label:'Không buộc phải nói quá / chạm claim cấm', bat_buoc:true},
+  {k:'kip_thoi',    label:'Còn kịp sản xuất trước khi trend nguội', bat_buoc:true},
+  {k:'an_toan',     label:'Không nhạy cảm, không rủi ro hình ảnh thương hiệu', bat_buoc:true},
+  {k:'lam_khac',    label:'Làm được khác biệt, không bắt chước y hệt', bat_buoc:false},
+];
+const TREND_ST = { MOI:'Mới ghi nhận', DANH_GIA:'Đang đánh giá', DUYET:'Duyệt triển khai', TU_CHOI:'Bỏ qua', DA_TRIEN_KHAI:'Đã triển khai' };
+// NỐI SEEDING ↔ CONTENT OS: gom kết quả seeding về nội dung gốc.
+// CHỦ Ý: chỉ đếm số bài + tương tác. KHÔNG quy ra doanh thu — seeding không quy đơn được (§9).
+function gomSeedingTheoNoiDung(topics, posts, cmts){
+  const map={};
+  const topicToCi={};
+  (topics||[]).forEach(t=>{ if(t.content_item_id) topicToCi[t.id]=t.content_item_id; });
+  (posts||[]).forEach(p=>{
+    const ci=topicToCi[p.topic_id]; if(!ci) return;
+    (map[ci] ||= {so_bai:0, so_bai_dat:0, react:0, cmt:0});
+    map[ci].so_bai++;
+    if(p.trang_thai==='DAT'||p.trang_thai==='DA_CHI') map[ci].so_bai_dat++;
+    map[ci].react += Number(p.react)||0;
+    map[ci].cmt += (Number(p.so_cmt_seeding)||0)+(Number(p.so_cmt_tu_nhien)||0);
+  });
+  const postToCi={}; (posts||[]).forEach(p=>{ const ci=topicToCi[p.topic_id]; if(ci) postToCi[p.id]=ci; });
+  (cmts||[]).forEach(c=>{
+    const ci=postToCi[c.post_seeding_id]; if(!ci) return;
+    (map[ci] ||= {so_bai:0, so_bai_dat:0, react:0, cmt:0});
+    map[ci].cmt += Number(c.so_cmt_seeding)||0;
+  });
+  return map;
+}
+// NHẮC VIỆC — ngưỡng "để lâu quá" (ngày). Tính trực tiếp mỗi lần bootstrap nên KHÔNG BAO GIỜ LỆCH;
+// cron chỉ ghi nhật ký hằng ngày, không phải nguồn sự thật.
+const NGUONG_KET = { sua_lai:3, cho_duyet:2, chua_nhap_kq:14, trend_sap_het:7, don_cho_gan:3 };
+function soNgay(iso){ if(!iso) return 0; const d=(Date.now()-new Date(iso).getTime())/864e5; return d>0?Math.floor(d):0; }
+// Trả về các nhóm việc đang kẹt + lý do cụ thể, KHÔNG gộp thành một con số vô nghĩa
+function tinhViecKet({scripts,approvals,air_posts,ket_qua,trends,don_cho_gan,nguong}){
+  const NGUONG_KET = {...CONFIG_MAC_DINH.viec_ket, ...(nguong||{})};
+  const homNay=new Date().toISOString().slice(0,10);
+  const coKQ=new Set((ket_qua||[]).map(k=>k.air_post_id));
+  const suaLai=(scripts||[]).filter(s=>s.trang_thai==='NHAP' && Number(s.so_lan_tra||0)>0 && soNgay(s.updated_at)>=NGUONG_KET.sua_lai)
+    .map(s=>({id:s.id, ten:s.tieu_de||s.hook||'(không tên)', ngay:soNgay(s.updated_at)}));
+  const choDuyet=(approvals||[]).filter(a=>a.trang_thai==='CHO' && soNgay(a.created_at)>=NGUONG_KET.cho_duyet)
+    .map(a=>({id:a.id, cong:a.cong, ngay:soNgay(a.created_at)}));
+  const chuaNhapKQ=(air_posts||[]).filter(a=>a.trang_thai==='DA_DANG' && !coKQ.has(a.id) && soNgay(a.posted_at)>=NGUONG_KET.chua_nhap_kq)
+    .map(a=>({id:a.id, ten:a.tieu_de||'(không tên)', ngay:soNgay(a.posted_at)}));
+  const trendGap=(trends||[]).filter(t=>['MOI','DANH_GIA','DUYET'].includes(t.trang_thai) && t.han_dung)
+    .map(t=>({id:t.id, ten:t.ten, con:Math.floor((new Date(t.han_dung)-new Date(homNay))/864e5)}))
+    .filter(t=>t.con<=NGUONG_KET.trend_sap_het);
+  const donKet=(don_cho_gan||[]).filter(d=>d.trang_thai==='CHO_GAN' && soNgay(d.created_at)>=NGUONG_KET.don_cho_gan)
+    .map(d=>({id:d.id, ma:d.ma_doi_soat||'', ngay:soNgay(d.created_at)}));
+  // Bài đã tới giờ mà chưa lên sóng (không tự động được hoặc đăng lỗi) — phải nhắc ngay, không để trôi
+  const denGio=(air_posts||[]).filter(a=>a.trang_thai==='DEN_GIO'||a.trang_thai==='LOI')
+    .map(a=>({id:a.id, ten:a.tieu_de||'(không tên)', loi:a.loi||'', lich:a.lich_dang||''}));
+  return { sua_lai:suaLai, cho_duyet:choDuyet, chua_nhap_kq:chuaNhapKQ, trend_gap:trendGap, don_ket:donKet, den_gio:denGio,
+    tong: suaLai.length+choDuyet.length+chuaNhapKQ.length+trendGap.length+donKet.length+denGio.length, nguong:NGUONG_KET };
+}
+// ===== QUẢN LÝ SẢN XUẤT — 6 khâu =====
+const SX_KHAU = [
+  {k:'KE_HOACH', ten:'Kế hoạch', pic:'pic_ke_hoach', tt:null,            deadline:null},
+  {k:'BRIEF',    ten:'Brief',    pic:'pic_brief',    tt:'tt_brief',      deadline:'deadline_brief'},
+  {k:'QUAY',     ten:'Quay',     pic:'pic_quay',     tt:'tt_quay',       deadline:'ngay_quay_dk'},
+  {k:'SAN_XUAT', ten:'Dựng',     pic:'pic_san_xuat', tt:'tt_san_xuat',   deadline:'deadline_sx'},
+  {k:'AIR',      ten:'Đăng',     pic:'pic_dang',     tt:'tt_air',        deadline:'ngay_dang'},
+  {k:'TRACKING', ten:'Đo lường', pic:'pic_tracking', tt:null,            deadline:null},
+];
+const SX_COT = ['content_item_id','stt','thang','tieu_de','loai_video','san_pham_id','kenh_id','framework_id','ngay_giao',
+  'pic_ke_hoach','pic_brief','pic_quay','pic_san_xuat','editor','pic_dang','pic_tracking',
+  'deadline_brief','deadline_sx','ngay_quay_dk','ngay_quay_tt','ngay_dang','gio_dang',
+  'tt_brief','tt_quay','tt_san_xuat','tt_air','tt_tong',
+  'link_kich_ban','link_source','link_final','link_air'];
+// Gom tiến độ sản xuất về từng nội dung: đang ở khâu nào, có trễ không
+function gomSanXuatTheoNoiDung(list){
+  const xong=v=>{ const t=String(v||'').toLowerCase(); return !!t && !/chưa|đang|nháp|mới/.test(t); };
+  const hn=new Date().toISOString().slice(0,10);
+  const map={};
+  (list||[]).forEach(x=>{
+    if(!x.content_item_id) return;
+    let khau=SX_KHAU[SX_KHAU.length-1];
+    for(const k of SX_KHAU){ if(k.tt && !xong(x[k.tt])){ khau=k; break; } }
+    const tre=SX_KHAU.some(k=>k.deadline && k.tt && x[k.deadline] && x[k.deadline]<hn && !xong(x[k.tt]));
+    const m=(map[x.content_item_id] ||= {so_dong:0, tre:0, khau:khau.ten});
+    m.so_dong++; if(tre) m.tre++;
+    m.khau=khau.ten;
+  });
+  return map;
+}
+function rowSX(r){ return { ...r, chi_tiet:JSON.parse(r.chi_tiet||'{}'), so_lieu:JSON.parse(r.so_lieu||'{}') }; }
+async function luuSanXuat(env, me, body, id){
+  const g=k=> body[k]!=null ? (typeof body[k]==='number'?body[k]:String(body[k]).trim()) : null;
+  if(id){
+    const cu=await env.DB.prepare(`SELECT * FROM san_xuat WHERE id=?`).bind(id).first();
+    if(!cu) return null;
+    const sets=[], vals=[];
+    SX_COT.forEach(c=>{ if(body[c]!==undefined){ sets.push(c+'=?'); vals.push(g(c)); } });
+    if(body.chi_tiet!==undefined){ sets.push('chi_tiet=?'); vals.push(JSON.stringify(body.chi_tiet||{})); }
+    if(body.so_lieu!==undefined){ sets.push('so_lieu=?'); vals.push(JSON.stringify(body.so_lieu||{})); }
+    sets.push('updated_at=?'); vals.push(nowISO()); vals.push(id);
+    if(sets.length>1) await env.DB.prepare(`UPDATE san_xuat SET ${sets.join(', ')} WHERE id=?`).bind(...vals).run();
+    return id;
+  }
+  const nid=uid('sx');
+  await env.DB.prepare(`INSERT INTO san_xuat (id,${SX_COT.join(',')},chi_tiet,so_lieu,created_at,updated_at) VALUES (?${',?'.repeat(SX_COT.length)},?,?,?,?)`)
+    .bind(nid, ...SX_COT.map(c=>g(c)), JSON.stringify(body.chi_tiet||{}), JSON.stringify(body.so_lieu||{}), nowISO(), nowISO()).run();
+  return nid;
+}
+// ===== CẤU HÌNH THEO MODULE =====
+// Ai được sửa cấu hình: Admin và Marketing (quản lý). Kỹ thuật/Sales KHÔNG.
+function canCauHinh(u){ return !!u && (u.vai_tro===ROLES.ADMIN || u.vai_tro===ROLES.MARKETING); }
+// Giá trị mặc định — cũng là "nguồn sự thật" khi chưa ai cấu hình gì
+const CONFIG_MAC_DINH = {
+  sanxuat: { canh_bao_tre:0 },
+  air:     { checklist: null },                       // null = dùng AIR_CHECKLIST gốc
+  // AI chỉ được TỰ QUYẾT khi người bật công tắc — mặc định TẮT, AI chỉ chấm sẵn để người xem.
+  // tu_khoa_nganh rỗng = NHẬN TẤT CẢ. Máy tự gom trend mà không lọc thì một tuần là ngập rác,
+  // nên chỗ này để người trong nghề tự khai từ khoá, không hard-code hộ.
+  trend:   { checklist: null, tu_dong_duyet:false, tu_dong_het_han:true, chan_khi_rui_ro:true,
+             tu_khoa_nganh: [], tu_dong_cham_ai:true, han_mac_dinh_ngay:7, chong_trung_ngay:30,
+             // AGENT chạy trong app theo lịch cố định — không cần n8n. Mặc định TẮT.
+             agent_bat:false, agent_gio:8, agent_tu_tao_ke_hoach:false },
+  viec_ket:{ sua_lai:3, cho_duyet:2, chua_nhap_kq:14, trend_sap_het:7, don_cho_gan:3 },
+  hoc:     { min_mau:5 },
+  dash:    { min_mau:5, lech_pillar:15 },
+  ketqua:  { nguon_mac_dinh:{ TIKTOK_SHOP:'TRUC_TIEP', SHOPEE:'GIAN_TIEP', API_KENH:'KHONG_QUY_DON', NHAP_TAY:'KHONG_QUY_DON' } },
+  lich:    { timeout_phut:60, max_lan_thu:3 },
+};
+async function docCauHinh(env){
+  const out={};
+  for(const k of Object.keys(CONFIG_MAC_DINH)) out[k]={...CONFIG_MAC_DINH[k]};
+  try{
+    const rows=(await env.DB.prepare(`SELECT * FROM module_config`).all()).results;
+    rows.forEach(r=>{ try{ out[r.id]={...(out[r.id]||{}), ...JSON.parse(r.cau_hinh||'{}')}; }catch(e){} });
+  }catch(e){}
+  return out;
+}
+// P10 — Ngưỡng bằng chứng: DƯỚI ngưỡng này thì KHÔNG rút ra kết luận nào.
+// Ranh giới: chỉ tổng hợp cái đã quan sát được; KHÔNG dự đoán viral/%view bằng AI.
+const MIN_MAU_BANG_CHUNG = 5;
+// P8 — 3 MỨC TIN CẬY. Ranh giới đạo đức số liệu: 3 mức này KHÔNG BAO GIỜ được cộng dồn
+// thành một con số "doanh thu từ content" — luôn báo cáo tách 3 cột riêng.
+const MUC_TIN_CAY = {
+  TRUC_TIEP:   'Trực tiếp',      // sàn trả về đúng mã của bài → quy đơn chắc chắn
+  GIAN_TIEP:   'Gián tiếp',      // có liên hệ nhưng không chắc 100% (vd voucher dùng chung)
+  KHONG_QUY_DON:'Không quy đơn', // chỉ là chỉ số hiển thị/tương tác, KHÔNG suy ra doanh thu
+};
+const NGUON_KQ = ['TIKTOK_SHOP','SHOPEE','API_KENH','NHAP_TAY'];
+// Nguồn nào mặc định thuộc mức tin cậy nào (người nhập vẫn có thể chọn khác)
+const NGUON_MUC_MAC_DINH = { TIKTOK_SHOP:'TRUC_TIEP', SHOPEE:'GIAN_TIEP', API_KENH:'KHONG_QUY_DON', NHAP_TAY:'KHONG_QUY_DON' };
+// P7 — Checklist đăng thủ công. KHÔNG auto-post (TikTok Content Posting API cần audit → SELF_ONLY).
+// bat_buoc=true → phải tick hết mới cho đánh dấu "Đã đăng".
+const AIR_CHECKLIST = [
+  {k:'noi_dung_duyet', label:'Nội dung đã qua 2 cổng duyệt', bat_buoc:true},
+  {k:'dung_kenh',      label:'Đúng kênh & đúng định dạng của kênh', bat_buoc:true},
+  {k:'ma_gan',         label:'Đã gắn mã theo dõi / voucher vào bài', bat_buoc:true},
+  {k:'link_sp',        label:'Link sản phẩm / giỏ hàng đúng', bat_buoc:true},
+  {k:'caption_claim',  label:'Caption đã rà lại cụm từ cấm', bat_buoc:true},
+  {k:'media_ty_le',    label:'Ảnh/video đúng tỉ lệ, không vỡ nét', bat_buoc:false},
+  {k:'hashtag_cta',    label:'Hashtag & CTA đầy đủ', bat_buoc:false},
+  {k:'hen_gio',        label:'Đã hẹn giờ / canh khung giờ đăng', bat_buoc:false},
+];
+const AIR_ST = { CHUAN_BI:'CHUAN_BI', DA_LEN_LICH:'DA_LEN_LICH', DANG_GUI:'DANG_GUI', DEN_GIO:'DEN_GIO', DA_DANG:'DA_DANG', LOI:'LOI' };
+// Gửi sang n8n rồi mà quá lâu không thấy báo về → coi như hỏng, chuyển đăng tay (tránh treo mãi)
+const N8N_TIMEOUT_PHUT = 60;
+// Nền tảng nào ĐĂNG TỰ ĐỘNG ĐƯỢC. Ghi rõ điều kiện để không hứa quá.
+// TikTok cố ý = false: Content Posting API chưa qua audit thì bài ra SELF_ONLY (chỉ mình thấy) → auto-post vô nghĩa.
+const KENH_TU_DONG = {
+  FANPAGE:  { duoc:true,  ten:'Facebook Page', dieu_kien:'Cần Page access token + quyền pages_manage_posts (app phải qua Meta review)' },
+  YOUTUBE:  { duoc:true,  ten:'YouTube',       dieu_kien:'Cần OAuth token có scope youtube.upload' },
+  ZALO_OA:  { duoc:true,  ten:'Zalo OA',       dieu_kien:'Cần OA access token' },
+  TIKTOK:   { duoc:false, ten:'TikTok',        dieu_kien:'Chưa qua audit thì bài đăng chỉ mình bạn thấy (SELF_ONLY) → phải đăng tay' },
+  SHOPEE:   { duoc:false, ten:'Shopee',        dieu_kien:'Không có API đăng bài công khai → đăng tay' },
+  WEBSITE:  { duoc:false, ten:'Website',       dieu_kien:'Tuỳ hệ quản trị website → đăng tay' },
+};
+// Token đọc từ SECRET của Worker theo quy ước TOKEN_<api_ma>, KHÔNG lưu trong D1.
+// Lý do: D1 không mã hoá; token rò rỉ là chiếm quyền đăng bài trên Page thật.
+function layToken(env, kenh){
+  const ma=String((kenh&&kenh.api_ma)||'').trim().toUpperCase().replace(/[^A-Z0-9_]/g,'');
+  if(!ma) return null;
+  return env['TOKEN_'+ma] || null;
+}
+// Đăng thật lên nền tảng. Trả {ok, id} hoặc {ok:false, loi}. KHÔNG BAO GIỜ trả ok khi không chắc.
+async function dangLenNenTang(env, kenh, post){
+  const cap=KENH_TU_DONG[String(kenh.loai||'').toUpperCase()];
+  if(!cap || !cap.duoc) return {ok:false, loi:'Nền tảng này không đăng tự động được — '+((cap&&cap.dieu_kien)||'')};
+  const token=layToken(env, kenh);
+  if(!token) return {ok:false, loi:'Chưa cắm token cho kênh này (secret TOKEN_'+((kenh.api_ma)||'?')+')'};
+  const objId=String(kenh.api_object_id||'').trim();
+  if(!objId) return {ok:false, loi:'Chưa khai báo ID đối tượng trên nền tảng (VD: Page ID)'};
+  try{
+    if(String(kenh.loai).toUpperCase()==='FANPAGE'){
+      const noi_dung=[post.tieu_de, post.ghi_chu].filter(Boolean).join('\n\n');
+      const body=new URLSearchParams();
+      body.set('message', noi_dung || post.tieu_de || '');
+      if(post.link_bai) body.set('link', post.link_bai);
+      body.set('access_token', token);
+      const res=await fetch('https://graph.facebook.com/v21.0/'+encodeURIComponent(objId)+'/feed',{method:'POST',body});
+      const j=await res.json().catch(()=>({}));
+      if(!res.ok || !j.id) return {ok:false, loi:'Facebook từ chối: '+((j.error&&j.error.message)||('HTTP '+res.status))};
+      return {ok:true, id:j.id};
+    }
+    // Các nền tảng còn lại: chưa hiện thực → nói thẳng, KHÔNG giả vờ thành công
+    return {ok:false, loi:'Chưa hiện thực bộ đăng cho '+cap.ten+' — hiện phải đăng tay'};
+  }catch(e){ return {ok:false, loi:'Lỗi gọi API: '+(e.message||e)}; }
+}
+// ===== HẠ TẦNG AI DÙNG CHUNG =====
+const AI_MODEL_MAC_DINH='claude-sonnet-4-5';
+async function goiAI(env, {system, messages, max_tokens=4000}){
+  const key=env.ANTHROPIC_API_KEY;
+  if(!key) return {ok:false, thieu_key:true, loi:'Chưa cắm ANTHROPIC_API_KEY'};
+  try{
+    const res=await fetch('https://api.anthropic.com/v1/messages',{ method:'POST',
+      headers:{ 'content-type':'application/json', 'x-api-key':key, 'anthropic-version':'2023-06-01' },
+      body: JSON.stringify({ model: env.ANTHROPIC_MODEL||AI_MODEL_MAC_DINH, max_tokens, system, messages }) });
+    const j=await res.json().catch(()=>({}));
+    if(!res.ok) return {ok:false, loi:'AI trả lỗi: '+((j.error&&j.error.message)||('HTTP '+res.status))};
+    const txt=((j.content||[]).map(c=>c.text||'').join('')||'').trim();
+    if(!txt) return {ok:false, loi:'AI trả về rỗng'};
+    return {ok:true, text:txt};
+  }catch(e){ return {ok:false, loi:'Không gọi được AI: '+(e.message||e)}; }
+}
+// Bảng dữ liệu THẬT đưa cho AI. Chỉ gửi số đã có; KHÔNG bịa, không suy diễn.
+async function boiCanhAI(env, me){
+  const q=async(sql)=>(await env.DB.prepare(sql).all()).results;
+  const [sp,cc,pil,fw,kn,ci,scr,ap,air,kq,tr,sx,bh]=await Promise.all([
+    q(`SELECT ma,ten,dong,nhom,don_vi,gia_sau_thue,bao_hanh,thong_so,tieu_chuan,huong_dan FROM san_pham WHERE active=1`),
+    q(`SELECT cum_tu,ly_do,muc_do FROM claim_cam WHERE active=1`),
+    q(`SELECT ten,ty_trong,objective FROM pillars WHERE active=1`),
+    q(`SELECT ten FROM frameworks WHERE active=1`),
+    q(`SELECT ten,loai FROM kenh WHERE active=1`),
+    q(`SELECT trang_thai,loai,thang FROM content_items`),
+    q(`SELECT trang_thai,so_lan_tra,created_by_name FROM scripts`),
+    q(`SELECT cong,trang_thai FROM approvals`),
+    q(`SELECT trang_thai,tieu_de FROM air_posts`),
+    q(`SELECT muc_tin_cay,doanh_thu,so_don,luot_xem,ky FROM ket_qua`),
+    q(`SELECT ten,trang_thai,han_dung FROM trends`),
+    q(`SELECT tieu_de,tt_brief,tt_quay,tt_san_xuat,tt_air,pic_quay,deadline_brief,deadline_sx FROM san_xuat`),
+    q(`SELECT tieu_de,loai,trang_thai,so_mau FROM bai_hoc WHERE trang_thai='DA_DUYET'`),
+  ]);
+  const dem=(arr,f)=>{ const m={}; arr.forEach(x=>{ const k=f(x)||'(trống)'; m[k]=(m[k]||0)+1; }); return m; };
+  const tong=(arr,f)=>arr.reduce((s,x)=>s+(Number(f(x))||0),0);
+  const strat=await env.DB.prepare(`SELECT * FROM content_strategy WHERE id=1`).first()||{};
+  return {
+    chien_luoc:{ okr:strat.okr||'', big_idea:strat.big_idea||'', doi_tuong:strat.audience||'', brand_voice:strat.brand_voice||'' },
+    tru_cot: pil.map(p=>({ten:p.ten, muc_tieu_phan_tram:p.ty_trong, dinh_huong:p.objective})),
+    // Chatbot nội bộ ĐƯỢC biết giá niêm yết (nhân viên hay hỏi); giá chưa công bố để null,
+    // không đưa 0 sang AI. Kịch bản đăng công khai thì KHÔNG nhận giá — xem /scripts/ai-sinh.
+    san_pham: sp.map(x=>({ma:x.ma, ten:x.ten, dong:x.dong, nhom:x.nhom, don_vi:x.don_vi,
+      gia_niem_yet_sau_thue: x.gia_sau_thue==null?null:x.gia_sau_thue, bao_hanh:x.bao_hanh||'',
+      thong_so:JSON.parse(x.thong_so||'[]'), tieu_chuan:x.tieu_chuan, huong_dan:x.huong_dan})),
+    cum_tu_cam: cc.map(c=>({cum_tu:c.cum_tu, ly_do:c.ly_do, muc_do:c.muc_do})),
+    framework: fw.map(x=>x.ten), kenh: kn.map(x=>({ten:x.ten,loai:x.loai})),
+    ke_hoach:{ tong:ci.length, theo_giai_doan:dem(ci,x=>x.trang_thai), theo_thang:dem(ci,x=>x.thang) },
+    kich_ban:{ tong:scr.length, theo_trang_thai:dem(scr,x=>x.trang_thai), tong_lan_bi_tra:tong(scr,x=>x.so_lan_tra), theo_nguoi:dem(scr,x=>x.created_by_name) },
+    duyet:{ dang_cho:ap.filter(a=>a.trang_thai==='CHO').length, theo_cong:dem(ap.filter(a=>a.trang_thai==='CHO'),x=>x.cong) },
+    dang_bai:{ tong:air.length, theo_trang_thai:dem(air,x=>x.trang_thai) },
+    ket_qua_TACH_3_MUC:{
+      truc_tiep:{ doanh_thu:tong(kq.filter(k=>k.muc_tin_cay==='TRUC_TIEP'),x=>x.doanh_thu), so_don:tong(kq.filter(k=>k.muc_tin_cay==='TRUC_TIEP'),x=>x.so_don) },
+      gian_tiep:{ doanh_thu:tong(kq.filter(k=>k.muc_tin_cay==='GIAN_TIEP'),x=>x.doanh_thu), so_don:tong(kq.filter(k=>k.muc_tin_cay==='GIAN_TIEP'),x=>x.so_don) },
+      khong_quy_don:{ luot_xem:tong(kq.filter(k=>k.muc_tin_cay==='KHONG_QUY_DON'),x=>x.luot_xem) } },
+    trend: tr.map(t=>({ten:t.ten, trang_thai:t.trang_thai, han_dung:t.han_dung})),
+    san_xuat:{ tong:sx.length, theo_tt_quay:dem(sx,x=>x.tt_quay), theo_pic_quay:dem(sx,x=>x.pic_quay) },
+    bai_hoc_da_duyet: bh.map(b=>({tieu_de:b.tieu_de, loai:b.loai, so_mau:b.so_mau})),
+  };
+}
+const AI_NGUYEN_TAC =
+  'NGUYÊN TẮC BẮT BUỘC:\n'+
+  '1. CHỈ dùng số liệu có trong DỮ LIỆU được cung cấp. Không có thì nói thẳng "chưa có dữ liệu" — TUYỆT ĐỐI KHÔNG bịa số, không ước lượng, không suy đoán.\n'+
+  '2. Ba mức tin cậy (Trực tiếp / Gián tiếp / Không quy đơn) KHÔNG BAO GIỜ được cộng lại thành một con số doanh thu. Luôn nói tách bạch kèm mức tin cậy.\n'+
+  '3. KHÔNG dự đoán khả năng viral, %view, hay bài nào sẽ thành công. Chỉ mô tả cái đã xảy ra.\n'+
+  '4. Khi nói về sản phẩm, CHỈ trích dẫn thông số/tiêu chuẩn có thật trong dữ liệu. Không có căn cứ thì không khẳng định.\n'+
+  '5. Tránh mọi cụm từ trong danh sách cấm.\n'+
+  '6. Trả lời bằng tiếng Việt, ngắn gọn, đi thẳng vào việc.';
+
+// AI đánh giá trend: CHỈ trả lời được/không cho từng mục checklist kèm lý do.
+// KHÔNG hỏi AI "trend này có viral không" — không ai đoán được, và đoán sai dẫn tới quyết định sai.
+async function aiDanhGiaTrend(env, me, tr){
+  const cfgAll=await docCauHinh(env);
+  const chk=(cfgAll.trend&&cfgAll.trend.checklist)||TREND_CHECK;
+  const pil=(await env.DB.prepare(`SELECT ten,objective,request FROM pillars WHERE active=1`).all()).results;
+  const sp=(await env.DB.prepare(`SELECT ten,dong,thong_so,tieu_chuan FROM san_pham WHERE active=1`).all()).results;
+  const cc=(await env.DB.prepare(`SELECT cum_tu,ly_do,muc_do FROM claim_cam WHERE active=1`).all()).results;
+  const strat=await env.DB.prepare(`SELECT * FROM content_strategy WHERE id=1`).first()||{};
+  const hnStr=new Date().toISOString().slice(0,10);
+  const sys='Bạn thẩm định một trend mạng xã hội xem thương hiệu vật liệu xây dựng Kingsmen CÓ NÊN LÀM hay không.\n'+AI_NGUYEN_TAC+'\n'+
+    'Bạn CHỈ đánh giá các câu hỏi trả lời được bằng dữ kiện. TUYỆT ĐỐI KHÔNG dự đoán trend sẽ viral hay đạt bao nhiêu view.\n'+
+    'Với mỗi mục checklist, trả true/false kèm lý do NGẮN dựa trên dữ liệu được cung cấp. Không chắc thì trả false và nói rõ vì sao chưa đủ căn cứ.\n'+
+    'CHỈ trả về JSON thuần: {"danh_gia":{"<mã mục>":true|false,...},"ly_do":{"<mã mục>":"..."},"rui_ro_claim":true|false,"tom_tat":"1-2 câu"}\n'+
+    'rui_ro_claim = true nếu làm trend này dễ buộc phải nói quá, chạm cụm từ cấm, hoặc gây hiểu nhầm về sản phẩm.';
+  const usr='TREND: '+(tr.ten||'')+'\n'+
+    'Nguồn: '+(tr.nguon||'')+' · Hạn dùng: '+(tr.han_dung||'(chưa đặt)')+' · Hôm nay: '+hnStr+'\n'+
+    'Mô tả: '+(tr.mo_ta||'(không có)')+'\n'+
+    'Rủi ro người dùng tự ghi: '+(tr.rui_ro||'(không có)')+'\n\n'+
+    'ĐỊNH HƯỚNG THƯƠNG HIỆU: '+(strat.big_idea||'')+' | Đối tượng: '+(strat.audience||'')+'\n'+
+    'TRỤ CỘT NỘI DUNG: '+JSON.stringify(pil.map(p=>({ten:p.ten,dinh_huong:p.objective})))+'\n'+
+    'SẢN PHẨM THẬT: '+JSON.stringify(sp.map(x=>({ten:x.ten,dong:x.dong,thong_so:JSON.parse(x.thong_so||'[]'),tieu_chuan:x.tieu_chuan})))+'\n'+
+    'CỤM TỪ CẤM: '+JSON.stringify(cc.map(c=>({cum_tu:c.cum_tu,muc_do:c.muc_do})))+'\n\n'+
+    'CHECKLIST CẦN CHẤM: '+JSON.stringify(chk.map(c=>({ma:c.k,noi_dung:c.label,bat_buoc:!!c.bat_buoc})));
+  const r=await goiAI(env,{system:sys, messages:[{role:'user',content:usr}], max_tokens:1500});
+  if(!r.ok) return r;
+  let txt=r.text.replace(/^```(?:json)?\s*/i,'').replace(/```\s*$/,'').trim();
+  const i=txt.indexOf('{'), k=txt.lastIndexOf('}');
+  if(i<0||k<0) return {ok:false, loi:'AI không trả về JSON'};
+  let o; try{ o=JSON.parse(txt.slice(i,k+1)); }catch(e){ return {ok:false, loi:'JSON từ AI hỏng: '+e.message}; }
+  if(!o || typeof o.danh_gia!=='object' || !o.danh_gia) return {ok:false, loi:'AI không trả về phần đánh giá'};
+  // Chỉ nhận đúng các mã mục có thật — AI bịa thêm mục thì bỏ
+  const dg={}, ld={};
+  chk.forEach(c=>{ dg[c.k]= o.danh_gia[c.k]===true; if(o.ly_do&&o.ly_do[c.k]) ld[c.k]=String(o.ly_do[c.k]).slice(0,300); });
+  // Hạn dùng là dữ kiện xác định — KHÔNG để AI phán, tự tính
+  const conKip = !tr.han_dung || tr.han_dung>=hnStr;
+  if(chk.some(c=>c.k==='kip_thoi')){ dg.kip_thoi=conKip; ld.kip_thoi = conKip?('Còn hạn tới '+(tr.han_dung||'(không đặt hạn)')):('Đã quá hạn '+tr.han_dung); }
+  return {ok:true, danh_gia:dg, ly_do:ld, rui_ro_claim:o.rui_ro_claim===true, tom_tat:String(o.tom_tat||'').slice(0,400)};
+}
+// Chấm trend bằng AI rồi GHI kết quả. Dùng chung cho nút bấm tay và luồng máy tự gom,
+// để hai đường đi qua đúng một bộ ràng buộc — không có đường tắt nào lỏng hơn đường kia.
+async function chamVaGhiTrend(env, me, tr){
+  const r=await aiDanhGiaTrend(env, me, tr);
+  if(!r.ok) return r;
+  const cfg=(await docCauHinh(env)).trend||{};
+  const chk=cfg.checklist||TREND_CHECK;
+  const duA=chk.filter(c=>c.bat_buoc).every(c=>r.danh_gia[c.k]===true);
+  const rui_ro=!!r.rui_ro_claim;
+  const tuDuyet = !!cfg.tu_dong_duyet && duA && !(cfg.chan_khi_rui_ro!==false && rui_ro);
+  await env.DB.prepare(`UPDATE trends SET danh_gia=?, trang_thai=?, ly_do=?, nguoi_duyet_ten=?, decided_at=? WHERE id=?`)
+    .bind(JSON.stringify(r.danh_gia), tuDuyet?'DUYET':'DANH_GIA', r.tom_tat||'',
+      tuDuyet?'AI tự duyệt (bật trong Cấu hình)':null, tuDuyet?nowISO():null, tr.id).run();
+  return { ok:true, danh_gia:r.danh_gia, ly_do:r.ly_do, tom_tat:r.tom_tat,
+    rui_ro_claim:rui_ro, du_dieu_kien:duA, tu_duyet:tuDuyet,
+    vi_sao_khong_tu_duyet: tuDuyet?null:(!cfg.tu_dong_duyet?'Chưa bật tự duyệt trong Cấu hình'
+      :(!duA?'Chưa đủ mục bắt buộc':'Có rủi ro claim nên phải người xác nhận')) };
+}
+// ===== MÁY TỰ GOM TREND =====
+// Chuẩn hoá để CHỐNG TRÙNG. Chạy hằng ngày mà không chống trùng thì danh sách thành bãi rác,
+// và người sẽ bỏ luôn không đọc — tự động hoá lúc đó thành phản tác dụng.
+function chuanHoaTen(s){ return String(s||'').toLowerCase().replace(/\s+/g,' ').trim(); }
+const THAM_SO_THEO_DOI = ['utm_source','utm_medium','utm_campaign','utm_term','utm_content',
+  'fbclid','gclid','igshid','is_from_webapp','sender_device','_r','_t','share_app_id','share_link_id'];
+function chuanHoaLink(s){
+  const raw=String(s||'').trim(); if(!raw) return '';
+  try{
+    const u=new URL(raw); u.hash='';
+    THAM_SO_THEO_DOI.forEach(k=>u.searchParams.delete(k));
+    const q=u.searchParams.toString();
+    return (u.host.replace(/^www\./,'')+u.pathname.replace(/\/+$/,'')+(q?'?'+q:'')).toLowerCase();
+  }catch(e){ return raw.toLowerCase(); }
+}
+// Rỗng = nhận tất cả. Có từ khoá thì phải khớp ít nhất 1 — cố ý KHÔNG đoán hộ mức liên quan.
+function khopTuKhoa(text, tuKhoa){
+  const ds=(tuKhoa||[]).map(chuanHoaTen).filter(Boolean);
+  if(!ds.length) return true;
+  const t=chuanHoaTen(text);
+  return ds.some(k=>t.includes(k));
+}
+// Lõi gom trend — dùng chung cho cửa HTTP (n8n đẩy vào) và cho agent chạy trong app.
+// Một đường duy nhất: chống trùng · lọc từ khoá · đặt hạn · chấm AI. Không có bản sao nào lỏng hơn.
+async function gomTrendVaoDB(env, ds, nguoiMay){
+  const cfg=(await docCauHinh(env)).trend||{};
+  const hn=new Date().toISOString().slice(0,10);
+  const hanMD=Number(cfg.han_mac_dinh_ngay); const soNgayHan=isFinite(hanMD)&&hanMD>0?hanMD:7;
+  const cutTrung=Number(cfg.chong_trung_ngay); const soNgayTrung=isFinite(cutTrung)&&cutTrung>0?cutTrung:30;
+  const tuCut=new Date(Date.now()-soNgayTrung*864e5).toISOString();
+  // Nạp trend gần đây MỘT LẦN để so trùng — không truy vấn lại theo từng dòng
+  const gan=(await env.DB.prepare(`SELECT ten,link FROM trends WHERE created_at>=?`).bind(tuCut).all()).results;
+  const daCoLink=new Set(gan.map(x=>chuanHoaLink(x.link)).filter(Boolean));
+  const daCoTen=new Set(gan.map(x=>chuanHoaTen(x.ten)).filter(Boolean));
+  let them=0; const trung=[], lechTuKhoa=[], loi=[]; const moi=[];
+  for(const x of ds){
+    const ten=String((x&&x.ten)||'').trim();
+    if(!ten){ loi.push('(thiếu tên)'); continue; }
+    const link=String((x&&x.link)||'').trim();
+    const mo_ta=String((x&&x.mo_ta)||'').trim();
+    const kLink=chuanHoaLink(link), kTen=chuanHoaTen(ten);
+    if((kLink&&daCoLink.has(kLink)) || daCoTen.has(kTen)){ trung.push(ten); continue; }
+    if(!khopTuKhoa(ten+' '+mo_ta, cfg.tu_khoa_nganh)){ lechTuKhoa.push(ten); continue; }
+    const id=uid('tr');
+    const han=String((x&&x.han_dung)||'').trim() || new Date(Date.now()+soNgayHan*864e5).toISOString().slice(0,10);
+    await env.DB.prepare(`INSERT INTO trends (id,ten,nguon,link,mo_ta,phat_hien_ngay,han_dung,pillar_id,san_pham_id,danh_gia,rui_ro,trang_thai,ly_do,nguoi_de_xuat,created_at) VALUES (?,?,?,?,?,?,?,NULL,NULL,'{}','','MOI','',?,?)`)
+      .bind(id, ten, String((x&&x.nguon)||'KHAC').trim().toUpperCase().slice(0,30), link, mo_ta,
+        String((x&&x.phat_hien_ngay)||'').trim()||hn, han, nguoiMay, nowISO()).run();
+    if(kLink) daCoLink.add(kLink); daCoTen.add(kTen);
+    moi.push({id, ten, mo_ta, link, han_dung:han, rui_ro:''});
+    them++;
+  }
+  // Chấm AI ngay để sáng ra người chỉ còn việc ĐỌC và QUYẾT.
+  // Thiếu key thì bỏ qua — trend vẫn nằm đó ở trạng thái Mới, KHÔNG báo là đã chấm.
+  let daCham=0, daDuyet=0;
+  if(cfg.tu_dong_cham_ai!==false && env.ANTHROPIC_API_KEY){
+    const may={ id:'', ho_ten:nguoiMay, vai_tro:ROLES.MARKETING };
+    for(const t of moi){ try{ const r=await chamVaGhiTrend(env, may, t); if(r.ok){ daCham++; if(r.tu_duyet) daDuyet++; } }catch(e){} }
+  }
+  if(them) await env.DB.prepare(`INSERT INTO audit (id,at,by_id,by_name,action,entity,entity_id,detail) VALUES (?,?,'',?,?,'trends','',?)`)
+    .bind(uid('a'), nowISO(), nguoiMay, 'máy gom trend', them+' trend mới · '+trung.length+' trùng · '+lechTuKhoa.length+' lệch từ khoá').run();
+  return { them, da_cham_ai:daCham, da_tu_duyet:daDuyet, id_moi:moi.map(x=>x.id),
+    bo_qua_trung:trung.length, bo_qua_tu_khoa:lechTuKhoa.length, bo_qua_thieu_ten:loi.length,
+    chi_tiet:{ trung:trung.slice(0,20), lech_tu_khoa:lechTuKhoa.slice(0,20) },
+    ghi_chu: (cfg.tu_dong_cham_ai!==false && !env.ANTHROPIC_API_KEY)
+      ? 'Chưa cắm ANTHROPIC_API_KEY nên chưa chấm được — trend nằm ở trạng thái Mới' : undefined };
+}
+// ===== AGENT TREND: chạy trong app theo lịch cố định, không cần n8n =====
+// Giờ Việt Nam. Cron của Cloudflare chạy theo UTC nên phải tự quy đổi, không để lệch 7 tiếng.
+function gioVN(d){ return (new Date(d||Date.now()).getUTCHours()+7)%24; }
+function ngayVN(d){ return new Date((d||Date.now())+7*36e5).toISOString().slice(0,10); }
+// Đọc RSS bằng regex, CỐ Ý không kéo thư viện XML vào Worker cho một việc đơn giản.
+function docRSS(xml){
+  const ra=[];
+  const items=String(xml||'').split(/<item[\s>]/i).slice(1);
+  const lay=(s,tag)=>{
+    const m=s.match(new RegExp('<'+tag+'[^>]*>([\\s\\S]*?)<\\/'+tag+'>','i'));
+    if(!m) return '';
+    return m[1].replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g,'$1')
+      .replace(/<[^>]+>/g,' ').replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>')
+      .replace(/&quot;/g,'"').replace(/&#39;/g,"'").replace(/\s+/g,' ').trim();
+  };
+  for(const it of items){
+    const ten=lay(it,'title'); if(!ten) continue;
+    ra.push({ ten, nguon:'GOOGLE_TRENDS', link:lay(it,'link'),
+      mo_ta:[lay(it,'ht:news_item_title'), lay(it,'description')].filter(Boolean).join(' — ').slice(0,500) });
+  }
+  return ra;
+}
+async function layGoogleTrends(){
+  const r=await fetch('https://trends.google.com/trending/rss?geo=VN',{headers:{'user-agent':'KingsmenContentOS/1.0'}});
+  if(!r.ok) throw new Error('Google Trends trả về '+r.status);
+  return docRSS(await r.text());
+}
+async function layYouTubeVN(env){
+  const key=env.YOUTUBE_API_KEY;
+  if(!key) return { bo_qua:'Chưa cắm YOUTUBE_API_KEY', ds:[] };
+  const u='https://www.googleapis.com/youtube/v3/videos?part=snippet&chart=mostPopular&regionCode=VN&maxResults=25&key='+encodeURIComponent(key);
+  const r=await fetch(u);
+  if(!r.ok) throw new Error('YouTube API trả về '+r.status);
+  const j=await r.json();
+  return { ds:(j.items||[]).filter(v=>v&&v.snippet&&v.snippet.title).map(v=>({
+    ten:String(v.snippet.title).trim(), nguon:'YOUTUBE',
+    link:'https://www.youtube.com/watch?v='+v.id, mo_ta:String(v.snippet.description||'').slice(0,500) })) };
+}
+async function ghiAgentLog(env, o){
+  try{ await env.DB.prepare(`INSERT INTO agent_log (id,at,loai,ngay,ok,tom_tat,chi_tiet) VALUES (?,?,?,?,?,?,?)`)
+    .bind(uid('ag'), nowISO(), o.loai||'TREND', o.ngay||ngayVN(), o.ok?1:0,
+      String(o.tom_tat||'').slice(0,300), JSON.stringify(o.chi_tiet||{}).slice(0,4000)).run();
+    // giữ 100 bản ghi gần nhất, đủ để truy vết mà không phình bảng
+    await env.DB.prepare(`DELETE FROM agent_log WHERE id NOT IN (SELECT id FROM agent_log ORDER BY at DESC LIMIT 100)`).run();
+  }catch(e){}
+}
+// Chạy một lượt agent. `ep=true` là bấm "Chạy thử ngay" — bỏ qua kiểm tra giờ và kiểm tra đã chạy hôm nay.
+async function chayAgentTrend(env, {ep=false}={}){
+  await ensureSchema(env);
+  const cfg=(await docCauHinh(env)).trend||{};
+  if(!ep){
+    if(!cfg.agent_bat) return {bo_qua:'Agent đang tắt'};
+    const gio=Number(cfg.agent_gio); const gioChay=isFinite(gio)&&gio>=0&&gio<=23?gio:8;
+    if(gioVN()!==gioChay) return {bo_qua:'Chưa tới giờ'};
+    const hn=ngayVN();
+    const daChay=await env.DB.prepare(`SELECT id FROM agent_log WHERE loai='TREND' AND ngay=? AND ok=1`).bind(hn).first();
+    if(daChay) return {bo_qua:'Hôm nay đã chạy rồi'};   // cron 15 phút/lần → phải chốt 1 lần/ngày
+  }
+  // Chạy thử ghi loại RIÊNG: bấm thử một cái mà làm mất luôn lượt chạy thật của ngày hôm đó
+  // là hành vi bẫy người dùng.
+  const loai = ep ? 'TREND_THU' : 'TREND';
+  const nguon={}, ds=[];
+  try{ const g=await layGoogleTrends(); ds.push(...g); nguon.google_trends=g.length; }
+  catch(e){ nguon.google_trends='lỗi: '+e.message; }
+  try{ const y=await layYouTubeVN(env); ds.push(...(y.ds||[])); nguon.youtube = y.bo_qua || (y.ds||[]).length; }
+  catch(e){ nguon.youtube='lỗi: '+e.message; }
+  if(!ds.length){
+    const tt='Không lấy được trend nào từ các nguồn';
+    await ghiAgentLog(env,{loai, ok:false, tom_tat:tt, chi_tiet:{nguon}});
+    return {ok:false, tom_tat:tt, nguon};
+  }
+  const kq=await gomTrendVaoDB(env, ds, 'Agent tự động');
+  // Tự tạo mục Kế hoạch nội dung cho trend ĐÃ DUYỆT — bước cuối của "tự động hoàn toàn".
+  // Mặc định TẮT: đây là lúc máy tạo ra việc cho người khác làm, nên phải do người bật.
+  let daTaoKH=0;
+  if(cfg.agent_tu_tao_ke_hoach && kq.them){
+    const may={ id:'', ho_ten:'Agent tự động', vai_tro:ROLES.MARKETING };
+    for(const id of kq.id_moi){
+      try{
+        const tr=await env.DB.prepare(`SELECT * FROM trends WHERE id=?`).bind(id).first();
+        if(!tr || tr.trang_thai!=='DUYET') continue;   // chỉ trend đã qua đủ ràng buộc tự duyệt
+        const ciId=await insertContentItem(env, may, {
+          loai:'SOCIAL', tieu_de:'[Trend] '+tr.ten, loai_muc_tieu:'THUONG_HIEU',
+          pillar_id:tr.pillar_id||null, framework_id:null, san_pham_id:tr.san_pham_id||null,
+          kenh_id:null, thang:ngayVN().slice(0,7), trang_thai:'Y_TUONG',
+          chi_tiet:{ tu_trend:tr.ten, link_trend:tr.link||'', han_dung:tr.han_dung||'', do_agent_tao:true },
+        });
+        await env.DB.prepare(`UPDATE trends SET trang_thai='DA_TRIEN_KHAI', content_item_id=?, decided_at=? WHERE id=?`).bind(ciId,nowISO(),id).run();
+        daTaoKH++;
+      }catch(e){}
+    }
+  }
+  const tom=kq.them+' trend mới · '+kq.da_cham_ai+' đã chấm · '+kq.da_tu_duyet+' tự duyệt'+
+    (daTaoKH?(' · '+daTaoKH+' đưa vào kế hoạch'):'')+' · bỏ '+kq.bo_qua_trung+' trùng, '+kq.bo_qua_tu_khoa+' lệch từ khoá';
+  await ghiAgentLog(env,{loai, ok:true, tom_tat:tom, chi_tiet:{nguon, ...kq, da_tao_ke_hoach:daTaoKH}});
+  return {ok:true, tom_tat:tom, nguon, ...kq, da_tao_ke_hoach:daTaoKH};
+}
+// ===== AI dựng workflow n8n =====
+// Kiểm tra workflow do AI sinh ra có dùng được không. KHÔNG BAO GIỜ trả JSON hỏng cho người dùng.
+function kiemTraWorkflow(wf){
+  const loi=[];
+  if(!wf || typeof wf!=='object') return ['Không phải object'];
+  if(!Array.isArray(wf.nodes) || !wf.nodes.length) loi.push('Thiếu mảng nodes');
+  if(!wf.connections || typeof wf.connections!=='object') loi.push('Thiếu connections');
+  if(loi.length) return loi;
+  const ten=new Set(); 
+  wf.nodes.forEach((n,i)=>{
+    if(!n || typeof n!=='object'){ loi.push('Node #'+i+' không hợp lệ'); return; }
+    if(!n.name) loi.push('Node #'+i+' thiếu name');
+    if(!n.type) loi.push('Node "'+(n.name||i)+'" thiếu type');
+    if(!Array.isArray(n.position)||n.position.length!==2) loi.push('Node "'+(n.name||i)+'" thiếu position');
+    if(ten.has(n.name)) loi.push('Trùng tên node: '+n.name);
+    ten.add(n.name);
+  });
+  // mọi liên kết phải trỏ tới node có thật — đây là lỗi hay gặp nhất khi AI sinh
+  for(const src of Object.keys(wf.connections)){
+    if(!ten.has(src)) loi.push('Liên kết từ node không tồn tại: '+src);
+    const mains=(wf.connections[src]||{}).main||[];
+    mains.forEach(br=>(br||[]).forEach(c=>{ if(!c||!ten.has(c.node)) loi.push('Liên kết tới node không tồn tại: '+((c&&c.node)||'?')); }));
+  }
+  if(!wf.nodes.some(n=>String(n.type).includes('webhook'))) loi.push('Không có node Webhook để app gọi vào');
+  const s2=JSON.stringify(wf);
+  if(!/callback_url/.test(s2)) loi.push('Không thấy gọi callback_url — app sẽ không biết kết quả');
+  return loi;
+}
+async function aiSinhWorkflow(env, {mo_ta, kenh_loai, token, app_base}){
+  const key=env.ANTHROPIC_API_KEY;
+  if(!key) return {ok:false, thieu_key:true, loi:'Chưa cắm ANTHROPIC_API_KEY'};
+  const sys='Bạn tạo workflow n8n (JSON) để đăng bài mạng xã hội. '+
+    'CHỈ trả về JSON thuần của workflow, không giải thích, không markdown fence. '+
+    'Bắt buộc: (1) node n8n-nodes-base.webhook httpMethod POST responseMode responseNode; '+
+    '(2) node n8n-nodes-base.code kiểm header x-app-token bằng TOKEN rồi làm phẳng body thành caption/media_url/tieu_de/object_id/callback_url/callback_token; '+
+    '(3) node n8n-nodes-base.respondToWebhook trả {received:true}; '+
+    '(4) các node đăng theo từng nền tảng; '+
+    '(5) node n8n-nodes-base.httpRequest POST tới callback_url, header X-N8N-Token, body {"ok":true,"link":...}; '+
+    'và một nhánh báo {"ok":false,"loi":...} khi lỗi. '+
+    'Mọi node phải có name duy nhất, type, typeVersion, position [x,y]. '+
+    'connections chỉ được trỏ tới name có thật. '+
+    'Dùng node thật khi có: n8n-nodes-base.facebookGraphApi cho Facebook, n8n-nodes-base.youTube cho YouTube; '+
+    'nền tảng không có node sẵn (TikTok) thì dùng n8n-nodes-base.httpRequest kèm ghi chú.';
+  const usr='Kênh cần đăng: '+((kenh_loai||[]).join(', ')||'TIKTOK, FANPAGE, YOUTUBE')+'\n'+
+    'TOKEN dùng chung: '+(token||'DAN_N8N_TOKEN_VAO_DAY')+'\n'+
+    'App base URL: '+(app_base||'')+'\n'+
+    'Yêu cầu thêm của người dùng: '+((mo_ta||'').trim()||'(không có)');
+  try{
+    const res=await fetch('https://api.anthropic.com/v1/messages',{ method:'POST',
+      headers:{ 'content-type':'application/json', 'x-api-key':key, 'anthropic-version':'2023-06-01' },
+      body: JSON.stringify({ model: env.ANTHROPIC_MODEL||'claude-sonnet-4-5', max_tokens:8000, system:sys, messages:[{role:'user',content:usr}] }) });
+    const j=await res.json().catch(()=>({}));
+    if(!res.ok) return {ok:false, loi:'AI trả lỗi: '+((j.error&&j.error.message)||('HTTP '+res.status))};
+    let txt=((j.content||[]).map(c=>c.text||'').join('')||'').trim();
+    txt=txt.replace(/^```(?:json)?\s*/i,'').replace(/```\s*$/,'').trim();
+    const i=txt.indexOf('{'), k=txt.lastIndexOf('}');
+    if(i<0||k<0) return {ok:false, loi:'AI không trả về JSON'};
+    let wf; try{ wf=JSON.parse(txt.slice(i,k+1)); }catch(e){ return {ok:false, loi:'JSON từ AI hỏng: '+e.message}; }
+    const loi=kiemTraWorkflow(wf);
+    if(loi.length) return {ok:false, loi:'Workflow AI sinh chưa dùng được: '+loi.slice(0,4).join(' · '), chi_tiet:loi};
+    return {ok:true, workflow:wf};
+  }catch(e){ return {ok:false, loi:'Không gọi được AI: '+(e.message||e)}; }
+}
+// Đăng qua n8n: app CHỈ gửi yêu cầu, n8n mới là bên đăng thật.
+// n8n đã qua audit của các nền tảng nên đăng được cả TikTok — thứ API trực tiếp không làm được.
+async function guiN8N(env, kenh, post){
+  const url=env.N8N_WEBHOOK_URL;
+  if(!url) return {ok:false, loi:'Chưa cắm N8N_WEBHOOK_URL (secret của Worker)'};
+  const payload={
+    air_post_id: post.id,
+    kenh: { id:kenh.id, ten:kenh.ten, loai:kenh.loai, thuong_hieu:kenh.thuong_hieu, object_id:kenh.api_object_id||'' },
+    tieu_de: post.tieu_de||'',
+    caption: post.ghi_chu||'',
+    media_url: post.media_url||'',
+    link_bai: post.link_bai||'',
+    ma_theo_doi: post.ma_theo_doi||'',
+    lich_dang: post.lich_dang||'',
+    // n8n gọi ngược về đây để báo kết quả (kèm token ở header X-N8N-Token)
+    callback_url: (env.APP_BASE_URL||'') + '/api/air/' + post.id + '/n8n-callback',
+  };
+  try{
+    const res=await fetch(url,{ method:'POST',
+      headers:{ 'content-type':'application/json', ...(env.N8N_TOKEN?{'X-App-Token':env.N8N_TOKEN}:{}) },
+      body: JSON.stringify(payload) });
+    let j=null; try{ j=await res.json(); }catch{}
+    if(!res.ok) return {ok:false, loi:'n8n trả lỗi HTTP '+res.status+(j&&j.error?(': '+j.error):'')};
+    // n8n trả kết quả ngay (workflow ngắn)
+    if(j && typeof j.ok==='boolean') return j.ok ? {ok:true, id:j.post_id||'', link:j.link||''} : {ok:false, loi:j.loi||'n8n báo thất bại'};
+    // n8n nhận việc, sẽ báo kết quả sau qua callback (upload video có thể lâu)
+    return {pending:true};
+  }catch(e){ return {ok:false, loi:'Không gọi được n8n: '+(e.message||e)}; }
+}
+// Cron: quét bài đến giờ. Đăng được thì đăng, không thì chuyển ĐẾN GIỜ để nhắc đăng tay.
+const MAX_LAN_THU = 3;
+async function chayLichDang(env){
+  try{
+    await ensureSchema(env);
+    const now=nowISO();
+    // Bài đã gửi n8n mà quá lâu không báo về → chuyển đăng tay, KHÔNG treo vô hạn
+    const cfgL=(await docCauHinh(env)).lich||{};
+    const timeoutPhut=Number(cfgL.timeout_phut)||N8N_TIMEOUT_PHUT;
+    const maxThu=Number(cfgL.max_lan_thu)||MAX_LAN_THU;
+    const hetHan=new Date(Date.now()-timeoutPhut*60000).toISOString();
+    await env.DB.prepare(`UPDATE air_posts SET trang_thai='DEN_GIO', loi=?, updated_at=? WHERE trang_thai='DANG_GUI' AND gui_luc IS NOT NULL AND gui_luc<?`)
+      .bind('Đã gửi n8n nhưng quá '+timeoutPhut+' phút không thấy báo kết quả — kiểm tra workflow n8n hoặc đăng tay', nowISO(), hetHan).run();
+    const dueRows=(await env.DB.prepare(
+      `SELECT * FROM air_posts WHERE lich_dang IS NOT NULL AND lich_dang<>'' AND lich_dang<=? AND trang_thai IN ('DA_LEN_LICH','LOI') AND COALESCE(lan_thu,0)<?`
+    ).bind(now, maxThu).all()).results;
+    for(const p of dueRows){
+      const kenh=p.kenh_id ? await env.DB.prepare(`SELECT * FROM kenh WHERE id=?`).bind(p.kenh_id).first() : null;
+      const batTuDong = p.tu_dong && kenh && uBool(kenh.tu_dong_dang);
+      if(!batTuDong){
+        // Không tự động được → KHÔNG im lặng: chuyển ĐẾN GIỜ để hiện trong nhắc việc
+        await env.DB.prepare(`UPDATE air_posts SET trang_thai='DEN_GIO', updated_at=? WHERE id=?`).bind(nowISO(),p.id).run();
+        continue;
+      }
+      const quaN8N = String(kenh.cach_dang||'API').toUpperCase()==='N8N';
+      const r = quaN8N ? await guiN8N(env, kenh, p) : await dangLenNenTang(env, kenh, p);
+      if(r.pending){
+        await env.DB.prepare(`UPDATE air_posts SET trang_thai='DANG_GUI', gui_luc=?, updated_at=? WHERE id=?`).bind(nowISO(),nowISO(),p.id).run();
+        continue;
+      }
+      if(r.ok){
+        await env.DB.prepare(`UPDATE air_posts SET trang_thai='DA_DANG', posted_at=?, updated_at=?, loi=NULL WHERE id=?`).bind(nowISO(),nowISO(),p.id).run();
+      } else {
+        const lan=Number(p.lan_thu||0)+1;
+        const het = lan>=maxThu;
+        await env.DB.prepare(`UPDATE air_posts SET trang_thai=?, lan_thu=?, loi=?, updated_at=? WHERE id=?`)
+          .bind(het?'DEN_GIO':'LOI', lan, (r.loi||'')+(het?' — đã thử '+lan+' lần, chuyển sang đăng tay':''), nowISO(), p.id).run();
+      }
+    }
+  }catch(e){}
+}
+// P6 — 2 cổng duyệt song song. Ai được quyết cổng nào.
+// (Khi thêm vai trò TRUONG_MKT ở P0, chỉ cần bổ sung vào nhánh NOI_DUNG.)
+const APPROVAL_GATES = ['NOI_DUNG','CLAIM'];
+function canDecideGate(u, cong){
+  if(!u) return false;
+  if(u.vai_tro===ROLES.ADMIN) return true;
+  if(cong==='NOI_DUNG') return u.vai_tro===ROLES.MARKETING;
+  if(cong==='CLAIM') return u.vai_tro===ROLES.KY_THUAT;
+  return false;
+}
+// Bảng + cột trạng thái của từng loại đối tượng đưa vào hàng đợi duyệt
+const APPROVAL_TARGETS = { SCRIPT:'scripts', CONTENT:'content_items' };
+// P4 — gộp toàn văn kịch bản để quét claim cấm
+function scriptText(s){
+  const secs=Array.isArray(s.sections)?s.sections.map(x=>(x&&x.text)||'').join('\n'):'';
+  return [s.tieu_de,s.hook,secs,s.cta].filter(Boolean).join('\n');
+}
+// P4 — quét văn bản với danh sách claim cấm → [{cum_tu,ly_do,muc_do}]
+function scanScriptClaims(text, claims){
+  const t=String(text||'').toLowerCase();
+  return (claims||[]).filter(c=>c.cum_tu && t.includes(String(c.cum_tu).toLowerCase()))
+    .map(c=>({ cum_tu:c.cum_tu, ly_do:c.ly_do||'', muc_do:c.muc_do||'CANH_BAO' }));
+}
+// P4 — DỰNG PROMPT KỊCH BẢN. Một nguồn duy nhất cho mọi đường gọi AI (Anthropic ở server
+// HAY Gemini chạy trong trình duyệt bằng key riêng của người dùng) — đổi luật ở đây là
+// đổi cho tất cả, không có đường nào lách được guardrail.
+async function promptKichBan(env, body){
+  const fw=body.framework_id ? await env.DB.prepare(`SELECT * FROM frameworks WHERE id=?`).bind(body.framework_id).first() : null;
+  if(!fw) return {ok:false, loi:'Chọn framework trước'};
+  const sp=body.san_pham_id ? await env.DB.prepare(`SELECT * FROM san_pham WHERE id=?`).bind(body.san_pham_id).first() : null;
+  const kn=body.kenh_id ? await env.DB.prepare(`SELECT * FROM kenh WHERE id=?`).bind(body.kenh_id).first() : null;
+  const strat=await env.DB.prepare(`SELECT * FROM content_strategy WHERE id=1`).first()||{};
+  const claims=(await env.DB.prepare(`SELECT * FROM claim_cam WHERE active=1`).all()).results;
+  const bh=(await env.DB.prepare(`SELECT tieu_de,noi_dung FROM bai_hoc WHERE trang_thai='DA_DUYET' LIMIT 5`).all()).results;
+  const thongSo = sp ? JSON.parse(sp.thong_so||'[]') : [];
+  // Danh sách bước quay CÓ THẬT trong nguồn footage đã import (vd từ công cụ Lọc video) —
+  // khi có, bắt AI viết ĐÚNG những bước này, không bịa cảnh không có source.
+  const cacBuoc=Array.isArray(body.cac_buoc)?body.cac_buoc.map(s=>String(s||'').trim()).filter(Boolean).slice(0,60):[];
+  const sys='Bạn viết kịch bản video ngắn cho thương hiệu vật liệu xây dựng Kingsmen.\n'+AI_NGUYEN_TAC+'\n'+
+    'KHÔNG nêu giá bán, khuyến mãi hay con số tiền nào — bảng giá thay đổi theo đợt còn video đã đăng thì nằm đó mãi. Cần nói về giá thì viết "[điền giá]".\n'+
+    (cacBuoc.length
+      ? '7. Nguồn quay THẬT chỉ có các bước liệt kê trong "CÁC BƯỚC CÓ SẴN" — mỗi mục sections BẮT BUỘC gắn field "buoc" bằng ĐÚNG NGUYÊN VĂN một tên trong danh sách đó (copy y hệt, không đổi chữ). KHÔNG viết cảnh nào không có bước tương ứng trong danh sách. Nếu là hook mở đầu hoặc CTA không cần cảnh quay riêng thì để "buoc":null.\n'
+      : '')+
+    'CHỈ trả về JSON thuần dạng {"tieu_de":"...","hook":"...","sections":[{"label":"...","buoc":'+(cacBuoc.length?'"<tên bước nguyên văn hoặc null>"':'null')+',"text":"..."}],"cta":"..."} — không giải thích, không markdown fence.\n'+
+    'Nếu thiếu dữ kiện để nói một điều gì đó, viết "[điền …]" thay vì bịa.';
+  const usr='FRAMEWORK: '+fw.ten+(fw.mo_ta?(' — '+fw.mo_ta):'')+'\n'+
+    'SẢN PHẨM: '+(sp?sp.ten:'(chưa chọn)')+'\n'+
+    'THÔNG SỐ THẬT (chỉ được dùng những cái này): '+(thongSo.length?JSON.stringify(thongSo):'(chưa có)')+'\n'+
+    'TIÊU CHUẨN: '+((sp&&sp.tieu_chuan)||'(chưa có)')+'\n'+
+    // Bảo hành là cam kết chính thức trong bảng giá → được trích. GIÁ thì KHÔNG gửi:
+    // bảng giá đổi theo đợt, còn video đã đăng thì sống mãi với con số cũ.
+    'BẢO HÀNH (cam kết chính thức, được trích nguyên văn): '+((sp&&sp.bao_hanh)||'(chưa có)')+'\n'+
+    'HƯỚNG DẪN DÙNG: '+((sp&&sp.huong_dan)||'(chưa có)')+'\n'+
+    'KÊNH: '+(kn?(kn.ten+' ('+kn.loai+')'):'(chưa chọn)')+'\n'+
+    'TÔNG GIỌNG: '+(strat.brand_voice||'(chưa đặt)')+'\n'+
+    'ĐỐI TƯỢNG: '+(strat.audience||'(chưa đặt)')+'\n'+
+    'CỤM TỪ CẤM (tuyệt đối tránh): '+JSON.stringify(claims.map(c=>c.cum_tu))+'\n'+
+    (bh.length?('BÀI HỌC ĐÃ DUYỆT TỪ DỮ LIỆU THẬT:\n'+bh.map(b=>'- '+b.tieu_de+': '+String(b.noi_dung||'').slice(0,200)).join('\n')+'\n'):'')+
+    (cacBuoc.length?('CÁC BƯỚC CÓ SẴN TRONG NGUỒN QUAY (theo đúng thứ tự, chỉ được dùng những bước này):\n'+cacBuoc.map((b,idx)=>(idx+1)+'. '+b).join('\n')+'\n'):'')+
+    'GÓC NHÌN: '+((body.angle||'').trim()||'(tự chọn góc phù hợp framework)');
+  return {ok:true, sys, usr, cacBuoc, claims};
+}
+// P4 — THẨM ĐỊNH kết quả AI trả về. Dùng chung cho mọi nhà cung cấp AI: bất kể văn bản này
+// do Anthropic hay Gemini sinh ra, nó đều phải qua đúng bộ kiểm này mới tới tay người dùng.
+function duyetKichBanAI(text, cacBuoc, claims){
+  let txt=String(text||'').replace(/^```(?:json)?\s*/i,'').replace(/```\s*$/,'').trim();
+  const i=txt.indexOf('{'), k=txt.lastIndexOf('}');
+  if(i<0||k<0) return {ok:false, loi:'AI không trả về JSON'};
+  let kb; try{ kb=JSON.parse(txt.slice(i,k+1)); }catch(e){ return {ok:false, loi:'JSON từ AI hỏng: '+e.message}; }
+  if(!kb || (!kb.hook && !kb.tieu_de)) return {ok:false, loi:'AI trả kịch bản rỗng'};
+  const ds=Array.isArray(cacBuoc)?cacBuoc:[];
+  kb.sections=Array.isArray(kb.sections)?kb.sections.filter(x=>x&&(x.label||x.text)).map(x=>({
+    label:x.label||'', text:x.text||'',
+    // AI tự xưng một bước không có trong nguồn → gạt về null, không tin theo AI
+    buoc:(ds.length && x.buoc && ds.includes(String(x.buoc).trim())) ? String(x.buoc).trim() : null,
+  })):[];
+  const flags=scanScriptClaims(scriptText(kb), claims);
+  const chan=flags.filter(f=>f.muc_do==='CHAN');
+  if(chan.length) return {ok:false, loi:'AI viết trúng cụm bị CHẶN ('+chan.map(c=>c.cum_tu).join(', ')+') — hãy thử lại hoặc sửa góc nhìn', blocked:chan.map(c=>c.cum_tu)};
+  return {ok:true, kich_ban:kb, canh_bao:flags.filter(f=>f.muc_do!=='CHAN')};
+}
 async function insertContentItem(env, me, body){
   const id=uid('ci');
   await env.DB.prepare(`INSERT INTO content_items (id,loai,tieu_de,loai_muc_tieu,pillar_id,framework_id,san_pham_id,kenh_id,thang,trang_thai,pic,chi_tiet,links,created_at,created_by,created_by_name,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
@@ -344,11 +1228,35 @@ async function bootstrap(env, u){
     .map(r=>({ ...r, active:uBool(r.active) }));
   const pillars = (await env.DB.prepare(`SELECT * FROM pillars ORDER BY thu_tu ASC, created_at ASC`).all()).results
     .map(r=>({ ...r, active:uBool(r.active), ty_trong:r.ty_trong==null?0:Number(r.ty_trong) }));
-  const content_strategy = (await env.DB.prepare(`SELECT * FROM content_strategy WHERE id=1`).first()) || { okr:'', big_idea:'', purpose:'', audience:'', swot:'' };
+  const content_strategy = (await env.DB.prepare(`SELECT * FROM content_strategy WHERE id=1`).first()) || { okr:'', big_idea:'', purpose:'', audience:'', swot:'', brand_voice:'' };
   const frameworks = (await env.DB.prepare(`SELECT * FROM frameworks ORDER BY thu_tu ASC, created_at ASC`).all()).results.map(r=>({ ...r, active:uBool(r.active) }));
-  const kenh = (await env.DB.prepare(`SELECT * FROM kenh ORDER BY created_at ASC`).all()).results.map(r=>({ ...r, active:uBool(r.active) }));
+  const kenh = (await env.DB.prepare(`SELECT * FROM kenh ORDER BY created_at ASC`).all()).results.map(r=>({ ...r, active:uBool(r.active), tu_dong_dang:uBool(r.tu_dong_dang) }));
   const content_items = (await env.DB.prepare(`SELECT * FROM content_items ORDER BY created_at DESC`).all()).results
     .map(r=>({ ...r, pic: JSON.parse(r.pic||'{}'), chi_tiet: JSON.parse(r.chi_tiet||'{}'), links: JSON.parse(r.links||'{}') }));
+  // P4 — kịch bản (chỉ staff xem; Sales không cần)
+  const canContent = staff || u.vai_tro===ROLES.KY_THUAT;
+  const scripts = canContent ? (await env.DB.prepare(`SELECT * FROM scripts ORDER BY updated_at DESC`).all()).results
+    .map(r=>({ ...r, sections: JSON.parse(r.sections||'[]'), claim_flags: JSON.parse(r.claim_flags||'[]') })) : [];
+  // P6 — hàng đợi duyệt 2 cổng (Kỹ thuật cần thấy để duyệt cổng CLAIM)
+  const approvals = canContent ? (await env.DB.prepare(`SELECT * FROM approvals ORDER BY created_at DESC`).all()).results : [];
+  const cfg = await docCauHinh(env);
+  const san_xuat = canContent ? (await env.DB.prepare(`SELECT * FROM san_xuat ORDER BY stt ASC, created_at ASC`).all()).results.map(rowSX) : [];
+  // P7 — bài đăng (checklist thủ công + mã theo dõi)
+  const air_posts = canContent ? (await env.DB.prepare(`SELECT * FROM air_posts ORDER BY created_at DESC`).all()).results
+    .map(r=>({ ...r, checklist: JSON.parse(r.checklist||'{}') })) : [];
+  // P8 — kết quả 3 mức tin cậy + hàng đợi gán tay
+  const ket_qua = canContent ? (await env.DB.prepare(`SELECT * FROM ket_qua ORDER BY created_at DESC`).all()).results : [];
+  const don_cho_gan = canContent ? (await env.DB.prepare(`SELECT * FROM don_cho_gan ORDER BY created_at DESC`).all()).results : [];
+  // P5 — kho footage + shot list
+  const footage = canContent ? (await env.DB.prepare(`SELECT * FROM footage ORDER BY created_at DESC`).all()).results
+    .map(r=>({ ...r, active:uBool(r.active), tags: JSON.parse(r.tags||'[]') })) : [];
+  const shot_list = canContent ? (await env.DB.prepare(`SELECT * FROM shot_list ORDER BY thu_tu ASC, created_at ASC`).all()).results : [];
+  // TREND — nghiên cứu & triển khai
+  const trends = canContent ? (await env.DB.prepare(`SELECT * FROM trends ORDER BY created_at DESC`).all()).results
+    .map(r=>({ ...r, danh_gia: JSON.parse(r.danh_gia||'{}') })) : [];
+  // P10 — thư viện học
+  const bai_hoc = canContent ? (await env.DB.prepare(`SELECT * FROM bai_hoc ORDER BY created_at DESC`).all()).results
+    .map(r=>({ ...r, bang_chung: JSON.parse(r.bang_chung||'{}') })) : [];
 
   return {
     me: rowUser(u),
@@ -356,7 +1264,23 @@ async function bootstrap(env, u){
     post_seedings: posts, cmt_seedings: cmtsFull,
     filming_templates, project_filmings, guides, post_type_prefs, post_slots, media_library,
     san_pham, claim_cam, pillars, content_strategy,
-    frameworks, kenh, content_items,
+    frameworks, kenh, content_items, scripts, approvals, air_posts, air_checklist:(cfg.air&&cfg.air.checklist)||AIR_CHECKLIST,
+    ket_qua, don_cho_gan, muc_tin_cay:MUC_TIN_CAY, nguon_kq:NGUON_KQ,
+    kenh_tu_dong: KENH_TU_DONG,
+    kenh_san_sang: staff ? Object.fromEntries((kenh||[]).map(k=>[k.id,
+      String(k.cach_dang||'API').toUpperCase()==='N8N'
+        ? (!!env.N8N_WEBHOOK_URL && !!env.N8N_TOKEN)
+        : (!!layToken(env,k) && !!String(k.api_object_id||'').trim())])) : {},
+    n8n_san_sang: staff ? (!!env.N8N_WEBHOOK_URL && !!env.N8N_TOKEN) : false,
+    youtube_san_sang: staff ? !!env.YOUTUBE_API_KEY : false,
+    agent_log: canContent ? (await env.DB.prepare(`SELECT * FROM agent_log ORDER BY at DESC LIMIT 10`).all()).results : [],
+    ai_san_sang: staff ? !!env.ANTHROPIC_API_KEY : false,
+    module_config: cfg, can_cau_hinh: canCauHinh(u),
+    san_xuat, sx_khau: SX_KHAU,
+    san_xuat_theo_noi_dung: canContent ? gomSanXuatTheoNoiDung(san_xuat) : {},
+    footage, shot_list, bai_hoc, min_mau:(cfg.hoc&&cfg.hoc.min_mau)||MIN_MAU_BANG_CHUNG, trends, trend_check:(cfg.trend&&cfg.trend.checklist)||TREND_CHECK,
+    viec_ket: canContent ? tinhViecKet({scripts,approvals,air_posts,ket_qua,trends,don_cho_gan,nguong:cfg.viec_ket}) : null,
+    seeding_theo_noi_dung: staff ? gomSeedingTheoNoiDung(topics, posts, cmts) : {},
     pricing: pricingRow, payouts: [], audit,
   };
 }
@@ -402,6 +1326,51 @@ async function handleApi(request, env){
     await env.DB.prepare(`INSERT INTO sessions (token,user_id,expires_at) VALUES (?,?,?)`).bind(token,u.id,exp).run();
     return json({ token, db: await bootstrap(env, u) });
   }
+
+  // n8n báo kết quả đăng về. KHÔNG dùng phiên đăng nhập (n8n không phải người dùng)
+  // → xác thực bằng secret dùng chung. Không có N8N_TOKEN thì TỪ CHỐI, không mở toang.
+  const cbMatch = method==='POST' ? path.match(/^\/air\/(.+)\/n8n-callback$/) : null;
+  if(cbMatch){
+    const tok=request.headers.get('X-N8N-Token')||'';
+    if(!env.N8N_TOKEN) return json({error:'Chưa cấu hình N8N_TOKEN'},503);
+    if(tok!==env.N8N_TOKEN) return json({error:'Sai token'},401);
+    const id=cbMatch[1];
+    // body đã được đọc ở trên — đọc request.json() lần nữa sẽ ra rỗng và hiểu nhầm là thất bại
+    const cb=body||{};
+    const r=await env.DB.prepare(`SELECT * FROM air_posts WHERE id=?`).bind(id).first();
+    if(!r) return json({error:'Không tìm thấy bài'},404);
+    if(r.trang_thai===AIR_ST.DA_DANG) return json({ok:true, note:'Bài đã đăng trước đó'});
+    if(cb.ok===true){
+      const link=String(cb.link||'').trim();
+      await env.DB.prepare(`UPDATE air_posts SET trang_thai='DA_DANG', posted_at=?, updated_at=?, loi=NULL, link_bai=? WHERE id=?`)
+        .bind(nowISO(), nowISO(), link||r.link_bai||'', id).run();
+      return json({ok:true});
+    }
+    const lan=Number(r.lan_thu||0)+1;
+    const het=lan>=MAX_LAN_THU;
+    await env.DB.prepare(`UPDATE air_posts SET trang_thai=?, lan_thu=?, loi=?, updated_at=? WHERE id=?`)
+      .bind(het?'DEN_GIO':'LOI', lan, String(cb.loi||'n8n báo thất bại')+(het?' — đã thử '+lan+' lần, chuyển sang đăng tay':''), nowISO(), id).run();
+    return json({ok:true, recorded:'that_bai'});
+  }
+
+  // MÁY TỰ GOM TREND đẩy vào đây (n8n chạy cron, lấy Google Trends / YouTube VN…).
+  // Không phải người dùng nên KHÔNG dùng phiên đăng nhập — xác thực bằng secret dùng chung.
+  // Chưa cấu hình N8N_TOKEN thì TỪ CHỐI, tuyệt đối không mở cửa không khoá.
+  if(path==='/trends/ingest' && method==='POST'){
+    if(!env.N8N_TOKEN) return json({error:'Chưa cấu hình N8N_TOKEN'},503);
+    if((request.headers.get('X-App-Token')||'')!==env.N8N_TOKEN) return json({error:'Sai token'},401);
+    await ensureSchema(env);
+    const ds=Array.isArray(body.trends)?body.trends:(Array.isArray(body)?body:[]);
+    if(!ds.length) return json({error:'Không có trend nào trong body'},400);
+    if(ds.length>200) return json({error:'Mỗi lần tối đa 200 trend'},413);
+    const kq=await gomTrendVaoDB(env, ds, (body.nguon_may||'Máy tự gom').toString().slice(0,60));
+    return json({ ok:true, ...kq });
+  }
+
+  // Công cụ Lọc video (/tools/loc-video.html) hỏi danh sách nhạc nền từ folder cục bộ.
+  // Bản chạy trên web không có folder đó → trả mảng rỗng để công cụ hiện đúng trạng thái
+  // thay vì 401/404. Không có dữ liệu nào nên để công khai (công cụ chạy ngoài phiên đăng nhập).
+  if(path==='/nhac' && method==='GET') return json([]);
 
   // các route dưới đây cần đăng nhập
   const sess = await getSession(env, request);
@@ -635,8 +1604,11 @@ async function handleApi(request, env){
   if(path==='/sanpham' && method==='POST'){
     if(!canBaseData(me)) return json({error:'Không có quyền'},403);
     const id=uid('sp'); const ts=Array.isArray(body.thong_so)?body.thong_so:[];
-    await env.DB.prepare(`INSERT INTO san_pham (id,ma,ten,dong,thong_so,tieu_chuan,huong_dan,anh,active,created_at) VALUES (?,?,?,?,?,?,?,?,1,?)`)
-      .bind(id,(body.ma||'').trim(),(body.ten||'').trim(),(body.dong||'').trim(),JSON.stringify(ts),(body.tieu_chuan||'').trim(),(body.huong_dan||'').trim(),(body.anh||'').trim(),nowISO()).run();
+    const gia=soTien(body.gia_truoc_thue), giaSau=soTien(body.gia_sau_thue), vat=soTien(body.thue_vat);
+    await env.DB.prepare(`INSERT INTO san_pham (id,ma,ten,dong,nhom,don_vi,gia_truoc_thue,thue_vat,gia_sau_thue,bao_hanh,gia_ap_dung_tu,thong_so,tieu_chuan,huong_dan,anh,active,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,?)`)
+      .bind(id,(body.ma||'').trim(),(body.ten||'').trim(),(body.dong||'').trim(),(body.nhom||'CHINH').trim(),(body.don_vi||'').trim(),
+        gia, vat, giaSau, (body.bao_hanh||'').trim(), (body.gia_ap_dung_tu||'').trim(),
+        JSON.stringify(ts),(body.tieu_chuan||'').trim(),(body.huong_dan||'').trim(),(body.anh||'').trim(),nowISO()).run();
     await logAudit(env,me,'thêm sản phẩm','san_pham',id,(body.ten||'').trim());
     return json({ db: await bootstrap(env, me) });
   }
@@ -645,9 +1617,14 @@ async function handleApi(request, env){
     const id=m[1]; const r=await env.DB.prepare(`SELECT * FROM san_pham WHERE id=?`).bind(id).first();
     if(!r) return json({error:'Không tìm thấy'},404);
     const g=(k,d)=> body[k]!=null?String(body[k]).trim():d;
+    // Giá: gửi '' hoặc null = XOÁ về "chưa có giá". Không gửi field = giữ nguyên.
+    const gn=(k,d)=> body[k]===undefined ? d : soTien(body[k]);
     const ts = body.thong_so!=null ? JSON.stringify(Array.isArray(body.thong_so)?body.thong_so:[]) : r.thong_so;
-    await env.DB.prepare(`UPDATE san_pham SET ma=?, ten=?, dong=?, thong_so=?, tieu_chuan=?, huong_dan=?, anh=?, active=? WHERE id=?`)
-      .bind(g('ma',r.ma),g('ten',r.ten),g('dong',r.dong),ts,g('tieu_chuan',r.tieu_chuan),g('huong_dan',r.huong_dan),g('anh',r.anh),body.active!=null?bool(body.active):r.active,id).run();
+    await env.DB.prepare(`UPDATE san_pham SET ma=?, ten=?, dong=?, nhom=?, don_vi=?, gia_truoc_thue=?, thue_vat=?, gia_sau_thue=?, bao_hanh=?, gia_ap_dung_tu=?, thong_so=?, tieu_chuan=?, huong_dan=?, anh=?, active=? WHERE id=?`)
+      .bind(g('ma',r.ma),g('ten',r.ten),g('dong',r.dong),g('nhom',r.nhom||'CHINH'),g('don_vi',r.don_vi||''),
+        gn('gia_truoc_thue',r.gia_truoc_thue), gn('thue_vat',r.thue_vat), gn('gia_sau_thue',r.gia_sau_thue),
+        g('bao_hanh',r.bao_hanh||''), g('gia_ap_dung_tu',r.gia_ap_dung_tu||''),
+        ts,g('tieu_chuan',r.tieu_chuan),g('huong_dan',r.huong_dan),g('anh',r.anh),body.active!=null?bool(body.active):r.active,id).run();
     await logAudit(env,me,'sửa sản phẩm','san_pham',id);
     return json({ db: await bootstrap(env, me) });
   }
@@ -717,8 +1694,8 @@ async function handleApi(request, env){
     if(!isStaff(me)) return json({error:'Không có quyền'},403);
     const r=await env.DB.prepare(`SELECT * FROM content_strategy WHERE id=1`).first()||{};
     const g=(k)=> body[k]!=null?String(body[k]):(r[k]||'');
-    await env.DB.prepare(`UPDATE content_strategy SET okr=?, big_idea=?, purpose=?, audience=?, swot=?, updated_at=? WHERE id=1`)
-      .bind(g('okr'),g('big_idea'),g('purpose'),g('audience'),g('swot'),nowISO()).run();
+    await env.DB.prepare(`UPDATE content_strategy SET okr=?, big_idea=?, purpose=?, audience=?, swot=?, brand_voice=?, updated_at=? WHERE id=1`)
+      .bind(g('okr'),g('big_idea'),g('purpose'),g('audience'),g('swot'),g('brand_voice'),nowISO()).run();
     await logAudit(env,me,'sửa chiến lược','content_strategy','1');
     return json({ db: await bootstrap(env, me) });
   }
@@ -750,7 +1727,13 @@ async function handleApi(request, env){
   if((m=path.match(/^\/kenh\/(.+)$/)) && method==='PATCH'){
     if(!isStaff(me)) return json({error:'Không có quyền'},403);
     const id=m[1]; const r=await env.DB.prepare(`SELECT * FROM kenh WHERE id=?`).bind(id).first(); if(!r) return json({error:'Không tìm thấy'},404);
-    await env.DB.prepare(`UPDATE kenh SET ten=?, loai=?, thuong_hieu=?, active=? WHERE id=?`).bind(body.ten!=null?String(body.ten).trim():r.ten,body.loai!=null?String(body.loai).trim():r.loai,body.thuong_hieu!=null?String(body.thuong_hieu).trim():r.thuong_hieu,body.active!=null?bool(body.active):r.active,id).run();
+    await env.DB.prepare(`UPDATE kenh SET ten=?, loai=?, thuong_hieu=?, active=?, tu_dong_dang=?, api_ma=?, api_object_id=?, cach_dang=? WHERE id=?`)
+      .bind(body.ten!=null?String(body.ten).trim():r.ten, body.loai!=null?String(body.loai).trim():r.loai,
+        body.thuong_hieu!=null?String(body.thuong_hieu).trim():r.thuong_hieu, body.active!=null?bool(body.active):r.active,
+        body.tu_dong_dang!=null?bool(body.tu_dong_dang):r.tu_dong_dang,
+        body.api_ma!=null?String(body.api_ma).trim().toUpperCase().replace(/[^A-Z0-9_]/g,''):r.api_ma,
+        body.api_object_id!=null?String(body.api_object_id).trim():r.api_object_id,
+        body.cach_dang!=null?String(body.cach_dang).trim().toUpperCase():(r.cach_dang||'API'), id).run();
     return json({ db: await bootstrap(env, me) });
   }
   if((m=path.match(/^\/kenh\/(.+)$/)) && method==='DELETE'){
@@ -790,6 +1773,295 @@ async function handleApi(request, env){
     if(!isStaff(me)) return json({error:'Không có quyền'},403);
     await env.DB.prepare(`DELETE FROM content_items WHERE id=?`).bind(m[1]).run();
     await logAudit(env,me,'xoá nội dung','content_items',m[1]);
+    return json({ db: await bootstrap(env, me) });
+  }
+
+  // ===== CONTENT OS · P4 — Creative Studio: kịch bản có guardrail claim + lịch sử phiên bản =====
+  if(path==='/scripts' && method==='POST'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    if(!(body.tieu_de||'').trim() && !(body.hook||'').trim()) return json({error:'Cần tiêu đề hoặc hook'},400);
+    // Guardrail: quét claim cấm trên toàn văn; mức CHẶN → không cho lưu
+    const claims=(await env.DB.prepare(`SELECT * FROM claim_cam WHERE active=1`).all()).results;
+    const flags=scanScriptClaims(scriptText(body), claims);
+    const blocked=flags.filter(f=>f.muc_do==='CHAN');
+    if(blocked.length) return json({error:'Có cụm từ bị CHẶN, gỡ trước khi lưu', blocked:blocked.map(b=>b.cum_tu)},422);
+    const id=uid('scr');
+    await env.DB.prepare(`INSERT INTO scripts (id,content_item_id,framework_id,san_pham_id,kenh_id,tieu_de,hook,sections,cta,brand_voice,claim_flags,trang_thai,version,created_at,created_by,created_by_name,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+      .bind(id, body.content_item_id||null, body.framework_id||null, body.san_pham_id||null, body.kenh_id||null, (body.tieu_de||'').trim(), (body.hook||'').trim(), JSON.stringify(body.sections||[]), (body.cta||'').trim(), (body.brand_voice||'').trim(), JSON.stringify(flags), body.trang_thai||'NHAP', 1, nowISO(), me.id, me.ho_ten, nowISO()).run();
+    await env.DB.prepare(`INSERT INTO script_versions (id,script_id,version,snapshot,created_at,created_by_name) VALUES (?,?,?,?,?,?)`)
+      .bind(uid('sv'), id, 1, JSON.stringify({tieu_de:body.tieu_de,hook:body.hook,sections:body.sections||[],cta:body.cta}), nowISO(), me.ho_ten).run();
+    await logAudit(env,me,'tạo kịch bản','scripts',id,(body.tieu_de||'').trim());
+    return json({ db: await bootstrap(env, me), id });
+  }
+  if((m=path.match(/^\/scripts\/(.+)$/)) && method==='PATCH'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    const id=m[1]; const r=await env.DB.prepare(`SELECT * FROM scripts WHERE id=?`).bind(id).first();
+    if(!r) return json({error:'Không tìm thấy'},404);
+    const merged={ tieu_de: body.tieu_de!=null?body.tieu_de:r.tieu_de, hook: body.hook!=null?body.hook:r.hook,
+      sections: body.sections!=null?body.sections:JSON.parse(r.sections||'[]'), cta: body.cta!=null?body.cta:r.cta };
+    const claims=(await env.DB.prepare(`SELECT * FROM claim_cam WHERE active=1`).all()).results;
+    const flags=scanScriptClaims(scriptText(merged), claims);
+    const blocked=flags.filter(f=>f.muc_do==='CHAN');
+    if(blocked.length) return json({error:'Có cụm từ bị CHẶN, gỡ trước khi lưu', blocked:blocked.map(b=>b.cum_tu)},422);
+    const ver=Number(r.version||1)+1;
+    const g=(k,d)=> body[k]!=null?String(body[k]).trim():d;
+    await env.DB.prepare(`UPDATE scripts SET content_item_id=?, framework_id=?, san_pham_id=?, kenh_id=?, tieu_de=?, hook=?, sections=?, cta=?, brand_voice=?, claim_flags=?, trang_thai=?, version=?, updated_at=? WHERE id=?`)
+      .bind(body.content_item_id!==undefined?(body.content_item_id||null):r.content_item_id, body.framework_id!==undefined?(body.framework_id||null):r.framework_id, body.san_pham_id!==undefined?(body.san_pham_id||null):r.san_pham_id, body.kenh_id!==undefined?(body.kenh_id||null):r.kenh_id, String(merged.tieu_de||'').trim(), String(merged.hook||'').trim(), JSON.stringify(merged.sections||[]), String(merged.cta||'').trim(), g('brand_voice',r.brand_voice), JSON.stringify(flags), g('trang_thai',r.trang_thai), ver, nowISO(), id).run();
+    await env.DB.prepare(`INSERT INTO script_versions (id,script_id,version,snapshot,created_at,created_by_name) VALUES (?,?,?,?,?,?)`)
+      .bind(uid('sv'), id, ver, JSON.stringify(merged), nowISO(), me.ho_ten).run();
+    await logAudit(env,me,'sửa kịch bản','scripts',id);
+    return json({ db: await bootstrap(env, me) });
+  }
+  if((m=path.match(/^\/scripts\/(.+)\/versions$/)) && method==='GET'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    const rows=(await env.DB.prepare(`SELECT * FROM script_versions WHERE script_id=? ORDER BY version DESC`).bind(m[1]).all()).results
+      .map(v=>({ ...v, snapshot: JSON.parse(v.snapshot||'{}') }));
+    return json({ versions: rows });
+  }
+  if((m=path.match(/^\/scripts\/(.+)$/)) && method==='DELETE'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    await env.DB.prepare(`DELETE FROM script_versions WHERE script_id=?`).bind(m[1]).run();
+    await env.DB.prepare(`DELETE FROM approvals WHERE doi_tuong='SCRIPT' AND doi_tuong_id=?`).bind(m[1]).run();
+    await env.DB.prepare(`DELETE FROM scripts WHERE id=?`).bind(m[1]).run();
+    await logAudit(env,me,'xoá kịch bản','scripts',m[1]);
+    return json({ db: await bootstrap(env, me) });
+  }
+
+  // ===== CONTENT OS · P6 — Hàng đợi duyệt 2 cổng song song (NOI_DUNG + CLAIM) =====
+  if(path==='/approvals/submit' && method==='POST'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    const loai=String(body.doi_tuong||'').toUpperCase(); const tbl=APPROVAL_TARGETS[loai];
+    if(!tbl) return json({error:'Loại đối tượng không hợp lệ'},400);
+    const obj=await env.DB.prepare(`SELECT * FROM ${tbl} WHERE id=?`).bind(body.doi_tuong_id||'').first();
+    if(!obj) return json({error:'Không tìm thấy đối tượng'},404);
+    if(obj.trang_thai==='CHO_DUYET') return json({error:'Đối tượng đang chờ duyệt'},409);
+    // Guardrail: kịch bản còn cụm CHẶN thì không được gửi duyệt
+    if(loai==='SCRIPT'){
+      const claims=(await env.DB.prepare(`SELECT * FROM claim_cam WHERE active=1`).all()).results;
+      const flags=scanScriptClaims(scriptText({...obj, sections:JSON.parse(obj.sections||'[]')}), claims);
+      const blocked=flags.filter(f=>f.muc_do==='CHAN');
+      if(blocked.length) return json({error:'Còn cụm từ bị CHẶN, không thể gửi duyệt', blocked:blocked.map(b=>b.cum_tu)},422);
+    }
+    // gửi lại: xoá các cổng cũ rồi mở lại 2 cổng
+    await env.DB.prepare(`DELETE FROM approvals WHERE doi_tuong=? AND doi_tuong_id=?`).bind(loai,obj.id).run();
+    for(const cong of APPROVAL_GATES){
+      await env.DB.prepare(`INSERT INTO approvals (id,doi_tuong,doi_tuong_id,cong,trang_thai,nguoi_gui,nguoi_gui_ten,ghi_chu,created_at) VALUES (?,?,?,?,'CHO',?,?,'',?)`)
+        .bind(uid('ap'),loai,obj.id,cong,me.id,me.ho_ten,nowISO()).run();
+    }
+    await env.DB.prepare(`UPDATE ${tbl} SET trang_thai='CHO_DUYET', updated_at=? WHERE id=?`).bind(nowISO(),obj.id).run();
+    await logAudit(env,me,'gửi duyệt',tbl,obj.id,(obj.tieu_de||''));
+    return json({ db: await bootstrap(env, me) });
+  }
+  if((m=path.match(/^\/approvals\/(.+)\/decide$/)) && method==='POST'){
+    const id=m[1]; const ap=await env.DB.prepare(`SELECT * FROM approvals WHERE id=?`).bind(id).first();
+    if(!ap) return json({error:'Không tìm thấy'},404);
+    if(!canDecideGate(me, ap.cong)) return json({error:'Bạn không có quyền duyệt cổng này'},403);
+    if(ap.trang_thai!=='CHO') return json({error:'Cổng này đã được quyết'},409);
+    const pass = body.result==='DAT';
+    if(!pass && !String(body.ghi_chu||'').trim()) return json({error:'Trả lại phải nêu lý do'},400);
+    const tbl=APPROVAL_TARGETS[ap.doi_tuong]; if(!tbl) return json({error:'Loại đối tượng không hợp lệ'},400);
+    await env.DB.prepare(`UPDATE approvals SET trang_thai=?, nguoi_duyet=?, nguoi_duyet_ten=?, ghi_chu=?, decided_at=? WHERE id=?`)
+      .bind(pass?'DAT':'TRA_LAI', me.id, me.ho_ten, String(body.ghi_chu||'').trim(), nowISO(), id).run();
+    if(!pass){
+      // Một cổng trả lại → đối tượng về Nháp, cổng còn lại huỷ (khỏi duyệt thừa)
+      await env.DB.prepare(`UPDATE approvals SET trang_thai='HUY', decided_at=? WHERE doi_tuong=? AND doi_tuong_id=? AND trang_thai='CHO'`)
+        .bind(nowISO(),ap.doi_tuong,ap.doi_tuong_id).run();
+      await env.DB.prepare(`UPDATE ${tbl} SET trang_thai='NHAP', so_lan_tra=COALESCE(so_lan_tra,0)+1, updated_at=? WHERE id=?`).bind(nowISO(),ap.doi_tuong_id).run();
+    } else {
+      // Chỉ DUYỆT khi CẢ HAI cổng đều Đạt
+      const rest=(await env.DB.prepare(`SELECT * FROM approvals WHERE doi_tuong=? AND doi_tuong_id=?`).bind(ap.doi_tuong,ap.doi_tuong_id).all()).results;
+      if(rest.length && rest.every(r=>r.trang_thai==='DAT'))
+        await env.DB.prepare(`UPDATE ${tbl} SET trang_thai='DUYET', updated_at=? WHERE id=?`).bind(nowISO(),ap.doi_tuong_id).run();
+    }
+    await logAudit(env,me,(pass?'duyệt ':'trả lại ')+'cổng '+ap.cong,tbl,ap.doi_tuong_id,String(body.ghi_chu||'').trim());
+    return json({ db: await bootstrap(env, me) });
+  }
+
+  // ===== CONTENT OS · P7 — Đăng thủ công theo checklist + khoá mã theo dõi =====
+  if(path==='/air' && method==='POST'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    // Chỉ đưa vào khâu đăng khi nội dung/kịch bản ĐÃ DUYỆT (2 cổng)
+    let tieu_de=(body.tieu_de||'').trim(), src=null;
+    if(body.script_id){
+      src=await env.DB.prepare(`SELECT * FROM scripts WHERE id=?`).bind(body.script_id).first();
+      if(!src) return json({error:'Không tìm thấy kịch bản'},404);
+    } else if(body.content_item_id){
+      src=await env.DB.prepare(`SELECT * FROM content_items WHERE id=?`).bind(body.content_item_id).first();
+      if(!src) return json({error:'Không tìm thấy nội dung'},404);
+    } else return json({error:'Cần chọn kịch bản hoặc nội dung'},400);
+    if(src.trang_thai!=='DUYET') return json({error:'Chỉ đăng nội dung ĐÃ DUYỆT (qua 2 cổng)'},409);
+    tieu_de = tieu_de || src.tieu_de || '';
+    const ma=String(body.ma_theo_doi||'').trim();
+    if(ma){
+      const dup=await env.DB.prepare(`SELECT id FROM air_posts WHERE ma_theo_doi=?`).bind(ma).first();
+      if(dup) return json({error:'Mã theo dõi đã dùng cho bài khác — 1 mã chỉ thuộc 1 bài'},409);
+    }
+    const id=uid('air');
+    await env.DB.prepare(`INSERT INTO air_posts (id,content_item_id,script_id,kenh_id,tieu_de,ngay_dang,link_bai,ma_theo_doi,loai_ma,checklist,ghi_chu,trang_thai,nguoi_dang,nguoi_dang_ten,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+      .bind(id, body.content_item_id||src.content_item_id||null, body.script_id||null, body.kenh_id||src.kenh_id||null, tieu_de,
+        (body.ngay_dang||'').trim(), (body.link_bai||'').trim(), ma, (body.loai_ma||'VOUCHER').trim(),
+        JSON.stringify(body.checklist||{}), (body.ghi_chu||'').trim(), AIR_ST.CHUAN_BI, me.id, me.ho_ten, nowISO(), nowISO()).run();
+    await logAudit(env,me,'tạo bài đăng','air_posts',id,tieu_de);
+    return json({ db: await bootstrap(env, me), id });
+  }
+  if((m=path.match(/^\/air\/(.+)\/publish$/)) && method==='POST'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    const id=m[1]; const r=await env.DB.prepare(`SELECT * FROM air_posts WHERE id=?`).bind(id).first();
+    if(!r) return json({error:'Không tìm thấy'},404);
+    if(r.trang_thai===AIR_ST.DA_DANG) return json({error:'Bài này đã đánh dấu đã đăng'},409);
+    const cl=JSON.parse(r.checklist||'{}');
+    const thieu=AIR_CHECKLIST.filter(c=>c.bat_buoc && !cl[c.k]).map(c=>c.label);
+    if(thieu.length) return json({error:'Chưa xong checklist bắt buộc', thieu},422);
+    if(!String(r.link_bai||'').trim()) return json({error:'Cần dán link bài đã đăng'},400);
+    if(!String(r.ma_theo_doi||'').trim()) return json({error:'Cần mã theo dõi để quy đơn ở bước đo lường'},400);
+    await env.DB.prepare(`UPDATE air_posts SET trang_thai=?, posted_at=?, updated_at=? WHERE id=?`).bind(AIR_ST.DA_DANG,nowISO(),nowISO(),id).run();
+    await logAudit(env,me,'đánh dấu đã đăng','air_posts',id,r.tieu_de||'');
+    return json({ db: await bootstrap(env, me) });
+  }
+  // Lên lịch đăng
+  if((m=path.match(/^\/air\/(.+)\/schedule$/)) && method==='POST'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    const id=m[1]; const r=await env.DB.prepare(`SELECT * FROM air_posts WHERE id=?`).bind(id).first();
+    if(!r) return json({error:'Không tìm thấy'},404);
+    if(r.trang_thai===AIR_ST.DA_DANG) return json({error:'Bài đã đăng rồi'},409);
+    const lich=String(body.lich_dang||'').trim();
+    if(!lich) return json({error:'Chọn thời điểm đăng'},400);
+    if(isNaN(new Date(lich).getTime())) return json({error:'Thời điểm không hợp lệ'},400);
+    if(new Date(lich).getTime() <= Date.now()) return json({error:'Thời điểm phải ở tương lai'},400);
+    const tuDong = bool(body.tu_dong);
+    // Bật tự động thì phải kiểm tra kênh có làm được không — nói TRƯỚC, không để đến giờ mới vỡ
+    if(tuDong){
+      const kenh = r.kenh_id ? await env.DB.prepare(`SELECT * FROM kenh WHERE id=?`).bind(r.kenh_id).first() : null;
+      if(!kenh) return json({error:'Bài chưa gắn kênh — không tự đăng được'},400);
+      if(!uBool(kenh.tu_dong_dang)) return json({error:'Kênh này chưa bật tự động đăng (mở ở Kênh & tự động đăng)'},422);
+      if(String(kenh.cach_dang||'API').toUpperCase()==='N8N'){
+        // Qua n8n thì KHÔNG bị giới hạn nền tảng — n8n đã có quyền, kể cả TikTok
+        if(!env.N8N_WEBHOOK_URL) return json({error:'Chưa cắm N8N_WEBHOOK_URL (secret của Worker)'},422);
+        if(!env.N8N_TOKEN) return json({error:'Chưa cắm N8N_TOKEN — cần để xác thực n8n báo kết quả về'},422);
+      } else {
+        const cap=KENH_TU_DONG[String(kenh.loai||'').toUpperCase()];
+        if(!cap || !cap.duoc) return json({error:'Kênh loại '+(kenh.loai||'?')+' không đăng tự động trực tiếp được: '+((cap&&cap.dieu_kien)||'')+'. Chuyển kênh sang cách đăng "n8n" nếu muốn tự động.'},422);
+        if(!layToken(env,kenh)) return json({error:'Chưa cắm token cho kênh (secret TOKEN_'+(kenh.api_ma||'?')+')'},422);
+        if(!String(kenh.api_object_id||'').trim()) return json({error:'Kênh chưa khai ID đối tượng (VD: Page ID)'},422);
+      }
+    }
+    // Đăng tự động thì checklist vẫn phải xong — không vì tự động mà bỏ qua kiểm tra
+    const cl=JSON.parse(r.checklist||'{}');
+    const thieu=AIR_CHECKLIST.filter(c=>c.bat_buoc && !cl[c.k]).map(c=>c.label);
+    if(thieu.length) return json({error:'Chưa xong checklist bắt buộc', thieu},422);
+    if(!String(r.ma_theo_doi||'').trim()) return json({error:'Cần mã theo dõi trước khi lên lịch'},400);
+    await env.DB.prepare(`UPDATE air_posts SET lich_dang=?, tu_dong=?, trang_thai='DA_LEN_LICH', lan_thu=0, loi=NULL, updated_at=? WHERE id=?`)
+      .bind(lich, tuDong?1:0, nowISO(), id).run();
+    await logAudit(env,me,'lên lịch đăng','air_posts',id,lich+(tuDong?' (tự động)':' (nhắc đăng tay)'));
+    return json({ db: await bootstrap(env, me) });
+  }
+  if((m=path.match(/^\/air\/(.+)\/unschedule$/)) && method==='POST'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    const id=m[1]; const r=await env.DB.prepare(`SELECT * FROM air_posts WHERE id=?`).bind(id).first();
+    if(!r) return json({error:'Không tìm thấy'},404);
+    if(r.trang_thai===AIR_ST.DA_DANG) return json({error:'Bài đã đăng rồi'},409);
+    await env.DB.prepare(`UPDATE air_posts SET lich_dang=NULL, tu_dong=0, trang_thai='CHUAN_BI', lan_thu=0, loi=NULL, updated_at=? WHERE id=?`).bind(nowISO(),id).run();
+    return json({ db: await bootstrap(env, me) });
+  }
+  if((m=path.match(/^\/air\/(.+)$/)) && method==='PATCH'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    const id=m[1]; const r=await env.DB.prepare(`SELECT * FROM air_posts WHERE id=?`).bind(id).first();
+    if(!r) return json({error:'Không tìm thấy'},404);
+    const ma = body.ma_theo_doi!=null ? String(body.ma_theo_doi).trim() : r.ma_theo_doi;
+    if(ma && ma!==r.ma_theo_doi){
+      const dup=await env.DB.prepare(`SELECT id FROM air_posts WHERE ma_theo_doi=? AND id<>?`).bind(ma,id).first();
+      if(dup) return json({error:'Mã theo dõi đã dùng cho bài khác — 1 mã chỉ thuộc 1 bài'},409);
+    }
+    const g=(k,d)=> body[k]!=null?String(body[k]).trim():d;
+    await env.DB.prepare(`UPDATE air_posts SET kenh_id=?, tieu_de=?, ngay_dang=?, link_bai=?, ma_theo_doi=?, loai_ma=?, checklist=?, ghi_chu=?, media_url=?, updated_at=? WHERE id=?`)
+      .bind(body.kenh_id!==undefined?(body.kenh_id||null):r.kenh_id, g('tieu_de',r.tieu_de), g('ngay_dang',r.ngay_dang), g('link_bai',r.link_bai),
+        ma, g('loai_ma',r.loai_ma), body.checklist!=null?JSON.stringify(body.checklist):r.checklist, g('ghi_chu',r.ghi_chu), g('media_url',r.media_url), nowISO(), id).run();
+    return json({ db: await bootstrap(env, me) });
+  }
+  if((m=path.match(/^\/air\/(.+)$/)) && method==='DELETE'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    await env.DB.prepare(`DELETE FROM air_posts WHERE id=?`).bind(m[1]).run();
+    await logAudit(env,me,'xoá bài đăng','air_posts',m[1]);
+    return json({ db: await bootstrap(env, me) });
+  }
+
+  // ===== CONTENT OS · P8 — Nhập kết quả (3 mức tin cậy) + hàng đợi gán tay =====
+  if(path==='/ketqua' && method==='POST'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    if(!body.air_post_id) return json({error:'Cần chọn bài đăng'},400);
+    const ap=await env.DB.prepare(`SELECT * FROM air_posts WHERE id=?`).bind(body.air_post_id).first();
+    if(!ap) return json({error:'Không tìm thấy bài đăng'},404);
+    const muc=String(body.muc_tin_cay||'').toUpperCase();
+    if(!MUC_TIN_CAY[muc]) return json({error:'Mức tin cậy không hợp lệ'},400);
+    // Ranh giới: mức KHÔNG QUY ĐƠN không được mang doanh thu/đơn — nếu không sẽ thành "bịa" quy đơn
+    const dt=Number(body.doanh_thu)||0, sd=Number(body.so_don)||0;
+    if(muc==='KHONG_QUY_DON' && (dt>0||sd>0))
+      return json({error:'Mức "Không quy đơn" chỉ ghi chỉ số hiển thị/tương tác, không được gắn doanh thu hay số đơn'},422);
+    const id=uid('kq');
+    await env.DB.prepare(`INSERT INTO ket_qua (id,air_post_id,muc_tin_cay,nguon,ky,doanh_thu,so_don,luot_xem,luot_tuong_tac,luot_click,ma_theo_doi,ghi_chu,created_at,created_by,created_by_name) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+      .bind(id, ap.id, muc, (body.nguon||'NHAP_TAY').trim(), (body.ky||'').trim(), dt, sd,
+        Number(body.luot_xem)||0, Number(body.luot_tuong_tac)||0, Number(body.luot_click)||0,
+        ap.ma_theo_doi||'', (body.ghi_chu||'').trim(), nowISO(), me.id, me.ho_ten).run();
+    await logAudit(env,me,'nhập kết quả','ket_qua',id,MUC_TIN_CAY[muc]);
+    return json({ db: await bootstrap(env, me), id });
+  }
+  // Import lô đối soát từ sàn: khớp mã → quy đơn; KHÔNG khớp duy nhất → vào hàng đợi gán tay
+  if(path==='/ketqua/import' && method==='POST'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    const rows=Array.isArray(body.rows)?body.rows:[];
+    const nguon=(body.nguon||'SHOPEE').trim();
+    const muc=String(body.muc_tin_cay||NGUON_MUC_MAC_DINH[nguon]||'GIAN_TIEP').toUpperCase();
+    if(!MUC_TIN_CAY[muc]) return json({error:'Mức tin cậy không hợp lệ'},400);
+    if(muc==='KHONG_QUY_DON') return json({error:'Import đối soát phải là mức quy đơn được (Trực tiếp/Gián tiếp)'},400);
+    let gan=0, cho=0;
+    for(const r of rows){
+      const ma=String(r.ma_theo_doi||r.ma||'').trim();
+      const dt=Number(r.doanh_thu)||0, sd=Number(r.so_don)||0;
+      if(!ma && !dt && !sd) continue;
+      // Khớp mã: CHỈ quy đơn khi khớp ĐÚNG 1 bài. Mọi trường hợp khác → gán tay.
+      const hits = ma ? (await env.DB.prepare(`SELECT * FROM air_posts WHERE ma_theo_doi=?`).bind(ma).all()).results : [];
+      if(hits.length===1){
+        await env.DB.prepare(`INSERT INTO ket_qua (id,air_post_id,muc_tin_cay,nguon,ky,doanh_thu,so_don,luot_xem,luot_tuong_tac,luot_click,ma_theo_doi,ghi_chu,created_at,created_by,created_by_name) VALUES (?,?,?,?,?,?,?,0,0,0,?,?,?,?,?)`)
+          .bind(uid('kq'), hits[0].id, muc, nguon, (r.ky||body.ky||'').trim(), dt, sd, ma, 'Khớp mã tự động', nowISO(), me.id, me.ho_ten).run();
+        gan++;
+      } else {
+        await env.DB.prepare(`INSERT INTO don_cho_gan (id,nguon,ma_doi_soat,doanh_thu,so_don,ky,ly_do,trang_thai,created_at) VALUES (?,?,?,?,?,?,?, 'CHO_GAN',?)`)
+          .bind(uid('dcg'), nguon, ma, dt, sd, (r.ky||body.ky||'').trim(),
+            !ma ? 'Dòng không có mã theo dõi' : (hits.length===0 ? 'Mã không khớp bài nào' : 'Mã khớp nhiều bài ('+hits.length+')'), nowISO()).run();
+        cho++;
+      }
+    }
+    await logAudit(env,me,'import đối soát','ket_qua',nguon,'khớp '+gan+' · chờ gán '+cho);
+    return json({ db: await bootstrap(env, me), gan, cho });
+  }
+  if((m=path.match(/^\/ketqua\/(.+)$/)) && method==='DELETE'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    await env.DB.prepare(`DELETE FROM ket_qua WHERE id=?`).bind(m[1]).run();
+    await logAudit(env,me,'xoá kết quả','ket_qua',m[1]);
+    return json({ db: await bootstrap(env, me) });
+  }
+  // Gán tay 1 đơn trong hàng đợi vào đúng 1 bài (KHÔNG chia đều cho nhiều bài)
+  if((m=path.match(/^\/donchogan\/(.+)\/assign$/)) && method==='POST'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    const id=m[1]; const d=await env.DB.prepare(`SELECT * FROM don_cho_gan WHERE id=?`).bind(id).first();
+    if(!d) return json({error:'Không tìm thấy'},404);
+    if(d.trang_thai!=='CHO_GAN') return json({error:'Đơn này đã xử lý'},409);
+    const ap=await env.DB.prepare(`SELECT * FROM air_posts WHERE id=?`).bind(body.air_post_id||'').first();
+    if(!ap) return json({error:'Chọn bài đăng để gán'},400);
+    // Gán tay luôn là GIÁN TIẾP: người vận hành suy luận, không phải sàn khẳng định
+    await env.DB.prepare(`INSERT INTO ket_qua (id,air_post_id,muc_tin_cay,nguon,ky,doanh_thu,so_don,luot_xem,luot_tuong_tac,luot_click,ma_theo_doi,ghi_chu,created_at,created_by,created_by_name) VALUES (?,?,'GIAN_TIEP',?,?,?,?,0,0,0,?,?,?,?,?)`)
+      .bind(uid('kq'), ap.id, d.nguon, d.ky||'', Number(d.doanh_thu)||0, Number(d.so_don)||0, d.ma_doi_soat||'', 'Gán tay từ hàng đợi', nowISO(), me.id, me.ho_ten).run();
+    await env.DB.prepare(`UPDATE don_cho_gan SET trang_thai='DA_GAN', air_post_id=?, decided_at=?, decided_by_name=? WHERE id=?`).bind(ap.id,nowISO(),me.ho_ten,id).run();
+    await logAudit(env,me,'gán tay đơn','don_cho_gan',id,ap.tieu_de||'');
+    return json({ db: await bootstrap(env, me) });
+  }
+  if((m=path.match(/^\/donchogan\/(.+)\/skip$/)) && method==='POST'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    const id=m[1]; const d=await env.DB.prepare(`SELECT * FROM don_cho_gan WHERE id=?`).bind(id).first();
+    if(!d) return json({error:'Không tìm thấy'},404);
+    if(d.trang_thai!=='CHO_GAN') return json({error:'Đơn này đã xử lý'},409);
+    await env.DB.prepare(`UPDATE don_cho_gan SET trang_thai='BO_QUA', decided_at=?, decided_by_name=? WHERE id=?`).bind(nowISO(),me.ho_ten,id).run();
+    await logAudit(env,me,'bỏ qua đơn không quy được','don_cho_gan',id,(body.ly_do||'').trim());
     return json({ db: await bootstrap(env, me) });
   }
   if((m=path.match(/^\/posts\/(.+)\/review$/)) && method==='POST'){
@@ -1037,6 +2309,414 @@ async function handleApi(request, env){
     return json({ db: await bootstrap(env, me), cleaned:r });
   }
 
+  if((m=path.match(/^\/module-config\/(.+)$/)) && method==='PATCH'){
+    if(!canCauHinh(me)) return json({error:'Chỉ Admin hoặc Marketing được sửa cấu hình'},403);
+    const key=m[1];
+    if(!CONFIG_MAC_DINH[key]) return json({error:'Module không hợp lệ: '+key},400);
+    const hienTai=await env.DB.prepare(`SELECT * FROM module_config WHERE id=?`).bind(key).first();
+    const cu=hienTai?JSON.parse(hienTai.cau_hinh||'{}'):{};
+    const moi={...cu, ...(body.cau_hinh||{})};
+    // Chặn số vô lý — cấu hình sai còn nguy hơn không cho cấu hình
+    for(const [k,v] of Object.entries(moi)){
+      if(typeof v==='number' && (!isFinite(v) || v<0 || v>3650)) return json({error:'Giá trị "'+k+'" không hợp lệ (0–3650)'},422);
+    }
+    if(Array.isArray(moi.checklist)){
+      if(!moi.checklist.length) return json({error:'Checklist không được rỗng'},422);
+      const ks=moi.checklist.map(c=>c&&c.k);
+      if(ks.some(k2=>!k2)) return json({error:'Mỗi mục checklist phải có mã (k)'},422);
+      if(new Set(ks).size!==ks.length) return json({error:'Mã mục checklist bị trùng'},422);
+      if(!moi.checklist.some(c=>c.bat_buoc)) return json({error:'Phải có ít nhất 1 mục bắt buộc'},422);
+    }
+    if(hienTai) await env.DB.prepare(`UPDATE module_config SET cau_hinh=?, updated_at=?, updated_by_name=? WHERE id=?`).bind(JSON.stringify(moi),nowISO(),me.ho_ten,key).run();
+    else await env.DB.prepare(`INSERT INTO module_config (id,cau_hinh,updated_at,updated_by_name) VALUES (?,?,?,?)`).bind(key,JSON.stringify(moi),nowISO(),me.ho_ten).run();
+    await logAudit(env,me,'sửa cấu hình module','module_config',key,JSON.stringify(body.cau_hinh||{}).slice(0,200));
+    return json({ db: await bootstrap(env, me) });
+  }
+  if((m=path.match(/^\/module-config\/(.+)\/reset$/)) && method==='POST'){
+    if(!canCauHinh(me)) return json({error:'Chỉ Admin hoặc Marketing được sửa cấu hình'},403);
+    await env.DB.prepare(`DELETE FROM module_config WHERE id=?`).bind(m[1]).run();
+    await logAudit(env,me,'khôi phục cấu hình mặc định','module_config',m[1]);
+    return json({ db: await bootstrap(env, me) });
+  }
+  // ===== QUẢN LÝ SẢN XUẤT =====
+  if(path==='/sanxuat' && method==='POST'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    if(!(body.tieu_de||'').trim()) return json({error:'Nhập tên nội dung / kịch bản'},400);
+    const id=await luuSanXuat(env, me, body, null);
+    await logAudit(env,me,'thêm dòng sản xuất','san_xuat',id,(body.tieu_de||'').trim());
+    return json({ db: await bootstrap(env, me), id });
+  }
+  if(path==='/sanxuat/import' && method==='POST'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    const rows=Array.isArray(body.rows)?body.rows:[];
+    const taoKH = bool(body.tao_ke_hoach);
+    // Nối về Kế hoạch nội dung: khớp theo tên + tháng. Không khớp thì tạo mới nếu user chọn.
+    const cis=(await env.DB.prepare(`SELECT id,tieu_de,thang FROM content_items`).all()).results;
+    const khoa=(t,th)=>String(t||'').trim().toLowerCase()+'|'+String(th||'').trim();
+    const banDo={}; cis.forEach(c=>{ banDo[khoa(c.tieu_de,c.thang)]=c.id; });
+    let n=0, bo=0, noi=0, moi=0;
+    for(const r of rows){
+      const ten=(r.tieu_de||'').trim();
+      if(!ten){ bo++; continue; }
+      const th=r.thang||body.thang||'';
+      let ciId=banDo[khoa(ten,th)] || null;
+      if(!ciId && taoKH){
+        ciId=await insertContentItem(env, me, { loai:'ECOM', tieu_de:ten, loai_muc_tieu:'BAN_HANG',
+          san_pham_id:r.san_pham_id||null, kenh_id:r.kenh_id||null, framework_id:r.framework_id||null,
+          thang:th, trang_thai:'SAN_XUAT', chi_tiet:{ tu_san_xuat:true } });
+        banDo[khoa(ten,th)]=ciId; moi++;
+      }
+      if(ciId) noi++;
+      await luuSanXuat(env, me, {...r, thang:th, content_item_id:ciId}, null); n++;
+    }
+    await logAudit(env,me,'import sản xuất','san_xuat',String(n),'nhận '+n+' · nối kế hoạch '+noi+' · tạo mới '+moi+' · bỏ '+bo);
+    return json({ db: await bootstrap(env, me), imported:n, bo_qua:bo, noi_ke_hoach:noi, tao_moi:moi });
+  }
+  if((m=path.match(/^\/sanxuat\/(.+)$/)) && method==='PATCH'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    const id=await luuSanXuat(env, me, body, m[1]);
+    if(!id) return json({error:'Không tìm thấy'},404);
+    return json({ db: await bootstrap(env, me) });
+  }
+  if((m=path.match(/^\/sanxuat\/(.+)$/)) && method==='DELETE'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    await env.DB.prepare(`DELETE FROM san_xuat WHERE id=?`).bind(m[1]).run();
+    await logAudit(env,me,'xoá dòng sản xuất','san_xuat',m[1]);
+    return json({ db: await bootstrap(env, me) });
+  }
+
+  // ===== AI viết kịch bản (P4) =====
+  // Danh mục rút gọn để nơi khác (vd công cụ Lọc video) chọn framework/sản phẩm/kênh
+  // trước khi gọi /scripts/ai-sinh — KHÔNG trả brand_voice/claim_cam ở đây (giữ trong prompt server).
+  if(path==='/scripts/ngu-canh' && method==='GET'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    const fw=(await env.DB.prepare(`SELECT id,ten,mo_ta FROM frameworks WHERE active=1 ORDER BY ten`).all()).results;
+    const sp=(await env.DB.prepare(`SELECT id,ten FROM san_pham WHERE active=1 ORDER BY ten`).all()).results;
+    const kn=(await env.DB.prepare(`SELECT id,ten,loai FROM kenh WHERE active=1 ORDER BY ten`).all()).results;
+    return json({frameworks:fw, san_pham:sp, kenh:kn});
+  }
+  if(path==='/scripts/ai-sinh' && method==='POST'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    const p=await promptKichBan(env, body);
+    if(!p.ok) return json({error:p.loi},400);
+    const r=await goiAI(env,{system:p.sys, messages:[{role:'user',content:p.usr}], max_tokens:2000});
+    if(!r.ok) return json({ok:false, thieu_key:!!r.thieu_key, loi:r.loi},200);
+    return json(duyetKichBanAI(r.text, p.cacBuoc, p.claims),200);
+  }
+  // ĐƯỜNG AI CỦA NGƯỜI DÙNG (vd Gemini bằng key riêng lưu trong trình duyệt, giống công cụ
+  // Lọc video). Trình duyệt tự gọi nhà cung cấp AI — key KHÔNG đi qua server, KHÔNG vào D1.
+  // Server vẫn giữ 2 việc quan trọng: dựng prompt (đúng định hướng thương hiệu) và thẩm định
+  // kết quả (claim cấm, khớp bước) — nên đường này không hề lỏng hơn đường Anthropic.
+  if(path==='/scripts/ai-sinh/prompt' && method==='POST'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    const p=await promptKichBan(env, body);
+    if(!p.ok) return json({error:p.loi},400);
+    return json({ok:true, system:p.sys, user:p.usr, cac_buoc:p.cacBuoc});
+  }
+  if(path==='/scripts/ai-sinh/ket-qua' && method==='POST'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    if(!String(body.text||'').trim()) return json({error:'Thiếu nội dung AI trả về'},400);
+    // Claim cấm LUÔN đọc lại từ DB — không nhận theo lời trình duyệt gửi lên.
+    const claims=(await env.DB.prepare(`SELECT * FROM claim_cam WHERE active=1`).all()).results;
+    const cacBuoc=Array.isArray(body.cac_buoc)?body.cac_buoc.map(s=>String(s||'').trim()).filter(Boolean).slice(0,60):[];
+    return json(duyetKichBanAI(body.text, cacBuoc, claims),200);
+  }
+
+  // ===== CHATBOT AI — hỏi đáp trên dữ liệu thật của chính mình =====
+  if(path==='/ai/chat' && method==='POST'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    const msgs=Array.isArray(body.messages)?body.messages.filter(m2=>m2&&m2.role&&m2.content).slice(-12):[];
+    if(!msgs.length) return json({error:'Chưa có câu hỏi'},400);
+    const bc=await boiCanhAI(env, me);
+    const sys='Bạn là trợ lý vận hành nội dung của Kingsmen (Masfico Việt Nam), nói chuyện với '+me.ho_ten+' (vai trò '+me.vai_tro+').\n'+
+      AI_NGUYEN_TAC+'\n'+
+      'Bạn giúp: tra cứu tình hình, giải thích số liệu, gợi ý việc nên làm tiếp, tư vấn hướng nội dung.\n'+
+      'Khi được hỏi con số, trả lời đúng con số trong DỮ LIỆU. Nếu dữ liệu không có, nói rõ là chưa có và gợi ý cần nhập ở đâu.\n'+
+      'DỮ LIỆU THẬT CỦA HỆ THỐNG (JSON):\n'+JSON.stringify(bc);
+    const r=await goiAI(env,{system:sys, messages:msgs, max_tokens:1500});
+    if(!r.ok) return json({ok:false, thieu_key:!!r.thieu_key, loi:r.loi},200);
+    return json({ok:true, tra_loi:r.text});
+  }
+
+  if(path==='/n8n/sinh-workflow' && method==='POST'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    const r=await aiSinhWorkflow(env,{ mo_ta:body.mo_ta, kenh_loai:body.kenh_loai, token:body.token, app_base:env.APP_BASE_URL||'' });
+    if(r.ok) return json({ ok:true, workflow:r.workflow });
+    // Không có key hoặc AI sinh hỏng → BÁO THẲNG để frontend dùng bản dựng sẵn, không im lặng
+    return json({ ok:false, thieu_key:!!r.thieu_key, loi:r.loi, chi_tiet:r.chi_tiet||[] }, 200);
+  }
+
+  // ===== NỐI SEEDING ↔ CONTENT OS: đẩy nội dung ĐÃ DUYỆT sang thư viện seeding =====
+  if((m=path.match(/^\/content\/(.+)\/day-seeding$/)) && method==='POST'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    const id=m[1]; const ci=await env.DB.prepare(`SELECT * FROM content_items WHERE id=?`).bind(id).first();
+    if(!ci) return json({error:'Không tìm thấy nội dung'},404);
+    // Chỉ đẩy nội dung ĐÃ QUA 2 CỔNG DUYỆT — đây chính là giá trị: Sales seeding nội dung đã kiểm claim
+    if(ci.trang_thai!=='DUYET') return json({error:'Chỉ đẩy nội dung ĐÃ DUYỆT (qua 2 cổng) sang seeding'},409);
+    const daCo=await env.DB.prepare(`SELECT id FROM content_topics WHERE content_item_id=?`).bind(id).first();
+    if(daCo) return json({error:'Nội dung này đã có trong thư viện seeding'},409);
+    // Lấy nội dung đầy đủ từ kịch bản đã duyệt (nếu có) để Sales copy dùng ngay
+    const sc=await env.DB.prepare(`SELECT * FROM scripts WHERE content_item_id=? AND trang_thai='DUYET' ORDER BY updated_at DESC LIMIT 1`).bind(id).first();
+    let noi_dung='';
+    if(sc){
+      const secs=JSON.parse(sc.sections||'[]');
+      noi_dung=[sc.hook, ...secs.map(x=>(x&&x.text)||''), sc.cta].filter(Boolean).join('\n\n');
+    }
+    if(!noi_dung){ const ct=JSON.parse(ci.chi_tiet||'{}'); noi_dung=ct.noi_dung||ct.brief||''; }
+    const tid=uid('t');
+    await env.DB.prepare(`INSERT INTO content_topics (id,chu_de,noi_dung,loai_bai,muc_tieu,tags,active,uu_tien,updated_at,content_item_id) VALUES (?,?,?,?,?,?,1,0,?,?)`)
+      .bind(tid, (ci.tieu_de||'').trim(), noi_dung, (body.loai_bai||'').trim(), (body.muc_tieu||'').trim(),
+        JSON.stringify(Array.isArray(body.tags)?body.tags:[]), nowISO(), id).run();
+    await logAudit(env,me,'đẩy nội dung sang seeding','content_topics',tid,(ci.tieu_de||'').trim());
+    return json({ db: await bootstrap(env, me), topic_id: tid });
+  }
+
+  // ===== AI ĐÁNH GIÁ TREND =====
+  // AI tick sẵn checklist + nêu lý do. Có tự duyệt hay không do CẤU HÌNH quyết, mặc định TẮT.
+  if((m=path.match(/^\/trends\/(.+)\/ai-danh-gia$/)) && method==='POST'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    const id=m[1]; const tr=await env.DB.prepare(`SELECT * FROM trends WHERE id=?`).bind(id).first();
+    if(!tr) return json({error:'Không tìm thấy trend'},404);
+    if(tr.trang_thai==='DA_TRIEN_KHAI') return json({error:'Trend này đã triển khai'},409);
+    const r=await chamVaGhiTrend(env, me, tr);
+    if(!r.ok) return json({ok:false, thieu_key:!!r.thieu_key, loi:r.loi},200);
+    await logAudit(env,me,r.tu_duyet?'AI tự duyệt trend':'AI đánh giá trend','trends',id,(tr.ten||'')+' · '+(r.tom_tat||'').slice(0,120));
+    return json({ ...r, db: await bootstrap(env, me) });
+  }
+
+  // Chạy thử agent ngay, không chờ tới giờ — để người kiểm chứng trước khi giao cho máy chạy một mình.
+  if(path==='/trends/agent/chay-thu' && method==='POST'){
+    if(!canCauHinh(me)) return json({error:'Chỉ Admin hoặc Marketing được chạy agent'},403);
+    const r=await chayAgentTrend(env,{ep:true});
+    await logAudit(env,me,'chạy thử agent trend','agent_log','',r.tom_tat||r.bo_qua||'');
+    return json({ ...r, db: await bootstrap(env, me) });
+  }
+
+  // ===== CONTENT OS · TREND — nghiên cứu & triển khai =====
+  if(path==='/trends' && method==='POST'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    if(!(body.ten||'').trim()) return json({error:'Nhập tên trend'},400);
+    const id=uid('tr');
+    await env.DB.prepare(`INSERT INTO trends (id,ten,nguon,link,mo_ta,phat_hien_ngay,han_dung,pillar_id,san_pham_id,danh_gia,rui_ro,trang_thai,ly_do,nguoi_de_xuat,created_at) VALUES (?,?,?,?,?,?,?,?,?,'{}',?,'MOI','',?,?)`)
+      .bind(id,(body.ten||'').trim(),(body.nguon||'TIKTOK').trim(),(body.link||'').trim(),(body.mo_ta||'').trim(),
+        (body.phat_hien_ngay||'').trim(),(body.han_dung||'').trim(), body.pillar_id||null, body.san_pham_id||null,
+        (body.rui_ro||'').trim(), me.ho_ten, nowISO()).run();
+    await logAudit(env,me,'ghi nhận trend','trends',id,(body.ten||'').trim());
+    return json({ db: await bootstrap(env, me), id });
+  }
+  if((m=path.match(/^\/trends\/(.+)\/decide$/)) && method==='POST'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    const id=m[1]; const r=await env.DB.prepare(`SELECT * FROM trends WHERE id=?`).bind(id).first();
+    if(!r) return json({error:'Không tìm thấy'},404);
+    if(r.trang_thai==='DA_TRIEN_KHAI') return json({error:'Trend này đã triển khai'},409);
+    const duyet = body.result==='DUYET';
+    if(duyet){
+      // Chỉ cho duyệt khi đã tick ĐỦ mục bắt buộc — tránh chạy theo trend rồi vỡ claim/hình ảnh
+      const dg=JSON.parse(r.danh_gia||'{}');
+      const thieu=TREND_CHECK.filter(c=>c.bat_buoc && !dg[c.k]).map(c=>c.label);
+      if(thieu.length) return json({error:'Chưa đánh giá đủ mục bắt buộc', thieu},422);
+    } else if(!String(body.ly_do||'').trim()) return json({error:'Bỏ qua phải nêu lý do'},400);
+    await env.DB.prepare(`UPDATE trends SET trang_thai=?, ly_do=?, nguoi_duyet_ten=?, decided_at=? WHERE id=?`)
+      .bind(duyet?'DUYET':'TU_CHOI', String(body.ly_do||'').trim(), me.ho_ten, nowISO(), id).run();
+    await logAudit(env,me,(duyet?'duyệt':'bỏ qua')+' trend','trends',id,r.ten||'');
+    return json({ db: await bootstrap(env, me) });
+  }
+  // Triển khai: trend đã duyệt → tạo thẳng 1 mục trong kế hoạch nội dung
+  if((m=path.match(/^\/trends\/(.+)\/trien-khai$/)) && method==='POST'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    const id=m[1]; const r=await env.DB.prepare(`SELECT * FROM trends WHERE id=?`).bind(id).first();
+    if(!r) return json({error:'Không tìm thấy'},404);
+    if(r.trang_thai!=='DUYET') return json({error:'Chỉ triển khai trend ĐÃ DUYỆT'},409);
+    const ciId = await insertContentItem(env, me, {
+      loai: body.loai||'SOCIAL', tieu_de: (body.tieu_de||('[Trend] '+r.ten)).trim(),
+      loai_muc_tieu: body.loai_muc_tieu||'THUONG_HIEU', pillar_id: r.pillar_id||null,
+      framework_id: body.framework_id||null, san_pham_id: r.san_pham_id||null, kenh_id: body.kenh_id||null,
+      thang: (body.thang||'').trim(), trang_thai:'Y_TUONG',
+      chi_tiet: { tu_trend: r.ten, link_trend: r.link||'', han_dung: r.han_dung||'' },
+    });
+    await env.DB.prepare(`UPDATE trends SET trang_thai='DA_TRIEN_KHAI', content_item_id=?, decided_at=? WHERE id=?`).bind(ciId,nowISO(),id).run();
+    await logAudit(env,me,'triển khai trend','trends',id,r.ten||'');
+    return json({ db: await bootstrap(env, me), content_item_id: ciId });
+  }
+  if((m=path.match(/^\/trends\/(.+)$/)) && method==='PATCH'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    const id=m[1]; const r=await env.DB.prepare(`SELECT * FROM trends WHERE id=?`).bind(id).first();
+    if(!r) return json({error:'Không tìm thấy'},404);
+    const g=(k,d)=> body[k]!=null?String(body[k]).trim():d;
+    const dg = body.danh_gia!=null ? JSON.stringify(body.danh_gia) : r.danh_gia;
+    // đang đánh giá dở thì chuyển sang trạng thái DANH_GIA cho đúng thực tế
+    let st = body.trang_thai!=null ? String(body.trang_thai).trim() : r.trang_thai;
+    if(body.danh_gia!=null && st==='MOI') st='DANH_GIA';
+    await env.DB.prepare(`UPDATE trends SET ten=?, nguon=?, link=?, mo_ta=?, phat_hien_ngay=?, han_dung=?, pillar_id=?, san_pham_id=?, danh_gia=?, rui_ro=?, trang_thai=? WHERE id=?`)
+      .bind(g('ten',r.ten),g('nguon',r.nguon),g('link',r.link),g('mo_ta',r.mo_ta),g('phat_hien_ngay',r.phat_hien_ngay),g('han_dung',r.han_dung),
+        body.pillar_id!==undefined?(body.pillar_id||null):r.pillar_id, body.san_pham_id!==undefined?(body.san_pham_id||null):r.san_pham_id,
+        dg, g('rui_ro',r.rui_ro), st, id).run();
+    return json({ db: await bootstrap(env, me) });
+  }
+  if((m=path.match(/^\/trends\/(.+)$/)) && method==='DELETE'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    await env.DB.prepare(`DELETE FROM trends WHERE id=?`).bind(m[1]).run();
+    return json({ db: await bootstrap(env, me) });
+  }
+
+  // ===== CONTENT OS · P10 — Thư viện học (máy rút đề xuất, NGƯỜI quyết) =====
+  if(path==='/baihoc/quet' && method==='POST'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    const scripts=(await env.DB.prepare(`SELECT * FROM scripts`).all()).results;
+    const airs=(await env.DB.prepare(`SELECT * FROM air_posts`).all()).results;
+    const kq=(await env.DB.prepare(`SELECT * FROM ket_qua`).all()).results;
+    const fws=(await env.DB.prepare(`SELECT * FROM frameworks`).all()).results;
+    const aps=(await env.DB.prepare(`SELECT * FROM approvals WHERE cong='CLAIM' AND trang_thai='TRA_LAI'`).all()).results;
+    const daCo=(await env.DB.prepare(`SELECT tieu_de FROM bai_hoc`).all()).results.map(x=>x.tieu_de);
+    const scrById={}; scripts.forEach(s=>scrById[s.id]=s);
+    let them=0;
+    const push=async(loai,tieu_de,noi_dung,bang_chung,so_mau)=>{
+      if(daCo.includes(tieu_de)) return;            // không tạo trùng đề xuất
+      await env.DB.prepare(`INSERT INTO bai_hoc (id,loai,tieu_de,noi_dung,bang_chung,so_mau,nguon_tu_dong,trang_thai,ghi_chu,created_at) VALUES (?,?,?,?,?,?,1,'DE_XUAT','',?)`)
+        .bind(uid('bh'),loai,tieu_de,noi_dung,JSON.stringify(bang_chung||{}),so_mau||0,nowISO()).run();
+      daCo.push(tieu_de); them++;
+    };
+    // (1) Framework: chỉ kết luận khi ĐỦ MẪU. Tổng hợp cái đã xảy ra, KHÔNG dự đoán.
+    const perFw={};
+    airs.forEach(a=>{ const sc=a.script_id?scrById[a.script_id]:null; const fid=sc&&sc.framework_id; if(!fid) return;
+      (perFw[fid] ||= {bai:0, dt:0, don:0, view:0});
+      perFw[fid].bai++;
+      kq.filter(k=>k.air_post_id===a.id).forEach(k=>{
+        if(k.muc_tin_cay==='KHONG_QUY_DON') perFw[fid].view += Number(k.luot_xem)||0;
+        else { perFw[fid].dt += Number(k.doanh_thu)||0; perFw[fid].don += Number(k.so_don)||0; }
+      });
+    });
+    for(const fid of Object.keys(perFw)){
+      const st=perFw[fid]; if(st.bai < MIN_MAU_BANG_CHUNG) continue;      // chưa đủ mẫu → im lặng
+      const fw=fws.find(f=>f.id===fid); if(!fw) continue;
+      const tb=Math.round(st.dt/st.bai);
+      await push('FRAMEWORK', 'Framework "'+fw.ten+'": '+st.bai+' bài đã đo',
+        'Quan sát trên '+st.bai+' bài đã đăng: doanh thu quy đơn được '+st.dt.toLocaleString('vi-VN')+'đ ('+st.don+' đơn), trung bình '+tb.toLocaleString('vi-VN')+'đ/bài; '+st.view.toLocaleString('vi-VN')+' lượt xem (không quy đơn). Đây là số ĐÃ XẢY RA, không phải dự đoán cho bài sau.',
+        {framework_id:fid, ...st, trung_binh:tb}, st.bai);
+    }
+    // (2) Claim: cụm từ bị Kỹ thuật trả lại lặp lại nhiều lần → đề xuất bổ sung danh sách cấm
+    const lyDo={};
+    aps.forEach(a=>{ const t=String(a.ghi_chu||'').trim().toLowerCase(); if(t.length>=6) lyDo[t]=(lyDo[t]||0)+1; });
+    for(const t of Object.keys(lyDo)){
+      if(lyDo[t] < 2) continue;                                          // lặp ít nhất 2 lần mới coi là mẫu hình
+      await push('CLAIM', 'Lỗi claim lặp lại: '+t.slice(0,60),
+        'Kỹ thuật đã trả lại '+lyDo[t]+' lần với cùng lý do này. Cân nhắc bổ sung cụm từ liên quan vào danh sách claim cấm, hoặc ghi vào brand voice để người viết tránh từ đầu.',
+        {so_lan:lyDo[t], ly_do:t}, lyDo[t]);
+    }
+    await logAudit(env,me,'quét thư viện học','bai_hoc','',them+' đề xuất mới');
+    return json({ db: await bootstrap(env, me), them });
+  }
+  if(path==='/baihoc' && method==='POST'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    if(!(body.tieu_de||'').trim()) return json({error:'Nhập tiêu đề bài học'},400);
+    const id=uid('bh');
+    await env.DB.prepare(`INSERT INTO bai_hoc (id,loai,tieu_de,noi_dung,bang_chung,so_mau,nguon_tu_dong,trang_thai,ghi_chu,created_at) VALUES (?,?,?,?,'{}',0,0,'DE_XUAT','',?)`)
+      .bind(id,(body.loai||'KHAC').trim(),(body.tieu_de||'').trim(),(body.noi_dung||'').trim(),nowISO()).run();
+    return json({ db: await bootstrap(env, me), id });
+  }
+  // NGƯỜI quyết: đề xuất chỉ thành quy tắc khi được duyệt
+  if((m=path.match(/^\/baihoc\/(.+)\/decide$/)) && method==='POST'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    const id=m[1]; const r=await env.DB.prepare(`SELECT * FROM bai_hoc WHERE id=?`).bind(id).first();
+    if(!r) return json({error:'Không tìm thấy'},404);
+    if(r.trang_thai!=='DE_XUAT') return json({error:'Bài học này đã được quyết'},409);
+    const duyet = body.result==='DUYET';
+    if(!duyet && !String(body.ghi_chu||'').trim()) return json({error:'Từ chối phải nêu lý do'},400);
+    await env.DB.prepare(`UPDATE bai_hoc SET trang_thai=?, nguoi_duyet_ten=?, ghi_chu=?, decided_at=? WHERE id=?`)
+      .bind(duyet?'DA_DUYET':'TU_CHOI', me.ho_ten, String(body.ghi_chu||'').trim(), nowISO(), id).run();
+    await logAudit(env,me,(duyet?'duyệt':'từ chối')+' bài học','bai_hoc',id,r.tieu_de||'');
+    return json({ db: await bootstrap(env, me) });
+  }
+  if((m=path.match(/^\/baihoc\/(.+)$/)) && method==='DELETE'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    await env.DB.prepare(`DELETE FROM bai_hoc WHERE id=?`).bind(m[1]).run();
+    return json({ db: await bootstrap(env, me) });
+  }
+
+  // ===== CONTENT OS · P5 — Kho footage + shot list =====
+  if(path==='/footage' && method==='POST'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    if(!(body.media_url||'').trim()) return json({error:'Cần file hoặc link media'},400);
+    const id=uid('ft');
+    await env.DB.prepare(`INSERT INTO footage (id,ten,mo_ta,media_url,media_type,tags,san_pham_id,kenh_id,dia_diem,ngay_quay,nguoi_quay,active,created_at,created_by,created_by_name) VALUES (?,?,?,?,?,?,?,?,?,?,?,1,?,?,?)`)
+      .bind(id,(body.ten||'').trim(),(body.mo_ta||'').trim(),(body.media_url||'').trim(),(body.media_type||'VIDEO').trim(),
+        JSON.stringify(Array.isArray(body.tags)?body.tags:[]), body.san_pham_id||null, body.kenh_id||null,
+        (body.dia_diem||'').trim(),(body.ngay_quay||'').trim(),(body.nguoi_quay||'').trim(), nowISO(), me.id, me.ho_ten).run();
+    await logAudit(env,me,'thêm footage','footage',id,(body.ten||'').trim());
+    return json({ db: await bootstrap(env, me), id });
+  }
+  if((m=path.match(/^\/footage\/(.+)$/)) && method==='PATCH'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    const id=m[1]; const r=await env.DB.prepare(`SELECT * FROM footage WHERE id=?`).bind(id).first();
+    if(!r) return json({error:'Không tìm thấy'},404);
+    const g=(k,d)=> body[k]!=null?String(body[k]).trim():d;
+    await env.DB.prepare(`UPDATE footage SET ten=?, mo_ta=?, tags=?, san_pham_id=?, kenh_id=?, dia_diem=?, ngay_quay=?, nguoi_quay=?, active=? WHERE id=?`)
+      .bind(g('ten',r.ten),g('mo_ta',r.mo_ta), body.tags!=null?JSON.stringify(body.tags):r.tags,
+        body.san_pham_id!==undefined?(body.san_pham_id||null):r.san_pham_id, body.kenh_id!==undefined?(body.kenh_id||null):r.kenh_id,
+        g('dia_diem',r.dia_diem),g('ngay_quay',r.ngay_quay),g('nguoi_quay',r.nguoi_quay),
+        body.active!=null?bool(body.active):r.active, id).run();
+    return json({ db: await bootstrap(env, me) });
+  }
+  if((m=path.match(/^\/footage\/(.+)$/)) && method==='DELETE'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    const id=m[1]; const r=await env.DB.prepare(`SELECT * FROM footage WHERE id=?`).bind(id).first();
+    if(r) await deleteMediaObject(env, r.media_url);
+    // gỡ liên kết ở shot list để không trỏ vào footage đã xoá
+    await env.DB.prepare(`UPDATE shot_list SET footage_id=NULL, trang_thai='CHUA_QUAY' WHERE footage_id=?`).bind(id).run();
+    await env.DB.prepare(`DELETE FROM footage WHERE id=?`).bind(id).run();
+    await logAudit(env,me,'xoá footage','footage',id);
+    return json({ db: await bootstrap(env, me) });
+  }
+  // Sinh shot list TỪ kịch bản đã có: mỗi phần thân kịch bản → 1 cảnh cần quay
+  if((m=path.match(/^\/shotlist\/from-script\/(.+)$/)) && method==='POST'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    const sid=m[1]; const sc=await env.DB.prepare(`SELECT * FROM scripts WHERE id=?`).bind(sid).first();
+    if(!sc) return json({error:'Không tìm thấy kịch bản'},404);
+    const cur=(await env.DB.prepare(`SELECT COUNT(*) c FROM shot_list WHERE script_id=?`).bind(sid).first())?.c||0;
+    if(Number(cur)>0) return json({error:'Kịch bản này đã có shot list — xoá cảnh cũ trước nếu muốn sinh lại'},409);
+    const secs=JSON.parse(sc.sections||'[]');
+    const rows=[]; let so=1;
+    if((sc.hook||'').trim()) rows.push(['Hook — '+String(sc.hook).slice(0,60), sc.hook]);
+    secs.forEach(x=>{ if(x && (x.label||x.text)) rows.push([x.label||('Cảnh '+so), x.text||'']); });
+    if((sc.cta||'').trim()) rows.push(['CTA', sc.cta]);
+    if(!rows.length) return json({error:'Kịch bản chưa có nội dung để tách cảnh'},400);
+    for(const [ten,mo] of rows){
+      await env.DB.prepare(`INSERT INTO shot_list (id,script_id,thu_tu,ten_canh,mo_ta,goc_may,thoi_luong,footage_id,trang_thai,ghi_chu,created_at,updated_at) VALUES (?,?,?,?,?,'',0,NULL,'CHUA_QUAY','',?,?)`)
+        .bind(uid('sl'),sid,so++,String(ten).slice(0,120),String(mo).slice(0,500),nowISO(),nowISO()).run();
+    }
+    await logAudit(env,me,'sinh shot list','shot_list',sid,rows.length+' cảnh');
+    return json({ db: await bootstrap(env, me), created: rows.length });
+  }
+  if(path==='/shotlist' && method==='POST'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    if(!body.script_id) return json({error:'Cần kịch bản'},400);
+    const n=Number((await env.DB.prepare(`SELECT COUNT(*) c FROM shot_list WHERE script_id=?`).bind(body.script_id).first())?.c||0);
+    const id=uid('sl');
+    await env.DB.prepare(`INSERT INTO shot_list (id,script_id,thu_tu,ten_canh,mo_ta,goc_may,thoi_luong,footage_id,trang_thai,ghi_chu,created_at,updated_at) VALUES (?,?,?,?,?,?,?,NULL,'CHUA_QUAY','',?,?)`)
+      .bind(id, body.script_id, n+1, (body.ten_canh||'Cảnh mới').trim(), (body.mo_ta||'').trim(), (body.goc_may||'').trim(), Number(body.thoi_luong)||0, nowISO(), nowISO()).run();
+    return json({ db: await bootstrap(env, me), id });
+  }
+  if((m=path.match(/^\/shotlist\/(.+)$/)) && method==='PATCH'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    const id=m[1]; const r=await env.DB.prepare(`SELECT * FROM shot_list WHERE id=?`).bind(id).first();
+    if(!r) return json({error:'Không tìm thấy'},404);
+    // gắn footage vào cảnh → tự chuyển trạng thái ĐÃ QUAY (nếu chưa đặt tay)
+    let fid = body.footage_id!==undefined ? (body.footage_id||null) : r.footage_id;
+    if(fid){ const f=await env.DB.prepare(`SELECT id FROM footage WHERE id=?`).bind(fid).first(); if(!f) return json({error:'Footage không tồn tại'},404); }
+    const st = body.trang_thai!=null ? String(body.trang_thai).trim() : (body.footage_id!==undefined ? (fid?'DA_QUAY':'CHUA_QUAY') : r.trang_thai);
+    const g=(k,d)=> body[k]!=null?String(body[k]).trim():d;
+    await env.DB.prepare(`UPDATE shot_list SET ten_canh=?, mo_ta=?, goc_may=?, thoi_luong=?, footage_id=?, trang_thai=?, ghi_chu=?, thu_tu=?, updated_at=? WHERE id=?`)
+      .bind(g('ten_canh',r.ten_canh),g('mo_ta',r.mo_ta),g('goc_may',r.goc_may), body.thoi_luong!=null?Number(body.thoi_luong)||0:r.thoi_luong,
+        fid, st, g('ghi_chu',r.ghi_chu), body.thu_tu!=null?Number(body.thu_tu)||0:r.thu_tu, nowISO(), id).run();
+    return json({ db: await bootstrap(env, me) });
+  }
+  if((m=path.match(/^\/shotlist\/(.+)$/)) && method==='DELETE'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    await env.DB.prepare(`DELETE FROM shot_list WHERE id=?`).bind(m[1]).run();
+    return json({ db: await bootstrap(env, me) });
+  }
+
+
   return json({error:'Route không tồn tại: '+method+' '+path}, 404);
 }
 
@@ -1048,6 +2728,43 @@ async function deleteMediaObject(env, media_url){
 }
 
 // Dọn media của công trình CHƯA ĐƯỢC DUYỆT quá 30 ngày (chạy theo cron)
+// Cron hằng ngày: chụp lại tình trạng việc kẹt vào nhật ký để có dấu vết theo thời gian.
+// Nguồn sự thật vẫn là bootstrap (tính tươi); đây chỉ là bản ghi lịch sử.
+// Trend quá hạn mà chưa triển khai → tự chuyển Bỏ qua. Đây là dữ kiện xác định, không cần AI phán.
+async function tuDongHetHanTrend(env){
+  try{
+    await ensureSchema(env);
+    const cfg=(await docCauHinh(env)).trend||{};
+    if(cfg.tu_dong_het_han===false) return;
+    const hn=new Date().toISOString().slice(0,10);
+    await env.DB.prepare(`UPDATE trends SET trang_thai='TU_CHOI', ly_do=?, nguoi_duyet_ten='Hệ thống', decided_at=? WHERE han_dung IS NOT NULL AND han_dung<>'' AND han_dung<? AND trang_thai IN ('MOI','DANH_GIA','DUYET')`)
+      .bind('Tự bỏ qua: đã quá hạn dùng, trend nguội thì làm cũng ít tác dụng', nowISO(), hn).run();
+  }catch(e){}
+}
+async function ghiNhatKyViecKet(env){
+  try{
+    await ensureSchema(env);
+    const g=async(sql)=>(await env.DB.prepare(sql).all()).results;
+    const v=tinhViecKet({
+      scripts: await g(`SELECT id,tieu_de,hook,trang_thai,so_lan_tra,updated_at FROM scripts`),
+      approvals: await g(`SELECT id,cong,trang_thai,created_at FROM approvals`),
+      air_posts: await g(`SELECT id,tieu_de,trang_thai,posted_at FROM air_posts`),
+      ket_qua: await g(`SELECT air_post_id FROM ket_qua`),
+      trends: await g(`SELECT id,ten,trang_thai,han_dung FROM trends`),
+      don_cho_gan: await g(`SELECT id,ma_doi_soat,trang_thai,created_at FROM don_cho_gan`),
+    });
+    if(v.tong===0) return;
+    const mo=[
+      v.sua_lai.length?v.sua_lai.length+' kịch bản bị trả chưa sửa':'',
+      v.cho_duyet.length?v.cho_duyet.length+' cổng duyệt tồn':'',
+      v.chua_nhap_kq.length?v.chua_nhap_kq.length+' bài đã đăng chưa nhập kết quả':'',
+      v.trend_gap.length?v.trend_gap.length+' trend sắp/đã hết hạn':'',
+      v.don_ket.length?v.don_ket.length+' đơn chờ gán tay':'',
+    ].filter(Boolean).join(' · ');
+    await env.DB.prepare(`INSERT INTO audit (id,at,by_id,by_name,action,entity,entity_id,detail) VALUES (?,?,'','Hệ thống','nhắc việc','viec_ket',?,?)`)
+      .bind(uid('a'), nowISO(), String(v.tong), mo).run();
+  }catch(e){}
+}
 async function cleanupOldMedia(env){
   await ensureSchema(env);
   const cutoff = new Date(Date.now() - 30*24*60*60*1000).toISOString();
@@ -1067,7 +2784,20 @@ async function cleanupOldMedia(env){
 export default {
   // Cron: dọn media công trình chưa duyệt quá 30 ngày
   async scheduled(controller, env, ctx){
-    ctx.waitUntil(cleanupOldMedia(env));
+    // Hai lịch cron khác nhau vào chung handler → phải tách, nếu không việc hằng ngày
+    // sẽ chạy mỗi 15 phút và làm rác nhật ký.
+    const cron = (controller && controller.cron) || '';
+    if(cron.startsWith('*/15')){
+      ctx.waitUntil(chayLichDang(env));           // quét bài tới giờ đăng
+      // Agent bám nhịp 15' để người tự chọn được GIỜ chạy trong Cấu hình;
+      // bên trong nó tự chốt mỗi ngày đúng 1 lần nên không chạy lặp.
+      ctx.waitUntil(chayAgentTrend(env).catch(()=>{}));
+    } else {
+      ctx.waitUntil(cleanupOldMedia(env));        // dọn media quá hạn
+      ctx.waitUntil(ghiNhatKyViecKet(env));       // chụp tình trạng việc kẹt
+      ctx.waitUntil(tuDongHetHanTrend(env));      // trend quá hạn → tự bỏ qua
+      ctx.waitUntil(chayLichDang(env));           // chạy kèm cho chắc, phòng lịch 15' lỗi
+    }
   },
   async fetch(request, env, ctx){
     const url = new URL(request.url);
