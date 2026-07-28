@@ -1336,7 +1336,20 @@ function Shell(){
     .map(g=>({...g, items:g.items.filter(it => me.is_dev || !BETA_KEYS.has(it.key))}))
     .filter(g=>g.items.length>0);
   const allItems = groups.flatMap(g=>g.items);
-  const [page, setPage] = useState((allItems[0]||{}).key||'home');
+  const [bmData,setBmData]=useState(null);
+  const [page, setPage] = useState(()=>{
+    if(typeof location!=='undefined' && /[?&]bm_ten=/.test(location.search)) return 'trend';
+    return (allItems[0]||{}).key||'home';
+  });
+  useEffect(()=>{
+    if(typeof location==='undefined') return;
+    const q=new URLSearchParams(location.search);
+    if(!q.has('bm_ten')) return;
+    setBmData({ ten:q.get('bm_ten')||'', link:q.get('bm_link')||'', mo_ta:q.get('bm_mota')||'' });
+    setPage('trend');
+    // Gỡ tham số khỏi URL ngay — reload trang không được mở lại modal cũ
+    window.history.replaceState(null,'',location.pathname);
+  },[]);
   const [profileOpen, setProfileOpen] = useState(false);
   const subNavRef = useRef(null);
   const curGroup = groups.find(g=>g.items.some(it=>it.key===page)) || groups[0] || {items:[]};
@@ -1376,7 +1389,7 @@ function Shell(){
       case 'kenh': return <KenhManager/>;
       case 'ketqua': return <KetQua/>;
       case 'cdash': return <ContentDashboard/>;
-      case 'trend': return <TrendModule/>;
+      case 'trend': return <TrendModule bookmarklet={bmData} tieuBookmarklet={()=>setBmData(null)}/>;
       case 'hoc': return <ThuVienHoc/>;
       case 'schedule': return <PostSchedule/>;
       case 'pay_report': return <MktPayReport/>;
@@ -3024,10 +3037,12 @@ function AirEditor({post, onClose}){
    CONTENT OS · TREND — nghiên cứu & triển khai
    Ranh giới: KHÔNG scrape (ToS) · KHÔNG dự đoán viral. Người ghi nhận, người đánh giá.
 ============================================================ */
-function TrendModule(){
+function TrendModule({bookmarklet, tieuBookmarklet}){
   const { db, addTrend, patchTrend, decideTrend, trienKhaiTrend, deleteTrend, notify } = useApp();
   const TR=db.trends||[]; const CHK=db.trend_check||TREND_CHECK_FE;
   const [tab,setTab]=useState('dang_lam'); const [add,setAdd]=useState(false); const [open,setOpen]=useState(null); const [dan,setDan]=useState(false);
+  useEffect(()=>{ if(bookmarklet) setDan(true); }, [bookmarklet]);
+  const dongDan=()=>{ setDan(false); if(tieuBookmarklet) tieuBookmarklet(); };
   const homNay=new Date().toISOString().slice(0,10);
   const conHan=t=>!t.han_dung || t.han_dung>=homNay;
   const dangLam=TR.filter(t=>['MOI','DANH_GIA','DUYET'].includes(t.trang_thai));
@@ -3078,8 +3093,9 @@ function TrendModule(){
       </div>}
     </div>
     <MayGomTrend/>
+    <TroLyTrinhDuyet/>
     {add && <TrendForm onClose={()=>setAdd(false)}/>}
-    {dan && <DanLinkTrend onClose={()=>setDan(false)}/>}
+    {dan && <DanLinkTrend onClose={dongDan} initial={bookmarklet}/>}
   </ModuleShell>;
 }
 // Bảng hướng dẫn bật máy tự gom trend. Gấp lại mặc định — dựng xong một lần là thôi,
@@ -3177,16 +3193,63 @@ function doanNguon(link){
   const hit=NGUON_THEO_TEN_MIEN.find(([re])=>re.test(String(link||'')));
   return hit?hit[1]:'KHAC';
 }
-function DanLinkTrend({onClose}){
+// Sinh mã bookmarklet: đọc thẻ og:title/og:description mà chính trang TikTok/Facebook
+// đã công khai cho trình duyệt (dùng để hiện preview khi share) rồi mở app với dữ liệu điền sẵn.
+// KHÔNG quét nền, không đăng nhập hộ, không chạm gì ngoài trang người dùng đang tự mở.
+function taoMaBookmarklet(goc){
+  const gocSach=JSON.stringify(String(goc||'').trim().replace(/\/+$/,''));
+  return "javascript:(function(){function v(p){var m=document.getElementsByTagName('meta');for(var i=0;i<m.length;i++){if(m[i].getAttribute('property')===p||m[i].getAttribute('name')===p)return m[i].content;}return '';}var ten=(v('og:title')||document.title||'').slice(0,200);var mota=(v('og:description')||'').slice(0,500);var link=location.href;if(!ten){alert('Khong doc duoc tieu de trang nay - dan link tay trong app nhe.');return;}var u="+gocSach+"+'/?bm_ten='+encodeURIComponent(ten)+'&bm_link='+encodeURIComponent(link)+'&bm_mota='+encodeURIComponent(mota);window.open(u,'_blank');})();";
+}
+function TroLyTrinhDuyet(){
+  const { notify } = useApp();
+  const [mo,setMo]=useState(false);
+  const goc = typeof location!=='undefined' ? location.origin : 'https://DAN_DIA_CHI_APP';
+  const ma = taoMaBookmarklet(goc);
+  return <div className="bg-white rounded-2xl border border-line shadow-card p-4">
+    <button onClick={()=>setMo(!mo)} className="w-full flex items-center justify-between text-left">
+      <div className="min-w-0">
+        <div className="text-sm font-semibold text-ink">📌 Trợ lý trình duyệt cho TikTok/Facebook</div>
+        <div className="text-[11px] text-slate-500 mt-0.5">1 cú bấm khi đang xem trend — không phải quét, không phải bot</div>
+      </div>
+      <span className="text-slate-400 shrink-0 ml-2">{mo?'▲':'▼'}</span>
+    </button>
+    {mo && <div className="mt-3 space-y-3 border-t border-line pt-3">
+      <div className="rounded-xl border border-brand/30 bg-brand-bg p-3 text-[11px] text-ink-soft leading-relaxed">
+        Đây <b>không phải agent tự chạy nền</b> — TikTok/Facebook không có API trend công khai, và quét/cào là vi phạm điều khoản, app sẽ không làm.
+        Đây là một <b>nút bấm cá nhân</b>: khi bạn đang tự xem một video/bài viết (tài khoản của bạn, trình duyệt của bạn), bấm nút là nó đọc
+        tiêu đề + mô tả trang đó (đúng phần mà TikTok/Facebook đã công khai để hiện preview khi share) rồi mở app, điền sẵn vào ô Dán link nhanh.
+      </div>
+      <div className="text-center py-2">
+        <a href={ma} onClick={e=>{ if(typeof location!=='undefined' && /^(file:|about:)/.test(location.protocol)) return;
+            notify('Kéo nút này vào thanh bookmark trên trình duyệt — bấm trực tiếp sẽ không chạy được ở đây'); e.preventDefault(); }}
+          className="inline-block px-4 py-2.5 rounded-xl bg-ink text-white text-sm font-semibold cursor-move select-none shadow-card">
+          📌 Trend nhanh
+        </a>
+        <div className="text-[11px] text-slate-400 mt-2">👆 Kéo nút này lên <b>thanh bookmark</b> của trình duyệt (Ctrl/Cmd+Shift+B để hiện thanh nếu đang ẩn)</div>
+      </div>
+      <div className="flex items-center gap-2">
+        <div className="flex-1 text-[11px] text-slate-400 truncate">Không kéo được? Copy mã rồi tự tạo bookmark, dán mã vào ô địa chỉ (URL).</div>
+        <CopyBtn text={ma} label="📋 Copy mã"/>
+      </div>
+      <div className="text-[11px] text-slate-500 leading-relaxed">
+        <b>Dùng thế nào:</b> mở TikTok/Facebook trên trình duyệt (không phải app trong điện thoại) → xem video/bài đang là trend →
+        bấm bookmark <b>📌 Trend nhanh</b> → tab mới hiện app với sẵn tiêu đề/mô tả/link → kiểm lại → Lưu.
+      </div>
+      <div className="text-[11px] text-amber-700">⚠ Bookmarklet chỉ chạy được trên <b>trình duyệt máy tính</b> (Chrome/Edge/Safari desktop). Trên điện thoại, mở link bằng trình duyệt (không phải app TikTok/Facebook) rồi bấm vào bookmark đã lưu trong menu bookmark.</div>
+    </div>}
+  </div>;
+}
+function DanLinkTrend({onClose, initial}){
   const { addTrend, db, notify } = useApp();
-  const [link,setLink]=useState(''); const [ten,setTen]=useState(''); const [busy,setBusy]=useState(false);
+  const [link,setLink]=useState((initial&&initial.link)||''); const [ten,setTen]=useState((initial&&initial.ten)||'');
+  const [mo_ta,setMoTa]=useState((initial&&initial.mo_ta)||''); const [busy,setBusy]=useState(false);
   const cfg=(db.module_config||{}).trend||{};
   const soNgay=Number(cfg.han_mac_dinh_ngay)>0?Number(cfg.han_mac_dinh_ngay):7;
   const nguon=doanNguon(link);
   const luu=async()=>{
     if(!ten.trim()) return notify('Đặt cho nó một cái tên để sau còn tìm lại được','warn');
     setBusy(true);
-    const r=await addTrend({ ten:ten.trim(), nguon, link:link.trim(), mo_ta:'',
+    const r=await addTrend({ ten:ten.trim(), nguon, link:link.trim(), mo_ta:mo_ta.trim(),
       phat_hien_ngay:new Date().toISOString().slice(0,10),
       han_dung:new Date(Date.now()+soNgay*864e5).toISOString().slice(0,10),
       pillar_id:null, san_pham_id:null, rui_ro:'' });
@@ -3196,14 +3259,17 @@ function DanLinkTrend({onClose}){
   };
   return <Modal open={true} onClose={onClose} title="🔗 Dán link nhanh">
     <div className="rounded-xl border border-brand/30 bg-brand-bg p-3 text-[11px] text-ink-soft mb-2">
+      {initial ? <>✅ <b>Trợ lý trình duyệt đã điền sẵn</b> từ trang bạn vừa xem — kiểm lại rồi lưu.</> : <>
       Thấy trend trên TikTok/Facebook thì <b>dán link vào đây là xong</b> — đánh giá để sau.
-      Máy <b>không tự lấy được</b> từ hai nguồn này: không có API công khai, và cào dữ liệu là vi phạm điều khoản nền tảng.
+      Máy <b>không tự lấy được</b> từ hai nguồn này: không có API công khai, và cào dữ liệu là vi phạm điều khoản nền tảng.</>}
     </div>
     <Field label="Link" hint={link.trim()?('Nhận ra nguồn: '+nguon):'Dán link video/bài viết'}>
-      <Input value={link} onChange={e=>setLink(e.target.value)} placeholder="https://…" autoFocus/></Field>
+      <Input value={link} onChange={e=>setLink(e.target.value)} placeholder="https://…" autoFocus={!initial}/></Field>
     <Field label="Gọi nó là gì" required hint="Ngắn thôi, đủ để sau này bạn nhớ ra là trend nào">
-      <Input value={ten} onChange={e=>setTen(e.target.value)} placeholder='VD: điệu nhảy dọn nhà'
+      <Input value={ten} onChange={e=>setTen(e.target.value)} placeholder='VD: điệu nhảy dọn nhà' autoFocus={!!initial}
         onKeyDown={e=>e.key==='Enter'&&luu()}/></Field>
+    <Field label="Mô tả (nếu có)" hint="Trợ lý trình duyệt tự lấy từ trang — sửa lại nếu cần">
+      <Textarea rows={2} value={mo_ta} onChange={e=>setMoTa(e.target.value)}/></Field>
     <div className="text-[11px] text-slate-400 mb-2">Hạn dùng tự đặt <b>{soNgay} ngày</b> (sửa được trong ⚙️ Cấu hình). Trụ cột / sản phẩm để trống, bổ sung sau khi đánh giá.</div>
     <div className="flex gap-2"><Btn variant="ghost" onClick={onClose}>Huỷ</Btn>
       <Btn variant="brand" className="flex-1" onClick={luu} disabled={busy}>{busy?'…':'Ghi vào danh sách'}</Btn></div>

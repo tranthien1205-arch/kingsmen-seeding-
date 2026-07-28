@@ -346,7 +346,14 @@ Tokens Tailwind (inline config trong `seeding-app.html`): `ink #0b3543` (soft #1
   - `POST /trends/agent/chay-thu` (Admin/Marketing) — bỏ qua kiểm tra giờ, **ghi log loại `TREND_THU` riêng** để một cú bấm thử không làm mất lượt chạy thật của ngày hôm đó.
   - Bảng `agent_log` giữ 100 lượt gần nhất, bootstrap trả 10 — chạy không có người ngồi xem thì **phải để lại dấu vết đọc được**.
   - UI: panel `MayGomTrend` hiện **cả 2 phương án** (Cách 1 agent trong app · Cách 2 n8n), trạng thái từng key, nút ▶ Chạy thử ngay, và nhật ký các lượt. (30 test backend + 11 test UI)
-- 📌 **Tổng test đang xanh: 577** (toàn bộ `scratchpad/test_*.mjs`), trong đó AI đánh giá trend 40.
+- ✅ **TRỢ LÝ TRÌNH DUYỆT cho TikTok/Facebook** (`TroLyTrinhDuyet`, bookmarklet) — nốt cuối để bớt việc tay ở nơi máy **không được phép** tự động.
+  - **Không phải scraper.** Đây là 1 cú bấm cá nhân khi người dùng đang tự xem một trang (tài khoản của họ, trình duyệt của họ): đọc `og:title`/`og:description` — đúng phần TikTok/Facebook đã công khai sẵn để hiện preview khi share — rồi mở app kèm dữ liệu. **Không gọi mạng ngầm, không có bot chạy nền, không có logic riêng cho TikTok/Facebook** (chỉ đọc thẻ chuẩn `og:*` nên hoạt động với bất kỳ trang nào).
+  - `taoMaBookmarklet()` sinh mã dùng `getElementsByTagName('meta')` thay vì `querySelector` với thuộc tính chứa dấu `:` (dễ vỡ chuỗi). Không đọc được tiêu đề → `alert()` báo người dùng, không âm thầm mở trang rỗng.
+  - App đọc `?bm_ten=&bm_link=&bm_mota=` lúc mount trong `Shell`, tự nhảy sang trang Trend, mở sẵn modal **Dán link nhanh** đã điền, rồi **gỡ tham số khỏi URL ngay** (`history.replaceState`) — reload không mở lại modal cũ.
+  - `DanLinkTrend` giờ nhận `initial` để prefill (`ten`/`link`/`mo_ta`) và **gửi kèm mô tả khi lưu** (trước đây bị bỏ trống cứng).
+  - Chỉ chạy được trên **trình duyệt máy tính** — nói rõ trong UI, không giả vờ hoạt động trên app di động của TikTok/Facebook.
+  - (16 test mã sinh ra + chạy thật qua `eval` mô phỏng DOM, 10 test nối dây UI)
+- 📌 **Tổng test đang xanh: 603** (toàn bộ `scratchpad/test_*.mjs`), trong đó AI đánh giá trend 40.
 - ✅ **ĐÃ XONG TOÀN BỘ P1→P10.** Còn lại là các mảnh nhỏ: vai trò `TRUONG_MKT`/`GIAM_DOC` riêng, `can()` tập trung (P0), và nâng P4 lên gợi ý AI khi có `ANTHROPIC_API_KEY`.
 
 ### ⚙️ Quy trình deploy (CẬP NHẬT)
