@@ -450,7 +450,10 @@ const CONFIG_MAC_DINH = {
   sanxuat: { canh_bao_tre:0 },
   air:     { checklist: null },                       // null = dùng AIR_CHECKLIST gốc
   // AI chỉ được TỰ QUYẾT khi người bật công tắc — mặc định TẮT, AI chỉ chấm sẵn để người xem.
-  trend:   { checklist: null, tu_dong_duyet:false, tu_dong_het_han:true, chan_khi_rui_ro:true },
+  // tu_khoa_nganh rỗng = NHẬN TẤT CẢ. Máy tự gom trend mà không lọc thì một tuần là ngập rác,
+  // nên chỗ này để người trong nghề tự khai từ khoá, không hard-code hộ.
+  trend:   { checklist: null, tu_dong_duyet:false, tu_dong_het_han:true, chan_khi_rui_ro:true,
+             tu_khoa_nganh: [], tu_dong_cham_ai:true, han_mac_dinh_ngay:7, chong_trung_ngay:30 },
   viec_ket:{ sua_lai:3, cho_duyet:2, chua_nhap_kq:14, trend_sap_het:7, don_cho_gan:3 },
   hoc:     { min_mau:5 },
   dash:    { min_mau:5, lech_pillar:15 },
@@ -638,6 +641,46 @@ async function aiDanhGiaTrend(env, me, tr){
   const conKip = !tr.han_dung || tr.han_dung>=hnStr;
   if(chk.some(c=>c.k==='kip_thoi')){ dg.kip_thoi=conKip; ld.kip_thoi = conKip?('Còn hạn tới '+(tr.han_dung||'(không đặt hạn)')):('Đã quá hạn '+tr.han_dung); }
   return {ok:true, danh_gia:dg, ly_do:ld, rui_ro_claim:o.rui_ro_claim===true, tom_tat:String(o.tom_tat||'').slice(0,400)};
+}
+// Chấm trend bằng AI rồi GHI kết quả. Dùng chung cho nút bấm tay và luồng máy tự gom,
+// để hai đường đi qua đúng một bộ ràng buộc — không có đường tắt nào lỏng hơn đường kia.
+async function chamVaGhiTrend(env, me, tr){
+  const r=await aiDanhGiaTrend(env, me, tr);
+  if(!r.ok) return r;
+  const cfg=(await docCauHinh(env)).trend||{};
+  const chk=cfg.checklist||TREND_CHECK;
+  const duA=chk.filter(c=>c.bat_buoc).every(c=>r.danh_gia[c.k]===true);
+  const rui_ro=!!r.rui_ro_claim;
+  const tuDuyet = !!cfg.tu_dong_duyet && duA && !(cfg.chan_khi_rui_ro!==false && rui_ro);
+  await env.DB.prepare(`UPDATE trends SET danh_gia=?, trang_thai=?, ly_do=?, nguoi_duyet_ten=?, decided_at=? WHERE id=?`)
+    .bind(JSON.stringify(r.danh_gia), tuDuyet?'DUYET':'DANH_GIA', r.tom_tat||'',
+      tuDuyet?'AI tự duyệt (bật trong Cấu hình)':null, tuDuyet?nowISO():null, tr.id).run();
+  return { ok:true, danh_gia:r.danh_gia, ly_do:r.ly_do, tom_tat:r.tom_tat,
+    rui_ro_claim:rui_ro, du_dieu_kien:duA, tu_duyet:tuDuyet,
+    vi_sao_khong_tu_duyet: tuDuyet?null:(!cfg.tu_dong_duyet?'Chưa bật tự duyệt trong Cấu hình'
+      :(!duA?'Chưa đủ mục bắt buộc':'Có rủi ro claim nên phải người xác nhận')) };
+}
+// ===== MÁY TỰ GOM TREND =====
+// Chuẩn hoá để CHỐNG TRÙNG. Chạy hằng ngày mà không chống trùng thì danh sách thành bãi rác,
+// và người sẽ bỏ luôn không đọc — tự động hoá lúc đó thành phản tác dụng.
+function chuanHoaTen(s){ return String(s||'').toLowerCase().replace(/\s+/g,' ').trim(); }
+const THAM_SO_THEO_DOI = ['utm_source','utm_medium','utm_campaign','utm_term','utm_content',
+  'fbclid','gclid','igshid','is_from_webapp','sender_device','_r','_t','share_app_id','share_link_id'];
+function chuanHoaLink(s){
+  const raw=String(s||'').trim(); if(!raw) return '';
+  try{
+    const u=new URL(raw); u.hash='';
+    THAM_SO_THEO_DOI.forEach(k=>u.searchParams.delete(k));
+    const q=u.searchParams.toString();
+    return (u.host.replace(/^www\./,'')+u.pathname.replace(/\/+$/,'')+(q?'?'+q:'')).toLowerCase();
+  }catch(e){ return raw.toLowerCase(); }
+}
+// Rỗng = nhận tất cả. Có từ khoá thì phải khớp ít nhất 1 — cố ý KHÔNG đoán hộ mức liên quan.
+function khopTuKhoa(text, tuKhoa){
+  const ds=(tuKhoa||[]).map(chuanHoaTen).filter(Boolean);
+  if(!ds.length) return true;
+  const t=chuanHoaTen(text);
+  return ds.some(k=>t.includes(k));
 }
 // ===== AI dựng workflow n8n =====
 // Kiểm tra workflow do AI sinh ra có dùng được không. KHÔNG BAO GIỜ trả JSON hỏng cho người dùng.
@@ -976,6 +1019,60 @@ async function handleApi(request, env){
     await env.DB.prepare(`UPDATE air_posts SET trang_thai=?, lan_thu=?, loi=?, updated_at=? WHERE id=?`)
       .bind(het?'DEN_GIO':'LOI', lan, String(cb.loi||'n8n báo thất bại')+(het?' — đã thử '+lan+' lần, chuyển sang đăng tay':''), nowISO(), id).run();
     return json({ok:true, recorded:'that_bai'});
+  }
+
+  // MÁY TỰ GOM TREND đẩy vào đây (n8n chạy cron, lấy Google Trends / YouTube VN…).
+  // Không phải người dùng nên KHÔNG dùng phiên đăng nhập — xác thực bằng secret dùng chung.
+  // Chưa cấu hình N8N_TOKEN thì TỪ CHỐI, tuyệt đối không mở cửa không khoá.
+  if(path==='/trends/ingest' && method==='POST'){
+    if(!env.N8N_TOKEN) return json({error:'Chưa cấu hình N8N_TOKEN'},503);
+    if((request.headers.get('X-App-Token')||'')!==env.N8N_TOKEN) return json({error:'Sai token'},401);
+    await ensureSchema(env);
+    const ds=Array.isArray(body.trends)?body.trends:(Array.isArray(body)?body:[]);
+    if(!ds.length) return json({error:'Không có trend nào trong body'},400);
+    if(ds.length>200) return json({error:'Mỗi lần tối đa 200 trend'},413);
+    const cfg=(await docCauHinh(env)).trend||{};
+    const hn=new Date().toISOString().slice(0,10);
+    const hanMD=Number(cfg.han_mac_dinh_ngay); const soNgayHan=isFinite(hanMD)&&hanMD>0?hanMD:7;
+    const cutTrung=Number(cfg.chong_trung_ngay); const soNgayTrung=isFinite(cutTrung)&&cutTrung>0?cutTrung:30;
+    const tuCut=new Date(Date.now()-soNgayTrung*864e5).toISOString();
+    // Nạp trend gần đây MỘT LẦN để so trùng — không truy vấn lại theo từng dòng
+    const gan=(await env.DB.prepare(`SELECT ten,link FROM trends WHERE created_at>=?`).bind(tuCut).all()).results;
+    const daCoLink=new Set(gan.map(x=>chuanHoaLink(x.link)).filter(Boolean));
+    const daCoTen=new Set(gan.map(x=>chuanHoaTen(x.ten)).filter(Boolean));
+    const nguoiMay=(body.nguon_may||'Máy tự gom').toString().slice(0,60);
+    let them=0; const trung=[], lechTuKhoa=[], loi=[]; const moi=[];
+    for(const x of ds){
+      const ten=String((x&&x.ten)||'').trim();
+      if(!ten){ loi.push('(thiếu tên)'); continue; }
+      const link=String((x&&x.link)||'').trim();
+      const mo_ta=String((x&&x.mo_ta)||'').trim();
+      const kLink=chuanHoaLink(link), kTen=chuanHoaTen(ten);
+      if((kLink&&daCoLink.has(kLink)) || daCoTen.has(kTen)){ trung.push(ten); continue; }
+      if(!khopTuKhoa(ten+' '+mo_ta, cfg.tu_khoa_nganh)){ lechTuKhoa.push(ten); continue; }
+      const id=uid('tr');
+      const han=String((x&&x.han_dung)||'').trim() || new Date(Date.now()+soNgayHan*864e5).toISOString().slice(0,10);
+      await env.DB.prepare(`INSERT INTO trends (id,ten,nguon,link,mo_ta,phat_hien_ngay,han_dung,pillar_id,san_pham_id,danh_gia,rui_ro,trang_thai,ly_do,nguoi_de_xuat,created_at) VALUES (?,?,?,?,?,?,?,NULL,NULL,'{}','','MOI','',?,?)`)
+        .bind(id, ten, String((x&&x.nguon)||'KHAC').trim().toUpperCase().slice(0,30), link, mo_ta,
+          String((x&&x.phat_hien_ngay)||'').trim()||hn, han, nguoiMay, nowISO()).run();
+      if(kLink) daCoLink.add(kLink); daCoTen.add(kTen);
+      moi.push({id, ten, mo_ta, link, han_dung:han, rui_ro:''});
+      them++;
+    }
+    // Chấm AI ngay để sáng ra người chỉ còn việc ĐỌC và QUYẾT.
+    // Thiếu key thì im lặng bỏ qua — trend vẫn nằm đó ở trạng thái Mới, KHÔNG báo là đã chấm.
+    let daCham=0;
+    if(cfg.tu_dong_cham_ai!==false && env.ANTHROPIC_API_KEY){
+      const may={ id:'', ho_ten:nguoiMay, vai_tro:ROLES.MARKETING };
+      for(const t of moi){ try{ const r=await chamVaGhiTrend(env, may, t); if(r.ok) daCham++; }catch(e){} }
+    }
+    if(them) await env.DB.prepare(`INSERT INTO audit (id,at,by_id,by_name,action,entity,entity_id,detail) VALUES (?,?,'',?,?,'trends','',?)`)
+      .bind(uid('a'), nowISO(), nguoiMay, 'máy gom trend', them+' trend mới · '+trung.length+' trùng · '+lechTuKhoa.length+' lệch từ khoá').run();
+    return json({ ok:true, them, da_cham_ai:daCham,
+      bo_qua_trung:trung.length, bo_qua_tu_khoa:lechTuKhoa.length, bo_qua_thieu_ten:loi.length,
+      chi_tiet:{ trung:trung.slice(0,20), lech_tu_khoa:lechTuKhoa.slice(0,20) },
+      ghi_chu: (cfg.tu_dong_cham_ai!==false && !env.ANTHROPIC_API_KEY)
+        ? 'Chưa cắm ANTHROPIC_API_KEY nên chưa chấm được — trend nằm ở trạng thái Mới' : undefined });
   }
 
   // Công cụ Lọc video (/tools/loc-video.html) hỏi danh sách nhạc nền từ folder cục bộ.
@@ -2084,23 +2181,10 @@ async function handleApi(request, env){
     const id=m[1]; const tr=await env.DB.prepare(`SELECT * FROM trends WHERE id=?`).bind(id).first();
     if(!tr) return json({error:'Không tìm thấy trend'},404);
     if(tr.trang_thai==='DA_TRIEN_KHAI') return json({error:'Trend này đã triển khai'},409);
-    const r=await aiDanhGiaTrend(env, me, tr);
+    const r=await chamVaGhiTrend(env, me, tr);
     if(!r.ok) return json({ok:false, thieu_key:!!r.thieu_key, loi:r.loi},200);
-    const cfgAll=await docCauHinh(env);
-    const cfg=cfgAll.trend||{};
-    const chk=cfg.checklist||TREND_CHECK;
-    const batBuoc=chk.filter(c=>c.bat_buoc);
-    const duA=batBuoc.every(c=>r.danh_gia[c.k]===true);
-    const rui_ro = !!r.rui_ro_claim;
-    // Tự duyệt CHỈ khi: bật cấu hình + đủ mục bắt buộc + không có rủi ro claim
-    const tuDuyet = !!cfg.tu_dong_duyet && duA && !(cfg.chan_khi_rui_ro!==false && rui_ro);
-    const tt = tuDuyet ? 'DUYET' : 'DANH_GIA';
-    await env.DB.prepare(`UPDATE trends SET danh_gia=?, trang_thai=?, ly_do=?, nguoi_duyet_ten=?, decided_at=? WHERE id=?`)
-      .bind(JSON.stringify(r.danh_gia), tt, r.tom_tat||'', tuDuyet?('AI tự duyệt (bật trong Cấu hình)'):null, tuDuyet?nowISO():null, id).run();
-    await logAudit(env,me,tuDuyet?'AI tự duyệt trend':'AI đánh giá trend','trends',id,(tr.ten||'')+' · '+(r.tom_tat||'').slice(0,120));
-    return json({ ok:true, db: await bootstrap(env, me), danh_gia:r.danh_gia, ly_do:r.ly_do, tom_tat:r.tom_tat,
-      rui_ro_claim:rui_ro, du_dieu_kien:duA, tu_duyet:tuDuyet,
-      vi_sao_khong_tu_duyet: tuDuyet?null:(!cfg.tu_dong_duyet?'Chưa bật tự duyệt trong Cấu hình':(!duA?'Chưa đủ mục bắt buộc':'Có rủi ro claim nên phải người xác nhận')) });
+    await logAudit(env,me,r.tu_duyet?'AI tự duyệt trend':'AI đánh giá trend','trends',id,(tr.ten||'')+' · '+(r.tom_tat||'').slice(0,120));
+    return json({ ...r, db: await bootstrap(env, me) });
   }
 
   // ===== CONTENT OS · TREND — nghiên cứu & triển khai =====

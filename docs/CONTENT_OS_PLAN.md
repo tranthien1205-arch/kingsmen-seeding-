@@ -326,7 +326,18 @@ Tokens Tailwind (inline config trong `seeding-app.html`): `ink #0b3543` (soft #1
 - ▶️ **Kế tiếp:** gỡ `BETA_KEYS` khi user duyệt xong; thêm `TRUONG_MKT`/`GIAM_DOC`; nâng P4 lên gợi ý AI khi có `ANTHROPIC_API_KEY`. Còn lại (giá trị thấp): `media_library` ↔ `footage`.
 - **P8** Nhập kết quả 3 mức tin cậy (25 test) · **P5** Kho footage & shot list (22 test) · **P9** Dashboard 4 hệ KPI + hiệu suất người (9 test) · **P10** Thư viện học + vòng lặp tự học (19 test).
 - ✅ **Hiện mật khẩu khi đăng nhập** — component dùng chung `PasswordInput` (nút 👁️ bên trong ô). **Mặc định vẫn ẨN**, chỉ hiện khi người dùng chủ động bấm; `type="button"` + `onMouseDown preventDefault` để không submit nhầm và không mất con trỏ đang gõ; giữ `autoComplete` đúng nên trình quản lý mật khẩu vẫn nhận ô. Áp cho **màn Đăng nhập** (mọi tài khoản, mọi vai trò) và **ô đổi mật khẩu trong Hồ sơ**. Ô mật khẩu trong form Admin tạo/sửa người dùng **cố ý để nguyên dạng hiện** — admin cần đọc lại mật khẩu vừa đặt để bàn giao. (12 test)
-- 📌 **Tổng test đang xanh: 481** (toàn bộ `scratchpad/test_*.mjs`), trong đó AI đánh giá trend 40.
+- ✅ **MÁY TỰ GOM TREND** (`POST /trends/ingest`) — mắt xích cuối để tự động hoá module Trend.
+  - Xác thực bằng `X-App-Token` = `N8N_TOKEN` (không dùng phiên đăng nhập — n8n không phải người). **Chưa cấu hình token → 503**, không bao giờ mở cửa không khoá.
+  - **Chống trùng** theo link đã chuẩn hoá (bỏ `utm_*`/`fbclid`/`is_from_webapp`… và `www`) **và** theo tên đã chuẩn hoá, trong cửa sổ `chong_trung_ngay`. Nạp danh sách gần đây **một lần**, không truy vấn theo từng dòng.
+  - **Lọc từ khoá ngành** (`tu_khoa_nganh`, khớp cả tên lẫn mô tả). **Rỗng = nhận tất cả** — cố ý không hard-code hộ, nhưng UI cảnh báo rõ là sẽ ngập rác.
+  - Tự đặt `han_dung` = hôm nay + `han_mac_dinh_ngay` (mặc định 7) — trend nguội nhanh, để trống hạn thì cron hết hạn không có gì để bám.
+  - **AI chấm ngay khi gom về** (`tu_dong_cham_ai`, mặc định bật). Thiếu key → trend nằm ở `MOI` và response nói rõ, **không báo là đã chấm**.
+  - Ghi `nguoi_de_xuat='Máy tự gom'` + audit `máy gom trend` — không mạo danh người.
+  - **Không có đường tắt:** ingest và nút bấm tay dùng chung `chamVaGhiTrend()`, nên ràng buộc tự duyệt (đủ mục bắt buộc + không rủi ro claim + bật công tắc) áp dụng y hệt cho luồng máy.
+- ✅ **Dán link nhanh** (`DanLinkTrend`) — TikTok/Facebook **không có API trend công khai và cào là vi phạm ToS**, nên vẫn phải làm tay; rút form còn 2 ô (link + tên), tự đoán nguồn theo tên miền, tự đặt hạn.
+- ✅ **Bộ dựng workflow n8n gom trend** (`n8nWorkflowTrend`) + bảng hướng dẫn `MayGomTrend` gấp gọn trong module. Chỉ dùng **Google Trends RSS VN** và **YouTube Data API (mostPopular, VN)** — nguồn công khai / API chính thức; **không có node nào đụng TikTok/Facebook**, có test chặn hồi quy. File Import về ở trạng thái **Active = false**.
+  - **Ranh giới đã nói thẳng với user:** hai nguồn này chủ yếu ra trend đại chúng; trend ngành vật liệu vẫn cần người trong nghề nhìn ra. Tự động hoá cắt ~80% việc tay chân, không thay được phán đoán ngành.
+- 📌 **Tổng test đang xanh: 536** (toàn bộ `scratchpad/test_*.mjs`), trong đó AI đánh giá trend 40.
 - ✅ **ĐÃ XONG TOÀN BỘ P1→P10.** Còn lại là các mảnh nhỏ: vai trò `TRUONG_MKT`/`GIAM_DOC` riêng, `can()` tập trung (P0), và nâng P4 lên gợi ý AI khi có `ANTHROPIC_API_KEY`.
 
 ### ⚙️ Quy trình deploy (CẬP NHẬT)

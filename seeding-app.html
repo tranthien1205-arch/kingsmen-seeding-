@@ -3025,7 +3025,7 @@ function AirEditor({post, onClose}){
 function TrendModule(){
   const { db, addTrend, patchTrend, decideTrend, trienKhaiTrend, deleteTrend, notify } = useApp();
   const TR=db.trends||[]; const CHK=db.trend_check||TREND_CHECK_FE;
-  const [tab,setTab]=useState('dang_lam'); const [add,setAdd]=useState(false); const [open,setOpen]=useState(null);
+  const [tab,setTab]=useState('dang_lam'); const [add,setAdd]=useState(false); const [open,setOpen]=useState(null); const [dan,setDan]=useState(false);
   const homNay=new Date().toISOString().slice(0,10);
   const conHan=t=>!t.han_dung || t.han_dung>=homNay;
   const dangLam=TR.filter(t=>['MOI','DANH_GIA','DUYET'].includes(t.trang_thai));
@@ -3035,7 +3035,9 @@ function TrendModule(){
   const hetHan=dangLam.filter(t=>t.han_dung && !conHan(t));
   const cur = open ? TR.find(t=>t.id===open) : null;
   if(cur) return <TrendDetail trend={cur} onClose={()=>setOpen(null)}/>;
-  return <ModuleShell moduleKey="trend" title="🔥 Trend" right={<Btn variant="brand" onClick={()=>setAdd(true)}>＋ Ghi nhận trend</Btn>}>
+  return <ModuleShell moduleKey="trend" title="🔥 Trend" right={<div className="flex gap-2">
+      <Btn variant="ghost" onClick={()=>setDan(true)}>🔗 Dán link nhanh</Btn>
+      <Btn variant="brand" onClick={()=>setAdd(true)}>＋ Ghi nhận trend</Btn></div>}>
     <div className="space-y-4">
     <div className="bg-white rounded-2xl border border-line shadow-card p-3 text-[11px] text-slate-500 leading-relaxed">
       Bạn <b>tự phát hiện và ghi nhận</b> trend (app không tự quét — nền tảng không cho phép), rồi đánh giá theo checklist trước khi làm.
@@ -3073,8 +3075,103 @@ function TrendModule(){
         </div>; })}
       </div>}
     </div>
+    <MayGomTrend/>
     {add && <TrendForm onClose={()=>setAdd(false)}/>}
+    {dan && <DanLinkTrend onClose={()=>setDan(false)}/>}
   </ModuleShell>;
+}
+// Bảng hướng dẫn bật máy tự gom trend. Gấp lại mặc định — dựng xong một lần là thôi,
+// không nên chiếm chỗ của danh sách trend hằng ngày.
+function MayGomTrend(){
+  const { db, notify } = useApp();
+  const [mo,setMo]=useState(false); const [tok,setTok]=useState(''); const [base,setBase]=useState('');
+  const [gio,setGio]=useState(8); const [ytKey,setYtKey]=useState('');
+  const san=db.n8n_san_sang; const cfg=(db.module_config||{}).trend||{};
+  const soTuKhoa=(cfg.tu_khoa_nganh||[]).length;
+  const tai=()=>{ download('n8n-kingsmen-gom-trend.json',
+    JSON.stringify(n8nWorkflowTrend({ token:tok.trim()||'DAN_N8N_TOKEN_VAO_DAY',
+      appBase:base.trim()||'https://DAN_DIA_CHI_APP', gio, ytKey:ytKey.trim() }),null,2),
+    'application/json');
+    notify('Đã tải — vào n8n bấm Import from File'); };
+  return <div className="bg-white rounded-2xl border border-line shadow-card p-4">
+    <button onClick={()=>setMo(!mo)} className="w-full flex items-center justify-between text-left">
+      <div className="min-w-0">
+        <div className="text-sm font-semibold text-ink">🤖 Cho máy tự gom trend mỗi sáng</div>
+        <div className="text-[11px] text-slate-500 mt-0.5">
+          {san?'n8n đã sẵn sàng':'Chưa cắm N8N_WEBHOOK_URL / N8N_TOKEN'} · {soTuKhoa?soTuKhoa+' từ khoá ngành':'chưa đặt từ khoá ngành'}
+        </div>
+      </div>
+      <span className="text-slate-400 shrink-0 ml-2">{mo?'▲':'▼'}</span>
+    </button>
+    {mo && <div className="mt-3 space-y-3 border-t border-line pt-3">
+      <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-[11px] text-amber-900 leading-relaxed">
+        <b>Máy gom được gì và không gom được gì —</b> nói trước để khỏi kỳ vọng sai:
+        <div className="mt-1">✅ <b>Google Trends VN</b> và <b>YouTube phổ biến VN</b>: nguồn công khai / API chính thức.</div>
+        <div>❌ <b>TikTok và Facebook</b>: không có API trend công khai, cào là vi phạm điều khoản → <b>vẫn phải nhìn tay</b>, dùng nút “🔗 Dán link nhanh”.</div>
+        <div className="mt-1">Hai nguồn tự động chủ yếu ra <b>trend đại chúng</b> (nhạc, phim, sự kiện). Trend <b>ngành vật liệu</b> vẫn cần người trong nghề nhìn ra.</div>
+      </div>
+      <div className="text-[11px] text-ink-soft leading-relaxed">
+        <b>Máy gom về rồi thì app tự làm tiếp:</b> chống trùng (theo link đã bỏ tham số theo dõi, và theo tên) →
+        lọc theo <b>từ khoá ngành</b> bạn đặt trong ⚙️ Cấu hình → đặt hạn dùng → <b>AI chấm sẵn checklist</b> (nếu bật).
+        Sáng ra bạn chỉ còn việc <b>đọc và quyết</b>.
+      </div>
+      <div className="grid sm:grid-cols-2 gap-2">
+        <Field label="Địa chỉ app" hint="Chính là địa chỉ bạn đang mở"><Input value={base} onChange={e=>setBase(e.target.value)} placeholder="https://app.masfico.vn"/></Field>
+        <Field label="N8N_TOKEN" hint="Đúng chuỗi đã cắm vào Worker secrets"><Input value={tok} onChange={e=>setTok(e.target.value)} placeholder="chuỗi bí mật dùng chung"/></Field>
+        <Field label="Chạy lúc mấy giờ" ><Input type="number" className="no-spin" value={gio} onChange={e=>setGio(e.target.value)}/></Field>
+        <Field label="YouTube API key" hint="Để trống nếu chỉ muốn lấy Google Trends"><Input value={ytKey} onChange={e=>setYtKey(e.target.value)} placeholder="tuỳ chọn"/></Field>
+      </div>
+      <Btn variant="brand" onClick={tai}>⬇ Tải workflow n8n (Import là chạy)</Btn>
+      <div className="text-[11px] text-slate-500 leading-relaxed">
+        <b>Các bước:</b> 1) Cắm <code>N8N_TOKEN</code> vào Worker secrets (nếu chưa) · 2) Đặt <b>từ khoá ngành</b> trong tab ⚙️ Cấu hình —
+        bỏ trống là máy gom về tất cả, rất nhanh ngập · 3) Tải file trên → vào n8n bấm <b>Import from File</b> → bật Active.
+      </div>
+      {!san && <div className="text-[11px] text-rose-600">⚠ App đang báo n8n chưa sẵn sàng — workflow tải về vẫn dùng được, nhưng nhớ cắm <code>N8N_TOKEN</code> vào Worker thì app mới nhận dữ liệu đẩy vào.</div>}
+      {!soTuKhoa && <div className="text-[11px] text-amber-700">⚠ Chưa đặt từ khoá ngành — nên đặt trước khi bật, kẻo sáng mai mở app thấy toàn trend không liên quan.</div>}
+    </div>}
+  </div>;
+}
+// Dán link nhanh — dành cho TikTok/Facebook, những nguồn máy KHÔNG tự gom được (không có API công khai,
+// và cào là vi phạm điều khoản). Bắt gõ đủ form trên điện thoại thì không ai ghi, nên rút còn 2 ô.
+const NGUON_THEO_TEN_MIEN = [
+  [/tiktok\./i,'TIKTOK'], [/(facebook|fb\.watch|fb\.com)/i,'FACEBOOK'],
+  [/(youtube\.|youtu\.be)/i,'YOUTUBE'], [/shopee\./i,'SHOPEE'],
+];
+function doanNguon(link){
+  const hit=NGUON_THEO_TEN_MIEN.find(([re])=>re.test(String(link||'')));
+  return hit?hit[1]:'KHAC';
+}
+function DanLinkTrend({onClose}){
+  const { addTrend, db, notify } = useApp();
+  const [link,setLink]=useState(''); const [ten,setTen]=useState(''); const [busy,setBusy]=useState(false);
+  const cfg=(db.module_config||{}).trend||{};
+  const soNgay=Number(cfg.han_mac_dinh_ngay)>0?Number(cfg.han_mac_dinh_ngay):7;
+  const nguon=doanNguon(link);
+  const luu=async()=>{
+    if(!ten.trim()) return notify('Đặt cho nó một cái tên để sau còn tìm lại được','warn');
+    setBusy(true);
+    const r=await addTrend({ ten:ten.trim(), nguon, link:link.trim(), mo_ta:'',
+      phat_hien_ngay:new Date().toISOString().slice(0,10),
+      han_dung:new Date(Date.now()+soNgay*864e5).toISOString().slice(0,10),
+      pillar_id:null, san_pham_id:null, rui_ro:'' });
+    setBusy(false);
+    if(r&&r.ok){ notify('Đã ghi — mở ra để chấm checklist khi rảnh'); onClose(); }
+    else notify((r&&r.msg)||'Lỗi','err');
+  };
+  return <Modal open={true} onClose={onClose} title="🔗 Dán link nhanh">
+    <div className="rounded-xl border border-brand/30 bg-brand-bg p-3 text-[11px] text-ink-soft mb-2">
+      Thấy trend trên TikTok/Facebook thì <b>dán link vào đây là xong</b> — đánh giá để sau.
+      Máy <b>không tự lấy được</b> từ hai nguồn này: không có API công khai, và cào dữ liệu là vi phạm điều khoản nền tảng.
+    </div>
+    <Field label="Link" hint={link.trim()?('Nhận ra nguồn: '+nguon):'Dán link video/bài viết'}>
+      <Input value={link} onChange={e=>setLink(e.target.value)} placeholder="https://…" autoFocus/></Field>
+    <Field label="Gọi nó là gì" required hint="Ngắn thôi, đủ để sau này bạn nhớ ra là trend nào">
+      <Input value={ten} onChange={e=>setTen(e.target.value)} placeholder='VD: điệu nhảy dọn nhà'
+        onKeyDown={e=>e.key==='Enter'&&luu()}/></Field>
+    <div className="text-[11px] text-slate-400 mb-2">Hạn dùng tự đặt <b>{soNgay} ngày</b> (sửa được trong ⚙️ Cấu hình). Trụ cột / sản phẩm để trống, bổ sung sau khi đánh giá.</div>
+    <div className="flex gap-2"><Btn variant="ghost" onClick={onClose}>Huỷ</Btn>
+      <Btn variant="brand" className="flex-1" onClick={luu} disabled={busy}>{busy?'…':'Ghi vào danh sách'}</Btn></div>
+  </Modal>;
 }
 function TrendForm({onClose}){
   const { db, addTrend, notify } = useApp();
@@ -3454,7 +3551,13 @@ const CONFIG_SCHEMA = {
     {k:'chan_khi_rui_ro', loai:'bat', label:'Có rủi ro claim thì luôn chờ người xác nhận',
       hint:'Nên để BẬT. Trend dễ buộc phải nói quá về sản phẩm là chỗ rủi ro thương hiệu nhất.'},
     {k:'tu_dong_het_han', loai:'bat', label:'Trend quá hạn tự chuyển “Bỏ qua”',
-      hint:'Chạy 1 lần mỗi ngày. Đây là dữ kiện xác định (so ngày), không phải AI phán.'} ]},
+      hint:'Chạy 1 lần mỗi ngày. Đây là dữ kiện xác định (so ngày), không phải AI phán.'},
+    {k:'tu_dong_cham_ai', loai:'bat', label:'Máy gom về thì AI chấm luôn',
+      hint:'Để sáng ra bạn chỉ còn việc đọc và quyết. Chưa cắm ANTHROPIC_API_KEY thì trend vẫn nằm ở “Mới”.'},
+    {k:'tu_khoa_nganh', loai:'tu_khoa', label:'Từ khoá ngành — lọc trend máy gom về',
+      hint:'Mỗi dòng một từ khoá. Khớp trong TÊN hoặc MÔ TẢ là nhận. ĐỂ TRỐNG = nhận tất cả (dễ ngập rác).'},
+    {k:'han_mac_dinh_ngay', loai:'so', label:'Máy gom về thì đặt hạn dùng bao nhiêu ngày', hint:'Trend nguội nhanh — để trống hạn thì không ai biết bao giờ hết kịp'},
+    {k:'chong_trung_ngay', loai:'so', label:'Chống trùng trong vòng bao nhiêu ngày', hint:'Trùng link hoặc trùng tên trong khoảng này thì bỏ qua'} ]},
   viec_ket: { ten:'Nhắc việc', truong:[
     {k:'sua_lai', loai:'so', label:'Kịch bản bị trả — nhắc sau (ngày)'},
     {k:'cho_duyet', loai:'so', label:'Cổng duyệt tồn — nhắc sau (ngày)'},
@@ -3497,11 +3600,14 @@ function CauHinhModule({moduleKey}){
   const macDinhCL = moduleKey==='air' ? (db.air_checklist||[]) : moduleKey==='trend' ? (db.trend_check||[]) : [];
   const [f,setF]=useState(()=>{ const o={}; sch.truong.forEach(t=>{
     o[t.k]= t.loai==='checklist' ? (goc[t.k]||macDinhCL).map(x=>({...x}))
-          : t.loai==='bat' ? !!goc[t.k] : (goc[t.k]??''); }); return o; });
+          : t.loai==='bat' ? !!goc[t.k]
+          : t.loai==='tu_khoa' ? (goc[t.k]||[]).join('\n') : (goc[t.k]??''); }); return o; });
   const [busy,setBusy]=useState(false);
   const luu=async()=>{ setBusy(true);
     const payload={}; sch.truong.forEach(t=>{ if(t.loai==='so'){ const n=Number(f[t.k]); if(isFinite(n)) payload[t.k]=n; }
-      else if(t.loai==='bat') payload[t.k]=!!f[t.k]; else payload[t.k]=f[t.k]; });
+      else if(t.loai==='bat') payload[t.k]=!!f[t.k];
+      else if(t.loai==='tu_khoa') payload[t.k]=String(f[t.k]||'').split(/[\n,]/).map(x=>x.trim()).filter(Boolean).slice(0,200);
+      else payload[t.k]=f[t.k]; });
     const r=await setModuleConfig(moduleKey,payload); setBusy(false);
     if(r&&r.ok) notify('Đã lưu cấu hình — áp dụng ngay, không cần deploy'); else notify((r&&r.msg)||'Lỗi','err'); };
   const khoiPhuc=async()=>{ if(!confirm('Khôi phục cấu hình mặc định cho '+sch.ten+'?')) return;
@@ -3514,6 +3620,16 @@ function CauHinhModule({moduleKey}){
     <div className="bg-white rounded-2xl border border-line shadow-card p-4 space-y-3">
       {sch.truong.map(t=> t.loai==='so'
         ? <Field key={t.k} label={t.label} hint={t.hint}><Input type="number" className="no-spin" value={f[t.k]} onChange={e=>setF({...f,[t.k]:e.target.value})}/></Field>
+        : t.loai==='tu_khoa'
+        ? <Field key={t.k} label={t.label} hint={t.hint}>
+            <Textarea rows={6} value={f[t.k]} onChange={e=>setF({...f,[t.k]:e.target.value})}
+              placeholder={"keo chít mạch\ngạch\nnhà tắm\nthi công\nchống thấm"}/>
+            <div className="text-[11px] text-slate-400 mt-1">
+              {String(f[t.k]||'').split(/[\n,]/).filter(x=>x.trim()).length===0
+                ? '⚠ Đang để trống — máy sẽ gom về TẤT CẢ trend, kể cả thứ không liên quan ngành.'
+                : String(f[t.k]||'').split(/[\n,]/).filter(x=>x.trim()).length+' từ khoá'}
+            </div>
+          </Field>
         : t.loai==='bat'
         ? <label key={t.k} className="flex items-start gap-2 rounded-xl border border-line p-3 cursor-pointer hover:bg-slate-50">
             <input type="checkbox" checked={!!f[t.k]} onChange={e=>setF({...f,[t.k]:e.target.checked})} className="mt-0.5 w-4 h-4 accent-brand shrink-0"/>
@@ -4205,6 +4321,57 @@ function LichDangBox({post,onSaveFirst}){
 }
 // Quản lý kênh + cấu hình tự động đăng. Token KHÔNG nhập ở đây (xem giải thích trong màn).
 // Sinh workflow n8n import thẳng được — dùng node ổn định của n8n 1.x.
+// Workflow n8n GOM TREND: cron sáng → Google Trends RSS + YouTube phổ biến VN → đẩy vào app.
+// CỐ Ý chỉ dùng nguồn CÔNG KHAI/API CHÍNH THỨC. Không có node nào cào TikTok/Facebook —
+// hai nền tảng đó không mở API trend, và cào là vi phạm điều khoản, mất tài khoản thì thiệt hơn được.
+function n8nWorkflowTrend({token='DAN_N8N_TOKEN_VAO_DAY', appBase='https://DAN_DIA_CHI_APP', gio=8, ytKey=''}={}){
+  const P=(x,y)=>[x,y]; const nodes=[]; const conn={};
+  const link=(from,to,idx=0)=>{ (conn[from] ||= {main:[]}); while(conn[from].main.length<=idx) conn[from].main.push([]);
+    conn[from].main[idx].push({node:to,type:'main',index:0}); };
+  nodes.push({ parameters:{ rule:{ interval:[{ triggerAtHour:Number(gio)||8, triggerAtMinute:0 }] } },
+    type:'n8n-nodes-base.scheduleTrigger', typeVersion:1.2, position:P(-700,300), id:'cron', name:'1. Mỗi sáng' });
+  nodes.push({ parameters:{ url:'https://trends.google.com/trending/rss?geo=VN', options:{} },
+    type:'n8n-nodes-base.rssFeedRead', typeVersion:1.1, position:P(-460,180), id:'gt', name:'2a. Google Trends VN' });
+  nodes.push({ parameters:{ url:'https://www.googleapis.com/youtube/v3/videos', options:{},
+      sendQuery:true, queryParameters:{ parameters:[
+        {name:'part',value:'snippet'},{name:'chart',value:'mostPopular'},
+        {name:'regionCode',value:'VN'},{name:'maxResults',value:'25'},
+        {name:'key',value: ytKey || 'DAN_YOUTUBE_API_KEY'} ] } },
+    type:'n8n-nodes-base.httpRequest', typeVersion:4.2, position:P(-460,420), id:'yt', name:'2b. YouTube phổ biến VN' });
+  nodes.push({ parameters:{ jsCode:
+'// Gộp 2 nguồn về CÙNG một dạng mà app hiểu: {ten, nguon, link, mo_ta}.\n'+
+'// KHÔNG bịa thêm trường nào app không có — nhận vào rồi cũng bị bỏ.\n'+
+'const ra = [];\n'+
+'for (const it of $input.all()) {\n'+
+'  const d = it.json || {};\n'+
+'  if (d.title && (d.link || d.guid)) {            // Google Trends RSS\n'+
+'    ra.push({ ten: String(d.title).trim(), nguon: "GOOGLE_TRENDS",\n'+
+'      link: String(d.link || d.guid || ""), mo_ta: String(d.contentSnippet || d.content || "").slice(0, 500) });\n'+
+'  } else if (Array.isArray(d.items)) {            // YouTube API\n'+
+'    for (const v of d.items) {\n'+
+'      const sn = (v && v.snippet) || {};\n'+
+'      if (!sn.title) continue;\n'+
+'      ra.push({ ten: String(sn.title).trim(), nguon: "YOUTUBE",\n'+
+'        link: "https://www.youtube.com/watch?v=" + v.id,\n'+
+'        mo_ta: String(sn.description || "").slice(0, 500) });\n'+
+'    }\n'+
+'  }\n'+
+'}\n'+
+'// App tự chống trùng và tự lọc từ khoá ngành — ở đây KHÔNG lọc hộ,\n'+
+'// để mọi quy tắc nằm một chỗ trong Cấu hình, sửa là ăn ngay không phải đụng n8n.\n'+
+'return [{ json: { trends: ra, nguon_may: "n8n gom trend" } }];' },
+    type:'n8n-nodes-base.code', typeVersion:2, position:P(-180,300), id:'gop', name:'3. Gộp về dạng app hiểu' });
+  nodes.push({ parameters:{ method:'POST', url: appBase.replace(/\/+$/,'') + '/api/trends/ingest',
+      sendHeaders:true, headerParameters:{ parameters:[{ name:'X-App-Token', value:token }] },
+      sendBody:true, specifyBody:'json', jsonBody:'={{ JSON.stringify($json) }}', options:{} },
+    type:'n8n-nodes-base.httpRequest', typeVersion:4.2, position:P(80,300), id:'day', name:'4. Đẩy vào app' });
+  link('1. Mỗi sáng','2a. Google Trends VN',0);
+  link('1. Mỗi sáng','2b. YouTube phổ biến VN',0);
+  link('2a. Google Trends VN','3. Gộp về dạng app hiểu',0);
+  link('2b. YouTube phổ biến VN','3. Gộp về dạng app hiểu',0);
+  link('3. Gộp về dạng app hiểu','4. Đẩy vào app',0);
+  return { name:'Kingsmen — Gom trend mỗi sáng', nodes, connections:conn, settings:{executionOrder:'v1'}, active:false };
+}
 function n8nWorkflow({token='DAN_N8N_TOKEN_VAO_DAY', path='kingsmen-dang-bai', kenhLoai=[]}={}){
   const P=(x,y)=>[x,y]; const nodes=[]; const conn={};
   const link=(from,to,idx=0)=>{ (conn[from] ||= {main:[]}); while(conn[from].main.length<=idx) conn[from].main.push([]);
