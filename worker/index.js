@@ -99,6 +99,8 @@ async function ensureSchema(env){
     // CONTENT OS · TREND — nghiên cứu & triển khai. KHÔNG scrape (ToS): người tự ghi nhận + đánh giá.
     `CREATE TABLE IF NOT EXISTS trends (id TEXT PRIMARY KEY, ten TEXT, nguon TEXT, link TEXT, mo_ta TEXT, phat_hien_ngay TEXT, han_dung TEXT, pillar_id TEXT, san_pham_id TEXT, danh_gia TEXT, rui_ro TEXT, trang_thai TEXT, ly_do TEXT, nguoi_de_xuat TEXT, nguoi_duyet_ten TEXT, content_item_id TEXT, script_id TEXT, created_at TEXT, decided_at TEXT)`,
     // CONTENT OS · P10 — Thư viện học. ĐỀ XUẤT do máy rút ra nhưng PHẢI người duyệt mới thành quy tắc.
+    // Nhật ký AGENT — chạy không có người ngồi xem, nên PHẢI để lại dấu vết đọc được.
+    `CREATE TABLE IF NOT EXISTS agent_log (id TEXT PRIMARY KEY, at TEXT, loai TEXT, ngay TEXT, ok INTEGER, tom_tat TEXT, chi_tiet TEXT)`,
     `CREATE TABLE IF NOT EXISTS bai_hoc (id TEXT PRIMARY KEY, loai TEXT, tieu_de TEXT, noi_dung TEXT, bang_chung TEXT, so_mau INTEGER DEFAULT 0, nguon_tu_dong INTEGER DEFAULT 0, trang_thai TEXT, nguoi_duyet_ten TEXT, ghi_chu TEXT, created_at TEXT, decided_at TEXT)`,
   ];
   await env.DB.batch(stmts.map(s=>env.DB.prepare(s)));
@@ -453,7 +455,9 @@ const CONFIG_MAC_DINH = {
   // tu_khoa_nganh rỗng = NHẬN TẤT CẢ. Máy tự gom trend mà không lọc thì một tuần là ngập rác,
   // nên chỗ này để người trong nghề tự khai từ khoá, không hard-code hộ.
   trend:   { checklist: null, tu_dong_duyet:false, tu_dong_het_han:true, chan_khi_rui_ro:true,
-             tu_khoa_nganh: [], tu_dong_cham_ai:true, han_mac_dinh_ngay:7, chong_trung_ngay:30 },
+             tu_khoa_nganh: [], tu_dong_cham_ai:true, han_mac_dinh_ngay:7, chong_trung_ngay:30,
+             // AGENT chạy trong app theo lịch cố định — không cần n8n. Mặc định TẮT.
+             agent_bat:false, agent_gio:8, agent_tu_tao_ke_hoach:false },
   viec_ket:{ sua_lai:3, cho_duyet:2, chua_nhap_kq:14, trend_sap_het:7, don_cho_gan:3 },
   hoc:     { min_mau:5 },
   dash:    { min_mau:5, lech_pillar:15 },
@@ -681,6 +685,148 @@ function khopTuKhoa(text, tuKhoa){
   if(!ds.length) return true;
   const t=chuanHoaTen(text);
   return ds.some(k=>t.includes(k));
+}
+// Lõi gom trend — dùng chung cho cửa HTTP (n8n đẩy vào) và cho agent chạy trong app.
+// Một đường duy nhất: chống trùng · lọc từ khoá · đặt hạn · chấm AI. Không có bản sao nào lỏng hơn.
+async function gomTrendVaoDB(env, ds, nguoiMay){
+  const cfg=(await docCauHinh(env)).trend||{};
+  const hn=new Date().toISOString().slice(0,10);
+  const hanMD=Number(cfg.han_mac_dinh_ngay); const soNgayHan=isFinite(hanMD)&&hanMD>0?hanMD:7;
+  const cutTrung=Number(cfg.chong_trung_ngay); const soNgayTrung=isFinite(cutTrung)&&cutTrung>0?cutTrung:30;
+  const tuCut=new Date(Date.now()-soNgayTrung*864e5).toISOString();
+  // Nạp trend gần đây MỘT LẦN để so trùng — không truy vấn lại theo từng dòng
+  const gan=(await env.DB.prepare(`SELECT ten,link FROM trends WHERE created_at>=?`).bind(tuCut).all()).results;
+  const daCoLink=new Set(gan.map(x=>chuanHoaLink(x.link)).filter(Boolean));
+  const daCoTen=new Set(gan.map(x=>chuanHoaTen(x.ten)).filter(Boolean));
+  let them=0; const trung=[], lechTuKhoa=[], loi=[]; const moi=[];
+  for(const x of ds){
+    const ten=String((x&&x.ten)||'').trim();
+    if(!ten){ loi.push('(thiếu tên)'); continue; }
+    const link=String((x&&x.link)||'').trim();
+    const mo_ta=String((x&&x.mo_ta)||'').trim();
+    const kLink=chuanHoaLink(link), kTen=chuanHoaTen(ten);
+    if((kLink&&daCoLink.has(kLink)) || daCoTen.has(kTen)){ trung.push(ten); continue; }
+    if(!khopTuKhoa(ten+' '+mo_ta, cfg.tu_khoa_nganh)){ lechTuKhoa.push(ten); continue; }
+    const id=uid('tr');
+    const han=String((x&&x.han_dung)||'').trim() || new Date(Date.now()+soNgayHan*864e5).toISOString().slice(0,10);
+    await env.DB.prepare(`INSERT INTO trends (id,ten,nguon,link,mo_ta,phat_hien_ngay,han_dung,pillar_id,san_pham_id,danh_gia,rui_ro,trang_thai,ly_do,nguoi_de_xuat,created_at) VALUES (?,?,?,?,?,?,?,NULL,NULL,'{}','','MOI','',?,?)`)
+      .bind(id, ten, String((x&&x.nguon)||'KHAC').trim().toUpperCase().slice(0,30), link, mo_ta,
+        String((x&&x.phat_hien_ngay)||'').trim()||hn, han, nguoiMay, nowISO()).run();
+    if(kLink) daCoLink.add(kLink); daCoTen.add(kTen);
+    moi.push({id, ten, mo_ta, link, han_dung:han, rui_ro:''});
+    them++;
+  }
+  // Chấm AI ngay để sáng ra người chỉ còn việc ĐỌC và QUYẾT.
+  // Thiếu key thì bỏ qua — trend vẫn nằm đó ở trạng thái Mới, KHÔNG báo là đã chấm.
+  let daCham=0, daDuyet=0;
+  if(cfg.tu_dong_cham_ai!==false && env.ANTHROPIC_API_KEY){
+    const may={ id:'', ho_ten:nguoiMay, vai_tro:ROLES.MARKETING };
+    for(const t of moi){ try{ const r=await chamVaGhiTrend(env, may, t); if(r.ok){ daCham++; if(r.tu_duyet) daDuyet++; } }catch(e){} }
+  }
+  if(them) await env.DB.prepare(`INSERT INTO audit (id,at,by_id,by_name,action,entity,entity_id,detail) VALUES (?,?,'',?,?,'trends','',?)`)
+    .bind(uid('a'), nowISO(), nguoiMay, 'máy gom trend', them+' trend mới · '+trung.length+' trùng · '+lechTuKhoa.length+' lệch từ khoá').run();
+  return { them, da_cham_ai:daCham, da_tu_duyet:daDuyet, id_moi:moi.map(x=>x.id),
+    bo_qua_trung:trung.length, bo_qua_tu_khoa:lechTuKhoa.length, bo_qua_thieu_ten:loi.length,
+    chi_tiet:{ trung:trung.slice(0,20), lech_tu_khoa:lechTuKhoa.slice(0,20) },
+    ghi_chu: (cfg.tu_dong_cham_ai!==false && !env.ANTHROPIC_API_KEY)
+      ? 'Chưa cắm ANTHROPIC_API_KEY nên chưa chấm được — trend nằm ở trạng thái Mới' : undefined };
+}
+// ===== AGENT TREND: chạy trong app theo lịch cố định, không cần n8n =====
+// Giờ Việt Nam. Cron của Cloudflare chạy theo UTC nên phải tự quy đổi, không để lệch 7 tiếng.
+function gioVN(d){ return (new Date(d||Date.now()).getUTCHours()+7)%24; }
+function ngayVN(d){ return new Date((d||Date.now())+7*36e5).toISOString().slice(0,10); }
+// Đọc RSS bằng regex, CỐ Ý không kéo thư viện XML vào Worker cho một việc đơn giản.
+function docRSS(xml){
+  const ra=[];
+  const items=String(xml||'').split(/<item[\s>]/i).slice(1);
+  const lay=(s,tag)=>{
+    const m=s.match(new RegExp('<'+tag+'[^>]*>([\\s\\S]*?)<\\/'+tag+'>','i'));
+    if(!m) return '';
+    return m[1].replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g,'$1')
+      .replace(/<[^>]+>/g,' ').replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>')
+      .replace(/&quot;/g,'"').replace(/&#39;/g,"'").replace(/\s+/g,' ').trim();
+  };
+  for(const it of items){
+    const ten=lay(it,'title'); if(!ten) continue;
+    ra.push({ ten, nguon:'GOOGLE_TRENDS', link:lay(it,'link'),
+      mo_ta:[lay(it,'ht:news_item_title'), lay(it,'description')].filter(Boolean).join(' — ').slice(0,500) });
+  }
+  return ra;
+}
+async function layGoogleTrends(){
+  const r=await fetch('https://trends.google.com/trending/rss?geo=VN',{headers:{'user-agent':'KingsmenContentOS/1.0'}});
+  if(!r.ok) throw new Error('Google Trends trả về '+r.status);
+  return docRSS(await r.text());
+}
+async function layYouTubeVN(env){
+  const key=env.YOUTUBE_API_KEY;
+  if(!key) return { bo_qua:'Chưa cắm YOUTUBE_API_KEY', ds:[] };
+  const u='https://www.googleapis.com/youtube/v3/videos?part=snippet&chart=mostPopular&regionCode=VN&maxResults=25&key='+encodeURIComponent(key);
+  const r=await fetch(u);
+  if(!r.ok) throw new Error('YouTube API trả về '+r.status);
+  const j=await r.json();
+  return { ds:(j.items||[]).filter(v=>v&&v.snippet&&v.snippet.title).map(v=>({
+    ten:String(v.snippet.title).trim(), nguon:'YOUTUBE',
+    link:'https://www.youtube.com/watch?v='+v.id, mo_ta:String(v.snippet.description||'').slice(0,500) })) };
+}
+async function ghiAgentLog(env, o){
+  try{ await env.DB.prepare(`INSERT INTO agent_log (id,at,loai,ngay,ok,tom_tat,chi_tiet) VALUES (?,?,?,?,?,?,?)`)
+    .bind(uid('ag'), nowISO(), o.loai||'TREND', o.ngay||ngayVN(), o.ok?1:0,
+      String(o.tom_tat||'').slice(0,300), JSON.stringify(o.chi_tiet||{}).slice(0,4000)).run();
+    // giữ 100 bản ghi gần nhất, đủ để truy vết mà không phình bảng
+    await env.DB.prepare(`DELETE FROM agent_log WHERE id NOT IN (SELECT id FROM agent_log ORDER BY at DESC LIMIT 100)`).run();
+  }catch(e){}
+}
+// Chạy một lượt agent. `ep=true` là bấm "Chạy thử ngay" — bỏ qua kiểm tra giờ và kiểm tra đã chạy hôm nay.
+async function chayAgentTrend(env, {ep=false}={}){
+  await ensureSchema(env);
+  const cfg=(await docCauHinh(env)).trend||{};
+  if(!ep){
+    if(!cfg.agent_bat) return {bo_qua:'Agent đang tắt'};
+    const gio=Number(cfg.agent_gio); const gioChay=isFinite(gio)&&gio>=0&&gio<=23?gio:8;
+    if(gioVN()!==gioChay) return {bo_qua:'Chưa tới giờ'};
+    const hn=ngayVN();
+    const daChay=await env.DB.prepare(`SELECT id FROM agent_log WHERE loai='TREND' AND ngay=? AND ok=1`).bind(hn).first();
+    if(daChay) return {bo_qua:'Hôm nay đã chạy rồi'};   // cron 15 phút/lần → phải chốt 1 lần/ngày
+  }
+  // Chạy thử ghi loại RIÊNG: bấm thử một cái mà làm mất luôn lượt chạy thật của ngày hôm đó
+  // là hành vi bẫy người dùng.
+  const loai = ep ? 'TREND_THU' : 'TREND';
+  const nguon={}, ds=[];
+  try{ const g=await layGoogleTrends(); ds.push(...g); nguon.google_trends=g.length; }
+  catch(e){ nguon.google_trends='lỗi: '+e.message; }
+  try{ const y=await layYouTubeVN(env); ds.push(...(y.ds||[])); nguon.youtube = y.bo_qua || (y.ds||[]).length; }
+  catch(e){ nguon.youtube='lỗi: '+e.message; }
+  if(!ds.length){
+    const tt='Không lấy được trend nào từ các nguồn';
+    await ghiAgentLog(env,{loai, ok:false, tom_tat:tt, chi_tiet:{nguon}});
+    return {ok:false, tom_tat:tt, nguon};
+  }
+  const kq=await gomTrendVaoDB(env, ds, 'Agent tự động');
+  // Tự tạo mục Kế hoạch nội dung cho trend ĐÃ DUYỆT — bước cuối của "tự động hoàn toàn".
+  // Mặc định TẮT: đây là lúc máy tạo ra việc cho người khác làm, nên phải do người bật.
+  let daTaoKH=0;
+  if(cfg.agent_tu_tao_ke_hoach && kq.them){
+    const may={ id:'', ho_ten:'Agent tự động', vai_tro:ROLES.MARKETING };
+    for(const id of kq.id_moi){
+      try{
+        const tr=await env.DB.prepare(`SELECT * FROM trends WHERE id=?`).bind(id).first();
+        if(!tr || tr.trang_thai!=='DUYET') continue;   // chỉ trend đã qua đủ ràng buộc tự duyệt
+        const ciId=await insertContentItem(env, may, {
+          loai:'SOCIAL', tieu_de:'[Trend] '+tr.ten, loai_muc_tieu:'THUONG_HIEU',
+          pillar_id:tr.pillar_id||null, framework_id:null, san_pham_id:tr.san_pham_id||null,
+          kenh_id:null, thang:ngayVN().slice(0,7), trang_thai:'Y_TUONG',
+          chi_tiet:{ tu_trend:tr.ten, link_trend:tr.link||'', han_dung:tr.han_dung||'', do_agent_tao:true },
+        });
+        await env.DB.prepare(`UPDATE trends SET trang_thai='DA_TRIEN_KHAI', content_item_id=?, decided_at=? WHERE id=?`).bind(ciId,nowISO(),id).run();
+        daTaoKH++;
+      }catch(e){}
+    }
+  }
+  const tom=kq.them+' trend mới · '+kq.da_cham_ai+' đã chấm · '+kq.da_tu_duyet+' tự duyệt'+
+    (daTaoKH?(' · '+daTaoKH+' đưa vào kế hoạch'):'')+' · bỏ '+kq.bo_qua_trung+' trùng, '+kq.bo_qua_tu_khoa+' lệch từ khoá';
+  await ghiAgentLog(env,{loai, ok:true, tom_tat:tom, chi_tiet:{nguon, ...kq, da_tao_ke_hoach:daTaoKH}});
+  return {ok:true, tom_tat:tom, nguon, ...kq, da_tao_ke_hoach:daTaoKH};
 }
 // ===== AI dựng workflow n8n =====
 // Kiểm tra workflow do AI sinh ra có dùng được không. KHÔNG BAO GIỜ trả JSON hỏng cho người dùng.
@@ -942,6 +1088,8 @@ async function bootstrap(env, u){
         ? (!!env.N8N_WEBHOOK_URL && !!env.N8N_TOKEN)
         : (!!layToken(env,k) && !!String(k.api_object_id||'').trim())])) : {},
     n8n_san_sang: staff ? (!!env.N8N_WEBHOOK_URL && !!env.N8N_TOKEN) : false,
+    youtube_san_sang: staff ? !!env.YOUTUBE_API_KEY : false,
+    agent_log: canContent ? (await env.DB.prepare(`SELECT * FROM agent_log ORDER BY at DESC LIMIT 10`).all()).results : [],
     ai_san_sang: staff ? !!env.ANTHROPIC_API_KEY : false,
     module_config: cfg, can_cau_hinh: canCauHinh(u),
     san_xuat, sx_khau: SX_KHAU,
@@ -1031,48 +1179,8 @@ async function handleApi(request, env){
     const ds=Array.isArray(body.trends)?body.trends:(Array.isArray(body)?body:[]);
     if(!ds.length) return json({error:'Không có trend nào trong body'},400);
     if(ds.length>200) return json({error:'Mỗi lần tối đa 200 trend'},413);
-    const cfg=(await docCauHinh(env)).trend||{};
-    const hn=new Date().toISOString().slice(0,10);
-    const hanMD=Number(cfg.han_mac_dinh_ngay); const soNgayHan=isFinite(hanMD)&&hanMD>0?hanMD:7;
-    const cutTrung=Number(cfg.chong_trung_ngay); const soNgayTrung=isFinite(cutTrung)&&cutTrung>0?cutTrung:30;
-    const tuCut=new Date(Date.now()-soNgayTrung*864e5).toISOString();
-    // Nạp trend gần đây MỘT LẦN để so trùng — không truy vấn lại theo từng dòng
-    const gan=(await env.DB.prepare(`SELECT ten,link FROM trends WHERE created_at>=?`).bind(tuCut).all()).results;
-    const daCoLink=new Set(gan.map(x=>chuanHoaLink(x.link)).filter(Boolean));
-    const daCoTen=new Set(gan.map(x=>chuanHoaTen(x.ten)).filter(Boolean));
-    const nguoiMay=(body.nguon_may||'Máy tự gom').toString().slice(0,60);
-    let them=0; const trung=[], lechTuKhoa=[], loi=[]; const moi=[];
-    for(const x of ds){
-      const ten=String((x&&x.ten)||'').trim();
-      if(!ten){ loi.push('(thiếu tên)'); continue; }
-      const link=String((x&&x.link)||'').trim();
-      const mo_ta=String((x&&x.mo_ta)||'').trim();
-      const kLink=chuanHoaLink(link), kTen=chuanHoaTen(ten);
-      if((kLink&&daCoLink.has(kLink)) || daCoTen.has(kTen)){ trung.push(ten); continue; }
-      if(!khopTuKhoa(ten+' '+mo_ta, cfg.tu_khoa_nganh)){ lechTuKhoa.push(ten); continue; }
-      const id=uid('tr');
-      const han=String((x&&x.han_dung)||'').trim() || new Date(Date.now()+soNgayHan*864e5).toISOString().slice(0,10);
-      await env.DB.prepare(`INSERT INTO trends (id,ten,nguon,link,mo_ta,phat_hien_ngay,han_dung,pillar_id,san_pham_id,danh_gia,rui_ro,trang_thai,ly_do,nguoi_de_xuat,created_at) VALUES (?,?,?,?,?,?,?,NULL,NULL,'{}','','MOI','',?,?)`)
-        .bind(id, ten, String((x&&x.nguon)||'KHAC').trim().toUpperCase().slice(0,30), link, mo_ta,
-          String((x&&x.phat_hien_ngay)||'').trim()||hn, han, nguoiMay, nowISO()).run();
-      if(kLink) daCoLink.add(kLink); daCoTen.add(kTen);
-      moi.push({id, ten, mo_ta, link, han_dung:han, rui_ro:''});
-      them++;
-    }
-    // Chấm AI ngay để sáng ra người chỉ còn việc ĐỌC và QUYẾT.
-    // Thiếu key thì im lặng bỏ qua — trend vẫn nằm đó ở trạng thái Mới, KHÔNG báo là đã chấm.
-    let daCham=0;
-    if(cfg.tu_dong_cham_ai!==false && env.ANTHROPIC_API_KEY){
-      const may={ id:'', ho_ten:nguoiMay, vai_tro:ROLES.MARKETING };
-      for(const t of moi){ try{ const r=await chamVaGhiTrend(env, may, t); if(r.ok) daCham++; }catch(e){} }
-    }
-    if(them) await env.DB.prepare(`INSERT INTO audit (id,at,by_id,by_name,action,entity,entity_id,detail) VALUES (?,?,'',?,?,'trends','',?)`)
-      .bind(uid('a'), nowISO(), nguoiMay, 'máy gom trend', them+' trend mới · '+trung.length+' trùng · '+lechTuKhoa.length+' lệch từ khoá').run();
-    return json({ ok:true, them, da_cham_ai:daCham,
-      bo_qua_trung:trung.length, bo_qua_tu_khoa:lechTuKhoa.length, bo_qua_thieu_ten:loi.length,
-      chi_tiet:{ trung:trung.slice(0,20), lech_tu_khoa:lechTuKhoa.slice(0,20) },
-      ghi_chu: (cfg.tu_dong_cham_ai!==false && !env.ANTHROPIC_API_KEY)
-        ? 'Chưa cắm ANTHROPIC_API_KEY nên chưa chấm được — trend nằm ở trạng thái Mới' : undefined });
+    const kq=await gomTrendVaoDB(env, ds, (body.nguon_may||'Máy tự gom').toString().slice(0,60));
+    return json({ ok:true, ...kq });
   }
 
   // Công cụ Lọc video (/tools/loc-video.html) hỏi danh sách nhạc nền từ folder cục bộ.
@@ -2187,6 +2295,14 @@ async function handleApi(request, env){
     return json({ ...r, db: await bootstrap(env, me) });
   }
 
+  // Chạy thử agent ngay, không chờ tới giờ — để người kiểm chứng trước khi giao cho máy chạy một mình.
+  if(path==='/trends/agent/chay-thu' && method==='POST'){
+    if(!canCauHinh(me)) return json({error:'Chỉ Admin hoặc Marketing được chạy agent'},403);
+    const r=await chayAgentTrend(env,{ep:true});
+    await logAudit(env,me,'chạy thử agent trend','agent_log','',r.tom_tat||r.bo_qua||'');
+    return json({ ...r, db: await bootstrap(env, me) });
+  }
+
   // ===== CONTENT OS · TREND — nghiên cứu & triển khai =====
   if(path==='/trends' && method==='POST'){
     if(!isStaff(me)) return json({error:'Không có quyền'},403);
@@ -2484,6 +2600,9 @@ export default {
     const cron = (controller && controller.cron) || '';
     if(cron.startsWith('*/15')){
       ctx.waitUntil(chayLichDang(env));           // quét bài tới giờ đăng
+      // Agent bám nhịp 15' để người tự chọn được GIỜ chạy trong Cấu hình;
+      // bên trong nó tự chốt mỗi ngày đúng 1 lần nên không chạy lặp.
+      ctx.waitUntil(chayAgentTrend(env).catch(()=>{}));
     } else {
       ctx.waitUntil(cleanupOldMedia(env));        // dọn media quá hạn
       ctx.waitUntil(ghiNhatKyViecKet(env));       // chụp tình trạng việc kẹt

@@ -447,7 +447,7 @@ function seedDB(){
     frameworks: ['Chuẩn bán hàng','PAS','Phản biện comment','Test chất lượng','Hành trình thi công','Size / Combo','FOMO','Review KOC','"đừng..." Trend','Q&A khách hàng','So sánh kinh tế','Hướng dẫn thi công'].map((ten,i)=>({id:uid('fw'),ten,mo_ta:'',thu_tu:i+1,active:true,created_at:now()})),
     kenh: [['Fanpage Kingsmen','FANPAGE','Kingsmen'],['TikTok Kingsmen','TIKTOK','Kingsmen'],['YouTube Short Kingsmen','YOUTUBE','Kingsmen'],['Fanpage VKXD','FANPAGE','VKXD'],['TikTok VKXD','TIKTOK','VKXD'],['Shopee VKXD','SHOPEE','VKXD'],['Zalo OA','ZALO_OA','Kingsmen'],['CHÍNH - Vật liệu mới FINEX','TIKTOK','FINEX'],['AFF - Sơn sàn hiệu ứng','TIKTOK','FINEX'],['BC - Vật liệu hoàn thiện','TIKTOK','Kingsmen']].map(([ten,loai,th])=>({id:uid('kn'),ten,loai,thuong_hieu:th,active:true,created_at:now()})),
     content_items: [],
-    scripts: [], approvals: [], air_posts: [], air_checklist: AIR_CHECKLIST_FE, ket_qua: [], don_cho_gan: [], footage: [], shot_list: [], bai_hoc: [], min_mau: MIN_MAU, trends: [], trend_check: TREND_CHECK_FE, viec_ket: null, seeding_theo_noi_dung: {}, kenh_tu_dong: KENH_TU_DONG_FE, kenh_san_sang: {}, n8n_san_sang: false, module_config: {}, can_cau_hinh: true, san_xuat: [], sx_khau: SX_KHAU_FE, san_xuat_theo_noi_dung: {},
+    scripts: [], approvals: [], air_posts: [], air_checklist: AIR_CHECKLIST_FE, ket_qua: [], don_cho_gan: [], footage: [], shot_list: [], bai_hoc: [], min_mau: MIN_MAU, trends: [], trend_check: TREND_CHECK_FE, viec_ket: null, seeding_theo_noi_dung: {}, kenh_tu_dong: KENH_TU_DONG_FE, kenh_san_sang: {}, n8n_san_sang: false, youtube_san_sang: false, agent_log: [], module_config: {}, can_cau_hinh: true, san_xuat: [], sx_khau: SX_KHAU_FE, san_xuat_theo_noi_dung: {},
     payouts: [],
     audit: [],
   };
@@ -488,7 +488,7 @@ function migrate(db){
   db.kenh ||= [];
   db.content_items ||= [];
   db.scripts ||= []; db.approvals ||= []; db.air_posts ||= []; db.air_checklist ||= AIR_CHECKLIST_FE;
-  db.ket_qua ||= []; db.don_cho_gan ||= []; db.footage ||= []; db.shot_list ||= []; db.bai_hoc ||= []; db.min_mau ||= MIN_MAU; db.trends ||= []; db.trend_check ||= TREND_CHECK_FE; db.viec_ket ||= null; db.seeding_theo_noi_dung ||= {}; db.kenh_tu_dong ||= KENH_TU_DONG_FE; db.kenh_san_sang ||= {}; db.n8n_san_sang ||= false; db.module_config ||= {}; db.can_cau_hinh ??= true; db.san_xuat ||= []; db.sx_khau ||= SX_KHAU_FE; db.san_xuat_theo_noi_dung ||= {};
+  db.ket_qua ||= []; db.don_cho_gan ||= []; db.footage ||= []; db.shot_list ||= []; db.bai_hoc ||= []; db.min_mau ||= MIN_MAU; db.trends ||= []; db.trend_check ||= TREND_CHECK_FE; db.viec_ket ||= null; db.seeding_theo_noi_dung ||= {}; db.kenh_tu_dong ||= KENH_TU_DONG_FE; db.kenh_san_sang ||= {}; db.n8n_san_sang ||= false; db.youtube_san_sang ||= false; db.agent_log ||= []; db.module_config ||= {}; db.can_cau_hinh ??= true; db.san_xuat ||= []; db.sx_khau ||= SX_KHAU_FE; db.san_xuat_theo_noi_dung ||= {};
   db.post_seedings.forEach(p=>{ p.react ??= 0; p.so_cmt_seeding ??= 0; p.so_cmt_tu_nhien ??= 0; p.thanh_tien ??= 0; });
   db.cmt_seedings.forEach(c=>{ c.proofs ||= []; c.so_cmt_seeding ??= 0; c.react ??= 0; c.so_cmt_tu_nhien ??= 0; c.thanh_tien ??= 0; });
   db.groups.forEach(g=>{ g.uu_tien ??= false; });
@@ -754,6 +754,7 @@ function AppProvider({children}){
       resetModuleConfig: async key=>{ if(S.module_config) delete S.module_config[key];
         if(key==='air') S.air_checklist=AIR_CHECKLIST_FE; if(key==='trend') S.trend_check=TREND_CHECK_FE;
         commit(); return true; },
+      chayThuAgent: async ()=>({ok:false, loi:'Chế độ offline không chạy agent được'}),
       aiDanhGiaTrend: async id=>({ok:false, thieu_key:true, loi:'Chế độ offline không gọi AI được'}),
       aiSinhKichBan: async o=>({ok:false, thieu_key:true, loi:'Chế độ offline không gọi AI được'}),
       aiChat: async m=>({ok:false, thieu_key:true, loi:'Chế độ offline không gọi AI được'}),
@@ -954,6 +955,7 @@ function AppProvider({children}){
     setModuleConfig: async (key,cau_hinh) => { try { const r=await call('/module-config/'+key,{method:'PATCH',body:{cau_hinh}}); if(r&&r.db) setDb(r.db); return {ok:true}; }
       catch(e){ return {ok:false,msg:e.message}; } },
     resetModuleConfig: key => mut('/module-config/'+key+'/reset', {method:'POST'}),
+    chayThuAgent: async () => { try { const r=await call('/trends/agent/chay-thu',{method:'POST',body:{}}); if(r&&r.db) setDb(r.db); return r; } catch(e){ return {ok:false,loi:e.message}; } },
     aiDanhGiaTrend: async id => { try { const r=await call('/trends/'+id+'/ai-danh-gia',{method:'POST',body:{}}); if(r&&r.db) setDb(r.db); return r; } catch(e){ return {ok:false,loi:e.message}; } },
     aiSinhKichBan: async o => { try { return await call('/scripts/ai-sinh',{method:'POST',body:o}); } catch(e){ return {ok:false,loi:e.message}; } },
     aiChat: async messages => { try { return await call('/ai/chat',{method:'POST',body:{messages}}); } catch(e){ return {ok:false,loi:e.message}; } },
@@ -3086,8 +3088,13 @@ function MayGomTrend(){
   const { db, notify } = useApp();
   const [mo,setMo]=useState(false); const [tok,setTok]=useState(''); const [base,setBase]=useState('');
   const [gio,setGio]=useState(8); const [ytKey,setYtKey]=useState('');
+  const [busy,setBusy]=useState(false); const [kq,setKq]=useState(null);
+  const { chayThuAgent } = useApp();
   const san=db.n8n_san_sang; const cfg=(db.module_config||{}).trend||{};
   const soTuKhoa=(cfg.tu_khoa_nganh||[]).length;
+  const agentBat=!!cfg.agent_bat; const gioAgent=Number(cfg.agent_gio)>=0?Number(cfg.agent_gio):8;
+  const chayThu=async()=>{ setBusy(true); setKq(null); const r=await chayThuAgent(); setBusy(false); setKq(r);
+    if(r&&r.ok) notify('Agent chạy xong — xem kết quả ngay dưới nút'); else notify((r&&(r.bo_qua||r.tom_tat||r.loi))||'Không chạy được','err'); };
   const tai=()=>{ download('n8n-kingsmen-gom-trend.json',
     JSON.stringify(n8nWorkflowTrend({ token:tok.trim()||'DAN_N8N_TOKEN_VAO_DAY',
       appBase:base.trim()||'https://DAN_DIA_CHI_APP', gio, ytKey:ytKey.trim() }),null,2),
@@ -3098,12 +3105,41 @@ function MayGomTrend(){
       <div className="min-w-0">
         <div className="text-sm font-semibold text-ink">🤖 Cho máy tự gom trend mỗi sáng</div>
         <div className="text-[11px] text-slate-500 mt-0.5">
-          {san?'n8n đã sẵn sàng':'Chưa cắm N8N_WEBHOOK_URL / N8N_TOKEN'} · {soTuKhoa?soTuKhoa+' từ khoá ngành':'chưa đặt từ khoá ngành'}
+          {agentBat?('Agent đang BẬT — chạy '+gioAgent+'h mỗi ngày'):'Agent đang tắt'} · {soTuKhoa?soTuKhoa+' từ khoá ngành':'chưa đặt từ khoá ngành'}
         </div>
       </div>
       <span className="text-slate-400 shrink-0 ml-2">{mo?'▲':'▼'}</span>
     </button>
     {mo && <div className="mt-3 space-y-3 border-t border-line pt-3">
+      {/* CÁCH 1 — agent chạy sẵn trong app, không phụ thuộc gì bên ngoài */}
+      <div className="rounded-xl border border-brand/40 bg-brand-bg p-3 space-y-2">
+        <div className="text-sm font-semibold text-ink">Cách 1 — Agent chạy sẵn trong app <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-brand text-white align-middle">gọn nhất</span></div>
+        <div className="text-[11px] text-ink-soft leading-relaxed">
+          App tự chạy theo lịch, <b>không cần cài gì thêm</b>, không phụ thuộc n8n. Bật/đặt giờ trong tab ⚙️ Cấu hình.
+        </div>
+        <div className="flex flex-wrap gap-3 text-[11px]">
+          <span className={agentBat?'text-emerald-700 font-semibold':'text-slate-500'}>{agentBat?'● Đang bật · '+gioAgent+'h hằng ngày':'○ Đang tắt'}</span>
+          <span className={db.ai_san_sang?'text-emerald-700':'text-amber-700'}>{db.ai_san_sang?'● AI chấm sẵn':'○ Chưa có ANTHROPIC_API_KEY — trend về sẽ nằm ở “Mới”'}</span>
+          <span className={db.youtube_san_sang?'text-emerald-700':'text-slate-500'}>{db.youtube_san_sang?'● Có YouTube':'○ Chưa cắm YOUTUBE_API_KEY (chỉ lấy Google Trends)'}</span>
+        </div>
+        <Btn variant="brand" onClick={chayThu} disabled={busy}>{busy?'Đang chạy…':'▶ Chạy thử ngay'}</Btn>
+        {kq && <div className={"rounded-xl p-2.5 text-[11px] "+(kq.ok?'bg-white border border-line text-ink-soft':'bg-rose-50 border border-rose-200 text-rose-700')}>
+          <b>{kq.ok?'Xong:':'Không chạy được:'}</b> {kq.tom_tat||kq.bo_qua||kq.loi||'—'}
+          {kq.nguon && <div className="mt-1 text-slate-500">Nguồn: {Object.entries(kq.nguon).map(([k,v])=>k+'='+v).join(' · ')}</div>}
+          {kq.ghi_chu && <div className="mt-1 text-amber-700">{kq.ghi_chu}</div>}
+        </div>}
+        {(db.agent_log||[]).length>0 && <div className="text-[11px] text-slate-500">
+          <div className="font-semibold text-ink-muted mb-0.5">Các lượt gần đây</div>
+          {(db.agent_log||[]).slice(0,5).map(l=>
+            <div key={l.id} className="flex gap-2 py-0.5 border-t border-line">
+              <span className="shrink-0">{l.ok?'✓':'✗'}</span>
+              <span className="shrink-0 text-slate-400">{String(l.at||'').slice(5,16).replace('T',' ')}</span>
+              <span className="shrink-0 text-slate-400">{l.loai==='TREND_THU'?'(thử)':''}</span>
+              <span className="min-w-0 flex-1">{l.tom_tat}</span>
+            </div>)}
+        </div>}
+      </div>
+      <div className="text-[11px] font-semibold text-ink-muted">Cách 2 — Qua n8n (nếu bạn muốn tự thêm nguồn khác)</div>
       <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-[11px] text-amber-900 leading-relaxed">
         <b>Máy gom được gì và không gom được gì —</b> nói trước để khỏi kỳ vọng sai:
         <div className="mt-1">✅ <b>Google Trends VN</b> và <b>YouTube phổ biến VN</b>: nguồn công khai / API chính thức.</div>
@@ -3557,7 +3593,12 @@ const CONFIG_SCHEMA = {
     {k:'tu_khoa_nganh', loai:'tu_khoa', label:'Từ khoá ngành — lọc trend máy gom về',
       hint:'Mỗi dòng một từ khoá. Khớp trong TÊN hoặc MÔ TẢ là nhận. ĐỂ TRỐNG = nhận tất cả (dễ ngập rác).'},
     {k:'han_mac_dinh_ngay', loai:'so', label:'Máy gom về thì đặt hạn dùng bao nhiêu ngày', hint:'Trend nguội nhanh — để trống hạn thì không ai biết bao giờ hết kịp'},
-    {k:'chong_trung_ngay', loai:'so', label:'Chống trùng trong vòng bao nhiêu ngày', hint:'Trùng link hoặc trùng tên trong khoảng này thì bỏ qua'} ]},
+    {k:'chong_trung_ngay', loai:'so', label:'Chống trùng trong vòng bao nhiêu ngày', hint:'Trùng link hoặc trùng tên trong khoảng này thì bỏ qua'},
+    {k:'agent_bat', loai:'bat', label:'Bật Agent tự chạy trong app',
+      hint:'App tự gom trend theo lịch, KHÔNG cần n8n. Tắt thì chỉ chạy khi bạn bấm “Chạy thử ngay”.'},
+    {k:'agent_gio', loai:'so', label:'Agent chạy lúc mấy giờ (giờ Việt Nam)', hint:'0–23. Mỗi ngày chạy đúng 1 lượt.'},
+    {k:'agent_tu_tao_ke_hoach', loai:'bat', label:'Trend đã duyệt thì tự đưa vào Kế hoạch nội dung',
+      hint:'Đây là lúc máy tạo ra VIỆC cho người khác làm — nên mặc định TẮT. Chỉ áp dụng cho trend đã qua đủ ràng buộc tự duyệt, và vào ở giai đoạn Ý tưởng chứ không nhảy cóc cổng duyệt.'} ]},
   viec_ket: { ten:'Nhắc việc', truong:[
     {k:'sua_lai', loai:'so', label:'Kịch bản bị trả — nhắc sau (ngày)'},
     {k:'cho_duyet', loai:'so', label:'Cổng duyệt tồn — nhắc sau (ngày)'},

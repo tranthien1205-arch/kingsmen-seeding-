@@ -337,7 +337,16 @@ Tokens Tailwind (inline config trong `seeding-app.html`): `ink #0b3543` (soft #1
 - ✅ **Dán link nhanh** (`DanLinkTrend`) — TikTok/Facebook **không có API trend công khai và cào là vi phạm ToS**, nên vẫn phải làm tay; rút form còn 2 ô (link + tên), tự đoán nguồn theo tên miền, tự đặt hạn.
 - ✅ **Bộ dựng workflow n8n gom trend** (`n8nWorkflowTrend`) + bảng hướng dẫn `MayGomTrend` gấp gọn trong module. Chỉ dùng **Google Trends RSS VN** và **YouTube Data API (mostPopular, VN)** — nguồn công khai / API chính thức; **không có node nào đụng TikTok/Facebook**, có test chặn hồi quy. File Import về ở trạng thái **Active = false**.
   - **Ranh giới đã nói thẳng với user:** hai nguồn này chủ yếu ra trend đại chúng; trend ngành vật liệu vẫn cần người trong nghề nhìn ra. Tự động hoá cắt ~80% việc tay chân, không thay được phán đoán ngành.
-- 📌 **Tổng test đang xanh: 536** (toàn bộ `scratchpad/test_*.mjs`), trong đó AI đánh giá trend 40.
+- ✅ **AGENT TREND CHẠY TRONG APP** — phương án tự động hoàn toàn, **không cần n8n**.
+  - `chayAgentTrend()` bám nhịp cron `*/15` để người **tự chọn giờ chạy** (`agent_gio`, giờ VN) — Cloudflare cron chạy UTC nên `gioVN()` tự quy đổi, không lệch 7 tiếng. Tự chốt **mỗi ngày đúng 1 lượt** qua `agent_log`.
+  - Nguồn: `layGoogleTrends()` (RSS công khai, `docRSS()` parse bằng regex — cố ý không kéo thư viện XML vào Worker) + `layYouTubeVN()` (cần `YOUTUBE_API_KEY`, thiếu thì **báo bỏ qua chứ không báo lỗi giả**). **Không có nguồn nào đụng TikTok/Facebook.**
+  - **Một nguồn chết không kéo sập cả lượt**; cả hai chết → ghi log `ok=0`, không im lặng.
+  - `agent_tu_tao_ke_hoach` (mặc định **TẮT**): trend **đã DUYỆT** tự tạo mục Kế hoạch nội dung ở giai đoạn `Y_TUONG` — không nhảy cóc cổng duyệt — rồi chuyển trend sang `DA_TRIEN_KHAI` để không làm lại. Đây là lúc máy **tạo việc cho người khác**, nên phải do người bật.
+  - **Không có đường tắt:** agent gọi đúng `gomTrendVaoDB()` → `chamVaGhiTrend()` như luồng n8n, nên chống trùng · lọc từ khoá · ràng buộc tự duyệt (đủ mục bắt buộc + không rủi ro claim) áp dụng y hệt.
+  - `POST /trends/agent/chay-thu` (Admin/Marketing) — bỏ qua kiểm tra giờ, **ghi log loại `TREND_THU` riêng** để một cú bấm thử không làm mất lượt chạy thật của ngày hôm đó.
+  - Bảng `agent_log` giữ 100 lượt gần nhất, bootstrap trả 10 — chạy không có người ngồi xem thì **phải để lại dấu vết đọc được**.
+  - UI: panel `MayGomTrend` hiện **cả 2 phương án** (Cách 1 agent trong app · Cách 2 n8n), trạng thái từng key, nút ▶ Chạy thử ngay, và nhật ký các lượt. (30 test backend + 11 test UI)
+- 📌 **Tổng test đang xanh: 577** (toàn bộ `scratchpad/test_*.mjs`), trong đó AI đánh giá trend 40.
 - ✅ **ĐÃ XONG TOÀN BỘ P1→P10.** Còn lại là các mảnh nhỏ: vai trò `TRUONG_MKT`/`GIAM_DOC` riêng, `can()` tập trung (P0), và nâng P4 lên gợi ý AI khi có `ANTHROPIC_API_KEY`.
 
 ### ⚙️ Quy trình deploy (CẬP NHẬT)
