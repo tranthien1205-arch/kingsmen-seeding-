@@ -86,6 +86,9 @@ const kpiLabel = v => (LOAI_MUC_TIEU_KPI.find(x=>x.v===v)||{}).label||'—';
 const KENH_LOAI = ['FANPAGE','TIKTOK','YOUTUBE','ZALO_OA','SHOPEE','WEBSITE'];
 // Content OS · P1 — dữ liệu nền
 const DONG_SP = ['Kingsmen grout','Terrazy','FINEX','Khác'];
+const NHOM_SP = { CHINH:'Sản phẩm chính', PHU_TRO:'Phụ trợ / dụng cụ' };
+// Giá chưa công bố phải hiện chữ, KHÔNG hiện "0 ₫" — 0đ người đọc hiểu thành miễn phí.
+const tien = v => (v==null||v==='') ? null : Number(v).toLocaleString('vi-VN')+' ₫';
 const CLAIM_MUC_DO = { CANH_BAO:'Cảnh báo', CHAN:'Chặn' };
 // Quét văn bản với danh sách claim cấm → trả các cụm khớp (dùng lại cho Creative Studio P4)
 function scanClaims(text, claims){
@@ -590,7 +593,7 @@ function AppProvider({children}){
         commit(); return true; },
       regenSchedule: async ()=>{ const today=todayYMD(); S.post_slots=(S.post_slots||[]).filter(s=>!(s.ngay>=today && !s.post_id)); ensureDemoSlots(S); commit(); return true; },
       reassignSlot: async (id, patch)=>{ const s=(S.post_slots||[]).find(x=>x.id===id); if(s){ if(patch.sales_id!==undefined) s.sales_id=patch.sales_id; if(patch.topic_id!==undefined) s.topic_id=patch.topic_id||null; } commit(); return true; },
-      upsertSanPham: async o=>{ S.san_pham ||= []; if(o.id){ const i=S.san_pham.findIndex(x=>x.id===o.id); if(i>=0) S.san_pham[i]={...S.san_pham[i],...o}; } else { S.san_pham.unshift({ id:uid('sp'), ma:'', ten:'', dong:'', thong_so:[], tieu_chuan:'', huong_dan:'', anh:'', active:true, created_at:now(), ...o }); } commit(); return true; },
+      upsertSanPham: async o=>{ S.san_pham ||= []; if(o.id){ const i=S.san_pham.findIndex(x=>x.id===o.id); if(i>=0) S.san_pham[i]={...S.san_pham[i],...o}; } else { S.san_pham.unshift({ id:uid('sp'), ma:'', ten:'', dong:'', nhom:'CHINH', don_vi:'', gia_truoc_thue:null, thue_vat:null, gia_sau_thue:null, bao_hanh:'', gia_ap_dung_tu:'', thong_so:[], tieu_chuan:'', huong_dan:'', anh:'', active:true, created_at:now(), ...o }); } commit(); return true; },
       deleteSanPham: async id=>{ S.san_pham=(S.san_pham||[]).filter(x=>x.id!==id); commit(); return true; },
       upsertClaim: async o=>{ S.claim_cam ||= []; if(o.id){ const i=S.claim_cam.findIndex(x=>x.id===o.id); if(i>=0) S.claim_cam[i]={...S.claim_cam[i],...o}; } else { S.claim_cam.unshift({ id:uid('cc'), cum_tu:'', ly_do:'', muc_do:'CANH_BAO', active:true, created_at:now(), ...o }); } commit(); return true; },
       deleteClaim: async id=>{ S.claim_cam=(S.claim_cam||[]).filter(x=>x.id!==id); commit(); return true; },
@@ -5021,15 +5024,18 @@ function SanPhamTab(){
   const list = db.san_pham||[];
   const [edit,setEdit]=useState(null);
   const fileRef=useRef();
-  const blank = {ma:'',ten:'',dong:DONG_SP[0],thong_so:[],tieu_chuan:'',huong_dan:'',anh:'',active:true};
-  const exportCSV=()=>{ const r=[['Mã','Tên','Dòng','Thông số (k=v; k=v)','Tiêu chuẩn','Hướng dẫn']];
-    list.forEach(p=>r.push([p.ma,p.ten,p.dong,(p.thong_so||[]).map(t=>t.k+'='+t.v).join('; '),p.tieu_chuan,p.huong_dan]));
+  const blank = {ma:'',ten:'',dong:DONG_SP[0],nhom:'CHINH',don_vi:'',gia_truoc_thue:'',thue_vat:'',gia_sau_thue:'',bao_hanh:'',gia_ap_dung_tu:'',thong_so:[],tieu_chuan:'',huong_dan:'',anh:'',active:true};
+  const exportCSV=()=>{ const r=[['Mã','Tên','Dòng','Thông số (k=v; k=v)','Tiêu chuẩn','Hướng dẫn','Nhóm','Đơn vị','Giá trước thuế','VAT %','Giá sau thuế','Bảo hành','Giá áp dụng từ']];
+    list.forEach(p=>r.push([p.ma,p.ten,p.dong,(p.thong_so||[]).map(t=>t.k+'='+t.v).join('; '),p.tieu_chuan,p.huong_dan,
+      p.nhom||'CHINH',p.don_vi||'',p.gia_truoc_thue??'',p.thue_vat??'',p.gia_sau_thue??'',p.bao_hanh||'',p.gia_ap_dung_tu||'']));
     download('san_pham.csv', toCSV(r)); };
   const onImport=(e)=>{ const f=e.target.files&&e.target.files[0]; e.target.value=''; if(!f) return;
     const rd=new FileReader(); rd.onload=async ev=>{ const rows=parseTable(String(ev.target.result||'')); if(!rows.length) return notify('File rỗng','warn');
       if((rows[0][0]||'').toLowerCase()==='mã') rows.shift(); let n=0;
       for(const c of rows){ if(!(c[1]||'').trim()) continue; const ts=(c[3]||'').split(/[;\n]/).map(s=>s.trim()).filter(Boolean).map(kv=>{ const i=kv.indexOf('='); return {k:(i>=0?kv.slice(0,i):kv).trim(), v:(i>=0?kv.slice(i+1):'').trim()}; });
-        await upsertSanPham({ma:(c[0]||'').trim(),ten:(c[1]||'').trim(),dong:(c[2]||'').trim()||DONG_SP[0],thong_so:ts,tieu_chuan:(c[4]||'').trim(),huong_dan:(c[5]||'').trim(),active:true}); n++; }
+        await upsertSanPham({ma:(c[0]||'').trim(),ten:(c[1]||'').trim(),dong:(c[2]||'').trim()||DONG_SP[0],thong_so:ts,tieu_chuan:(c[4]||'').trim(),huong_dan:(c[5]||'').trim(),
+          nhom:(c[6]||'').trim()||'CHINH',don_vi:(c[7]||'').trim(),gia_truoc_thue:(c[8]||'').trim(),thue_vat:(c[9]||'').trim(),gia_sau_thue:(c[10]||'').trim(),
+          bao_hanh:(c[11]||'').trim(),gia_ap_dung_tu:(c[12]||'').trim(),active:true}); n++; }
       notify('Đã import '+n+' sản phẩm'); };
     rd.readAsText(f,'utf-8'); };
   return <div className="space-y-3">
@@ -5046,8 +5052,14 @@ function SanPhamTab(){
             {p.anh ? <img src={p.anh} className="w-14 h-14 rounded-xl object-cover border border-line shrink-0"/> : <div className="w-14 h-14 rounded-xl bg-slate-100 flex items-center justify-center text-2xl shrink-0">🧴</div>}
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap"><span className="font-semibold text-sm text-ink">{p.ten||'(chưa tên)'}</span><HeChip he={p.dong}/></div>
-              {p.ma && <div className="text-[11px] text-slate-400">Mã: {p.ma}</div>}
+              {p.ma && <div className="text-[11px] text-slate-400">Mã: {p.ma}{p.don_vi?' · '+p.don_vi:''}</div>}
+              <div className="text-xs mt-0.5">
+                {tien(p.gia_sau_thue)
+                  ? <><b className="text-ink">{tien(p.gia_sau_thue)}</b><span className="text-slate-400"> sau thuế{p.thue_vat!=null?' (VAT '+p.thue_vat+'%)':''}</span></>
+                  : <span className="text-amber-600">chưa có giá</span>}
+              </div>
               {(p.thong_so||[]).length>0 && <div className="text-xs text-slate-500 mt-1 line-clamp-2">{(p.thong_so||[]).map(t=>t.k+': '+t.v).join(' · ')}</div>}
+              {p.bao_hanh && <div className="text-[11px] text-emerald-700 mt-0.5">🛡 {p.bao_hanh}</div>}
               {p.tieu_chuan && <div className="text-[11px] text-brand-dark mt-0.5">TC: {p.tieu_chuan}</div>}
             </div>
           </div>
@@ -5071,9 +5083,19 @@ function SanPhamModal({edit,onClose}){
   const addTS=()=>setF(p=>({...p,thong_so:[...p.thong_so,{k:'',v:''}]}));
   const delTS=(i)=>setF(p=>({...p,thong_so:p.thong_so.filter((_,j)=>j!==i)}));
   const onImg=async e=>{ const file=e.target.files&&e.target.files[0]; e.target.value=''; if(!file) return; setBusy(true); try{ const b64=await compressImage(file); set('anh',b64); }catch(err){ notify('Lỗi ảnh','err'); } setBusy(false); };
+  // Cảnh báo lệch giá — chỉ NHẮC, không tự sửa số người dùng nhập.
+  const nTruoc=Number(f.gia_truoc_thue), nVat=Number(f.thue_vat), nSau=Number(f.gia_sau_thue);
+  const lechGia = (f.gia_truoc_thue!==''&&f.gia_truoc_thue!=null&&f.gia_sau_thue!==''&&f.gia_sau_thue!=null
+    && Number.isFinite(nTruoc)&&Number.isFinite(nSau)&&Number.isFinite(nVat)
+    && Math.abs(Math.round(nTruoc*(1+nVat/100))-nSau)>1)
+    ? Math.round(nTruoc*(1+nVat/100)).toLocaleString('vi-VN')+' ₫' : null;
   const save=async()=>{ if(!f.ten.trim()) return notify('Nhập tên sản phẩm','warn');
     const ts=f.thong_so.filter(t=>t.k.trim()||t.v.trim());
-    const ok=await upsertSanPham({...(edit.id?{id:edit.id}:{}), ma:f.ma.trim(), ten:f.ten.trim(), dong:f.dong, thong_so:ts, tieu_chuan:f.tieu_chuan.trim(), huong_dan:f.huong_dan.trim(), anh:f.anh, active:f.active!==false});
+    const ok=await upsertSanPham({...(edit.id?{id:edit.id}:{}), ma:f.ma.trim(), ten:f.ten.trim(), dong:f.dong,
+      nhom:f.nhom||'CHINH', don_vi:(f.don_vi||'').trim(),
+      gia_truoc_thue:f.gia_truoc_thue??'', thue_vat:f.thue_vat??'', gia_sau_thue:f.gia_sau_thue??'',
+      bao_hanh:(f.bao_hanh||'').trim(), gia_ap_dung_tu:(f.gia_ap_dung_tu||'').trim(),
+      thong_so:ts, tieu_chuan:f.tieu_chuan.trim(), huong_dan:f.huong_dan.trim(), anh:f.anh, active:f.active!==false});
     if(ok){ notify(edit.id?'Đã lưu':'Đã thêm sản phẩm'); onClose(); } };
   return <Modal open={!!edit} onClose={onClose} title={(edit.id?'Sửa ':'Thêm ')+'sản phẩm'} wide>
     <div className="grid grid-cols-2 gap-2">
@@ -5088,6 +5110,21 @@ function SanPhamModal({edit,onClose}){
       </div>
       <button onClick={addTS} className="text-xs text-brand-dark font-semibold mt-1.5">＋ Thêm chỉ tiêu</button>
     </div>
+    <div className="mb-3">
+      <div className="text-[13px] font-semibold text-ink mb-1.5">Giá niêm yết <span className="text-[11px] font-normal text-ink-muted">— để trống = “chưa có giá”, KHÔNG điền 0</span></div>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+        <Field label="Đơn vị"><Input value={f.don_vi||''} onChange={e=>set('don_vi',e.target.value)} placeholder="Chai / Bộ / Cái"/></Field>
+        <Field label="Giá trước thuế"><Input value={f.gia_truoc_thue??''} onChange={e=>set('gia_truoc_thue',e.target.value)} placeholder="220000"/></Field>
+        <Field label="VAT (%)"><Input value={f.thue_vat??''} onChange={e=>set('thue_vat',e.target.value)} placeholder="8"/></Field>
+        <Field label="Giá sau thuế"><Input value={f.gia_sau_thue??''} onChange={e=>set('gia_sau_thue',e.target.value)} placeholder="237600"/></Field>
+      </div>
+      {lechGia && <div className="text-[11px] text-amber-600 mt-1">⚠ Giá sau thuế lệch so với trước thuế + VAT (tính ra {lechGia}). Kiểm lại trước khi lưu — app không tự sửa số của bạn.</div>}
+      <div className="grid grid-cols-2 gap-2 mt-2">
+        <Field label="Nhóm"><Select value={f.nhom||'CHINH'} onChange={e=>set('nhom',e.target.value)}>{Object.entries(NHOM_SP).map(([k,v])=><option key={k} value={k}>{v}</option>)}</Select></Field>
+        <Field label="Giá áp dụng từ"><Input type="date" value={f.gia_ap_dung_tu||''} onChange={e=>set('gia_ap_dung_tu',e.target.value)}/></Field>
+      </div>
+    </div>
+    <Field label="Bảo hành (cam kết chính thức — AI được trích vào kịch bản)"><Input value={f.bao_hanh||''} onChange={e=>set('bao_hanh',e.target.value)} placeholder="VD: 10 năm chống ố vàng · 30 năm chống thấm bền vật liệu"/></Field>
     <div className="grid grid-cols-2 gap-2">
       <Field label="Tiêu chuẩn áp dụng"><Input value={f.tieu_chuan} onChange={e=>set('tieu_chuan',e.target.value)} placeholder="VD: TCVN…"/></Field>
       <Field label="Ảnh sản phẩm"><div className="flex items-center gap-2">{f.anh && <img src={f.anh} className="w-10 h-10 rounded-lg object-cover border"/>}<Btn variant="ghost" onClick={()=>imgRef.current&&imgRef.current.click()} disabled={busy}>{busy?'…':(f.anh?'Đổi ảnh':'Tải ảnh')}</Btn><input ref={imgRef} type="file" accept="image/*" className="hidden" onChange={onImg}/></div></Field>

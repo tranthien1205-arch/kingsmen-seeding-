@@ -360,7 +360,16 @@ Tokens Tailwind (inline config trong `seeding-app.html`): `ink #0b3543` (soft #1
   - **Toàn bộ guardrail cũ giữ nguyên**: `AI_NGUYEN_TAC`, quét cụm từ cấm (`CHẶN` → từ chối trả kết quả), chỉ trích thông số/tiêu chuẩn thật của sản phẩm — không thêm đường tắt riêng cho luồng này.
   - Kết quả đổ vào ô kịch bản dạng `<tên bước nguyên văn>: <lời bình>` — khớp thẳng vào bộ so khớp bước đã có (`parseScriptRules`/`poolSteps`), nên bấm tiếp **🪄 AI DỰNG** như bình thường là lên timeline, không cần đổi gì ở bộ dựng.
   - Không có token app (mở tool ở máy chưa đăng nhập / ngoài origin) → báo rõ lý do, không âm thầm hỏng hay tự bịa định hướng thương hiệu. Lỗi AI (thiếu key/chặn claim) → giữ nguyên kịch bản đang có, không ghi đè. (30 test backend `test_ai.mjs` + 28 test UI `test_kbai.mjs`, trong đó có mô phỏng chạy thật qua `new Function`)
-- 📌 **Tổng test đang xanh: 641** (toàn bộ `scratchpad/test_*.mjs`), trong đó AI đánh giá trend 40.
+- ✅ **BẢNG GIÁ NIÊM YẾT KINGSMEN** (33 mã, áp dụng 01/05/2026) nạp thẳng vào `san_pham` — nguồn: file bảng giá chính thức của Masfico.
+  - Cột mới: `nhom` (CHINH/PHU_TRO) · `don_vi` · `gia_truoc_thue` · `thue_vat` · `gia_sau_thue` · `bao_hanh` · `gia_ap_dung_tu`. Giá khai `REAL` **không DEFAULT** → hàng cũ và hàng chưa công bố giá là **NULL**, không rơi về 0 (0đ người đọc hiểu thành miễn phí).
+  - **Chép cả giá trước thuế LẪN sau thuế** thay vì tính ra một cái — để test bắt được lỗi gõ nhầm ở *một trong hai* cột. Test kiểm `round(trước×1.08)===sau` cho toàn bộ 31 mã có giá; nếu chỉ lưu một cột rồi tính, phép kiểm này thành vô nghĩa.
+  - **2 dụng cụ bảng giá bỏ trống** (Bàn gạt thép răng cưa 30cm · Gạt nhựa răng cưa + que khuấy sơn) giữ nguyên `null` và vẫn nằm trong danh mục — không bịa giá, cũng không âm thầm bỏ dòng.
+  - **Bảo hành chép nguyên văn** (G3000 1 năm → G7000 30 năm chống ố vàng, tất cả 30 năm chống thấm). Terazzy và dụng cụ **bảng giá không ghi bảo hành → để trống**, không suy diễn.
+  - `seedBangGia()` chỉ **thêm mã còn thiếu**, không bao giờ ghi đè dòng đã có — seed chạy mỗi lần khởi động isolate, đạp lên sửa tay của người dùng là mất dữ liệu. Có test chứng minh sửa tay sống sót qua lần seed sau.
+  - `soTien()` gác đầu vào: ô trống/rác → `null` chứ không phải 0; hiểu được cả `"1.089.000"` (phân cách nghìn) lẫn `"8,5"` (thập phân) mà không lẫn lộn.
+  - **Ranh giới AI — cố ý bất đối xứng:** chatbot nội bộ **ĐƯỢC** biết giá niêm yết (nhân viên hay hỏi); còn `/scripts/ai-sinh` (kịch bản đăng công khai) **KHÔNG** nhận giá và system prompt cấm thẳng việc nêu giá — *bảng giá đổi theo đợt, video đã đăng thì nằm đó mãi với con số cũ*. Ngược lại **bảo hành thì được trích** vì đó là cam kết chính thức, bền theo thời gian.
+  - UI: thẻ sản phẩm hiện giá sau thuế hoặc chữ **"chưa có giá"** (màu cảnh báo, không phải "0 ₫"); form nhập có cảnh báo lệch giá trước/sau thuế nhưng **chỉ nhắc, không tự sửa số người nhập**; xuất/nhập CSV kèm đủ cột giá. (41 test backend + 17 test UI)
+- 📌 **Tổng test đang xanh: 700** (toàn bộ `scratchpad/test_*.mjs`), trong đó AI đánh giá trend 40.
 - ✅ **ĐÃ XONG TOÀN BỘ P1→P10.** Còn lại là các mảnh nhỏ: vai trò `TRUONG_MKT`/`GIAM_DOC` riêng, `can()` tập trung (P0), và nâng P4 lên gợi ý AI khi có `ANTHROPIC_API_KEY`.
 
 ### ⚙️ Quy trình deploy (CẬP NHẬT)

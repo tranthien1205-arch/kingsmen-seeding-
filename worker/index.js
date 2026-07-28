@@ -32,6 +32,105 @@ async function verifyPassword(pw, stored){
   }catch(e){ return false; }
 }
 
+// ---------- BẢNG GIÁ NIÊM YẾT KINGSMEN (Masfico Việt Nam phân phối độc quyền) ----------
+// Chép NGUYÊN VĂN từ bảng giá áp dụng 01/05/2026. `gia` = trước thuế, `gia_sau` = sau thuế
+// — cố ý chép CẢ HAI thay vì tính ra, để test bắt được lỗi gõ nhầm ở một trong hai cột.
+// Hai dụng cụ cuối bảng chưa công bố giá → để null, KHÔNG điền 0 (0đ đọc thành "miễn phí").
+const GIA_AP_DUNG_TU = '2026-05-01';
+const VAT_BANG_GIA = 8;
+const BANG_GIA_KINGSMEN = [
+  // I — KEO RON GẠCH
+  { ma:'G3000', ten:'Kingsmen G3000 (Tiêu chuẩn)', dong:'Kingsmen grout', nhom:'CHINH', don_vi:'Chai', gia:220000, gia_sau:237600,
+    bao_hanh:'1 năm chống ố vàng, bạc màu · 30 năm chống thấm bền vật liệu',
+    thong_so:[{k:'Phân hạng',v:'Tiêu chuẩn'},{k:'Phạm vi sử dụng',v:'Trong nhà'},
+      {k:'Đặc tính',v:'Chống thấm bám vượt trội, bám dính ổn định, phù hợp mọi công trình trong nhà với chi phí tối ưu'}] },
+  { ma:'G5000', ten:'Kingsmen G5000 (Cao cấp)', dong:'Kingsmen grout', nhom:'CHINH', don_vi:'Chai', gia:330000, gia_sau:356400,
+    bao_hanh:'3 năm chống ố vàng, bạc màu · 30 năm chống thấm bền vật liệu',
+    thong_so:[{k:'Phân hạng',v:'Cao cấp'},{k:'Phạm vi sử dụng',v:'Trong nhà'},
+      {k:'Đặc tính',v:'Bám dính mạnh hơn 50%, dành cho công trình nội thất yêu cầu chất lượng vượt trội và độ bền lâu dài'}] },
+  { ma:'G6000', ten:'Kingsmen G6000 (Chống UV)', dong:'Kingsmen grout', nhom:'CHINH', don_vi:'Chai', gia:484000, gia_sau:522720,
+    bao_hanh:'10 năm chống ố vàng, bạc màu · 30 năm chống thấm bền vật liệu',
+    thong_so:[{k:'Phân hạng',v:'Chống UV'},{k:'Phạm vi sử dụng',v:'Trong nhà và ngoài trời'},{k:'Gốc hoá học',v:'Polyurea'},
+      {k:'Đặc tính',v:'Gốc polyurea bền màu dưới nắng, chịu thời tiết và chống đứt gãy, phù hợp khu vực bán ngoài trời'}] },
+  { ma:'G7000', ten:'Kingsmen G7000 (Chống UV Plus)', dong:'Kingsmen grout', nhom:'CHINH', don_vi:'Chai', gia:891000, gia_sau:962280,
+    bao_hanh:'30 năm chống ố vàng, bạc màu · 30 năm chống thấm bền vật liệu',
+    thong_so:[{k:'Phân hạng',v:'Chống UV Plus'},{k:'Phạm vi sử dụng',v:'Trong nhà và ngoài trời'},{k:'Gốc hoá học',v:'Polyurea cao cấp nhất'},
+      {k:'Đặc tính',v:'Tăng cường 50% hoạt chất chống UV, giữ màu 30 năm, siêu bền dưới nắng gắt và biến đổi nhiệt độ, tối ưu cho công trình ngoài trời cao cấp'}] },
+  { ma:'G9000', ten:'Kingsmen G9000 (Chuyên dụng hồ bơi)', dong:'Kingsmen grout', nhom:'CHINH', don_vi:'Chai', gia:1089000, gia_sau:1176120,
+    bao_hanh:'10 năm chống ố vàng, bạc màu · 30 năm chống thấm bền vật liệu',
+    thong_so:[{k:'Phân hạng',v:'Chuyên dụng hồ bơi'},{k:'Gốc hoá học',v:'Polyurea'},
+      {k:'Đặc tính',v:'Chuyên dụng chịu áp lực nước cao, chống chịu tốt Clo, ổn định trong môi trường ngập nước hằng ngày'}] },
+  { ma:'GS200', ten:'Kingsmen GS200 (Chuyên dụng gạch mosaic)', dong:'Kingsmen grout', nhom:'CHINH', don_vi:'Xô 3,5kg', gia:3190000, gia_sau:3445200,
+    bao_hanh:'3 năm chống ố vàng, bạc màu · 30 năm chống thấm bền vật liệu',
+    thong_so:[{k:'Phân hạng',v:'Chuyên dụng gạch mosaic'},{k:'Gốc hoá học',v:'Epoxy gốc nước'},
+      {k:'Đặc tính',v:'Hỗ trợ liên kết mạnh mẽ cho gạch và đường ron bền chắc nhất'}] },
+  { ma:'ColorMatch G', ten:'Kingsmen ColorMatch G (Tuỳ chỉnh màu ron)', dong:'Kingsmen grout', nhom:'CHINH', don_vi:'Chai', gia:539000, gia_sau:582120,
+    bao_hanh:'3 năm chống ố vàng, bạc màu · 30 năm chống thấm bền vật liệu',
+    thong_so:[{k:'Phân hạng',v:'Tuỳ chỉnh màu ron'},{k:'Phạm vi sử dụng',v:'Trong nhà'},{k:'Độ đồng màu với gạch',v:'Đến 97%'},
+      {k:'Đặc tính',v:'Công nghệ tuỳ chỉnh màu ron đồng màu với gạch đến 97%, tạo bề mặt đồng nhất thẩm mỹ và độ bền lâu dài'}] },
+  { ma:'ColorMatch GS', ten:'Kingsmen ColorMatch GS (Gốc nước — tuỳ chỉnh màu ron)', dong:'Kingsmen grout', nhom:'CHINH', don_vi:'Xô 3,5kg', gia:5170000, gia_sau:5583600,
+    bao_hanh:'3 năm chống ố vàng, bạc màu · 30 năm chống thấm bền vật liệu',
+    thong_so:[{k:'Phân hạng',v:'Tuỳ chỉnh màu ron'},{k:'Phạm vi sử dụng',v:'Trong nhà và ngoài trời'},{k:'Gốc hoá học',v:'Epoxy gốc nước cao cấp'},{k:'Độ đồng màu với gạch',v:'Đến 97%'},
+      {k:'Đặc tính',v:'Áp dụng phương pháp thi công đánh bóng tạo mặt phẳng liền mạch như không ron'}] },
+  // II — SÀN TỰ PHẲNG TERRAZY (4 quy cách, cùng mô tả; bảng giá KHÔNG ghi bảo hành → để trống)
+  { ma:'TERAZZY-1KG', ten:'Kingsmen Terazzy 1kg', dong:'Terrazy', nhom:'CHINH', don_vi:'Bộ 1kg', gia:385000, gia_sau:415800, bao_hanh:'',
+    thong_so:[{k:'Quy cách',v:'Bộ 1kg'},{k:'Đặc tính',v:'Sàn tự phẳng thông minh thế hệ mới, chuyên dụng để cải tạo sàn không cần đục phá. Thi công nhanh gọn chỉ với 4 bước, cho mặt sàn liền mạch dễ lau chùi, chống thấm và nấm mốc, bền đẹp như terrazzo cao cấp'}] },
+  { ma:'TERAZZY-3.5KG', ten:'Kingsmen Terazzy 3,5kg', dong:'Terrazy', nhom:'CHINH', don_vi:'Bộ 3,5kg', gia:1386000, gia_sau:1496880, bao_hanh:'',
+    thong_so:[{k:'Quy cách',v:'Bộ 3,5kg'},{k:'Đặc tính',v:'Sàn tự phẳng thông minh thế hệ mới, chuyên dụng để cải tạo sàn không cần đục phá. Thi công nhanh gọn chỉ với 4 bước, cho mặt sàn liền mạch dễ lau chùi, chống thấm và nấm mốc, bền đẹp như terrazzo cao cấp'}] },
+  { ma:'TERAZZY-7KG', ten:'Kingsmen Terazzy 7kg', dong:'Terrazy', nhom:'CHINH', don_vi:'Bộ 7kg', gia:2552000, gia_sau:2756160, bao_hanh:'',
+    thong_so:[{k:'Quy cách',v:'Bộ 7kg'},{k:'Đặc tính',v:'Sàn tự phẳng thông minh thế hệ mới, chuyên dụng để cải tạo sàn không cần đục phá. Thi công nhanh gọn chỉ với 4 bước, cho mặt sàn liền mạch dễ lau chùi, chống thấm và nấm mốc, bền đẹp như terrazzo cao cấp'}] },
+  { ma:'TERAZZY-21KG', ten:'Kingsmen Terazzy 21kg', dong:'Terrazy', nhom:'CHINH', don_vi:'Bộ 21kg', gia:6930000, gia_sau:7484400, bao_hanh:'',
+    thong_so:[{k:'Quy cách',v:'Bộ 21kg'},{k:'Đặc tính',v:'Sàn tự phẳng thông minh thế hệ mới, chuyên dụng để cải tạo sàn không cần đục phá. Thi công nhanh gọn chỉ với 4 bước, cho mặt sàn liền mạch dễ lau chùi, chống thấm và nấm mốc, bền đẹp như terrazzo cao cấp'}] },
+  // PHỤ TRỢ I — DỤNG CỤ KEO RON GẠCH
+  { ma:'KT700', ten:'Bộ dụng cụ thi công KT700', dong:'Kingsmen grout', nhom:'PHU_TRO', don_vi:'Bộ', gia:295000, gia_sau:318600, bao_hanh:'', thong_so:[] },
+  { ma:'KT800', ten:'Bộ dụng cụ thi công KT800', dong:'Kingsmen grout', nhom:'PHU_TRO', don_vi:'Bộ', gia:459000, gia_sau:495720, bao_hanh:'', thong_so:[] },
+  { ma:'SUNGTROLUC', ten:'Súng trợ lực bắn ron gạch Kingsmen', dong:'Kingsmen grout', nhom:'PHU_TRO', don_vi:'Cái', gia:300000, gia_sau:324000, bao_hanh:'', thong_so:[] },
+  { ma:'SUNGCO', ten:'Súng bắn ron gạch Kingsmen', dong:'Kingsmen grout', nhom:'PHU_TRO', don_vi:'Cái', gia:165000, gia_sau:178200, bao_hanh:'', thong_so:[] },
+  { ma:'SUNGDIEN', ten:'Súng bắn keo ron gạch Kingsmen bằng pin 21V', dong:'Kingsmen grout', nhom:'PHU_TRO', don_vi:'Cái', gia:4500000, gia_sau:4860000, bao_hanh:'',
+    thong_so:[{k:'Nguồn',v:'Pin 21V'}] },
+  { ma:'BICAU', ten:'Bi cầu di ron gạch', dong:'Kingsmen grout', nhom:'PHU_TRO', don_vi:'Bộ', gia:45000, gia_sau:48600, bao_hanh:'', thong_so:[] },
+  { ma:'BICAU4', ten:'Bi cầu 4 cây di ron gạch', dong:'Kingsmen grout', nhom:'PHU_TRO', don_vi:'Bộ', gia:45000, gia_sau:48600, bao_hanh:'', thong_so:[] },
+  { ma:'VITNAO', ten:'Vít nạo vét ron gạch', dong:'Kingsmen grout', nhom:'PHU_TRO', don_vi:'Cái', gia:50000, gia_sau:54000, bao_hanh:'', thong_so:[] },
+  { ma:'DAOSUI6', ten:'Dao sủi keo KT6', dong:'Kingsmen grout', nhom:'PHU_TRO', don_vi:'Cái', gia:125000, gia_sau:135000, bao_hanh:'', thong_so:[] },
+  { ma:'DAOSUI', ten:'Dao sủi keo KT3', dong:'Kingsmen grout', nhom:'PHU_TRO', don_vi:'Cái', gia:90000, gia_sau:97200, bao_hanh:'', thong_so:[] },
+  { ma:'SAP', ten:'Hũ sáp', dong:'Kingsmen grout', nhom:'PHU_TRO', don_vi:'Hộp', gia:50000, gia_sau:54000, bao_hanh:'', thong_so:[] },
+  { ma:'THANHMR-A', ten:'Thanh miết ron gạch loại thẳng', dong:'Kingsmen grout', nhom:'PHU_TRO', don_vi:'Cái', gia:680000, gia_sau:734400, bao_hanh:'',
+    thong_so:[{k:'Chất liệu',v:'Vonfram cao cấp'},{k:'Loại',v:'Thẳng'}] },
+  { ma:'THANHMR-B', ten:'Thanh miết ron góc', dong:'Kingsmen grout', nhom:'PHU_TRO', don_vi:'Cái', gia:620000, gia_sau:669600, bao_hanh:'',
+    thong_so:[{k:'Chất liệu',v:'Vonfram cao cấp'},{k:'Loại',v:'Góc'}] },
+  // PHỤ TRỢ II — SẢN PHẨM PHỤ TRỢ SÀN TERRAZY
+  { ma:'KEP100-0.5L', ten:'Kingsmen KEP100 Primer 0,5L', dong:'Terrazy', nhom:'PHU_TRO', don_vi:'Bộ 0,5L', gia:240000, gia_sau:259200, bao_hanh:'',
+    thong_so:[{k:'Loại',v:'Primer epoxy 2 thành phần gốc dung môi'},{k:'Đóng rắn',v:'Polyamide'},
+      {k:'Đặc tính',v:'Dạng sealer thẩm thấu/khoá nền; khô nhanh, kháng nước & hoá chất, bám dính tốt, giúp chống bụi – cố định bề mặt và tăng liên kết cho lớp epoxy tự phẳng/lớp phủ kế tiếp'}] },
+  { ma:'KEP100-2L', ten:'Kingsmen KEP100 Primer 2L', dong:'Terrazy', nhom:'PHU_TRO', don_vi:'Bộ 2L', gia:820000, gia_sau:885600, bao_hanh:'',
+    thong_so:[{k:'Loại',v:'Primer epoxy 2 thành phần gốc dung môi'},{k:'Đóng rắn',v:'Polyamide'},
+      {k:'Đặc tính',v:'Dạng sealer thẩm thấu/khoá nền; khô nhanh, kháng nước & hoá chất, bám dính tốt, giúp chống bụi – cố định bề mặt và tăng liên kết cho lớp epoxy tự phẳng/lớp phủ kế tiếp'}] },
+  { ma:'RULOVAI15', ten:'Rulo vải 15cm', dong:'Terrazy', nhom:'PHU_TRO', don_vi:'Cái', gia:30000, gia_sau:32400, bao_hanh:'',
+    thong_so:[{k:'Công dụng',v:'Lăn primer'}] },
+  { ma:'LANGAI-TERRAZY', ten:'Con lăn gai 15cm', dong:'Terrazy', nhom:'PHU_TRO', don_vi:'Cái', gia:120000, gia_sau:129600, bao_hanh:'',
+    thong_so:[{k:'Công dụng',v:'Phá bọt khí, phẳng bề mặt sơn Terrazy'}] },
+  { ma:'LANGAI-22CM', ten:'Con lăn gai 22cm', dong:'Terrazy', nhom:'PHU_TRO', don_vi:'Cái', gia:150000, gia_sau:162000, bao_hanh:'',
+    thong_so:[{k:'Công dụng',v:'Phá bọt khí, phẳng bề mặt sơn Terrazy'}] },
+  { ma:'GIAYDINH', ten:'Giày đinh thi công sơn Terrazy', dong:'Terrazy', nhom:'PHU_TRO', don_vi:'Đôi', gia:180000, gia_sau:194400, bao_hanh:'', thong_so:[] },
+  // Bảng giá liệt kê nhưng BỎ TRỐNG đơn vị và giá — giữ nguyên trống, chờ công bố.
+  { ma:'BANGATTHEP-30', ten:'Bàn gạt thép răng cưa 30cm', dong:'Terrazy', nhom:'PHU_TRO', don_vi:'', gia:null, gia_sau:null, bao_hanh:'', thong_so:[] },
+  { ma:'GATNHUA-QUEKHUAY', ten:'Gạt nhựa răng cưa + que khuấy sơn (lớn)', dong:'Terrazy', nhom:'PHU_TRO', don_vi:'', gia:null, gia_sau:null, bao_hanh:'', thong_so:[] },
+];
+// Nạp bảng giá: CHỈ thêm mã chưa có. Cố ý KHÔNG ghi đè sản phẩm đã tồn tại —
+// người dùng có thể đã sửa tay, seed chạy mỗi lần khởi động isolate không được đạp lên.
+async function seedBangGia(env){
+  const co=(await env.DB.prepare(`SELECT ma,ten FROM san_pham`).all()).results;
+  const daCo=new Set(co.map(r=>String(r.ma||r.ten||'').trim().toLowerCase()).filter(Boolean));
+  const them=BANG_GIA_KINGSMEN.filter(p=>!daCo.has(String(p.ma||p.ten).trim().toLowerCase()));
+  if(!them.length) return 0;
+  await env.DB.batch(them.map(p=>env.DB.prepare(
+    `INSERT INTO san_pham (id,ma,ten,dong,nhom,don_vi,gia_truoc_thue,thue_vat,gia_sau_thue,bao_hanh,gia_ap_dung_tu,thong_so,tieu_chuan,huong_dan,anh,active,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,'','','',1,?)`)
+    .bind(uid('sp'), p.ma||'', p.ten, p.dong, p.nhom, p.don_vi||'',
+          p.gia==null?null:p.gia, p.gia==null?null:VAT_BANG_GIA, p.gia==null?null:p.gia_sau,
+          p.bao_hanh||'', GIA_AP_DUNG_TU, JSON.stringify(p.thong_so||[]), nowISO())));
+  return them.length;
+}
+
 // ---------- khởi tạo schema + seed ----------
 let SCHEMA_READY = false;
 async function ensureSchema(env){
@@ -141,6 +240,15 @@ async function ensureSchema(env){
   try { await env.DB.prepare(`ALTER TABLE content_items ADD COLUMN so_lan_tra INTEGER DEFAULT 0`).run(); } catch(e){}
   // cờ DEV PREVIEW: chỉ tài khoản is_dev=1 thấy các module đang nâng cấp
   try { await env.DB.prepare(`ALTER TABLE users ADD COLUMN is_dev INTEGER DEFAULT 0`).run(); } catch(e){}
+  // BẢNG GIÁ NIÊM YẾT — giá/đơn vị/bảo hành. Giá để REAL không DEFAULT: hàng cũ và hàng
+  // chưa công bố giá phải là NULL ("chưa có giá"), KHÔNG được rơi về 0 thành giá thật.
+  try { await env.DB.prepare(`ALTER TABLE san_pham ADD COLUMN nhom TEXT DEFAULT 'CHINH'`).run(); } catch(e){}
+  try { await env.DB.prepare(`ALTER TABLE san_pham ADD COLUMN don_vi TEXT DEFAULT ''`).run(); } catch(e){}
+  try { await env.DB.prepare(`ALTER TABLE san_pham ADD COLUMN gia_truoc_thue REAL`).run(); } catch(e){}
+  try { await env.DB.prepare(`ALTER TABLE san_pham ADD COLUMN thue_vat REAL`).run(); } catch(e){}
+  try { await env.DB.prepare(`ALTER TABLE san_pham ADD COLUMN gia_sau_thue REAL`).run(); } catch(e){}
+  try { await env.DB.prepare(`ALTER TABLE san_pham ADD COLUMN bao_hanh TEXT DEFAULT ''`).run(); } catch(e){}
+  try { await env.DB.prepare(`ALTER TABLE san_pham ADD COLUMN gia_ap_dung_tu TEXT DEFAULT ''`).run(); } catch(e){}
 
   // seed pricing
   const pr = await env.DB.prepare(`SELECT id FROM pricing WHERE id=1`).first();
@@ -203,6 +311,9 @@ async function ensureSchema(env){
     await env.DB.prepare(`INSERT INTO content_strategy (id,okr,big_idea,purpose,audience,swot,updated_at) VALUES (1,?,?,?,?,?,?)`)
       .bind('Xây dựng nhận diện thương hiệu Kingsmen; tăng tiếp xúc & niềm tin với khách hàng.','Your satisfaction – Our quality – Persistence over time','Tăng độ nhận diện thương hiệu; tiếp xúc khách hàng, tạo niềm tin; thúc đẩy chuyển đổi.','','',nowISO()).run();
   }
+
+  // CONTENT OS · P1 — nạp bảng giá niêm yết Kingsmen (chỉ thêm mã còn thiếu)
+  try { await seedBangGia(env); } catch(e){}
 
   // CONTENT OS · P3 — seed 12 nhóm kịch bản THẬT (từ file ecom) + kênh thật
   const anyFw = await env.DB.prepare(`SELECT id FROM frameworks LIMIT 1`).first();
@@ -274,6 +385,17 @@ async function seedFilming(env){
 // ---------- helpers ----------
 const bool = v => v?1:0;
 const uBool = v => !!v;
+// Tiền: ô trống / rác → null ("chưa có giá"), KHÔNG rơi về 0 — 0đ đọc thành "miễn phí".
+function soTien(v){
+  if(v==null || v==='') return null;
+  if(typeof v==='number') return Number.isFinite(v)&&v>=0 ? v : null;
+  let s=String(v).trim().replace(/\s/g,'');
+  // "1.089.000" / "1,089,000" = phân cách nghìn → bỏ hết. Còn "8,5" = thập phân → giữ.
+  if(/^\d{1,3}([.,]\d{3})+$/.test(s)) s=s.replace(/[.,]/g,'');
+  else s=s.replace(/,/g,'.');
+  const n=Number(s);
+  return Number.isFinite(n) && n>=0 ? n : null;
+}
 function rowUser(u){ if(!u) return null; return { id:u.id, ho_ten:u.ho_ten, email:u.email, vai_tro:u.vai_tro, active:uBool(u.active), is_dev:uBool(u.is_dev), created_at:u.created_at }; }
 function rowGroup(g){ return { ...g, active:uBool(g.active), uu_tien:uBool(g.uu_tien) }; }
 function rowTopic(t){ return { ...t, active:uBool(t.active), uu_tien:uBool(t.uu_tien), tags: JSON.parse(t.tags||'[]') }; }
@@ -562,7 +684,7 @@ async function goiAI(env, {system, messages, max_tokens=4000}){
 async function boiCanhAI(env, me){
   const q=async(sql)=>(await env.DB.prepare(sql).all()).results;
   const [sp,cc,pil,fw,kn,ci,scr,ap,air,kq,tr,sx,bh]=await Promise.all([
-    q(`SELECT ten,dong,thong_so,tieu_chuan,huong_dan FROM san_pham WHERE active=1`),
+    q(`SELECT ma,ten,dong,nhom,don_vi,gia_sau_thue,bao_hanh,thong_so,tieu_chuan,huong_dan FROM san_pham WHERE active=1`),
     q(`SELECT cum_tu,ly_do,muc_do FROM claim_cam WHERE active=1`),
     q(`SELECT ten,ty_trong,objective FROM pillars WHERE active=1`),
     q(`SELECT ten FROM frameworks WHERE active=1`),
@@ -582,7 +704,11 @@ async function boiCanhAI(env, me){
   return {
     chien_luoc:{ okr:strat.okr||'', big_idea:strat.big_idea||'', doi_tuong:strat.audience||'', brand_voice:strat.brand_voice||'' },
     tru_cot: pil.map(p=>({ten:p.ten, muc_tieu_phan_tram:p.ty_trong, dinh_huong:p.objective})),
-    san_pham: sp.map(x=>({ten:x.ten, dong:x.dong, thong_so:JSON.parse(x.thong_so||'[]'), tieu_chuan:x.tieu_chuan, huong_dan:x.huong_dan})),
+    // Chatbot nội bộ ĐƯỢC biết giá niêm yết (nhân viên hay hỏi); giá chưa công bố để null,
+    // không đưa 0 sang AI. Kịch bản đăng công khai thì KHÔNG nhận giá — xem /scripts/ai-sinh.
+    san_pham: sp.map(x=>({ma:x.ma, ten:x.ten, dong:x.dong, nhom:x.nhom, don_vi:x.don_vi,
+      gia_niem_yet_sau_thue: x.gia_sau_thue==null?null:x.gia_sau_thue, bao_hanh:x.bao_hanh||'',
+      thong_so:JSON.parse(x.thong_so||'[]'), tieu_chuan:x.tieu_chuan, huong_dan:x.huong_dan})),
     cum_tu_cam: cc.map(c=>({cum_tu:c.cum_tu, ly_do:c.ly_do, muc_do:c.muc_do})),
     framework: fw.map(x=>x.ten), kenh: kn.map(x=>({ten:x.ten,loai:x.loai})),
     ke_hoach:{ tong:ci.length, theo_giai_doan:dem(ci,x=>x.trang_thai), theo_thang:dem(ci,x=>x.thang) },
@@ -1420,8 +1546,11 @@ async function handleApi(request, env){
   if(path==='/sanpham' && method==='POST'){
     if(!canBaseData(me)) return json({error:'Không có quyền'},403);
     const id=uid('sp'); const ts=Array.isArray(body.thong_so)?body.thong_so:[];
-    await env.DB.prepare(`INSERT INTO san_pham (id,ma,ten,dong,thong_so,tieu_chuan,huong_dan,anh,active,created_at) VALUES (?,?,?,?,?,?,?,?,1,?)`)
-      .bind(id,(body.ma||'').trim(),(body.ten||'').trim(),(body.dong||'').trim(),JSON.stringify(ts),(body.tieu_chuan||'').trim(),(body.huong_dan||'').trim(),(body.anh||'').trim(),nowISO()).run();
+    const gia=soTien(body.gia_truoc_thue), giaSau=soTien(body.gia_sau_thue), vat=soTien(body.thue_vat);
+    await env.DB.prepare(`INSERT INTO san_pham (id,ma,ten,dong,nhom,don_vi,gia_truoc_thue,thue_vat,gia_sau_thue,bao_hanh,gia_ap_dung_tu,thong_so,tieu_chuan,huong_dan,anh,active,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,?)`)
+      .bind(id,(body.ma||'').trim(),(body.ten||'').trim(),(body.dong||'').trim(),(body.nhom||'CHINH').trim(),(body.don_vi||'').trim(),
+        gia, vat, giaSau, (body.bao_hanh||'').trim(), (body.gia_ap_dung_tu||'').trim(),
+        JSON.stringify(ts),(body.tieu_chuan||'').trim(),(body.huong_dan||'').trim(),(body.anh||'').trim(),nowISO()).run();
     await logAudit(env,me,'thêm sản phẩm','san_pham',id,(body.ten||'').trim());
     return json({ db: await bootstrap(env, me) });
   }
@@ -1430,9 +1559,14 @@ async function handleApi(request, env){
     const id=m[1]; const r=await env.DB.prepare(`SELECT * FROM san_pham WHERE id=?`).bind(id).first();
     if(!r) return json({error:'Không tìm thấy'},404);
     const g=(k,d)=> body[k]!=null?String(body[k]).trim():d;
+    // Giá: gửi '' hoặc null = XOÁ về "chưa có giá". Không gửi field = giữ nguyên.
+    const gn=(k,d)=> body[k]===undefined ? d : soTien(body[k]);
     const ts = body.thong_so!=null ? JSON.stringify(Array.isArray(body.thong_so)?body.thong_so:[]) : r.thong_so;
-    await env.DB.prepare(`UPDATE san_pham SET ma=?, ten=?, dong=?, thong_so=?, tieu_chuan=?, huong_dan=?, anh=?, active=? WHERE id=?`)
-      .bind(g('ma',r.ma),g('ten',r.ten),g('dong',r.dong),ts,g('tieu_chuan',r.tieu_chuan),g('huong_dan',r.huong_dan),g('anh',r.anh),body.active!=null?bool(body.active):r.active,id).run();
+    await env.DB.prepare(`UPDATE san_pham SET ma=?, ten=?, dong=?, nhom=?, don_vi=?, gia_truoc_thue=?, thue_vat=?, gia_sau_thue=?, bao_hanh=?, gia_ap_dung_tu=?, thong_so=?, tieu_chuan=?, huong_dan=?, anh=?, active=? WHERE id=?`)
+      .bind(g('ma',r.ma),g('ten',r.ten),g('dong',r.dong),g('nhom',r.nhom||'CHINH'),g('don_vi',r.don_vi||''),
+        gn('gia_truoc_thue',r.gia_truoc_thue), gn('thue_vat',r.thue_vat), gn('gia_sau_thue',r.gia_sau_thue),
+        g('bao_hanh',r.bao_hanh||''), g('gia_ap_dung_tu',r.gia_ap_dung_tu||''),
+        ts,g('tieu_chuan',r.tieu_chuan),g('huong_dan',r.huong_dan),g('anh',r.anh),body.active!=null?bool(body.active):r.active,id).run();
     await logAudit(env,me,'sửa sản phẩm','san_pham',id);
     return json({ db: await bootstrap(env, me) });
   }
@@ -2217,6 +2351,7 @@ async function handleApi(request, env){
     // khi có, bắt AI viết ĐÚNG những bước này, không bịa cảnh không có source.
     const cacBuoc=Array.isArray(body.cac_buoc)?body.cac_buoc.map(s=>String(s||'').trim()).filter(Boolean).slice(0,60):[];
     const sys='Bạn viết kịch bản video ngắn cho thương hiệu vật liệu xây dựng Kingsmen.\n'+AI_NGUYEN_TAC+'\n'+
+      'KHÔNG nêu giá bán, khuyến mãi hay con số tiền nào — bảng giá thay đổi theo đợt còn video đã đăng thì nằm đó mãi. Cần nói về giá thì viết "[điền giá]".\n'+
       (cacBuoc.length
         ? '7. Nguồn quay THẬT chỉ có các bước liệt kê trong "CÁC BƯỚC CÓ SẴN" — mỗi mục sections BẮT BUỘC gắn field "buoc" bằng ĐÚNG NGUYÊN VĂN một tên trong danh sách đó (copy y hệt, không đổi chữ). KHÔNG viết cảnh nào không có bước tương ứng trong danh sách. Nếu là hook mở đầu hoặc CTA không cần cảnh quay riêng thì để "buoc":null.\n'
         : '')+
@@ -2226,6 +2361,9 @@ async function handleApi(request, env){
       'SẢN PHẨM: '+(sp?sp.ten:'(chưa chọn)')+'\n'+
       'THÔNG SỐ THẬT (chỉ được dùng những cái này): '+(thongSo.length?JSON.stringify(thongSo):'(chưa có)')+'\n'+
       'TIÊU CHUẨN: '+((sp&&sp.tieu_chuan)||'(chưa có)')+'\n'+
+      // Bảo hành là cam kết chính thức trong bảng giá → được trích. GIÁ thì KHÔNG gửi:
+      // bảng giá đổi theo đợt, còn video đã đăng thì sống mãi với con số cũ.
+      'BẢO HÀNH (cam kết chính thức, được trích nguyên văn): '+((sp&&sp.bao_hanh)||'(chưa có)')+'\n'+
       'HƯỚNG DẪN DÙNG: '+((sp&&sp.huong_dan)||'(chưa có)')+'\n'+
       'KÊNH: '+(kn?(kn.ten+' ('+kn.loai+')'):'(chưa chọn)')+'\n'+
       'TÔNG GIỌNG: '+(strat.brand_voice||'(chưa đặt)')+'\n'+
