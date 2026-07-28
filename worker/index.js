@@ -2194,6 +2194,15 @@ async function handleApi(request, env){
   }
 
   // ===== AI viết kịch bản (P4) =====
+  // Danh mục rút gọn để nơi khác (vd công cụ Lọc video) chọn framework/sản phẩm/kênh
+  // trước khi gọi /scripts/ai-sinh — KHÔNG trả brand_voice/claim_cam ở đây (giữ trong prompt server).
+  if(path==='/scripts/ngu-canh' && method==='GET'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    const fw=(await env.DB.prepare(`SELECT id,ten,mo_ta FROM frameworks WHERE active=1 ORDER BY ten`).all()).results;
+    const sp=(await env.DB.prepare(`SELECT id,ten FROM san_pham WHERE active=1 ORDER BY ten`).all()).results;
+    const kn=(await env.DB.prepare(`SELECT id,ten,loai FROM kenh WHERE active=1 ORDER BY ten`).all()).results;
+    return json({frameworks:fw, san_pham:sp, kenh:kn});
+  }
   if(path==='/scripts/ai-sinh' && method==='POST'){
     if(!isStaff(me)) return json({error:'Không có quyền'},403);
     const fw=body.framework_id ? await env.DB.prepare(`SELECT * FROM frameworks WHERE id=?`).bind(body.framework_id).first() : null;
@@ -2204,8 +2213,14 @@ async function handleApi(request, env){
     const claims=(await env.DB.prepare(`SELECT * FROM claim_cam WHERE active=1`).all()).results;
     const bh=(await env.DB.prepare(`SELECT tieu_de,noi_dung FROM bai_hoc WHERE trang_thai='DA_DUYET' LIMIT 5`).all()).results;
     const thongSo = sp ? JSON.parse(sp.thong_so||'[]') : [];
+    // Danh sách bước quay CÓ THẬT trong nguồn footage đã import (vd từ công cụ Lọc video) —
+    // khi có, bắt AI viết ĐÚNG những bước này, không bịa cảnh không có source.
+    const cacBuoc=Array.isArray(body.cac_buoc)?body.cac_buoc.map(s=>String(s||'').trim()).filter(Boolean).slice(0,60):[];
     const sys='Bạn viết kịch bản video ngắn cho thương hiệu vật liệu xây dựng Kingsmen.\n'+AI_NGUYEN_TAC+'\n'+
-      'CHỈ trả về JSON thuần dạng {"tieu_de":"...","hook":"...","sections":[{"label":"...","text":"..."}],"cta":"..."} — không giải thích, không markdown fence.\n'+
+      (cacBuoc.length
+        ? '7. Nguồn quay THẬT chỉ có các bước liệt kê trong "CÁC BƯỚC CÓ SẴN" — mỗi mục sections BẮT BUỘC gắn field "buoc" bằng ĐÚNG NGUYÊN VĂN một tên trong danh sách đó (copy y hệt, không đổi chữ). KHÔNG viết cảnh nào không có bước tương ứng trong danh sách. Nếu là hook mở đầu hoặc CTA không cần cảnh quay riêng thì để "buoc":null.\n'
+        : '')+
+      'CHỈ trả về JSON thuần dạng {"tieu_de":"...","hook":"...","sections":[{"label":"...","buoc":'+(cacBuoc.length?'"<tên bước nguyên văn hoặc null>"':'null')+',"text":"..."}],"cta":"..."} — không giải thích, không markdown fence.\n'+
       'Nếu thiếu dữ kiện để nói một điều gì đó, viết "[điền …]" thay vì bịa.';
     const usr='FRAMEWORK: '+fw.ten+(fw.mo_ta?(' — '+fw.mo_ta):'')+'\n'+
       'SẢN PHẨM: '+(sp?sp.ten:'(chưa chọn)')+'\n'+
@@ -2217,6 +2232,7 @@ async function handleApi(request, env){
       'ĐỐI TƯỢNG: '+(strat.audience||'(chưa đặt)')+'\n'+
       'CỤM TỪ CẤM (tuyệt đối tránh): '+JSON.stringify(claims.map(c=>c.cum_tu))+'\n'+
       (bh.length?('BÀI HỌC ĐÃ DUYỆT TỪ DỮ LIỆU THẬT:\n'+bh.map(b=>'- '+b.tieu_de+': '+String(b.noi_dung||'').slice(0,200)).join('\n')+'\n'):'')+
+      (cacBuoc.length?('CÁC BƯỚC CÓ SẴN TRONG NGUỒN QUAY (theo đúng thứ tự, chỉ được dùng những bước này):\n'+cacBuoc.map((b,idx)=>(idx+1)+'. '+b).join('\n')+'\n'):'')+
       'GÓC NHÌN: '+((body.angle||'').trim()||'(tự chọn góc phù hợp framework)');
     const r=await goiAI(env,{system:sys, messages:[{role:'user',content:usr}], max_tokens:2000});
     if(!r.ok) return json({ok:false, thieu_key:!!r.thieu_key, loi:r.loi},200);
@@ -2225,7 +2241,10 @@ async function handleApi(request, env){
     if(i<0||k<0) return json({ok:false, loi:'AI không trả về JSON'},200);
     let kb; try{ kb=JSON.parse(txt.slice(i,k+1)); }catch(e){ return json({ok:false, loi:'JSON từ AI hỏng: '+e.message},200); }
     if(!kb || (!kb.hook && !kb.tieu_de)) return json({ok:false, loi:'AI trả kịch bản rỗng'},200);
-    kb.sections=Array.isArray(kb.sections)?kb.sections.filter(x=>x&&(x.label||x.text)):[];
+    kb.sections=Array.isArray(kb.sections)?kb.sections.filter(x=>x&&(x.label||x.text)).map(x=>({
+      label:x.label||'', text:x.text||'',
+      buoc:(cacBuoc.length && x.buoc && cacBuoc.includes(String(x.buoc).trim())) ? String(x.buoc).trim() : null,
+    })):[];
     // Guardrail: AI vẫn có thể lỡ dùng cụm cấm → kiểm lại, mức CHẶN thì TỪ CHỐI
     const flags=scanScriptClaims(scriptText(kb), claims);
     const chan=flags.filter(f=>f.muc_do==='CHAN');

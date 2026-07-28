@@ -353,7 +353,14 @@ Tokens Tailwind (inline config trong `seeding-app.html`): `ink #0b3543` (soft #1
   - `DanLinkTrend` giờ nhận `initial` để prefill (`ten`/`link`/`mo_ta`) và **gửi kèm mô tả khi lưu** (trước đây bị bỏ trống cứng).
   - Chỉ chạy được trên **trình duyệt máy tính** — nói rõ trong UI, không giả vờ hoạt động trên app di động của TikTok/Facebook.
   - (16 test mã sinh ra + chạy thật qua `eval` mô phỏng DOM, 10 test nối dây UI)
-- 📌 **Tổng test đang xanh: 603** (toàn bộ `scratchpad/test_*.mjs`), trong đó AI đánh giá trend 40.
+- ✅ **AI VIẾT KỊCH BẢN theo nguồn + định hướng thương hiệu** (nút **✨ AI viết** trong panel "Dựng video" của `tools/loc-video.html`) — trả lời câu hỏi "viết kịch bản vừa khớp source vừa đúng định hướng" bằng cách **nối 2 hệ AI đã có sẵn**, không tạo agent/skill riêng biệt:
+  - `tools/loc-video.html` chạy 100% cục bộ, **không có** dữ liệu pillar/brand voice/cụm từ cấm (những thứ đó chỉ nằm trong D1 của Worker). Vì cùng origin với app (`appseeding.masfico.vn`), công cụ đọc thẳng `localStorage['kingsmen_token']` (`appToken()`) để gọi API app **bằng đúng phiên đăng nhập đang có** — không cần đăng nhập lại, không có endpoint công khai mới nào lộ dữ liệu thương hiệu.
+  - `GET /scripts/ngu-canh` (staff-only, mới) — danh mục rút gọn framework/sản phẩm/kênh để chọn trước khi sinh; **cố ý không trả** `brand_voice`/`cụm từ cấm` (những cái đó chỉ nằm trong prompt phía server, không lộ qua API).
+  - `POST /scripts/ai-sinh` (đã có từ Creative Studio) mở rộng nhận thêm `cac_buoc` = danh sách bước quay **CÓ THẬT** trong nguồn đã nạp (`poolSteps()`). Khi có, system prompt bắt AI gắn field `buoc` bằng **đúng nguyên văn** một tên trong danh sách cho từng section — AI tự xưng bước không có trong danh sách thì server **gạt về `null`**, không tin AI (đúng nguyên tắc "không bịa").
+  - **Toàn bộ guardrail cũ giữ nguyên**: `AI_NGUYEN_TAC`, quét cụm từ cấm (`CHẶN` → từ chối trả kết quả), chỉ trích thông số/tiêu chuẩn thật của sản phẩm — không thêm đường tắt riêng cho luồng này.
+  - Kết quả đổ vào ô kịch bản dạng `<tên bước nguyên văn>: <lời bình>` — khớp thẳng vào bộ so khớp bước đã có (`parseScriptRules`/`poolSteps`), nên bấm tiếp **🪄 AI DỰNG** như bình thường là lên timeline, không cần đổi gì ở bộ dựng.
+  - Không có token app (mở tool ở máy chưa đăng nhập / ngoài origin) → báo rõ lý do, không âm thầm hỏng hay tự bịa định hướng thương hiệu. Lỗi AI (thiếu key/chặn claim) → giữ nguyên kịch bản đang có, không ghi đè. (30 test backend `test_ai.mjs` + 28 test UI `test_kbai.mjs`, trong đó có mô phỏng chạy thật qua `new Function`)
+- 📌 **Tổng test đang xanh: 641** (toàn bộ `scratchpad/test_*.mjs`), trong đó AI đánh giá trend 40.
 - ✅ **ĐÃ XONG TOÀN BỘ P1→P10.** Còn lại là các mảnh nhỏ: vai trò `TRUONG_MKT`/`GIAM_DOC` riêng, `can()` tập trung (P0), và nâng P4 lên gợi ý AI khi có `ANTHROPIC_API_KEY`.
 
 ### ⚙️ Quy trình deploy (CẬP NHẬT)

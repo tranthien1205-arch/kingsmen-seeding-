@@ -777,6 +777,8 @@
         <div style="display:flex;flex-direction:column;gap:6px">
           <button class="stbtn stbtn-ai" style="padding:9px 18px;font-size:13px;justify-content:center" onclick="aiBuildTimeline()"
                   title="AI đọc kịch bản → tách cảnh → chọn shot khớp trong kho → tự căn thời lượng theo lời bình">🪄 AI DỰNG</button>
+          <button class="stbtn" style="justify-content:center;font-size:11px" onclick="kbAiPopOpen()"
+                  title="Chưa có kịch bản? AI viết mới — chỉ dùng đúng các bước có thật trong nguồn, đúng định hướng thương hiệu (pillar/tông giọng/cụm từ cấm) lấy từ app">✨ AI viết</button>
           <button class="stbtn" style="justify-content:center;font-size:11px" onclick="document.getElementById('scriptFile').click()"
                   title="Tải kịch bản từ file .txt">⬆ .txt</button>
           <button class="stbtn" style="justify-content:center;font-size:11px" onclick="kbPopOpen()"
@@ -1117,6 +1119,38 @@
       <span style="margin-left:auto"></span>
       <button class="stbtn stbtn-ai" style="padding:9px 20px;font-size:13.5px" onclick="kbPopDung()">🪄 AI DỰNG VIDEO</button>
     </div>
+  </div>
+</div>
+
+<div id="kbAiPop" class="hidden" onclick="if(event.target===this)kbAiPopClose()"
+     style="position:fixed;inset:0;z-index:10000;background:rgba(10,25,20,.55);display:flex;align-items:center;justify-content:center">
+  <div style="background:#fff;border-radius:12px;width:min(560px,94vw);max-height:92vh;overflow:auto;display:flex;flex-direction:column;padding:16px 18px;box-shadow:0 12px 40px rgba(0,0,0,.35)">
+    <div class="strow" style="margin-bottom:6px">
+      <b style="font-size:15px">✨ AI viết kịch bản</b>
+      <button class="stbtn" style="margin-left:auto" onclick="kbAiPopClose()">✕ Đóng</button>
+    </div>
+    <div class="note" style="margin:0 0 10px">
+      Kịch bản chỉ dùng <b>các bước có thật trong nguồn</b> đã chọn (<span id="kbAiSoBuoc">0</span> bước) —
+      không bịa cảnh không có footage. Định hướng/tông giọng/cụm từ cấm lấy trực tiếp từ app, giống hệt Creative Studio.
+    </div>
+    <div id="kbAiCanToken" class="hidden" style="background:#FAEEDA;border:1px solid #EFD9A7;color:#8a5a10;border-radius:8px;padding:10px 12px;font-size:12.5px;margin-bottom:10px">
+      Chưa thấy phiên đăng nhập app. Mở công cụ này từ trong <b>Creative Studio</b> (đã đăng nhập) hoặc đăng nhập app ở tab khác trên cùng trình duyệt rồi mở lại — vì định hướng thương hiệu (pillar/tông giọng/cụm từ cấm) chỉ nằm trong dữ liệu app, công cụ này không tự có.
+    </div>
+    <div id="kbAiForm">
+      <label class="note" style="display:block;margin:0 0 3px">Framework <span style="color:#c0392b">*</span></label>
+      <select id="kbAiFw" style="width:100%;margin-bottom:8px"></select>
+      <label class="note" style="display:block;margin:0 0 3px">Sản phẩm</label>
+      <select id="kbAiSp" style="width:100%;margin-bottom:8px"><option value="">(chưa chọn)</option></select>
+      <label class="note" style="display:block;margin:0 0 3px">Kênh</label>
+      <select id="kbAiKn" style="width:100%;margin-bottom:8px"><option value="">(chưa chọn)</option></select>
+      <label class="note" style="display:block;margin:0 0 3px">Góc nhìn (tuỳ chọn)</label>
+      <input id="kbAiGoc" type="text" style="width:100%;margin-bottom:10px" placeholder="vd: chống ố cho nhà tắm">
+      <div class="strow">
+        <span style="margin-left:auto"></span>
+        <button class="stbtn stbtn-ai" style="padding:9px 20px;font-size:13.5px" id="kbAiBtn" onclick="kbAiSinh()">✨ Viết kịch bản</button>
+      </div>
+    </div>
+    <div class="note" id="kbAiStatus" style="margin-top:8px"></div>
   </div>
 </div>
 
@@ -5617,6 +5651,73 @@ function kbPopClose(){
   capNhatFlow();
 }
 function kbPopDung(){ kbPopClose(); aiBuildTimeline(); }
+// ---- ✨ AI VIET KICH BAN — dua vao cac buoc CO THAT trong nguon (poolSteps) +
+// dinh huong thuong hieu that cua app (goi /scripts/ai-sinh qua token dang nhap app,
+// cung origin nen doc chung duoc localStorage) — KHONG tu bia du lieu thuong hieu o day.
+function appToken(){ try{ return localStorage.getItem("kingsmen_token")||null; }catch(e){ return null; } }
+var _kbAiNguCanh=null;
+function kbAiPopOpen(){
+  if(!POOL.length){ announce("Chưa có nguồn shot — chọn nguồn ở đầu mục này trước.","err"); return; }
+  document.getElementById("kbAiSoBuoc").textContent=poolSteps().length;
+  var tok=appToken();
+  document.getElementById("kbAiCanToken").classList.toggle("hidden", !!tok);
+  document.getElementById("kbAiForm").classList.toggle("hidden", !tok);
+  document.getElementById("kbAiStatus").textContent="";
+  document.getElementById("kbAiPop").classList.remove("hidden");
+  if(!tok) return;
+  if(_kbAiNguCanh){ kbAiDienChon(_kbAiNguCanh); return; }
+  document.getElementById("kbAiStatus").textContent="Đang tải framework/sản phẩm/kênh từ app…";
+  fetch("/scripts/ngu-canh",{headers:{Authorization:"Bearer "+tok}}).then(function(r){ return r.json(); })
+    .then(function(j){
+      if(!j || !Array.isArray(j.frameworks)){ document.getElementById("kbAiStatus").textContent="⚠ Không đọc được danh mục từ app."; return; }
+      _kbAiNguCanh=j; kbAiDienChon(j);
+      document.getElementById("kbAiStatus").textContent="";
+    }).catch(function(){ document.getElementById("kbAiStatus").textContent="⚠ Không gọi được app — kiểm tra đã đăng nhập chưa."; });
+}
+function kbAiDienChon(j){
+  var fw=document.getElementById("kbAiFw");
+  fw.innerHTML = j.frameworks.length ? j.frameworks.map(function(x){ return '<option value="'+x.id+'">'+esc(x.ten)+'</option>'; }).join("")
+    : '<option value="">(chưa có framework trong app)</option>';
+  document.getElementById("kbAiSp").innerHTML = '<option value="">(chưa chọn)</option>'+
+    j.san_pham.map(function(x){ return '<option value="'+x.id+'">'+esc(x.ten)+'</option>'; }).join("");
+  document.getElementById("kbAiKn").innerHTML = '<option value="">(chưa chọn)</option>'+
+    j.kenh.map(function(x){ return '<option value="'+x.id+'">'+esc(x.ten)+'</option>'; }).join("");
+}
+function kbAiPopClose(){ document.getElementById("kbAiPop").classList.add("hidden"); }
+function kbAiSinh(){
+  var tok=appToken(); if(!tok) return;
+  var fwId=document.getElementById("kbAiFw").value;
+  if(!fwId){ document.getElementById("kbAiStatus").textContent="⚠ Chọn framework trước."; return; }
+  var btn=document.getElementById("kbAiBtn"); btn.disabled=true;
+  document.getElementById("kbAiStatus").textContent="🧠 AI đang viết kịch bản theo đúng nguồn + định hướng thương hiệu…";
+  fetch("/scripts/ai-sinh",{method:"POST",headers:{"Content-Type":"application/json",Authorization:"Bearer "+tok},
+    body:JSON.stringify({
+      framework_id:fwId,
+      san_pham_id:document.getElementById("kbAiSp").value||undefined,
+      kenh_id:document.getElementById("kbAiKn").value||undefined,
+      angle:document.getElementById("kbAiGoc").value||undefined,
+      cac_buoc:poolSteps(),
+    })}).then(function(r){ return r.json(); }).then(function(j){
+      btn.disabled=false;
+      if(!j || j.ok!==true){
+        document.getElementById("kbAiStatus").textContent="⚠ "+((j&&j.loi)||(j&&j.thieu_key&&"Chưa cắm ANTHROPIC_API_KEY trong app.")||"AI không viết được, thử lại.");
+        return;
+      }
+      var kb=j.kich_ban, dong=[];
+      if(kb.hook) dong.push(kb.hook);
+      var khopBuoc=0;
+      (kb.sections||[]).forEach(function(s){
+        if(s.buoc){ dong.push(s.buoc+": "+s.text); khopBuoc++; }
+        else if(s.text) dong.push(s.text);
+      });
+      if(kb.cta) dong.push(kb.cta);
+      document.getElementById("scriptText").value=dong.join("\n");
+      kbAiPopClose();
+      capNhatFlow();
+      announce("✨ AI đã viết kịch bản — "+khopBuoc+"/"+(kb.sections||[]).length+" cảnh khớp đúng bước có thật trong nguồn. Xem lại rồi bấm 🪄 AI DỰNG để xếp vào timeline."+
+        ((j.canh_bao&&j.canh_bao.length)?" (có "+j.canh_bao.length+" cụm từ cần chú ý, xem trong kịch bản)":""),"ok");
+    }).catch(function(){ btn.disabled=false; document.getElementById("kbAiStatus").textContent="⚠ Không gọi được app."; });
+}
 // ---- Thanh 🧠 TIM SHOT CHO CANH NAY — luon hien duoi canh dang chinh ----
 var timShotBeat=null, timShotCungBuoc=false;
 function timShotBuocToggle(){
