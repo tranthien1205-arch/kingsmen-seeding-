@@ -801,6 +801,7 @@ const NAV = {
     {key:'schedule', label:'Lịch đăng', icon:'📅'},
     {key:'users', label:'Tài khoản', icon:'👥'},
     {key:'pay_report', label:'Thanh toán', icon:'📄'},
+    {key:'locvideo', label:'Lọc & dựng video', short:'Lọc video', icon:'🎞️', href:'/tools/loc-video.html'},
   ],
   [ROLES.KY_THUAT]: [
     {key:'products', label:'Sản phẩm & Claim', short:'Sản phẩm', icon:'🧪'},
@@ -817,6 +818,7 @@ const NAV = {
     {key:'pricing', label:'Đơn giá', icon:'⚙️'},
     {key:'payroll', label:'Bảng lương', icon:'🧾'},
     {key:'audit', label:'Nhật ký', icon:'🕑'},
+    {key:'locvideo', label:'Lọc & dựng video', short:'Lọc video', icon:'🎞️', href:'/tools/loc-video.html'},
   ],
 };
 
@@ -849,6 +851,8 @@ function Shell(){
   const { me, logout, db } = useApp();
   const nav = (NAV[me.vai_tro]||[]).filter(item => me.is_dev || !BETA_KEYS.has(item.key));
   const [page, setPage] = useState((nav[0]||{}).key||'home');
+  // Mục có 'href' là công cụ nằm ngoài app (trang tĩnh riêng) — mở tab mới, không đổi màn.
+  const goNav = (n) => n.href ? window.open(n.href, '_blank', 'noopener') : setPage(n.key);
   const [profileOpen, setProfileOpen] = useState(false);
   const botNavRef = useRef(null);
   useEffect(()=>{ const el=botNavRef.current&&botNavRef.current.querySelector('[data-navkey="'+page+'"]'); if(el&&el.scrollIntoView) el.scrollIntoView({inline:'center', block:'nearest'}); }, [page]);
@@ -891,7 +895,7 @@ function Shell(){
         <div><div className="font-display font-700 leading-tight">Kingsmen</div><div className="text-[11px] text-white/40">Seeding</div></div>
       </div>
       <nav className="flex-1 p-2 space-y-1 overflow-y-auto">
-        {nav.map(n=><button key={n.key} onClick={()=>setPage(n.key)}
+        {nav.map(n=><button key={n.key} onClick={()=>goNav(n)}
           className={"w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition "+(page===n.key?'bg-brand text-white shadow-brand':'text-white/70 hover:bg-white/10')}>
           <span className="text-base">{n.icon}</span><span>{n.label}</span>
           {badgeFor(n.key)>0 && <span className="ml-auto bg-white text-ink text-xs font-bold px-1.5 rounded-full">{badgeFor(n.key)}</span>}
@@ -926,7 +930,7 @@ function Shell(){
     {/* Bottom nav mobile — cuộn ngang, mỗi mục 1 dòng, tự cuộn mục đang mở vào giữa */}
     <nav ref={botNavRef} className="sm:hidden fixed bottom-0 inset-x-0 z-20 bg-white/97 backdrop-blur border-t border-line flex overflow-x-auto no-scrollbar px-1"
       style={{paddingBottom:'env(safe-area-inset-bottom)'}}>
-      {nav.map(n=>{ const on=page===n.key; return <button key={n.key} data-navkey={n.key} onClick={()=>setPage(n.key)}
+      {nav.map(n=>{ const on=page===n.key; return <button key={n.key} data-navkey={n.key} onClick={()=>goNav(n)}
         className={"shrink-0 basis-[62px] flex flex-col items-center pt-1.5 pb-1 relative "+(on?'text-brand-dark':'text-ink-muted')}>
         {on && <span className="absolute top-0 inset-x-3 h-0.5 rounded-full bg-brand"></span>}
         <span className="text-lg leading-none relative">{n.icon}

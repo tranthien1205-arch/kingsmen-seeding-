@@ -1,7 +1,26 @@
 # KINGSMEN CONTENT & SEEDING OS — KẾ HOẠCH TRIỂN KHAI (bộ nhớ bền)
 
 > **Đọc file này ĐẦU TIÊN mỗi phiên.** Đây là nguồn sự thật về mục tiêu, kiến trúc, tiến độ, và cách build/test/deploy. Cập nhật file này sau MỖI lát cắt hoàn thành (mục "Changelog" + đổi trạng thái module).
-> Cập nhật lần cuối: sau khi deploy **P2** (commit `719852e`).
+> Cập nhật lần cuối: **2026-09-08** — sau **P3 lát cắt 2a** (commit `a8a6024`). Nhánh `claude/cap-nhat-hien-trang-v38et4` đang **bằng `main`**.
+
+---
+
+## ⚡ HIỆN TRẠNG ĐÃ KIỂM (ảnh chụp — chạy thật, không phải mô tả)
+Kiểm ngày 2026-09-08 trên đúng mã đang ở `main`:
+
+| Hạng mục | Kết quả |
+|---|---|
+| `dist/index.html` vs `seeding-app.html` | ✅ **trùng khớp** (3.740 dòng) — không lệch bản deploy |
+| `node --check worker/index.js` | ✅ hợp lệ (1.112 dòng) |
+| Babel transform khối `app-src` (preset react) | ✅ **BABEL OK** (3.675 dòng JSX) |
+| Bảng D1 tạo trong `migrate()` | ✅ **26 bảng** (19 Domain A + 7 Domain B) |
+| Test tích hợp Worker (mô phỏng D1 bằng `node:sqlite`) | ✅ **16/16 đạt** |
+
+**Seed thật khi dựng DB mới** (đếm từ `bootstrap`): `pillars` **4** · `frameworks` **12** · `kenh` **10** · `content_strategy` có OKR thật · tài khoản `mkt@kingsmen.vn` (MARKETING) + `dev@masfico.vn` (ADMIN, `is_dev=1`).
+
+**16 test đã chạy:** đăng nhập · bootstrap · seed 4 pillar/12 framework/10 kênh/OKR · tạo–sửa–xoá `content_items` · PIC theo khâu lưu đúng · `chi_tiet.ngay_dang` (nguồn của Lịch) lưu đúng · chuyển giai đoạn · import bỏ dòng rỗng · tạo tài khoản SALES · **SALES bị chặn ghi content (403)** · SALES vẫn đọc được dữ liệu nền · chưa có khoá AI.
+
+**⚠️ Lệch đã phát hiện & phải nhớ:** `san_pham` và `claim_cam` **đếm = 0 trên DB mới** — P1 chỉ giao *màn quản lý + endpoint*, **KHÔNG có seed dữ liệu thật**. §7 từng ghi "seed thẳng" là **sai thực tế**, đã sửa ở §7/§8. Hệ quả: **guardrail claim của P4 hiện rỗng** (không có cụm từ nào để chặn) → phải nhập dữ liệu trước khi làm P4.
 
 ---
 
@@ -87,15 +106,17 @@ App hiện tại KHÔNG phải Next.js/Supabase như brief gốc. Ta **thích �
 | `claim_cam` | P1 | ✅ | id, cum_tu, ly_do, muc_do(CANH_BAO/CHAN), active, created_at |
 | `pillars` | P2 | ✅ | id, ten, objective, point_of_difference, request, ty_trong(REAL %), thu_tu, active, created_at |
 | `content_strategy` | P2 | ✅ | id=1 singleton: okr, big_idea, purpose, audience, swot, updated_at |
-| `content_items` | P3 | ⏳ | XEM §5.P3 — trung tâm, 2 loại (ECOM/SOCIAL) |
-| `content_stages` / status | P3 | ⏳ | pipeline 6 giai đoạn (ECOM) / trạng thái (SOCIAL) |
-| `frameworks` | P3/P4 | ⏳ | 12 nhóm kịch bản thật (§7) |
-| `kenh` | P3 | ⏳ | kênh/shop đa thương hiệu (§7) |
+| `content_items` | P3 | ✅ | id, loai(ECOM/SOCIAL), tieu_de, loai_muc_tieu, pillar_id, framework_id, san_pham_id, kenh_id, thang, trang_thai, **pic**(JSON theo khâu), **chi_tiet**(JSON — chứa `ngay_dang` nuôi Lịch), links(JSON), created_at, created_by, created_by_name, updated_at |
+| ~~`content_stages`~~ | P3 | ✅ **không cần bảng riêng** | Giai đoạn là **cột `trang_thai`** trên `content_items`. 7 giá trị (`PIPELINE` trong frontend): `Y_TUONG` → `SCRIPT` → `QUAY` → `DUNG` → `CHO_DUYET` → `DA_DANG` → `DA_DO`. Dùng chung cho cả ECOM lẫn SOCIAL |
+| `frameworks` | P3/P4 | ✅ | id, ten, mo_ta, thu_tu, active, created_at — **seed 12 nhóm kịch bản thật** (§7) |
+| `kenh` | P3 | ✅ | id, ten, loai, thuong_hieu, active, created_at — **seed 10 kênh thật**; `loai` ∈ FANPAGE/TIKTOK/YOUTUBE/ZALO_OA/SHOPEE/WEBSITE |
 | `brand_voice` | P4 | ⏳ | tone, từ nên/cấm, CTA |
 | `script`, `script_version` | P4 | ⏳ | AI output có version/rollback |
 | `duyet_log` | P6 | ⏳ | cổng(nội dung/claim), kết quả, lý do |
 | `ket_qua` | P8 | ⏳ | chỉ số + mucTinCay(TRUC_TIEP/GIAN_TIEP/KHONG_QUY_DON) + nguồn |
 | `muc_tieu_thang` | P2b/P3 | ⏳ | (tuỳ chọn) tỷ lệ mục tiêu theo tháng để so lệch |
+
+**4 loại mục tiêu KPI** (`LOAI_MUC_TIEU_KPI`, bắt buộc khi tạo nội dung): `BAN_HANG` Bán hàng · `THUONG_HIEU` Thương hiệu · `KY_THUAT` Kỹ thuật · `KENH_DAI_LY` Kênh đại lý. Đây là 4 hệ KPI sẽ tách riêng ở P9 (KHÔNG cộng dồn).
 
 `bootstrap(env,u)` trả tất cả các mảng trên (đọc chung cho mọi vai trò; ghi thì gác quyền). Endpoint mutation luôn `return json({db: await bootstrap(env,me)})`.
 
@@ -117,6 +138,7 @@ Có 3 vai trò + KY_THUAT. ⏳ Còn: `can()` tập trung + 3 vai trò còn lại
 - UI: `ProductClaimManager` (nav `products`) — 2 tab, editor thông số key-value, upload ảnh, import/export CSV sản phẩm. Nav cho MARKETING/ADMIN/KY_THUAT.
 - Tiện ích: `scanClaims(text, claims)` (dùng lại ở P4).
 - **Dùng cho:** guardrail claim ở P4 (AI chỉ trích thong_so; chặn nếu chạm CHAN).
+- ⚠️ **CHƯA có seed dữ liệu:** `san_pham`/`claim_cam` rỗng trên DB mới (đã kiểm — xem §Hiện trạng). Màn hình chạy đủ nhưng **kho dữ liệu trống** → phải nhập/import trước khi P4 có tác dụng.
 
 ### ✅ P2 — Chiến lược & Pillar
 - Bảng: `pillars` (seed 4 THẬT: Branding 50/Information 30/Problems 15/Interaction 5), `content_strategy` (OKR/BigIdea/Purpose thật). Quyền: `isStaff`.
@@ -127,16 +149,17 @@ Có 3 vai trò + KY_THUAT. ⏳ Còn: `can()` tập trung + 3 vai trò còn lại
 ### ◐ P3 — Kế hoạch & lịch (THỐNG NHẤT ecom + social) — **module lớn nhất, thay 2 file Excel**
 **Lát cắt (1) ✅ ĐÃ LÀM & DEPLOY:** bảng `content_items`, `frameworks` (seed 12 nhóm kịch bản thật), `kenh` (seed 10 kênh thật). content_item có: loai(ECOM/SOCIAL), tieu_de, loai_muc_tieu(4 KPI), pillar_id, framework_id, san_pham_id, kenh_id, thang, trang_thai(7 giai đoạn PIPELINE), pic/chi_tiet/links(JSON), created_by. Endpoints: `POST/PATCH/DELETE /content` + `POST /content/import` + CRUD `/frameworks` `/kenh` (isStaff). UI `ContentPlan` (nav `plan`, MKT/ADMIN): **Kanban 7 cột + Danh sách**, lọc (loại/kênh/pillar/tháng), tạo/sửa (bắt buộc pillar+framework+kênh+mục tiêu), chuyển giai đoạn, **cảnh báo lệch tỷ lệ pillar >15%** (khi ≥5 mục), **Import CSV/paste**. Helper `insertContentItem`.
 **Lát cắt (2a) ✅:** **Calendar** (agenda theo ngày, mobile-first) — dùng `chi_tiet.ngay_dang`; **PIC theo từng khâu** (pic.ke_hoach/brief/quay/dung/dang/tracking — nền Trụ A); form mobile 1-cột. 3 view: Kanban/Danh sách/Lịch.
-**Lát cắt (2b) ⏳:** faithful .xlsx import 2 file (SheetJS) · đẩy "Chờ duyệt" sang P6.
+**Lát cắt (2b) ⏳ — VIỆC KẾ TIẾP:** faithful .xlsx import 2 file bằng SheetJS (139 video ecom + lịch social đa kênh) · đẩy trạng thái `CHO_DUYET` sang hàng đợi duyệt P6.
+**Đã kiểm chạy thật (§Hiện trạng):** tạo/sửa/xoá nội dung, chuyển giai đoạn, import bỏ dòng rỗng, PIC theo khâu và `ngay_dang` lưu đúng, SALES bị chặn ghi (403) nhưng vẫn đọc được dữ liệu nền.
 Thiết kế `content_items` bao cả 2 loại:
 - **Chung:** id, loai(ECOM|SOCIAL), tieu_de, pillar_id, framework_id, san_pham_id, kenh_id, **nguoi_phu_trach theo từng khâu** (PIC), trang_thai, thang(YYYY-MM), created_at, created_by. (4 chiều bắt buộc: pillar+loaiMucTieu, campaign, sanpham, framework+hook — KHÔNG cho lưu nếu thiếu.)
 - **ECOM (từ file 1):** 6 giai đoạn GĐ1 Kế hoạch → GĐ2 Brief → GĐ3 Quay → GĐ4 Dựng → GĐ5 Air → GĐ6 Tracking; các trường: loai_video, concept, link_kich_ban, PIC brief/quay/dựng/đăng/tracking, ngày quay/đăng, link final, link air, reup Shopee, ghi chú.
 - **SOCIAL (từ file 2):** lich_dang, content_pillar, format, content_angle, noi_dung, brief_thiet_ke, link_final, link_post.
-- **Views:** Kanban (6 cột ecom / trạng thái social) kéo-thả + Calendar tháng.
+- **Views (thực tế đang chạy):** 3 chế độ — **Kanban 7 cột** (dùng chung ECOM/SOCIAL) · **Danh sách** · **Lịch** (agenda theo ngày, đọc `chi_tiet.ngay_dang`, mobile-first).
 - **Import cả 2 file .xlsx** làm dữ liệu khởi tạo (139 video ecom + ~lịch social đa kênh).
 - **Cảnh báo lệch tỷ lệ** so với pillar (P2).
-- **Lát cắt:** (1) schema + import + list/Kanban → (2) calendar + cảnh báo lệch → (3) đẩy "Chờ duyệt" sang P6.
-- Thêm bảng phụ: `frameworks` (seed 12 nhóm kịch bản §7), `kenh` (seed kênh §7).
+- **Lát cắt:** (1) ✅ schema + import + list/Kanban → (2a) ✅ calendar + PIC theo khâu + cảnh báo lệch → (2b) ⏳ .xlsx faithful import + đẩy "Chờ duyệt" sang P6.
+- Bảng phụ `frameworks` (12 kịch bản §7) và `kenh` (10 kênh §7): ✅ đã tạo & seed.
 
 ### ⏳ P4 — Creative Studio (AI) — **thay chatbot rời**
 Chọn framework + brand_voice + sản phẩm + góc → Worker gọi Anthropic (cần API key) → output block (hook/problem/solution/proof/cta), lưu `script`+`script_version`. **Guardrail claim bắt buộc** (dùng `scanClaims` + chỉ trích `thong_so`): chạm CHAN → chặn "Gửi duyệt". Hook Optimizer 5 variant + lý do (KHÔNG dự đoán %). Cần: `ANTHROPIC_API_KEY`.
@@ -169,17 +192,18 @@ Chọn framework + brand_voice + sản phẩm + góc → Worker gọi Anthropic 
 - ~15 lịch kênh (Fanpage/TikTok/YT Short/Zalo/Shopee × Kingsmen/VKXD/Terrazy/ColorMatch): Lịch đăng·Content Pillar·Format·Content Angle·Nội dung·Brief thiết kế·Link Final·Link post → **P3 SOCIAL**
 - SEEDING PLAN, Group FB Thầu thợ → Domain A. Audience/SWOT → P2. HÌNH ẢNH → Thư viện ảnh.
 
-### DỮ LIỆU THẬT (seed thẳng, KHÔNG cần file json ngoài):
-- **Pillar (đã seed):** Branding 50 · Information 30 · Problems 15 · Interaction 5.
-- **Sản phẩm (dòng):** Finex · Terrazy · Keo Ron (+ Kingsmen grout, ColorMatch, FINEX, Sàn tự phẳng…).
-- **12 nhóm kịch bản = frameworks (seed ở P3/P4):** PAS · Phản biện comment · Test chất lượng · Hành trình thi công · Size/Combo · Chuẩn bán hàng · FOMO · Review KOC · "đừng..." Trend · Q&A khách hàng · So sánh kinh tế · Hướng dẫn thi công.
-- **Kênh/Shop:** BC-Vật liệu hoàn thiện · CHÍNH-Finex · AFF-Sơn sàn hiệu ứng · Vua keo xây dựng (+ các trang social ở file 2).
+### DỮ LIỆU THẬT — trạng thái seed (đã đếm trên DB mới, §Hiện trạng):
+- ✅ **Pillar (4, đã seed):** Branding 50 · Information 30 · Problems 15 · Interaction 5.
+- ✅ **12 nhóm kịch bản = `frameworks` (đã seed):** Chuẩn bán hàng · PAS · Phản biện comment · Test chất lượng · Hành trình thi công · Size/Combo · FOMO · Review KOC · "đừng..." Trend · Q&A khách hàng · So sánh kinh tế · Hướng dẫn thi công.
+- ✅ **10 kênh = `kenh` (đã seed):** Fanpage/TikTok/YouTube Short Kingsmen · Fanpage/TikTok/Shopee VKXD · Zalo OA · CHÍNH-Vật liệu mới FINEX · AFF-Sơn sàn hiệu ứng · BC-Vật liệu hoàn thiện.
+- ❌ **Sản phẩm & Claim cấm: CHƯA seed** (`san_pham`=0, `claim_cam`=0). Dự kiến các dòng Finex · Terrazy · Keo Ron (+ Kingsmen grout, ColorMatch, Sàn tự phẳng…) nhưng **chưa nằm trong `migrate()`**. Phải nhập tay qua màn `products` hoặc import CSV — **đây là chặn của P4** (§8).
 - **Pipeline ecom (6 GĐ):** ⚪ Mới lên kế hoạch → ✍️ Brief → 🛠 Sản xuất → 🎬 Chờ air → ✅ Đã air (+ Tracking).
 
 ---
 
 ## 8. CẦN USER CUNG CẤP (chặn các mốc)
-- ⏳ `ANTHROPIC_API_KEY` (Cloudflare secret) — cho **P4** Creative Studio.
+- ⏳ `ANTHROPIC_API_KEY` (Cloudflare secret) — cho **P4** Creative Studio. Đã kiểm: **chưa cắm ở bất kỳ đâu** (`wrangler.toml`/worker/frontend đều không có).
+- ⏳ **Nội dung Sản phẩm + Claim cấm thật** (spec kỹ thuật từng dòng · danh sách cụm từ cấm kèm mức CANH_BAO/CHAN) — cho **P4**. Hiện 2 bảng rỗng nên guardrail claim **không chặn được gì**. Cần Kỹ thuật (`KY_THUAT`) nhập, hoặc user gửi file để import.
 - ⏳ Baseline KPI 3 tháng thật — cho ngưỡng đạt/không đạt ở **P9** (nếu chưa có → để trống, ghi "chưa có baseline").
 - (Không còn cần `pillars.json`/`frameworks.json` riêng — đã có trong 2 file Excel.)
 
@@ -200,6 +224,9 @@ Tokens Tailwind (inline config trong `seeding-app.html`): `ink #0b3543` (soft #1
 - P3 lát cắt (1) — content_items + frameworks(12)/kenh(10) + CRUD/import + List/Kanban 7 cột + cảnh báo lệch pillar (13 test).
 - DEV PREVIEW — cờ `is_dev` + BETA_KEYS ẩn module nâng cấp khỏi user thường + seed `dev@masfico.vn`; Kanban mobile horizontal-scroll (7 test). **Ưu tiên mobile-first cho mọi màn Content OS từ đây.**
 - Mobile: thanh menu dưới cuộn ngang 1 dòng (nhãn ngắn + tự cuộn mục mở).
-- P3 lát cắt (2a) — Calendar (agenda) + PIC theo khâu + form mobile 1-cột (4 test).
+- `a8a6024` — P3 lát cắt (2a): Calendar (agenda theo ngày) + PIC theo khâu + form mobile 1-cột (4 test).
 - (Trước đó, Domain A: seeding/quay/lịch/thư viện ảnh/vinh danh/chống trùng… đã deploy.)
-- ▶️ **Kế tiếp:** P3 lát cắt (2) — Calendar + faithful .xlsx import (SheetJS) + PIC theo khâu + đẩy sang P6.
+- **2026-09-08 — Rà soát hiện trạng (không đổi code app):** đối chiếu tài liệu với mã thật, chạy lại toàn bộ validate + **16 test tích hợp (16/16 đạt)**. Sửa 5 chỗ tài liệu ghi sai/lỗi thời: mốc cập nhật còn đứng ở P2 · `content_items`/`frameworks`/`kenh` còn ⏳ dù đã ✅ · `content_stages` không tồn tại (là cột `trang_thai` 7 giá trị) · views ghi "6 cột" thay vì 3 chế độ Kanban-7-cột/Danh sách/Lịch · §7 khẳng định sản phẩm "seed thẳng" trong khi thực tế **chưa seed**. Thêm §Hiện trạng làm ảnh chụp hiện trạng đã kiểm.
+- **2026-09-22 — Khôi phục công cụ Lọc & dựng video (tầng TÍNH NĂNG, đường nhanh 0→3→5, không ADR):** lấy `tools/loc-video.html` (v4.0, 435 KB) + `tools/vendor/ffmpeg/` từ nhánh PR #9 (chưa merge) về `main`; đặt bản sao ở `dist/tools/` để Cloudflare phục vụ tĩnh qua binding ASSETS — **không sửa worker, không đổi schema, không đổi quyền**. Thêm mục menu **Lọc & dựng video** cho Marketing + Admin, kèm `goNav()` (mục có `href` mở tab mới thay vì đổi màn trong app). Đã kiểm: trang tải + render đủ 4 tab, `ffmpeg.js` nạp same-origin; `node --check` hợp lệ; BABEL OK (3.679 dòng); `dist/index.html` đồng bộ; worker **không đổi** nên 16 test backend không thể hồi quy.
+  - ⚠️ **Nợ kỹ thuật kèm theo:** (1) ffmpeg core (~32 MB) vẫn nạp từ **jsDelivr CDN**, chưa vendor — đúng bẫy đã làm hỏng import Excel trước đây; (2) hai nút `/scripts/ai-sinh` + `/scripts/ngu-canh` gọi Creative Studio (chỉ có ở PR #9) nên sẽ lỗi trên `main`, phần quét–lọc–bóc lời thoại–dựng vẫn chạy; (3) **bug có sẵn trên `main`:** `seedDB()` và `ensureDemoSlots()` dùng biến `now` chưa khai báo → chế độ DEMO crash khi đăng nhập (app thật `DEMO=false` nên không ảnh hưởng), **chưa sửa**.
+- ▶️ **Kế tiếp:** **P3 lát cắt (2b)** — faithful .xlsx import 2 file bằng SheetJS + đẩy `CHO_DUYET` sang P6. **Song song, việc rẻ mà gỡ chặn P4:** nhập/seed dữ liệu thật cho `san_pham` + `claim_cam` (§8).
