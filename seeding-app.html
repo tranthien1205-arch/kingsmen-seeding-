@@ -1507,7 +1507,7 @@ function Shell(){
         </div>}
       </header>
 
-      <main className="p-3 sm:p-2 max-w-5xl mx-auto">{render()}</main>
+      <main className="p-3 sm:p-2 w-full max-w-[1720px] mx-auto">{render()}</main>
     </div>
 
     {/* Bottom nav mobile — CHỈ 5 nhóm lớn, chia đều, không cuộn ngang */}
@@ -2487,7 +2487,7 @@ function LocVideoTool(){
     </div>
     <div className={full?'fixed inset-0 z-40 bg-white':'rounded-2xl overflow-hidden border border-line shadow-card'}>
       {full && <button onClick={()=>setFull(false)} className="absolute top-2 right-2 z-10 bg-ink text-white text-xs px-3 py-1.5 rounded-lg shadow-lift">✕ Đóng</button>}
-      <iframe src={LOC_VIDEO_URL} title="Lọc video" className={full?'w-full h-full border-0':'w-full border-0'} style={full?undefined:{height:'75vh'}} allow="camera; microphone"/>
+      <iframe src={LOC_VIDEO_URL} title="Lọc video" className={full?'w-full h-full border-0':'w-full border-0'} style={full?undefined:{height:'calc(100vh - 150px)',minHeight:640}} allow="camera; microphone"/>
     </div>
     <p className="text-[11px] text-slate-400">Nếu nút chọn folder không mở được trong khung này, bấm <b>Mở tab mới</b> — một số trình duyệt chỉ cho chọn folder ở tab riêng.</p>
     <CauNoiFootage/>
