@@ -165,6 +165,26 @@ Thay cho : (không)
 Ảnh hưởng: PIPELINE FE/BE, kanban/lọc/form/import, approvals CONTENT bỏ, air ready list, dashboard, demo.
 Người duyệt: Thiện · Trạng thái: ĐÃ DUYỆT (2026-09-23)
 ```
+```
+ADR-003 · 2026-09-23 · Vai trò TRUONG_MKT + GIAM_DOC; người gửi không tự duyệt
+Bối cảnh : MARKETING vừa soạn vừa duyệt cổng Nội dung; canDecideGate không chặn người gửi = người duyệt
+            (trái chuẩn người lập ≠ người duyệt). Chưa có vai trò xem-báo-cáo cho lãnh đạo.
+Quyết định: (1) ROLES += TRUONG_MKT (mọi quyền MARKETING: isStaff/canBaseData/canCauHinh + duyệt cổng
+                NOI_DUNG). MARKETING KHÔNG còn duyệt NOI_DUNG — trừ khi hệ thống chưa có TRUONG_MKT
+                đang hoạt động (fallback có báo, để không kẹt cổng). ADMIN giữ cả 2 cổng.
+            (2) ROLES += GIAM_DOC: đọc toàn bộ (bootstrap như staff), KHÔNG ghi; ngoại lệ được sửa
+                Chiến lược & tỷ trọng pillar. Nav: Dashboard nội dung · Kế hoạch (xem) · Kết quả (xem)
+                · Chiến lược · Thư viện học · Dashboard seeding.
+            (3) Chặn người gửi tự duyệt bài mình (approvals.nguoi_gui === me): công tắc
+                module_config.duyet.chan_tu_duyet, MẶC ĐỊNH BẬT, Admin/Trưởng MKT tắt được (audit).
+            (4) Vai trò gán ở màn Tài khoản; không seed tài khoản mới; luật "≥1 Marketing hoạt động"
+                tính cả TRUONG_MKT.
+Thay cho : (không) — bổ sung §3 bảng vai trò
+Ảnh hưởng: isStaff/canBaseData/canCauHinh/canDecideGate (BE) ⟷ canDecideGateFE (FE), bootstrap thêm
+            co_truong_mkt, NAV_GROUPS 2 vai trò mới, Hàng đợi duyệt (nút + lý do), Cấu hình module Duyệt,
+            Tài khoản, demo.
+Người duyệt: Thiện · Trạng thái: ĐÃ DUYỆT (2026-09-23)
+```
 **Ánh xạ trường theo định dạng** (một nguồn: `DINH_DANG` worker ⟷ `DINH_DANG_FE` frontend):
 | Định dạng | `hook` | `sections[]` | `cta` | `chi_tiet` |
 |---|---|---|---|---|
@@ -445,6 +465,14 @@ Tokens Tailwind (inline config trong `seeding-app.html`): `ink #0b3543` (soft #1
   - **Vá kèm:** Dashboard nội dung "nghẽn ở khâu nào" dùng `PIPELINE.find(p=>p.v===k)` (sai key) → nhãn luôn rơi về mã; sửa `.k`. Demo `createAir` bỏ sót `media_url`/ngày đăng mặc định (lệnh vá trước bị chặn) → đã vá; demo `submitApproval/decideApproval/publishAir/createKetQua/importKetQua/assignDon/patchAir` gương đúng luật mới.
   - **Ảnh hưởng dữ liệu:** không thêm bảng/cột; đổi giá trị `content_items.trang_thai` cũ (một lần, có thể chạy lại). Test backend **73/73**; chạy tay bản DEMO: Ý tưởng → Kịch bản → Chờ duyệt → Sản xuất tự chuyển, thẻ Việc của tôi ra đúng 3 việc (2 gấp).
   - ⏳ **Đợt 2 (nền, cần ADR):** `TRUONG_MKT` + chặn người gửi = người duyệt · `GIAM_DOC`. **Đợt 3:** gộp 3 kho media · Quản lý sản xuất thành góc nhìn của Kế hoạch. **Đợt 4:** gỡ `BETA_KEYS` theo nhóm.
+
+- ✅ **ĐỢT 2 "CHUẨN QUYỀN" — TRUONG_MKT · GIAM_DOC · người gửi không tự duyệt** (ADR-003, §4b).
+  - `ROLES` += `TRUONG_MKT` (= Marketing + duyệt cổng Nội dung; nằm trong `isStaff/canBaseData/canCauHinh`) và `GIAM_DOC` (bootstrap đọc như staff, mọi endpoint ghi 403 trừ `PATCH /strategy` + CRUD `/pillars` qua `canChienLuoc`). FE: `laStaffFE`/`laMktFE`, `ROLE_LABEL`, `NAV_GROUPS[TRUONG_MKT]=NAV_GROUPS[MARKETING]`, `NAV_GROUPS[GIAM_DOC]` = Dashboard nội dung · Kế hoạch (chỉ xem: `chiXem`) · Chiến lược · Kết quả · Thư viện học · Dashboard seeding.
+  - **Cổng Nội dung:** `canDecideGate(u,cong,coTruongMkt)` ⟷ `canDecideGateFE(me,cong,db)`; `bootstrap.co_truong_mkt`. Chưa có Trưởng MKT hoạt động → Marketing tạm giữ cổng (Hàng đợi duyệt hiện cảnh báo vàng); có rồi → Marketing mất cổng.
+  - **Chặn tự duyệt:** `module_config.duyet.chan_tu_duyet` (mặc định BẬT, `CONFIG_SCHEMA.duyet` kiểu `bat`; Hàng đợi duyệt bọc `ModuleShell` nên có ⚙️ Cấu hình). Bật → `approvals.nguoi_gui===me` → 403 kể cả Admin; FE ẩn nút + ghi "Bạn là người gửi", badge/Việc của tôi không đếm bài mình gửi. Tắt có audit (qua `setModuleConfig`).
+  - **Tài khoản:** vai trò lạ → 400; luật "≥1 Marketing hoạt động" tính cả Trưởng MKT (BE + FE). Không seed tài khoản mới — Admin gán ở Hệ thống › Tài khoản. Demo seed thêm `truongmkt@kingsmen.vn` và `gd@kingsmen.vn` (123456) + nút vào nhanh.
+  - **Ảnh hưởng dữ liệu:** không đổi bảng; tài khoản cũ giữ nguyên vai trò. Test: `test_quyen.mjs` **28/28** + hồi quy `test_dinh_dang.mjs` **74/74** (đã sửa test cho người khác duyệt).
+  - ▶️ **Việc anh Thiện cần làm sau deploy:** vào Tài khoản gán `Trưởng MKT` cho đúng người (trước đó Marketing vẫn tạm duyệt được, có cảnh báo).
 
 ### ⚙️ Quy trình deploy (CẬP NHẬT)
 `npm run build` (build.mjs: biên dịch JSX, build CSS Tailwind từ chính khối `tailwind.config` trong seeding-app.html, chép vendor React và `tools/`) → `node --check worker/index.js` → commit cả `dist/` → push. `node_modules/` đã trong .gitignore.

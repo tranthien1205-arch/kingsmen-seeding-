@@ -62,8 +62,11 @@ const DEMO_MODE = true;
 // Khi deploy thật → đổi thành false để dùng API Worker + D1.
 const DEMO = false;
 
-const ROLES = { MARKETING:'MARKETING', SALES:'SALES', ADMIN:'ADMIN', KY_THUAT:'KY_THUAT' };
-const ROLE_LABEL = { MARKETING:'Marketing', SALES:'Sales', ADMIN:'Admin / Kế toán', KY_THUAT:'Kỹ thuật' };
+// ADR-003: TRUONG_MKT = Marketing + duyệt cổng Nội dung · GIAM_DOC = đọc toàn bộ, chỉ sửa Chiến lược
+const ROLES = { MARKETING:'MARKETING', SALES:'SALES', ADMIN:'ADMIN', KY_THUAT:'KY_THUAT', TRUONG_MKT:'TRUONG_MKT', GIAM_DOC:'GIAM_DOC' };
+const ROLE_LABEL = { MARKETING:'Marketing', SALES:'Sales', ADMIN:'Admin / Kế toán', KY_THUAT:'Kỹ thuật', TRUONG_MKT:'Trưởng MKT', GIAM_DOC:'Giám đốc' };
+const laStaffFE = me => !!me && (me.vai_tro===ROLES.MARKETING || me.vai_tro===ROLES.TRUONG_MKT || me.vai_tro===ROLES.ADMIN);
+const laMktFE = r => r===ROLES.MARKETING || r===ROLES.TRUONG_MKT;
 // Content OS · P3 — kế hoạch nội dung
 const CONTENT_LOAI = { ECOM:'ECOM', SOCIAL:'SOCIAL' };
 const CONTENT_LOAI_LABEL = { ECOM:'Ecom (video bán hàng)', SOCIAL:'Social (thương hiệu)' };
@@ -465,6 +468,8 @@ function seedDB(){
   const uS2    = { id:uid('u'), ho_ten:'Lan (Sales)',      email:'sale2@kingsmen.vn', vai_tro:ROLES.SALES, active:true, is_dev:false, password:'123456' };
   const uAdmin = { id:uid('u'), ho_ten:'Kế toán (Admin)',  email:'admin@kingsmen.vn', vai_tro:ROLES.ADMIN, active:true, is_dev:false, password:'123456' };
   const uDev   = { id:uid('u'), ho_ten:'Admin Dev',        email:'dev@masfico.vn', vai_tro:ROLES.ADMIN, active:true, is_dev:true, password:'Dev2026!' };
+  const uTMkt  = { id:uid('u'), ho_ten:'Trang (Trưởng MKT)', email:'truongmkt@kingsmen.vn', vai_tro:ROLES.TRUONG_MKT, active:true, is_dev:false, password:'123456' };
+  const uGD    = { id:uid('u'), ho_ten:'Thiện (Giám đốc)',  email:'gd@kingsmen.vn', vai_tro:ROLES.GIAM_DOC, active:true, is_dev:false, password:'123456' };
 
   const groups = [
     { id:uid('g'), ten_group:'Cộng đồng Xây nhà trọn gói', link:'https://facebook.com/groups/xaynha', loai:'Nhà ở', so_member:128000, active:true, uu_tien:true, updated_at:nowISO() },
@@ -515,7 +520,7 @@ function seedDB(){
   }
   return {
     version: SCHEMA_VERSION,
-    users: [uMkt,uS1,uS2,uAdmin,uDev],
+    users: [uMkt,uS1,uS2,uAdmin,uDev,uTMkt,uGD],
     groups, content_topics:topics, cmt_suggestions:cmts,
     post_seedings: demoPosts, cmt_seedings: demoCmts,
     filming_templates, project_filmings,
@@ -582,6 +587,7 @@ function migrate(db){
   db.content_items ||= [];
   db.scripts ||= []; db.approvals ||= []; db.air_posts ||= []; db.air_checklist ||= AIR_CHECKLIST_FE;
   (db.content_items||[]).forEach(c=>{ if(PIPELINE_CU[c.trang_thai]) c.trang_thai=PIPELINE_CU[c.trang_thai]; });
+  if(db.co_truong_mkt==null) db.co_truong_mkt=(db.users||[]).some(u=>u.active && u.vai_tro===ROLES.TRUONG_MKT);   // demo; bản thật do bootstrap trả
   db.ket_qua ||= []; db.don_cho_gan ||= []; db.footage ||= []; db.shot_list ||= []; db.bai_hoc ||= []; db.min_mau ||= MIN_MAU; db.trends ||= []; db.trend_check ||= TREND_CHECK_FE; db.viec_ket ||= null; db.seeding_theo_noi_dung ||= {}; db.kenh_tu_dong ||= KENH_TU_DONG_FE; db.kenh_san_sang ||= {}; db.n8n_san_sang ||= false; db.youtube_san_sang ||= false; db.agent_log ||= []; db.module_config ||= {}; db.can_cau_hinh ??= true; db.san_xuat ||= []; db.sx_khau ||= SX_KHAU_FE; db.san_xuat_theo_noi_dung ||= {};
   db.post_seedings.forEach(p=>{ p.react ??= 0; p.so_cmt_seeding ??= 0; p.so_cmt_tu_nhien ??= 0; p.thanh_tien ??= 0; });
   db.cmt_seedings.forEach(c=>{ c.proofs ||= []; c.so_cmt_seeding ??= 0; c.react ??= 0; c.so_cmt_tu_nhien ??= 0; c.thanh_tien ??= 0; });
@@ -630,7 +636,8 @@ function AppProvider({children}){
   const store = useRef(null);
   if(DEMO && !store.current) store.current = seedDB();
   const meRef = useRef(null);
-  const commit = () => setDb(meRef.current ? { ...store.current, me: meRef.current } : null);
+  // demo: bản thật do bootstrap trả co_truong_mkt; ở đây tính từ danh sách tài khoản trong bộ nhớ
+  const commit = () => setDb(meRef.current ? { ...store.current, me: meRef.current, co_truong_mkt:(store.current.users||[]).some(u=>u.active && u.vai_tro===ROLES.TRUONG_MKT) } : null);
 
   if(DEMO){
     const S = store.current;
@@ -870,6 +877,9 @@ function AppProvider({children}){
       skipDon: async (id,ly_do)=>{ const d=(S.don_cho_gan||[]).find(x=>x.id===id); if(!d||d.trang_thai!=='CHO_GAN') return false;
         Object.assign(d,{trang_thai:'BO_QUA',decided_at:now(),decided_by_name:meRef.current.ho_ten}); commit(); return true; },
       decideApproval: async (id,result,ghi_chu)=>{ const ap=(S.approvals||[]).find(a=>a.id===id); if(!ap) return false;
+        const coTM=(S.users||[]).some(u=>u.active && u.vai_tro===ROLES.TRUONG_MKT);
+        if(!canDecideGateFE(meRef.current, ap.cong, {co_truong_mkt:coTM})) return false;
+        if((((S.module_config||{}).duyet||{}).chan_tu_duyet!==false) && ap.nguoi_gui===meRef.current.id) return false;
         const arr = ap.doi_tuong==='SCRIPT'?S.scripts:S.content_items; const o=(arr||[]).find(x=>x.id===ap.doi_tuong_id);
         Object.assign(ap,{ trang_thai:result==='DAT'?'DAT':'TRA_LAI', nguoi_duyet:meRef.current.id, nguoi_duyet_ten:meRef.current.ho_ten, ghi_chu:ghi_chu||'', decided_at:now() });
         if(result!=='DAT'){ (S.approvals||[]).forEach(a=>{ if(a.doi_tuong===ap.doi_tuong&&a.doi_tuong_id===ap.doi_tuong_id&&a.trang_thai==='CHO'){ a.trang_thai='HUY'; a.decided_at=now(); } }); if(o){ o.trang_thai='NHAP'; o.so_lan_tra=(Number(o.so_lan_tra)||0)+1; luiVeKichBanFE(S,o.content_item_id); } }
@@ -1306,7 +1316,7 @@ function Login(){
         {DEMO && <div className="mt-4 pt-3 border-t border-line">
           <div className="text-[11px] text-amber-600 text-center mb-2">⚡ BẢN PREVIEW — bấm để vào nhanh (mật khẩu demo: 123456)</div>
           <div className="grid grid-cols-3 gap-1.5">
-            {[['mkt@kingsmen.vn','Marketing'],['sale1@kingsmen.vn','Sales'],['admin@kingsmen.vn','Kế toán'],['dev@masfico.vn','Admin Dev']].map(([em,lb])=>
+            {[['mkt@kingsmen.vn','Marketing'],['truongmkt@kingsmen.vn','Trưởng MKT'],['sale1@kingsmen.vn','Sales'],['admin@kingsmen.vn','Kế toán'],['gd@kingsmen.vn','Giám đốc'],['dev@masfico.vn','Admin Dev']].map(([em,lb])=>
               <button key={em} onClick={()=>login(em,'123456')} className="text-xs bg-slate-100 hover:bg-brand hover:text-white text-slate-600 rounded-lg py-2 transition">{lb}</button>)}
           </div>
         </div>}
@@ -1505,6 +1515,18 @@ function navSections(items){
   return rest.length ? [{label:null, items:rest}, ...out] : out;
 }
 // Module đang NÂNG CẤP — chỉ tài khoản dev preview (is_dev) mới thấy
+// ADR-003: Trưởng MKT thấy đúng như Marketing; Giám đốc chỉ các màn xem + Chiến lược (vẫn trong 5 nhóm lớn)
+NAV_GROUPS[ROLES.TRUONG_MKT] = NAV_GROUPS[ROLES.MARKETING];
+NAV_GROUPS[ROLES.GIAM_DOC] = [
+  {key:'g_content', label:'Content', icon:'✍️', items:[
+    {key:'cdash', label:'Dashboard nội dung', short:'Dashboard', icon:'📊'},
+    {key:'plan', label:'Kế hoạch nội dung', short:'Kế hoạch', icon:'🗓️'},
+    {key:'strategy', label:'Chiến lược', icon:'🎯'},
+    {key:'ketqua', label:'Kết quả', short:'Kết quả', icon:'📈'},
+    {key:'hoc', label:'Thư viện học', short:'Học', icon:'🎓'},
+  ]},
+  {key:'g_seeding', label:'Seeding', icon:'💬', items:[ {key:'dash', label:'Dashboard', icon:'📊'} ]},
+];
 const BETA_KEYS = new Set(['strategy','plan','products','studio','approve','air','ketqua','footage','cdash','hoc','trend','kenh','sanxuat']);
 function Shell(){
   const { me, logout, db } = useApp();
@@ -1539,9 +1561,9 @@ function Shell(){
     pendingCount: db.post_seedings.filter(p=>p.trang_thai===ST.CHO_DUYET).length + db.cmt_seedings.filter(c=>c.trang_thai===ST.CHO_DUYET).length,
     pendingFilming: (db.project_filmings||[]).filter(f=>f.trang_thai===ST.CHO_DUYET).length,
     // P6 — chỉ đếm việc thuộc cổng mà chính người này được quyết
-    pendingApprove: (db.approvals||[]).filter(a=>a.trang_thai==='CHO' && canDecideGateFE(me,a.cong)).length,
+    pendingApprove: (db.approvals||[]).filter(a=>a.trang_thai==='CHO' && canDecideGateFE(me,a.cong,db) && !(chanTuDuyetFE(db) && a.nguoi_gui===me.id)).length,
   }), [db, me]);
-  const badgeFor = (k) => k==='queue' ? pendingCount : k==='approve' ? pendingApprove : (k==='filming' && me.vai_tro===ROLES.MARKETING) ? pendingFilming : 0;
+  const badgeFor = (k) => k==='queue' ? pendingCount : k==='approve' ? pendingApprove : (k==='filming' && laMktFE(me.vai_tro)) ? pendingFilming : 0;
   const groupBadge = (g) => g.items.reduce((s,it)=>s+badgeFor(it.key),0);
   // mở nhóm: về module con đầu tiên (hoặc giữ nguyên nếu đang ở trong nhóm)
   const openGroup = (g) => { if(!g.items.some(it=>it.key===page)) setPage(g.items[0].key); };
@@ -1557,7 +1579,7 @@ function Shell(){
       case 'new_cmt': return <SalesNewCmt go={setPage}/>;
       case 'imglib': return <ImageLibrary/>;
       case 'income': return <SalesIncome/>;
-      case 'filming': return me.vai_tro===ROLES.SALES ? <SalesFilming/> : me.vai_tro===ROLES.MARKETING ? <MktFilming/> : <AdminFilming/>;
+      case 'filming': return me.vai_tro===ROLES.SALES ? <SalesFilming/> : laMktFE(me.vai_tro) ? <MktFilming/> : <AdminFilming/>;
       case 'dash': return <MktDashboard/>;
       case 'library': return <Library/>;
       case 'queue': return <MktQueue/>;
@@ -1656,7 +1678,7 @@ function Shell(){
       </header>
 
       <main className="p-3 sm:p-2 w-full">{/* ADR-002: máy giao việc ngay trang đầu tiên mỗi vai trò nhìn thấy khi mở app (không phải Sales) */}
-        {me.vai_tro!==ROLES.SALES && page===((allItems[0]||{}).key) && <div className="mb-4"><VietCuaToi go={setPage}/></div>}
+        {me.vai_tro!==ROLES.SALES && me.vai_tro!==ROLES.GIAM_DOC && page===((allItems[0]||{}).key) && <div className="mb-4"><VietCuaToi go={setPage}/></div>}
         {render()}</main>
     </div>
 
@@ -1674,7 +1696,7 @@ function Shell(){
     </nav>
 
     <ProfileModal open={profileOpen} onClose={()=>setProfileOpen(false)}/>
-    {(me.vai_tro===ROLES.MARKETING||me.vai_tro===ROLES.ADMIN) && <ChatBot/>}
+    {laStaffFE(me) && <ChatBot/>}
   </div>;
 }
 
@@ -2246,7 +2268,8 @@ function BreakdownCard({title, data}){
    CONTENT OS · P3 — KẾ HOẠCH NỘI DUNG (content_item · List/Kanban)
 ============================================================ */
 function ContentPlan(){
-  const { db, upsertContentItem, deleteContentItem, notify } = useApp();
+  const { db, me, upsertContentItem, deleteContentItem, notify } = useApp();
+  const chiXem = me.vai_tro===ROLES.GIAM_DOC;   // ADR-003: Giám đốc xem, không sửa
   const lechNguong=lechPillarCfg(db);
   const items = db.content_items||[];
   const pillars = (db.pillars||[]).filter(p=>p.active!==false);
@@ -2280,10 +2303,10 @@ function ContentPlan(){
       <div className="flex items-center justify-between mt-1.5 gap-1">
         <span className="text-[9px] text-slate-400 truncate">{pic?('👤 '+pic.ho_ten):(it.created_by_name||'')}</span>
         <div className="flex gap-1 shrink-0">
-          <button onClick={()=>setEdit(it)} className="text-[10px] text-blue-500">Sửa</button>
-          <select value={it.trang_thai} onChange={e=>move(it,e.target.value)} className="text-[9px] border border-line rounded px-0.5 py-0.5 bg-white max-w-[70px]">
+          {!chiXem && <button onClick={()=>setEdit(it)} className="text-[10px] text-blue-500">Sửa</button>}
+          {!chiXem && <select value={it.trang_thai} onChange={e=>move(it,e.target.value)} className="text-[9px] border border-line rounded px-0.5 py-0.5 bg-white max-w-[70px]">
             {PIPELINE.map(s=><option key={s.k} value={s.k}>{s.label}</option>)}
-          </select>
+          </select>}
         </div>
       </div>
     </div>;
@@ -2318,7 +2341,7 @@ function ContentPlan(){
     </div>;
   };
   return <div className="space-y-4">
-    <PageHeader title={<>🗓️ Kế hoạch nội dung</>} right={<><div className="flex rounded-lg overflow-hidden border border-line"> <button onClick={()=>setView('kanban')} className={"px-3 py-1.5 text-xs font-semibold "+(view==='kanban'?'bg-brand text-white':'bg-white text-ink-muted')}>Kanban</button> <button onClick={()=>setView('list')} className={"px-3 py-1.5 text-xs font-semibold "+(view==='list'?'bg-brand text-white':'bg-white text-ink-muted')}>Danh sách</button> <button onClick={()=>setView('calendar')} className={"px-3 py-1.5 text-xs font-semibold "+(view==='calendar'?'bg-brand text-white':'bg-white text-ink-muted')}>Lịch</button> </div> <Btn variant="ghost" onClick={()=>setImp(true)}>⬆ Import</Btn> <Btn variant="brand" onClick={()=>setEdit({...blank})}>＋ Thêm nội dung</Btn></>}/>
+    <PageHeader title={<>🗓️ Kế hoạch nội dung</>} right={<><div className="flex rounded-lg overflow-hidden border border-line"> <button onClick={()=>setView('kanban')} className={"px-3 py-1.5 text-xs font-semibold "+(view==='kanban'?'bg-brand text-white':'bg-white text-ink-muted')}>Kanban</button> <button onClick={()=>setView('list')} className={"px-3 py-1.5 text-xs font-semibold "+(view==='list'?'bg-brand text-white':'bg-white text-ink-muted')}>Danh sách</button> <button onClick={()=>setView('calendar')} className={"px-3 py-1.5 text-xs font-semibold "+(view==='calendar'?'bg-brand text-white':'bg-white text-ink-muted')}>Lịch</button> </div> {!chiXem && <Btn variant="ghost" onClick={()=>setImp(true)}>⬆ Import</Btn>} {!chiXem && <Btn variant="brand" onClick={()=>setEdit({...blank})}>＋ Thêm nội dung</Btn>}</>}/>
     <div className="bg-white rounded-2xl border border-line shadow-card p-3 flex flex-wrap gap-2 items-center">
       <Select value={fLoai} onChange={e=>setFLoai(e.target.value)} className="max-w-[140px]"><option value="">Mọi loại</option><option value="ECOM">Ecom</option><option value="SOCIAL">Social</option></Select>
       <Select value={fKenh} onChange={e=>setFKenh(e.target.value)} className="max-w-[180px]"><option value="">Mọi kênh</option>{kenhs.map(k=><option key={k.id} value={k.id}>{k.ten}</option>)}</Select>
@@ -2345,10 +2368,10 @@ function ContentPlan(){
           <thead className="bg-slate-50/70 text-[11px] uppercase text-ink-muted text-left"><tr><Th>Tiêu đề</Th><Th>Loại</Th><Th>Mục tiêu</Th><Th>Pillar</Th><Th>Kênh</Th><Th>Tháng</Th><Th>Giai đoạn</Th><Th>Sản xuất</Th><Th>Seeding</Th><Th></Th></tr></thead>
           <tbody className="divide-y">{filtered.map(it=><tr key={it.id} className="hover:bg-slate-50">
             <Td>{it.tieu_de}</Td><Td>{it.loai}</Td><Td>{kpiLabel(it.loai_muc_tieu)}</Td><Td>{nameOf(pillars,it.pillar_id)}</Td><Td>{nameOf(kenhs,it.kenh_id)}</Td><Td>{it.thang}</Td>
-            <Td><select value={it.trang_thai} onChange={e=>move(it,e.target.value)} className="text-xs border border-line rounded px-1 py-0.5">{PIPELINE.map(s=><option key={s.k} value={s.k}>{s.label}</option>)}</select></Td>
+            <Td>{chiXem ? pipeLabel(it.trang_thai) : <select value={it.trang_thai} onChange={e=>move(it,e.target.value)} className="text-xs border border-line rounded px-1 py-0.5">{PIPELINE.map(s=><option key={s.k} value={s.k}>{s.label}</option>)}</select>}</Td>
             <Td><SanXuatCell it={it}/></Td>
             <Td><SeedingCell it={it} onDay={()=>setDay(it)}/></Td>
-            <Td><button onClick={()=>setEdit(it)} className={LINK.edit}>Sửa</button> <button onClick={()=>{ if(confirm('Xoá?')) deleteContentItem(it.id).then(ok=>ok&&notify('Đã xoá')); }} className={LINK.danger}>Xoá</button></Td>
+            <Td>{!chiXem && <><button onClick={()=>setEdit(it)} className={LINK.edit}>Sửa</button> <button onClick={()=>{ if(confirm('Xoá?')) deleteContentItem(it.id).then(ok=>ok&&notify('Đã xoá')); }} className={LINK.danger}>Xoá</button></>}</Td>
           </tr>)}</tbody>
         </table>
       </div>}
@@ -3183,14 +3206,16 @@ function ScriptEditor({init, onClose, onDung}){
    CONTENT OS · P6 — HÀNG ĐỢI DUYỆT 2 CỔNG (nội dung · claim)
 ============================================================ */
 const GATE_LABEL = { NOI_DUNG:'Nội dung', CLAIM:'Claim (Kỹ thuật)' };
+const chanTuDuyetFE = db => (((db||{}).module_config||{}).duyet||{}).chan_tu_duyet !== false;
 const GATE_ICON  = { NOI_DUNG:'📝', CLAIM:'🧪' };
 const AP_ST = { CHO:'Chờ', DAT:'Đạt', TRA_LAI:'Trả lại', HUY:'Đã huỷ' };
 const AP_ST_STYLE = { CHO:TONE.warn, DAT:TONE.ok, TRA_LAI:TONE.danger, HUY:TONE.off };
 // Ai được quyết cổng nào — khớp canDecideGate ở worker
-function canDecideGateFE(me, cong){
+// db.co_truong_mkt do bootstrap trả: chưa có Trưởng MKT thì Marketing tạm giữ cổng Nội dung (khớp canDecideGate ở worker)
+function canDecideGateFE(me, cong, db){
   if(!me) return false;
   if(me.vai_tro===ROLES.ADMIN) return true;
-  if(cong==='NOI_DUNG') return me.vai_tro===ROLES.MARKETING;
+  if(cong==='NOI_DUNG') return me.vai_tro===ROLES.TRUONG_MKT || (me.vai_tro===ROLES.MARKETING && !(db&&db.co_truong_mkt));
   if(cong==='CLAIM') return me.vai_tro===ROLES.KY_THUAT;
   return false;
 }
@@ -3233,7 +3258,7 @@ function ApprovalStatus({doi_tuong, doi_tuong_id, trang_thai, canSubmit}){
 function vietCuaToiFE(db, me){
   const homNay=todayYMD(); const v=[]; const UU={KHAN:0, HOM_NAY:1, SAP:2};
   // 1. cổng duyệt đang chờ tôi (không tính bài chính mình gửi)
-  (db.approvals||[]).filter(a=>a.trang_thai==='CHO' && canDecideGateFE(me,a.cong) && a.nguoi_gui!==me.id).forEach(a=>{
+  (db.approvals||[]).filter(a=>a.trang_thai==='CHO' && canDecideGateFE(me,a.cong,db) && a.nguoi_gui!==me.id).forEach(a=>{
     const sc=(db.scripts||[]).find(x=>x.id===a.doi_tuong_id)||{}; const ngay=soNgayFE(a.created_at);
     v.push({uu: ngay>=2?UU.KHAN:UU.HOM_NAY, icon:GATE_ICON[a.cong]||'🛂', ten:'Duyệt cổng '+(GATE_LABEL[a.cong]||a.cong)+': '+(sc.tieu_de||sc.hook||'(không tên)'), meta:(a.nguoi_gui_ten||'')+' gửi '+(ngay?ngay+' ngày trước':'hôm nay'), page:'approve'}); });
   // 2. kịch bản của tôi bị trả lại
@@ -3288,20 +3313,21 @@ function ApprovalQueue(){
   const [reject,setReject]=useState(null); const [ly,setLy]=useState(''); const [busy,setBusy]=useState(false);
   const objOf=(a)=> (a.doi_tuong==='SCRIPT' ? (db.scripts||[]) : (db.content_items||[])).find(x=>x.id===a.doi_tuong_id);
   const pending=(db.approvals||[]).filter(a=>a.trang_thai==='CHO');
-  const mine=pending.filter(a=>canDecideGateFE(me,a.cong));
+  const chanTu=chanTuDuyetFE(db);
+  const mine=pending.filter(a=>canDecideGateFE(me,a.cong,db) && !(chanTu && a.nguoi_gui===me.id));
   const list = tab==='toi' ? mine : pending;
   const decide=async(a,result)=>{ if(result==='DAT'){ setBusy(true); const ok=await decideApproval(a.id,'DAT',''); setBusy(false); if(ok) notify('Đã duyệt cổng '+GATE_LABEL[a.cong]); }
     else { setReject(a); setLy(''); } };
   const doReject=async()=>{ if(!ly.trim()) return notify('Nhập lý do trả lại','warn');
     setBusy(true); const ok=await decideApproval(reject.id,'TRA_LAI',ly.trim()); setBusy(false);
     if(ok){ notify('Đã trả lại'); setReject(null); } };
-  return <div className="space-y-4">
-    <PageHeader title={<>🛂 Hàng đợi duyệt</>} right={<Tabs size="sm" active={tab} onChange={setTab} tabs={[{key:'toi',label:'Việc của tôi',count:mine.length},{key:'tat_ca',label:'Tất cả',count:pending.length}]}/>}/>
+  return <ModuleShell moduleKey="duyet" title={<>🛂 Hàng đợi duyệt</>} right={<Tabs size="sm" active={tab} onChange={setTab} tabs={[{key:'toi',label:'Việc của tôi',count:mine.length},{key:'tat_ca',label:'Tất cả',count:pending.length}]}/>}>
+    {!db.co_truong_mkt && laMktFE(me.vai_tro) && <div className={CALLOUT.warn}>⚠ Chưa có tài khoản <b>Trưởng MKT</b> đang hoạt động — Marketing tạm giữ cổng Nội dung. Gán vai trò ở <b>Hệ thống › Tài khoản</b> để đúng luật người lập ≠ người duyệt.</div>}
     <div className={CALLOUT.note}>
       2 cổng chạy <b>song song</b>: <b>📝 Nội dung</b> (Marketing) và <b>🧪 Claim</b> (Kỹ thuật). <b>Cả hai Đạt</b> thì nội dung mới được duyệt; <b>một cổng trả lại</b> là quay về Nháp và cổng kia tự huỷ.
     </div>
     {list.length===0 ? <Empty>{tab==='toi'?'Không có việc nào chờ bạn duyệt. 🎉':'Không có việc nào đang chờ.'}</Empty> :
-      <div className="space-y-3">{list.map(a=>{ const o=objOf(a)||{}; const can=canDecideGateFE(me,a.cong);
+      <div className="space-y-3">{list.map(a=>{ const o=objOf(a)||{}; const tuGui=chanTu && a.nguoi_gui===me.id; const can=canDecideGateFE(me,a.cong,db) && !tuGui;
         const flags=(o.claim_flags||[]);
         return <div key={a.id} className="bg-white rounded-2xl border border-line shadow-card p-3">
           <div className="flex items-start gap-2 flex-wrap">
@@ -3327,7 +3353,7 @@ function ApprovalQueue(){
               <Btn variant="ghost" onClick={()=>decide(a,'TRA_LAI')} disabled={busy}>↩ Trả lại</Btn>
               <Btn variant="brand" className="flex-1" onClick={()=>decide(a,'DAT')} disabled={busy}>✓ Duyệt cổng {GATE_LABEL[a.cong]}</Btn>
             </div>
-            : <div className="text-[11px] text-slate-400 mt-3">Chờ {GATE_LABEL[a.cong]} duyệt — bạn không có quyền ở cổng này.</div>}
+            : <div className="text-[11px] text-slate-400 mt-3">{tuGui ? 'Bạn là người gửi — cần người khác duyệt (người lập ≠ người duyệt).' : ('Chờ '+GATE_LABEL[a.cong]+' duyệt — bạn không có quyền ở cổng này.')}</div>}
         </div>; })}
       </div>}
     {reject && <Modal open={true} onClose={()=>setReject(null)} title="Trả lại — nêu lý do">
@@ -3335,7 +3361,7 @@ function ApprovalQueue(){
       <Textarea rows="3" value={ly} onChange={e=>setLy(e.target.value)} placeholder="VD: Thiếu căn cứ thông số, câu chốt thổi phồng…"/>
       <div className="flex gap-2 mt-3"><Btn variant="ghost" onClick={()=>setReject(null)} disabled={busy}>Huỷ</Btn><Btn variant="brand" className="flex-1" onClick={doReject} disabled={busy}>{busy?'…':'Trả lại'}</Btn></div>
     </Modal>}
-  </div>;
+  </ModuleShell>;
 }
 
 /* ============================================================
@@ -4082,6 +4108,9 @@ function SanXuatImport({onClose}){
    Thêm cấu hình cho module mới: chỉ khai báo thêm 1 mục trong CONFIG_SCHEMA.
 ============================================================ */
 const CONFIG_SCHEMA = {
+  duyet: { ten:'Hàng đợi duyệt', truong:[
+    {k:'chan_tu_duyet', loai:'bat', label:'Người gửi không được tự duyệt bài mình',
+      hint:'BẬT (khuyến nghị, chuẩn người lập ≠ người duyệt). Chỉ tắt khi team quá nhỏ, một người vừa soạn vừa duyệt — mọi lần tắt đều có audit.'} ]},
   sanxuat: { ten:'Quản lý sản xuất', truong:[
     {k:'canh_bao_tre', loai:'so', label:'Cảnh báo trễ hạn trước (ngày)', hint:'0 = chỉ báo khi đã quá hạn'} ]},
   air: { ten:'Đăng bài', truong:[
@@ -4133,7 +4162,7 @@ function ModuleShell({moduleKey, title, right, children}){
     <PageHeader title={title} back={tab==='cfg'?'Nội dung':null} onBack={()=>setTab('main')}
       right={tab==='main' ? <>{right}{coTab && <Btn variant="ghost" onClick={()=>setTab('cfg')}>⚙️ Cấu hình</Btn>}</> : null}/>
     {tab==='cfg' ? (duocSua ? <CauHinhModule moduleKey={moduleKey}/>
-      : <div className="rounded-2xl border border-line bg-white p-4 text-sm text-ink-muted">Chỉ <b>Admin</b> hoặc <b>Marketing</b> được sửa cấu hình. Bạn xem được nhưng không sửa.</div>)
+      : <div className="rounded-2xl border border-line bg-white p-4 text-sm text-ink-muted">Chỉ <b>Admin</b>, <b>Trưởng MKT</b> hoặc <b>Marketing</b> được sửa cấu hình. Bạn xem được nhưng không sửa.</div>)
       : children}
   </div>;
 }
@@ -4523,7 +4552,7 @@ function ContentDashboard(){
     <ViecKet/>
 
     {view==='cfg' ? (db.can_cau_hinh!==false ? <CauHinhModule moduleKey="dash"/>
-      : <div className="rounded-2xl border border-line bg-white p-4 text-sm text-ink-muted">Chỉ <b>Admin</b> hoặc <b>Marketing</b> được sửa cấu hình.</div>)
+      : <div className="rounded-2xl border border-line bg-white p-4 text-sm text-ink-muted">Chỉ <b>Admin</b>, <b>Trưởng MKT</b> hoặc <b>Marketing</b> được sửa cấu hình.</div>)
      : view==='kh' ? <KeHoachVsThucHien/> : <>
 
     <div className={CALLOUT.warn}>
@@ -6245,7 +6274,7 @@ function UserManagement(){
   const [sel, setSel] = useState(()=>new Set());
   const blank = {ho_ten:'',email:'',password:'123456',vai_tro:ROLES.SALES,active:true,is_dev:false};
 
-  const activeMkt = db.users.filter(u=>u.active && u.vai_tro===ROLES.MARKETING).length;
+  const activeMkt = db.users.filter(u=>u.active && laMktFE(u.vai_tro)).length;
 
   const selectable = db.users.filter(u=>u.id!==me.id); // không cho chọn chính mình
   const toggleSel = (id)=> setSel(prev=>{ const s=new Set(prev); s.has(id)?s.delete(id):s.add(id); return s; });
@@ -6256,7 +6285,7 @@ function UserManagement(){
     let users=[...sel].map(id=>db.users.find(u=>u.id===id)).filter(u=>u && u.id!==me.id);
     if(!users.length) return notify('Chưa chọn tài khoản nào (không thể xoá chính mình)','warn');
     // giữ tối thiểu 1 Marketing đang hoạt động
-    const activeMktIds = db.users.filter(u=>u.active && u.vai_tro===ROLES.MARKETING).map(u=>u.id);
+    const activeMktIds = db.users.filter(u=>u.active && laMktFE(u.vai_tro)).map(u=>u.id);
     const delMkt = users.filter(u=>activeMktIds.includes(u.id));
     let blocked=0;
     if(delMkt.length && activeMktIds.length - delMkt.length < 1){ users=users.filter(u=>!activeMktIds.includes(u.id)); blocked=delMkt.length; }
@@ -6268,16 +6297,16 @@ function UserManagement(){
 
   const setActive = (u, on) => {
     if(!on && u.id===me.id) return notify('Không thể tự tắt tài khoản của mình','warn');
-    if(!on && u.vai_tro===ROLES.MARKETING && activeMkt<=1) return notify('Phải còn ít nhất 1 Marketing đang hoạt động','warn');
+    if(!on && laMktFE(u.vai_tro) && activeMkt<=1) return notify('Phải còn ít nhất 1 Marketing/Trưởng MKT đang hoạt động','warn');
     updateUser(u.id, {active:on});
   };
   const setRole = (u, role) => {
-    if(u.id===me.id && role!==ROLES.MARKETING && u.vai_tro===ROLES.MARKETING && activeMkt<=1) return notify('Phải còn ít nhất 1 Marketing','warn');
+    if(u.id===me.id && !laMktFE(role) && laMktFE(u.vai_tro) && activeMkt<=1) return notify('Phải còn ít nhất 1 Marketing/Trưởng MKT','warn');
     updateUser(u.id, {vai_tro:role});
   };
   const remove = async (u) => {
     if(u.id===me.id) return notify('Không thể xoá tài khoản của mình','warn');
-    if(u.vai_tro===ROLES.MARKETING && activeMkt<=1) return notify('Phải còn ít nhất 1 Marketing','warn');
+    if(laMktFE(u.vai_tro) && activeMkt<=1) return notify('Phải còn ít nhất 1 Marketing/Trưởng MKT','warn');
     if(!confirm('Xoá tài khoản '+u.ho_ten+'?')) return;
     if(await deleteUser(u.id)) notify('Đã xoá');
   };

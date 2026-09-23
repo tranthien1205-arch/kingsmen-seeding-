@@ -5,7 +5,8 @@
 //  - Dữ liệu dùng chung trong Cloudflare D1 (binding DB)
 // ============================================================
 
-const ROLES = { MARKETING:'MARKETING', SALES:'SALES', ADMIN:'ADMIN', KY_THUAT:'KY_THUAT' };
+// ADR-003: TRUONG_MKT = Marketing + duyệt cổng Nội dung · GIAM_DOC = đọc toàn bộ, chỉ sửa Chiến lược
+const ROLES = { MARKETING:'MARKETING', SALES:'SALES', ADMIN:'ADMIN', KY_THUAT:'KY_THUAT', TRUONG_MKT:'TRUONG_MKT', GIAM_DOC:'GIAM_DOC' };
 const ST = { NHAP:'NHAP', CHO_DUYET:'CHO_DUYET', DAT:'DAT', KHONG_DAT:'KHONG_DAT', DA_CHI:'DA_CHI' };
 const CORS = { 'Access-Control-Allow-Origin':'*', 'Access-Control-Allow-Methods':'GET,POST,PATCH,DELETE,OPTIONS', 'Access-Control-Allow-Headers':'Content-Type,Authorization' };
 const json = (data, status=200) => new Response(JSON.stringify(data), { status, headers:{'Content-Type':'application/json; charset=utf-8', ...CORS} });
@@ -418,9 +419,11 @@ async function getSession(env, req){
   if(!u || !u.active) return null;
   return { token, user:u };
 }
-const isStaff = (u) => u && (u.vai_tro===ROLES.MARKETING || u.vai_tro===ROLES.ADMIN);
+const isStaff = (u) => u && (u.vai_tro===ROLES.MARKETING || u.vai_tro===ROLES.TRUONG_MKT || u.vai_tro===ROLES.ADMIN);
+// Chiến lược & tỷ trọng pillar: staff + Giám đốc (ngoại lệ ghi duy nhất của GIAM_DOC)
+const canChienLuoc = (u) => isStaff(u) || (u && u.vai_tro===ROLES.GIAM_DOC);
 // Content OS · dữ liệu nền (sản phẩm + claim cấm): chủ sở hữu Kỹ thuật, thêm Marketing/Admin
-const canBaseData = (u) => u && (u.vai_tro===ROLES.KY_THUAT || u.vai_tro===ROLES.MARKETING || u.vai_tro===ROLES.ADMIN);
+const canBaseData = (u) => u && (u.vai_tro===ROLES.KY_THUAT || isStaff(u));
 async function logAudit(env, u, action, entity, entity_id, detail=''){
   await env.DB.prepare(`INSERT INTO audit (id,at,by_id,by_name,action,entity,entity_id,detail) VALUES (?,?,?,?,?,?,?,?)`)
     .bind(uid('a'),nowISO(),u?.id||null,u?.ho_ten||'—',action,entity,String(entity_id||''),detail).run();
@@ -574,7 +577,7 @@ async function luuSanXuat(env, me, body, id){
 }
 // ===== CẤU HÌNH THEO MODULE =====
 // Ai được sửa cấu hình: Admin và Marketing (quản lý). Kỹ thuật/Sales KHÔNG.
-function canCauHinh(u){ return !!u && (u.vai_tro===ROLES.ADMIN || u.vai_tro===ROLES.MARKETING); }
+function canCauHinh(u){ return isStaff(u); }
 // Giá trị mặc định — cũng là "nguồn sự thật" khi chưa ai cấu hình gì
 const CONFIG_MAC_DINH = {
   sanxuat: { canh_bao_tre:0 },
@@ -587,6 +590,8 @@ const CONFIG_MAC_DINH = {
              // AGENT chạy trong app theo lịch cố định — không cần n8n. Mặc định TẮT.
              agent_bat:false, agent_gio:8, agent_tu_tao_ke_hoach:false },
   viec_ket:{ sua_lai:3, cho_duyet:2, chua_nhap_kq:14, trend_sap_het:7, don_cho_gan:3 },
+  // ADR-003: người gửi không tự duyệt bài mình. Mặc định BẬT; tắt là có audit (qua setModuleConfig).
+  duyet:   { chan_tu_duyet:true },
   hoc:     { min_mau:5 },
   dash:    { min_mau:5, lech_pillar:15 },
   ketqua:  { nguon_mac_dinh:{ TIKTOK_SHOP:'TRUC_TIEP', SHOPEE:'GIAN_TIEP', API_KENH:'KHONG_QUY_DON', NHAP_TAY:'KHONG_QUY_DON' } },
@@ -1097,16 +1102,21 @@ async function chayLichDang(env){
 // P6 — 2 cổng duyệt song song. Ai được quyết cổng nào.
 // (Khi thêm vai trò TRUONG_MKT ở P0, chỉ cần bổ sung vào nhánh NOI_DUNG.)
 const APPROVAL_GATES = ['NOI_DUNG','CLAIM'];
-function canDecideGate(u, cong){
+// coTruongMkt: hệ thống có Trưởng MKT đang hoạt động không. Chưa có → Marketing tạm giữ cổng (không kẹt việc).
+function canDecideGate(u, cong, coTruongMkt){
   if(!u) return false;
   if(u.vai_tro===ROLES.ADMIN) return true;
-  if(cong==='NOI_DUNG') return u.vai_tro===ROLES.MARKETING;
+  if(cong==='NOI_DUNG') return u.vai_tro===ROLES.TRUONG_MKT || (u.vai_tro===ROLES.MARKETING && !coTruongMkt);
   if(cong==='CLAIM') return u.vai_tro===ROLES.KY_THUAT;
   return false;
 }
 // Bảng + cột trạng thái của từng loại đối tượng đưa vào hàng đợi duyệt
 // ADR-002: chỉ KỊCH BẢN đi qua cổng duyệt; mục kế hoạch phản chiếu trạng thái, không duyệt riêng
 const APPROVAL_TARGETS = { SCRIPT:'scripts' };
+async function coTruongMktHoatDong(env){
+  const r=await env.DB.prepare(`SELECT COUNT(*) n FROM users WHERE active=1 AND vai_tro=?`).bind(ROLES.TRUONG_MKT).first();
+  return Number((r&&r.n)||0)>0;
+}
 // ADR-002 — Kế hoạch 6 giai đoạn (khớp PIPELINE ở frontend). Sự kiện chỉ đẩy TỚI, không tự lùi.
 const PIPELINE_BE = ['Y_TUONG','SCRIPT','CHO_DUYET','SAN_XUAT','DA_DANG','DA_DO'];
 const HE_THONG = { id:null, ho_ten:'Hệ thống' };
@@ -1245,7 +1255,7 @@ async function insertContentItem(env, me, body){
 
 // ---------- bootstrap: toàn bộ dữ liệu theo quyền ----------
 async function bootstrap(env, u){
-  const staff = isStaff(u);
+  const staff = isStaff(u) || u.vai_tro===ROLES.GIAM_DOC;   // GIAM_DOC đọc như staff, ghi thì từng endpoint tự gác
   const canContent = staff || u.vai_tro===ROLES.KY_THUAT;
   // Mọi câu SELECT độc lập → bắn cùng lúc rồi chờ một lượt (trước: ~40 câu chạy tuần tự, mỗi lần ghi
   // là một lượt như vậy). ensurePostSlots đã chuyển sang cron hằng ngày + lúc đăng nhập/bật lịch.
@@ -1356,6 +1366,7 @@ async function bootstrap(env, u){
     agent_log,
     ai_san_sang: staff ? !!env.ANTHROPIC_API_KEY : false,
     module_config: cfg, can_cau_hinh: canCauHinh(u),
+    co_truong_mkt: await coTruongMktHoatDong(env),
     san_xuat, sx_khau: SX_KHAU,
     san_xuat_theo_noi_dung: canContent ? gomSanXuatTheoNoiDung(san_xuat) : {},
     footage, shot_list, bai_hoc, min_mau:(cfg.hoc&&cfg.hoc.min_mau)||MIN_MAU_BANG_CHUNG, trends, trend_check:(cfg.trend&&cfg.trend.checklist)||TREND_CHECK,
@@ -1555,6 +1566,7 @@ async function handleApi(request, env){
     if(!body.ho_ten||!email||!body.password) return json({error:'Nhập đủ họ tên, email, mật khẩu'},400);
     const dup = await env.DB.prepare(`SELECT id FROM users WHERE lower(email)=?`).bind(email).first();
     if(dup) return json({error:'Email đã tồn tại'},409);
+    if(body.vai_tro && !Object.values(ROLES).includes(body.vai_tro)) return json({error:'Vai trò không hợp lệ'},400);
     const id=uid('u'); const pass=await hashPassword(body.password);
     await env.DB.prepare(`INSERT INTO users (id,ho_ten,email,password,vai_tro,active,is_dev,created_at) VALUES (?,?,?,?,?,?,?,?)`)
       .bind(id,body.ho_ten.trim(),email,pass,body.vai_tro||ROLES.SALES,bool(body.active!==false),bool(body.is_dev),nowISO()).run();
@@ -1566,10 +1578,12 @@ async function handleApi(request, env){
     if(!isStaff(me)) return json({error:'Không có quyền'},403);
     const id=m[1]; const u=await env.DB.prepare(`SELECT * FROM users WHERE id=?`).bind(id).first();
     if(!u) return json({error:'Không tìm thấy'},404);
-    const activeMkt = (await env.DB.prepare(`SELECT COUNT(*) n FROM users WHERE active=1 AND vai_tro=?`).bind(ROLES.MARKETING).first()).n;
+    if(body.vai_tro && !Object.values(ROLES).includes(body.vai_tro)) return json({error:'Vai trò không hợp lệ'},400);
+    const laMkt = r => r===ROLES.MARKETING || r===ROLES.TRUONG_MKT;
+    const activeMkt = (await env.DB.prepare(`SELECT COUNT(*) n FROM users WHERE active=1 AND vai_tro IN (?,?)`).bind(ROLES.MARKETING, ROLES.TRUONG_MKT).first()).n;
     const newRole = body.vai_tro ?? u.vai_tro;
     const newActive = body.active!=null ? bool(body.active) : u.active;
-    if(u.vai_tro===ROLES.MARKETING && u.active && activeMkt<=1 && (newRole!==ROLES.MARKETING || !newActive))
+    if(laMkt(u.vai_tro) && u.active && activeMkt<=1 && (!laMkt(newRole) || !newActive))
       return json({error:'Phải còn ít nhất 1 Marketing đang hoạt động'},400);
     const pass = body.password ? await hashPassword(body.password) : u.password;
     const newDev = body.is_dev!=null ? bool(body.is_dev) : u.is_dev;
@@ -1623,7 +1637,7 @@ async function handleApi(request, env){
 
   // ===== ĐƠN GIÁ (admin) =====
   if(path==='/pricing' && method==='PATCH'){
-    if(me.vai_tro!==ROLES.ADMIN && me.vai_tro!==ROLES.MARKETING) return json({error:'Không có quyền'},403);
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
     const p=body;
     const cur = await env.DB.prepare(`SELECT * FROM pricing WHERE id=1`).first() || {};
     const num = (v, d)=> (v!=null && v!=='' ? Number(v)||0 : Number(d)||0);
@@ -1639,7 +1653,7 @@ async function handleApi(request, env){
 
   // ===== Ưu tiên / ẩn-hiện LOẠI BÀI theo giai đoạn =====
   if((m=path.match(/^\/posttypes\/(.+)$/)) && method==='PATCH'){
-    if(me.vai_tro!==ROLES.ADMIN && me.vai_tro!==ROLES.MARKETING) return json({error:'Không có quyền'},403);
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
     const loai = decodeURIComponent(m[1]);
     const cur = await env.DB.prepare(`SELECT * FROM post_type_prefs WHERE loai=?`).bind(loai).first();
     const an = body.an!=null ? (body.an?1:0) : (cur?cur.an:0);
@@ -1819,7 +1833,7 @@ async function handleApi(request, env){
 
   // ===== CONTENT OS · P2 — Pillar (trụ cột nội dung) + Chiến lược =====
   if(path==='/pillars' && method==='POST'){
-    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    if(!canChienLuoc(me)) return json({error:'Không có quyền'},403);
     const id=uid('pil');
     const n = Number((await env.DB.prepare(`SELECT COUNT(*) c FROM pillars`).first())?.c||0);
     await env.DB.prepare(`INSERT INTO pillars (id,ten,objective,point_of_difference,request,ty_trong,thu_tu,active,created_at) VALUES (?,?,?,?,?,?,?,1,?)`)
@@ -1828,7 +1842,7 @@ async function handleApi(request, env){
     return json({ db: await bootstrap(env, me) });
   }
   if((m=path.match(/^\/pillars\/(.+)$/)) && method==='PATCH'){
-    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    if(!canChienLuoc(me)) return json({error:'Không có quyền'},403);
     const id=m[1]; const r=await env.DB.prepare(`SELECT * FROM pillars WHERE id=?`).bind(id).first();
     if(!r) return json({error:'Không tìm thấy'},404);
     const g=(k,d)=> body[k]!=null?String(body[k]).trim():d;
@@ -1838,13 +1852,13 @@ async function handleApi(request, env){
     return json({ db: await bootstrap(env, me) });
   }
   if((m=path.match(/^\/pillars\/(.+)$/)) && method==='DELETE'){
-    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    if(!canChienLuoc(me)) return json({error:'Không có quyền'},403);
     await env.DB.prepare(`DELETE FROM pillars WHERE id=?`).bind(m[1]).run();
     await logAudit(env,me,'xoá pillar','pillars',m[1]);
     return json({ db: await bootstrap(env, me) });
   }
   if(path==='/strategy' && method==='PATCH'){
-    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    if(!canChienLuoc(me)) return json({error:'Không có quyền'},403);
     const r=await env.DB.prepare(`SELECT * FROM content_strategy WHERE id=1`).first()||{};
     const g=(k)=> body[k]!=null?String(body[k]):(r[k]||'');
     await env.DB.prepare(`UPDATE content_strategy SET okr=?, big_idea=?, purpose=?, audience=?, swot=?, brand_voice=?, updated_at=? WHERE id=1`)
@@ -2034,7 +2048,11 @@ async function handleApi(request, env){
   if((m=path.match(/^\/approvals\/(.+)\/decide$/)) && method==='POST'){
     const id=m[1]; const ap=await env.DB.prepare(`SELECT * FROM approvals WHERE id=?`).bind(id).first();
     if(!ap) return json({error:'Không tìm thấy'},404);
-    if(!canDecideGate(me, ap.cong)) return json({error:'Bạn không có quyền duyệt cổng này'},403);
+    if(!canDecideGate(me, ap.cong, await coTruongMktHoatDong(env))) return json({error:'Bạn không có quyền duyệt cổng này'},403);
+    // ADR-003: người lập ≠ người duyệt — công tắc module_config.duyet.chan_tu_duyet (mặc định BẬT)
+    const cfgDuyet=(await docCauHinh(env)).duyet||{};
+    if(cfgDuyet.chan_tu_duyet!==false && ap.nguoi_gui && ap.nguoi_gui===me.id)
+      return json({error:'Bạn là người gửi — cần người khác duyệt (người lập ≠ người duyệt). Admin/Trưởng MKT tắt được ở Hàng đợi duyệt › ⚙️ Cấu hình nếu team quá nhỏ.'},403);
     if(ap.trang_thai!=='CHO') return json({error:'Cổng này đã được quyết'},409);
     const pass = body.result==='DAT';
     if(!pass && !String(body.ghi_chu||'').trim()) return json({error:'Trả lại phải nêu lý do'},400);
