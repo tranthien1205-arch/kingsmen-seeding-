@@ -1374,6 +1374,23 @@ function ProfileModal({open, onClose}){
     <div className="flex gap-2 mt-2"><Btn variant="ghost" onClick={onClose}>Huỷ</Btn><Btn variant="brand" className="flex-1" onClick={save} disabled={busy}>{busy?'Đang lưu…':'Lưu'}</Btn></div>
   </Modal>;
 }
+// Sidebar desktop: nhóm dài (≥5 mục) được chia thành cụm nhỏ theo luồng công việc.
+// Chỉ dùng cho desktop — thanh menu mobile vẫn giữ đúng thứ tự NAV_GROUPS.
+const NAV_SECTIONS = [
+  ['Định hướng',   ['strategy','plan','trend']],
+  ['Sản xuất',     ['studio','sanxuat','footage']],
+  ['Duyệt & đăng', ['approve','air']],
+  ['Đo lường',     ['ketqua','cdash']],
+  ['Dữ liệu nền',  ['products','hoc']],
+];
+function navSections(items){
+  if(items.length<5) return [{label:null, items}];
+  const used=new Set(); const out=[];
+  NAV_SECTIONS.forEach(([label,keys])=>{ const its=keys.map(k=>items.find(i=>i.key===k)).filter(Boolean);
+    its.forEach(i=>used.add(i.key)); if(its.length) out.push({label, items:its}); });
+  const rest=items.filter(i=>!used.has(i.key));
+  return rest.length ? [{label:null, items:rest}, ...out] : out;
+}
 // Module đang NÂNG CẤP — chỉ tài khoản dev preview (is_dev) mới thấy
 const BETA_KEYS = new Set(['strategy','plan','products','studio','approve','air','ketqua','footage','cdash','hoc','trend','kenh','sanxuat']);
 function Shell(){
@@ -1413,6 +1430,10 @@ function Shell(){
   const groupBadge = (g) => g.items.reduce((s,it)=>s+badgeFor(it.key),0);
   // mở nhóm: về module con đầu tiên (hoặc giữ nguyên nếu đang ở trong nhóm)
   const openGroup = (g) => { if(!g.items.some(it=>it.key===page)) setPage(g.items[0].key); };
+  // Sidebar desktop: nhóm đang đứng luôn mở; nhóm khác bấm để mở/thu
+  const [openG,setOpenG]=useState(()=>new Set([curGroup.key]));
+  useEffect(()=>{ setOpenG(s=>s.has(curGroup.key)?s:new Set([...s,curGroup.key])); },[curGroup.key]);
+  const toggleG=(k)=>setOpenG(s=>{ const n=new Set(s); n.has(k)?n.delete(k):n.add(k); return n; });
 
   const render = () => {
     switch(page){
@@ -1455,21 +1476,33 @@ function Shell(){
         <div className="w-10 h-10 rounded-xl bg-brand flex items-center justify-center font-display font-800 text-ink">K</div>
         <div><div className="font-display font-700 leading-tight">Kingsmen</div><div className="text-[11px] text-white/40">Seeding</div></div>
       </div>
-      <nav className="flex-1 p-2 space-y-3 overflow-y-auto">
-        {groups.map(g=><div key={g.key}>
-          <div className="px-3 pt-1 pb-1 flex items-center gap-1.5">
-            <span className="text-[11px]">{g.icon}</span>
-            <span className="text-[10px] font-bold tracking-widest uppercase text-white/35">{g.label}</span>
-            {groupBadge(g)>0 && <span className="ml-auto bg-rose-500 text-white text-[10px] font-bold px-1.5 rounded-full">{groupBadge(g)}</span>}
-          </div>
-          <div className="space-y-0.5">
-            {g.items.map(n=><button key={n.key} onClick={()=>setPage(n.key)}
-              className={"w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium transition "+(page===n.key?'bg-brand text-white shadow-brand':'text-white/70 hover:bg-white/10')}>
-              <span className="text-base">{n.icon}</span><span className="truncate">{n.label}</span>
-              {badgeFor(n.key)>0 && <span className="ml-auto bg-white text-ink text-xs font-bold px-1.5 rounded-full">{badgeFor(n.key)}</span>}
-            </button>)}
-          </div>
-        </div>)}
+      <nav className="flex-1 px-2 py-3 space-y-1 overflow-y-auto">
+        {groups.map(g=>{
+          const b=groupBadge(g), active=curGroup.key===g.key;
+          const navBtn=(n,sub)=><button key={n.key} onClick={()=>setPage(n.key)}
+            className={"w-full flex items-center gap-2.5 rounded-lg text-[13px] font-medium transition "+(sub?'pl-3 pr-2 py-1.5 ':'px-3 py-2 ')+
+              (page===n.key?'bg-brand text-white shadow-brand':'text-white/70 hover:bg-white/10 hover:text-white')}>
+            <span className="text-sm w-5 text-center shrink-0">{n.icon}</span><span className="truncate">{n.label}</span>
+            {badgeFor(n.key)>0 && <span className="ml-auto bg-rose-500 text-white text-[10px] font-bold px-1.5 rounded-full">{badgeFor(n.key)}</span>}
+          </button>;
+          // Nhóm chỉ có 1 mục → hiện thẳng như một mục, không lồng thêm cấp
+          if(g.items.length===1) return navBtn(g.items[0], false);
+          const open=openG.has(g.key);
+          return <div key={g.key}>
+            <button onClick={()=>toggleG(g.key)}
+              className={"w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] font-semibold transition "+(active?'text-white':'text-white/60 hover:text-white hover:bg-white/5')}>
+              <span className="text-sm w-5 text-center shrink-0">{g.icon}</span><span className="truncate">{g.label}</span>
+              {!open && b>0 && <span className="bg-rose-500 text-white text-[10px] font-bold px-1.5 rounded-full">{b}</span>}
+              <span className={"ml-auto text-[10px] text-white/40 transition-transform "+(open?'rotate-90':'')}>▶</span>
+            </button>
+            {open && <div className="ml-5 pl-2 border-l border-white/10 mt-0.5 mb-1.5 space-y-0.5">
+              {navSections(g.items).map((sec,i)=><div key={sec.label||i} className={sec.label&&i>0?'pt-1.5':''}>
+                {sec.label && <div className="px-3 pb-0.5 text-[10px] font-semibold uppercase tracking-wider text-white/30">{sec.label}</div>}
+                <div className="space-y-0.5">{sec.items.map(n=>navBtn(n,true))}</div>
+              </div>)}
+            </div>}
+          </div>;
+        })}
       </nav>
       <div className="p-3 border-t border-white/10">
         <button onClick={()=>setProfileOpen(true)} className="text-left w-full group mb-2 flex items-center gap-2.5">
@@ -1507,7 +1540,7 @@ function Shell(){
         </div>}
       </header>
 
-      <main className="p-3 sm:p-2 w-full max-w-[1720px] mx-auto">{render()}</main>
+      <main className="p-3 sm:p-2 w-full">{render()}</main>
     </div>
 
     {/* Bottom nav mobile — CHỈ 5 nhóm lớn, chia đều, không cuộn ngang */}
