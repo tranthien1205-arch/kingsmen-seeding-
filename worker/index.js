@@ -2849,6 +2849,8 @@ export default {
     const cron = (controller && controller.cron) || '';
     if(cron.startsWith('*/15')){
       ctx.waitUntil(chayLichDang(env));           // quét bài tới giờ đăng
+      // Tự chuyển ảnh bằng chứng cũ (base64 trong D1) sang R2, mỗi lượt 30 ảnh — hết thì chỉ còn 1 câu COUNT
+      ctx.waitUntil(migrateProofsBatch(env, 30).catch(()=>{}));
       // Agent bám nhịp 15' để người tự chọn được GIỜ chạy trong Cấu hình;
       // bên trong nó tự chốt mỗi ngày đúng 1 lần nên không chạy lặp.
       ctx.waitUntil(chayAgentTrend(env).catch(()=>{}));
