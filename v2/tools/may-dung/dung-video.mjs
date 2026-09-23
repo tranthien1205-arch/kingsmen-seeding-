@@ -20,7 +20,7 @@ const tachCau = (t) => { const ds = String(t || "").replace(/\s+/g, " ").split(/
 const xuongDong = (s, n = 26) => { const w = String(s).split(" "); const dong = []; let cur = ""; for (const x of w) { if ((cur + " " + x).trim().length > n && cur) { dong.push(cur); cur = x; } else cur = (cur + " " + x).trim(); } if (cur) dong.push(cur); return dong.slice(0, 3).join("\n"); };
 const srtTime = (t) => { const ms = Math.round(t * 1000); const h = Math.floor(ms / 3600000), m = Math.floor((ms % 3600000) / 60000), s = Math.floor((ms % 60000) / 1000), x = ms % 1000; return String(h).padStart(2, "0") + ":" + String(m).padStart(2, "0") + ":" + String(s).padStart(2, "0") + "," + String(x).padStart(3, "0"); };
 
-export default async function dung({ app, goiApp, lenh, dir, log, may }) {
+export default async function dung({ app, goiApp, lenh, dir, log, may, script }) {
   const id = String((lenh.tham_so || {}).noi_dung_id || ""); if (!id) return { ok: false, msg: "lệnh thiếu noi_dung_id" };
   const r = await goiApp("/hub/viec/dung_video?noi_dung_id=" + encodeURIComponent(id)); if (!r.ok) return { ok: false, msg: "không hỏi được việc dựng (HTTP " + r.status + ")" };
   const v = ((r.d && r.d.viec) || [])[0]; if (!v) return { ok: false, msg: "kịch bản không còn ở trạng thái đã duyệt / sản xuất" };
@@ -33,14 +33,23 @@ export default async function dung({ app, goiApp, lenh, dir, log, may }) {
   if (v.cta) canhGoc.push({ label: "Chốt", text: v.cta, hinh: "logo Kingsmen, sản phẩm" });
   const canh = canhGoc.map((c, k) => ({ k, label: c.label || "Cảnh " + (k + 1), hinh: c.hinh || "", cau: tachCau((k === 0 && v.hook && c.text !== v.hook ? v.hook + " " : "") + (c.text || "")) })).filter((c) => c.cau.length);
 
-  // ---- chọn footage theo gợi ý hình
+  // ---- chọn footage theo gợi ý hình: quy tắc từ khoá (thầy) + mô hình nhìn mở (trò — BÓNG: chỉ ghi, MỞ: dùng) — ADR-009
   const thieuHinh = []; let xoay = 0; let truoc = null;
   for (const c of canh) {
     const diem = nguon.map((t) => ({ t, d: khop(c.hinh + " " + c.cau.join(" "), (t.ten || "") + " " + (t.mo_ta || "")) + (t.loai === "FOOTAGE" ? 0.5 : 0) - (t === truoc ? 0.4 : 0) }));
-    diem.sort((a, b) => b.d - a.d); const tot = diem[0];
+    diem.sort((a, b) => b.d - a.d); const tot = diem[0]; c.ung_vien = diem.map((x) => ({ id: x.t.id, ten: x.t.ten, mo_ta: x.t.mo_ta, media_url: x.t.media_url, media_type: x.t.media_type, diem: +x.d.toFixed(2) }));
     if (tot && tot.d >= 1) c.ts = tot.t; else { c.ts = nguon[xoay++ % nguon.length]; if (c.hinh) thieuHinh.push(c.label + ": " + c.hinh.slice(0, 60)); }
-    truoc = c.ts;
+    c.chon_tu_khoa = c.ts; truoc = c.ts;
   }
+  let cachChon = "TU_KHOA";
+  try { const mh = await goiApp("/hub/mo-hinh/chon_canh"); const dt = mh.ok ? mh.d : null;
+    if (dt && ["BONG", "MO"].includes(dt.muc) && dt.mo_hinh_mo && script) { const nhin = await script("nhin"); const N = await nhin.taoNhin({ model_id: dt.mo_hinh_mo.model_id, log });
+      let dau = null; if (dt.mo_hinh_mo.checkpoint_url) { try { const x = await fetch(dt.mo_hinh_mo.checkpoint_url, { headers: /\/media\//.test(dt.mo_hinh_mo.checkpoint_url) ? { "X-Hub-Key": app.khoa } : {} }); if (x.ok) dau = await x.json(); } catch (e) { log("  không tải được đầu học:", e.message); } }
+      const emb = {}; for (const t of nguon) { try { const src = await taiVe(t.media_url, "ts_" + t.id + (t.media_type === "IMAGE" ? ".jpg" : ".mp4")); emb[t.id] = await N.embImage(nhin.khungHinh(src, join(TH, "khung"), t.id)); } catch (e) { log("  bỏ nhìn", t.ten, e.message.slice(0, 60)); } }
+      let prev = null; for (const c of canh) { const tv = await N.embText(c.hinh + " " + c.cau.join(" ")); let best = null, bs = -1e9;
+        for (const u of c.ung_vien) { const iv = emb[u.id]; if (!iv) continue; const f = nhin.dacTrung(tv, iv); const sc = (dau ? nhin.diemDau(dau, f) : (f[0] + 1) / 2) - (prev === u.id ? 0.08 : 0); u.diem_mo = +sc.toFixed(3); if (sc > bs) { bs = sc; best = u.id; } }
+        c.chon_mo = best; prev = best; if (dt.muc === "MO" && best) { c.ts = nguon.find((t) => t.id === best) || c.ts; } }
+      cachChon = dt.muc === "MO" ? "MO" : "TU_KHOA"; log("  mô hình nhìn mở:", dt.muc, dau ? "đầu " + (dau.tinh_nang || "") : "cos thuần"); } } catch (e) { log("  bỏ mô hình nhìn:", e.message.slice(0, 120)); }
 
   // ---- giọng đọc từng câu (TTS ở Worker) — không có khoá → không tiếng
   let coGiong = true; let ttsLoi = "";
@@ -80,7 +89,7 @@ export default async function dung({ app, goiApp, lenh, dir, log, may }) {
   const taiLen = async (f, type) => { const buf = readFileSync(f); const x = await fetch(app.url.replace(/\/+$/, "") + "/hub/upload?type=" + encodeURIComponent(type), { method: "POST", headers: { "X-Hub-Key": app.khoa, "Content-Type": type, "Content-Length": String(buf.length) }, body: buf }); const d = await x.json().catch(() => ({})); if (!x.ok) throw new Error("tải lên " + x.status + " " + (d.error || "")); return d.media_url; };
   const mediaUrl = await taiLen(banNhap, "video/mp4"); let goiUrl = ""; if (goiF) { try { goiUrl = await taiLen(goiF, "application/zip"); } catch (e) { log("  tải gói lỗi:", e.message); } }
   const moTa = "Máy dựng v2 · " + canhDung.length + " cảnh · " + Math.round(t0) + "s · " + (coGiong ? "có giọng đọc " + (cfg.tts_giong || "") : "không giọng (" + ttsLoi + ")") + (nhacF ? " · nhạc nền" : "") + (goiUrl ? " · có gói CapCut" : "");
-  const nap = await goiApp("/hub/nap", { method: "POST", body: JSON.stringify({ viec: "may_dung.dung_video", bang: "content_os.video", luot: "md" + Date.now(), phan: { i: 1, n: 1 }, dong: [{ noi_dung_id: id, media_url: mediaUrl, goi_url: goiUrl, thieu_hinh: thieuHinh, mo_ta: moTa, may }] }) });
+  const nap = await goiApp("/hub/nap", { method: "POST", body: JSON.stringify({ viec: "may_dung.dung_video", bang: "content_os.video", luot: "md" + Date.now(), phan: { i: 1, n: 1 }, dong: [{ noi_dung_id: id, media_url: mediaUrl, goi_url: goiUrl, thieu_hinh: thieuHinh, mo_ta: moTa, may, canh_chon: canhDung.map((c) => ({ k: c.k, label: c.label, hinh: c.hinh, text: c.cau.join(" ").slice(0, 300), chon: c.ts && c.ts.id, chon_mo: c.chon_mo || null, cach: cachChon, ung_vien: (c.ung_vien || []).slice(0, 12) })) }] }) });
   if (!nap.ok) return { ok: false, msg: "dựng xong nhưng app không nhận lô (HTTP " + nap.status + ")" };
   return { ok: true, msg: moTa + (thieuHinh.length ? " · thiếu hình " + thieuHinh.length + " cảnh" : "") };
 }

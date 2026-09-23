@@ -8,6 +8,11 @@ Máy con rút gọn: nhận lệnh **dựng video nháp** từ app cho tài kho�
 3. Trong app: **Hồ sơ › Máy dựng › ＋ Kết nối máy này** → copy mã ghép (hiện một lần).
 4. Chạy `BAT-DAU.bat`, dán mã ghép khi được hỏi. Máy báo nhịp tim 2 phút/lần; app hiện 🟢 ở Hồ sơ › Máy dựng.
 
+## Bật phần AI (tuỳ chọn — ADR-009)
+- Mô hình nhìn mở (chọn cảnh, huấn luyện đầu học): trong thư mục máy con chạy `npm install` (tải @huggingface/transformers; CLIP ~150 MB tải lần đầu). Máy sẽ khai `mo_hinh` + `huan_luyen` với app. Có GPU NVIDIA thì nhanh hơn, không bắt buộc.
+- Mô hình ngôn ngữ mở chạy bóng: cài Ollama (https://ollama.com) rồi `ollama pull qwen2.5:7b`. Máy tự nhận ra Ollama đang chạy.
+- Mã các phần này (`nhin.mjs`, `mo-hinh.mjs`, `huan-luyen.mjs`) cũng phát từ app, máy chỉ giữ bản cache theo hash.
+
 ## Dùng
 - Ở thẻ video đã duyệt › tab **Sản xuất** › **🎬 Dựng trên máy…** chọn máy của bạn. Máy tải footage/ảnh của thẻ, đọc lời bình bằng giọng Google (nếu Admin đã cắm khoá), trộn nhạc nền, in phụ đề, xuất **bản nháp** và **gói CapCut** (từng cảnh + giọng + SRT + nhạc) về thẻ.
 - Máy nào cũng chạy được lệnh của người khác nếu người đó chọn máy bạn; máy chỉ nhận lệnh gửi đích danh cho nó.

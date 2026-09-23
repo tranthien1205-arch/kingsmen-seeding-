@@ -171,6 +171,15 @@ async function ensureSchema(env){
     `CREATE TABLE IF NOT EXISTS tram_trang_thai (id TEXT PRIMARY KEY, than TEXT, nhan_luc TEXT)`,
     // ADR-008 — máy ghép theo tài khoản (máy con dựng video): khoá chỉ lưu hash; kha_nang ['dung_video']; than = nhịp tim gần nhất
     `CREATE TABLE IF NOT EXISTS may_ghep (id TEXT PRIMARY KEY, ten TEXT, chu_user_id TEXT, chu_ten TEXT, khoa_hash TEXT, kha_nang TEXT, ban TEXT, nhan_luc TEXT, than TEXT, active INTEGER DEFAULT 1, created_at TEXT)`,
+    // ADR-009 — BỘ NÃO AI. mo_hinh: loai NGON_NGU|NHIN|NGHE|TTS|ANH · cach_goi API|MAY_GHEP · gia theo don_vi (1M_token | 1M_ky_tu) · phien_ban/checkpoint = đầu đã huấn luyện (mô hình mở)
+    `CREATE TABLE IF NOT EXISTS mo_hinh (id TEXT PRIMARY KEY, ten TEXT, nha_cung_cap TEXT, loai TEXT, cach_goi TEXT, model_id TEXT, gia_vao REAL DEFAULT 0, gia_ra REAL DEFAULT 0, don_vi TEXT DEFAULT '1M_token', kha_nang TEXT, trang_thai TEXT DEFAULT 'BAT', phien_ban TEXT, checkpoint_url TEXT, diem INTEGER DEFAULT 0, so_mau INTEGER DEFAULT 0, ghi_chu TEXT, created_at TEXT, updated_at TEXT)`,
+    // dinh_tuyen: mỗi TÍNH NĂNG một mô hình chính (API/quy tắc = thầy), dự phòng, mô hình mở (trò); muc API → BONG (mở chạy song song, không dùng) → MO (mở tự làm) — máy đề nghị, người gạt
+    `CREATE TABLE IF NOT EXISTS dinh_tuyen (tinh_nang TEXT PRIMARY KEY, ten TEXT, loai TEXT, mo_hinh_chinh TEXT, mo_hinh_du_phong TEXT, mo_hinh_mo TEXT, muc TEXT DEFAULT 'API', nguong INTEGER DEFAULT 80, min_mau INTEGER DEFAULT 30, diem INTEGER DEFAULT 0, so_mau INTEGER DEFAULT 0, de_nghi TEXT, de_nghi_ly_do TEXT, updated_at TEXT, updated_by_name TEXT)`,
+    // mau_hoc_ai: kho mẫu — đầu vào, đầu ra mô hình chính, đầu ra mô hình mở (bóng), phán quyết/nhãn người; tap HOC|KIEM (giữ lại 20% để đánh giá)
+    `CREATE TABLE IF NOT EXISTS mau_hoc_ai (id TEXT PRIMARY KEY, tinh_nang TEXT, mo_hinh_id TEXT, doi_tuong TEXT, doi_tuong_id TEXT, dau_vao TEXT, dau_ra TEXT, dau_ra_mo TEXT, mo_hinh_mo_id TEXT, giong_mo REAL, phan_quyet TEXT, nhan TEXT, giong REAL, tap TEXT DEFAULT 'HOC', created_at TEXT, cham_at TEXT, cham_boi TEXT)`,
+    `CREATE INDEX IF NOT EXISTS idx_mau_ai_tn ON mau_hoc_ai(tinh_nang, created_at)`,
+    // mo_hinh_phien_ban: checkpoint máy huấn luyện gửi về + đánh giá trên tập kiểm → người duyệt (G4) mới bật
+    `CREATE TABLE IF NOT EXISTS mo_hinh_phien_ban (id TEXT PRIMARY KEY, mo_hinh_id TEXT, tinh_nang TEXT, phien_ban TEXT, checkpoint_url TEXT, danh_gia TEXT, so_mau INTEGER, may TEXT, trang_thai TEXT DEFAULT 'CHO_DUYET', duyet_boi TEXT, duyet_at TEXT, ly_do TEXT, created_at TEXT)`,
     `CREATE TABLE IF NOT EXISTS tram_lo (id TEXT PRIMARY KEY, viec TEXT, bang TEXT, luot TEXT, phan TEXT, so_dong INTEGER, xu_ly TEXT, created_at TEXT)`,
     // ADR-005 — kết quả (3 mức tin cậy, không cộng dồn), báo cáo, đề xuất cải tiến
     // ket_qua: muc_tin_cay TRUC_TIEP|GIAN_TIEP|KHONG_QUY_DON · nguon API_KENH|TRAM|SAN|NHAP_TAY|NGOAI · ky = ngày (API) hoặc kỳ đối soát
@@ -194,14 +203,15 @@ async function ensureSchema(env){
     // lead từ bình luận hỏi mua/hỏi giá dưới bài seeding → giao MKT trả lời (luôn người)
     `CREATE TABLE IF NOT EXISTS lead_seeding (id TEXT PRIMARY KEY, viec_id TEXT, nguoi TEXT, noi_dung_hoi TEXT, link_bl TEXT, trang_thai TEXT DEFAULT 'MOI', giao_cho TEXT, tra_loi_at TEXT, tra_loi_boi TEXT, ghi_chu TEXT, created_at TEXT)`,
   );
-  try{ await env.DB.prepare(`ALTER TABLE bai_dang ADD COLUMN ma_theo_doi TEXT`).run(); }catch(e){}
-  try{ await env.DB.prepare(`ALTER TABLE tram_lenh ADD COLUMN may_id TEXT`).run(); }catch(e){}   // ADR-008: lệnh có máy đích ('tram' = Trạm văn phòng, NULL = Trạm)   // mã/voucher để đối soát sàn quy đơn
   // ADR-006: điểm N ngày gần nhất + đề nghị của máy (LEN | XUONG | null) cho từng bước
   for(const s of [`ALTER TABLE buoc_thuc_hien ADD COLUMN san_sang_gan INTEGER DEFAULT 0`,`ALTER TABLE buoc_thuc_hien ADD COLUMN so_mau_gan INTEGER DEFAULT 0`,`ALTER TABLE buoc_thuc_hien ADD COLUMN de_nghi TEXT`,`ALTER TABLE buoc_thuc_hien ADD COLUMN de_nghi_ly_do TEXT`,`ALTER TABLE buoc_thuc_hien ADD COLUMN de_nghi_at TEXT`]) try{ await env.DB.prepare(s).run(); }catch(e){}
   for(const s of q) await env.DB.prepare(s).run();
+  // cột thêm sau (DB cũ) — ALTER phải chạy SAU khi bảng đã tạo
+  for(const st of [`ALTER TABLE bai_dang ADD COLUMN ma_theo_doi TEXT`,`ALTER TABLE tram_lenh ADD COLUMN may_id TEXT`,`ALTER TABLE ai_usage ADD COLUMN mo_hinh_id TEXT`,`ALTER TABLE ai_usage ADD COLUMN muc TEXT`]) try{ await env.DB.prepare(st).run(); }catch(e){}
   // pillar phục vụ mục tiêu nào → chỉ tiêu tháng & KPI đo theo đó
   try{ await env.DB.prepare(`ALTER TABLE pillars ADD COLUMN muc_tieu TEXT DEFAULT 'BRAND'`).run(); }catch(e){}
   await seedNeuTrong(env);
+  await seedBoNaoAI(env);
 }
 async function seedNeuTrong(env){
   const u=await env.DB.prepare(`SELECT id FROM users LIMIT 1`).first();
@@ -229,8 +239,8 @@ async function logAudit(env, u, action, entity, entity_id, detail=''){
 function tinhChiPhiAI(cfg, model, vao, ra){ const g=(cfg.gia||{})[model]; if(!g) return 0; return (so(vao)*so(g.vao)+so(ra)*so(g.ra))/1e6; }
 async function ghiAIUsage(env, o){
   const cfg=(await docCauHinh(env)).ai||{};
-  try{ await env.DB.prepare(`INSERT INTO ai_usage (id,at,thang,provider,model,tinh_nang,user_id,user_name,tokens_vao,tokens_ra,chi_phi_usd,ok,ms,loi) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
-    .bind(uid('ai'), nowISO(), thangHienTai(), o.provider||'anthropic', o.model||'', chuoi(o.tinh_nang||'khac',40), (o.me&&o.me.id)||null, (o.me&&o.me.ho_ten)||'Agent', so(o.tokens_vao), so(o.tokens_ra), (o.chi_phi_usd!=null?so(o.chi_phi_usd):tinhChiPhiAI(cfg,o.model,o.tokens_vao,o.tokens_ra)), bool(o.ok!==false), so(o.ms), o.loi?chuoi(o.loi,300):null).run(); }catch(e){}
+  try{ await env.DB.prepare(`INSERT INTO ai_usage (id,at,thang,provider,model,tinh_nang,user_id,user_name,tokens_vao,tokens_ra,chi_phi_usd,ok,ms,loi,mo_hinh_id,muc) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+    .bind(uid('ai'), nowISO(), thangHienTai(), o.provider||'anthropic', o.model||'', chuoi(o.tinh_nang||'khac',40), (o.me&&o.me.id)||null, (o.me&&o.me.ho_ten)||'Agent', so(o.tokens_vao), so(o.tokens_ra), (o.chi_phi_usd!=null?so(o.chi_phi_usd):tinhChiPhiAI(cfg,o.model,o.tokens_vao,o.tokens_ra)), bool(o.ok!==false), so(o.ms), o.loi?chuoi(o.loi,300):null, o.mo_hinh_id||null, o.muc||null).run(); }catch(e){}
 }
 async function tongHopAI(env, thang){
   const t=await env.DB.prepare(`SELECT COUNT(*) so_lan, COALESCE(SUM(tokens_vao),0) vao, COALESCE(SUM(tokens_ra),0) ra, COALESCE(SUM(chi_phi_usd),0) usd FROM ai_usage WHERE thang=?`).bind(thang).first()||{};
@@ -246,18 +256,87 @@ async function kiemNganSachAI(env, {hoc=false}={}){
     const nsHoc=ns*so(cfg.ngan_sach_hoc_pct,20)/100; if(so(th.usd)>=nsHoc) return {ok:false, vuot_ngan_sach:true, loi:'Hết ngân sách học tháng này ('+so(th.usd).toFixed(2)+'/'+nsHoc.toFixed(2)+' USD)'}; }
   return {ok:true, pct:usd/ns*100};
 }
-async function goiAI(env, {system, messages, max_tokens=4000, tinh_nang='khac', me=null}){
-  const key=env.ANTHROPIC_API_KEY; if(!key) return {ok:false, thieu_key:true, loi:'Chưa cắm ANTHROPIC_API_KEY'};
-  const ns=await kiemNganSachAI(env,{hoc:/^hoc_/.test(tinh_nang)}); if(!ns.ok) return ns;
-  const model=env.ANTHROPIC_MODEL||AI_MODEL_MAC_DINH; const t0=Date.now();
+// ============================================================
+//  ADR-009 — BỘ NÃO AI: danh mục mô hình · định tuyến theo tính năng · kho mẫu · bóng · huấn luyện
+// ============================================================
+const MO_HINH_SEED=[
+  { id:'claude-sonnet-4-5', ten:'Claude Sonnet 4.5', nha_cung_cap:'anthropic', loai:'NGON_NGU', cach_goi:'API', model_id:'claude-sonnet-4-5', gia_vao:3, gia_ra:15, ghi_chu:'mặc định soạn bài' },
+  { id:'claude-haiku-4-5', ten:'Claude Haiku 4.5', nha_cung_cap:'anthropic', loai:'NGON_NGU', cach_goi:'API', model_id:'claude-haiku-4-5-20251001', gia_vao:1, gia_ra:5, ghi_chu:'rẻ — chấm điểm, tóm tắt' },
+  { id:'gemini-2-5-flash', ten:'Gemini 2.5 Flash', nha_cung_cap:'google', loai:'NGON_NGU', cach_goi:'API', model_id:'gemini-2.5-flash', gia_vao:0.3, gia_ra:2.5, ghi_chu:'cần GEMINI_API_KEY' },
+  { id:'gpt-4o-mini', ten:'GPT-4o mini', nha_cung_cap:'openai', loai:'NGON_NGU', cach_goi:'API', model_id:'gpt-4o-mini', gia_vao:0.15, gia_ra:0.6, ghi_chu:'cần OPENAI_API_KEY' },
+  { id:'google-tts-neural2', ten:'Google TTS Neural2 vi-VN', nha_cung_cap:'google', loai:'TTS', cach_goi:'API', model_id:'vi-VN-Neural2-D', gia_vao:16, gia_ra:0, don_vi:'1M_ky_tu', ghi_chu:'cần GOOGLE_TTS_KEY' },
+  { id:'qwen2-5-7b', ten:'Qwen2.5 7B (Ollama)', nha_cung_cap:'ollama', loai:'NGON_NGU', cach_goi:'MAY_GHEP', model_id:'qwen2.5:7b', gia_vao:0, gia_ra:0, ghi_chu:'mở — chạy bóng trên máy ghép có Ollama' },
+  { id:'clip-vit-b16', ten:'CLIP ViT-B/16 + đầu học', nha_cung_cap:'huggingface', loai:'NHIN', cach_goi:'MAY_GHEP', model_id:'Xenova/clip-vit-base-patch16', gia_vao:0, gia_ra:0, ghi_chu:'mở — chọn cảnh / lọc footage; đầu (head) huấn luyện từ mẫu người chấm' },
+  { id:'whisper-base', ten:'Whisper base', nha_cung_cap:'huggingface', loai:'NGHE', cach_goi:'MAY_GHEP', model_id:'onnx-community/whisper-base', gia_vao:0, gia_ra:0, ghi_chu:'mở — nghe lời trong footage (009c)' },
+  { id:'piper-vi', ten:'Piper TTS tiếng Việt', nha_cung_cap:'piper', loai:'TTS', cach_goi:'MAY_GHEP', model_id:'vi_VN-vais1000-medium', gia_vao:0, gia_ra:0, don_vi:'1M_ky_tu', ghi_chu:'mở — giọng đọc miễn phí (009c)' },
+];
+// mô hình chính null = quy tắc/người (không gọi API); NGON_NGU mức MỞ thuộc 009c (cần hàng đợi máy ghép) — 009 chỉ cho BÓNG
+const DINH_TUYEN_SEED=[
+  { tinh_nang:'soan_noi_dung', ten:'Soạn nội dung (người bấm ✨)', loai:'NGON_NGU', chinh:'claude-sonnet-4-5', du_phong:'claude-haiku-4-5', mo:'qwen2-5-7b' },
+  { tinh_nang:'soan_nhap_agent', ten:'Soạn nháp theo kế hoạch (B4)', loai:'NGON_NGU', chinh:'claude-sonnet-4-5', du_phong:'claude-haiku-4-5', mo:'qwen2-5-7b' },
+  { tinh_nang:'hoc_ban_bong', ten:'Bản nháp bóng (học B4)', loai:'NGON_NGU', chinh:'claude-haiku-4-5', du_phong:'claude-sonnet-4-5', mo:'qwen2-5-7b' },
+  { tinh_nang:'seeding_bien_the', ten:'Biến thể seeding (B13)', loai:'NGON_NGU', chinh:'claude-sonnet-4-5', du_phong:'claude-haiku-4-5', mo:'qwen2-5-7b' },
+  { tinh_nang:'seeding_thong_diep', ten:'Đề xuất bản đồ thông điệp', loai:'NGON_NGU', chinh:'claude-sonnet-4-5', du_phong:null, mo:null },
+  { tinh_nang:'cham_y_tuong', ten:'Chấm ý tưởng/trend (B1)', loai:'NGON_NGU', chinh:'claude-haiku-4-5', du_phong:'claude-sonnet-4-5', mo:'qwen2-5-7b' },
+  { tinh_nang:'bao_cao', ten:'Nhận định báo cáo (B11)', loai:'NGON_NGU', chinh:'claude-haiku-4-5', du_phong:'claude-sonnet-4-5', mo:'qwen2-5-7b' },
+  { tinh_nang:'tts', ten:'Giọng đọc video nháp', loai:'TTS', chinh:'google-tts-neural2', du_phong:null, mo:'piper-vi' },
+  { tinh_nang:'chon_canh', ten:'Chọn footage cho từng cảnh (dựng video)', loai:'NHIN', chinh:null, du_phong:null, mo:'clip-vit-b16', nguong:75, min_mau:40 },
+  { tinh_nang:'loc_footage', ten:'Lọc clip chuẩn từ footage thô', loai:'NHIN', chinh:null, du_phong:null, mo:'clip-vit-b16', nguong:75, min_mau:60 },
+];
+async function seedBoNaoAI(env){ for(const m of MO_HINH_SEED) await env.DB.prepare(`INSERT OR IGNORE INTO mo_hinh (id,ten,nha_cung_cap,loai,cach_goi,model_id,gia_vao,gia_ra,don_vi,kha_nang,trang_thai,ghi_chu,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,'BAT',?,?,?)`).bind(m.id,m.ten,m.nha_cung_cap,m.loai,m.cach_goi,m.model_id,m.gia_vao,m.gia_ra,m.don_vi||'1M_token','[]',m.ghi_chu||'',nowISO(),nowISO()).run();
+  for(const d of DINH_TUYEN_SEED) await env.DB.prepare(`INSERT OR IGNORE INTO dinh_tuyen (tinh_nang,ten,loai,mo_hinh_chinh,mo_hinh_du_phong,mo_hinh_mo,muc,nguong,min_mau,updated_at) VALUES (?,?,?,?,?,?,'API',?,?,?)`).bind(d.tinh_nang,d.ten,d.loai,d.chinh,d.du_phong,d.mo,so(d.nguong,80),so(d.min_mau,30),nowISO()).run(); }
+const KHOA_NCC={ anthropic:'ANTHROPIC_API_KEY', google:'GEMINI_API_KEY', openai:'OPENAI_API_KEY' };
+async function docMoHinh(env, id){ return id?await env.DB.prepare(`SELECT * FROM mo_hinh WHERE id=?`).bind(id).first():null; }
+// định tuyến: mô hình chính đang BẬT và có khoá → dùng; không thì dự phòng; không có gì → null (goiAI rơi về Anthropic mặc định)
+async function chonMoHinh(env, tinh_nang){ const dt=await env.DB.prepare(`SELECT * FROM dinh_tuyen WHERE tinh_nang=?`).bind(tinh_nang).first(); if(!dt) return {dt:null, mh:null, du_phong:null};
+  const ok=m=>m&&m.trang_thai==='BAT'&&m.cach_goi==='API'&&!!env[KHOA_NCC[m.nha_cung_cap]||'']; const c=await docMoHinh(env, dt.mo_hinh_chinh), d=await docMoHinh(env, dt.mo_hinh_du_phong);
+  return { dt, mh: ok(c)?c:(ok(d)?d:null), du_phong: ok(c)&&ok(d)?d:null, thieu_key: c&&c.cach_goi==='API'&&!env[KHOA_NCC[c.nha_cung_cap]||'']?KHOA_NCC[c.nha_cung_cap]:null }; }
+// gọi một nhà cung cấp — cùng hình dạng trả về {ok, text, vao, ra}
+async function goiNhaCungCap(env, mh, {system, messages, max_tokens}){ const key=env[KHOA_NCC[mh.nha_cung_cap]||'']; if(!key) return {ok:false, loi:'Chưa cắm '+(KHOA_NCC[mh.nha_cung_cap]||'khoá')};
   try{
-    const res=await fetch('https://api.anthropic.com/v1/messages',{ method:'POST', headers:{ 'content-type':'application/json', 'x-api-key':key, 'anthropic-version':'2023-06-01' }, body: JSON.stringify({ model, max_tokens, system, messages }) });
-    const j=await res.json().catch(()=>({})); const u=j.usage||{};
-    if(!res.ok){ const loi='AI trả lỗi: '+((j.error&&j.error.message)||('HTTP '+res.status)); await ghiAIUsage(env,{model,tinh_nang,me,tokens_vao:u.input_tokens,tokens_ra:u.output_tokens,ok:false,ms:Date.now()-t0,loi}); return {ok:false, loi}; }
-    await ghiAIUsage(env,{model,tinh_nang,me,tokens_vao:u.input_tokens,tokens_ra:u.output_tokens,ok:true,ms:Date.now()-t0});
-    return {ok:true, text:(j.content||[]).map(c=>c.text||'').join(''), usage:u, model};
-  }catch(e){ await ghiAIUsage(env,{model,tinh_nang,me,ok:false,ms:Date.now()-t0,loi:e.message}); return {ok:false, loi:'Không gọi được AI: '+e.message}; }
+    if(mh.nha_cung_cap==='anthropic'){ const res=await fetch('https://api.anthropic.com/v1/messages',{ method:'POST', headers:{ 'content-type':'application/json', 'x-api-key':key, 'anthropic-version':'2023-06-01' }, body: JSON.stringify({ model:mh.model_id, max_tokens, system, messages }) }); const j=await res.json().catch(()=>({})); const u=j.usage||{}; if(!res.ok) return {ok:false, loi:'AI trả lỗi: '+((j.error&&j.error.message)||('HTTP '+res.status)), vao:u.input_tokens, ra:u.output_tokens}; return {ok:true, text:(j.content||[]).map(c=>c.text||'').join(''), vao:u.input_tokens, ra:u.output_tokens}; }
+    if(mh.nha_cung_cap==='google'){ const res=await fetch('https://generativelanguage.googleapis.com/v1beta/models/'+encodeURIComponent(mh.model_id)+':generateContent?key='+encodeURIComponent(key),{ method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify({ system_instruction:{parts:[{text:system||''}]}, contents:messages.map(m=>({role:m.role==='assistant'?'model':'user', parts:[{text:String(m.content||'')}]})), generationConfig:{maxOutputTokens:max_tokens} }) }); const j=await res.json().catch(()=>({})); const u=j.usageMetadata||{}; if(!res.ok) return {ok:false, loi:'AI trả lỗi: '+((j.error&&j.error.message)||('HTTP '+res.status)), vao:u.promptTokenCount, ra:u.candidatesTokenCount}; return {ok:true, text:(((j.candidates||[])[0]||{}).content||{}).parts?.map(p=>p.text||'').join('')||'', vao:u.promptTokenCount, ra:u.candidatesTokenCount}; }
+    if(mh.nha_cung_cap==='openai'){ const res=await fetch('https://api.openai.com/v1/chat/completions',{ method:'POST', headers:{ 'content-type':'application/json', authorization:'Bearer '+key }, body: JSON.stringify({ model:mh.model_id, max_tokens, messages:[...(system?[{role:'system',content:system}]:[]), ...messages] }) }); const j=await res.json().catch(()=>({})); const u=j.usage||{}; if(!res.ok) return {ok:false, loi:'AI trả lỗi: '+((j.error&&j.error.message)||('HTTP '+res.status)), vao:u.prompt_tokens, ra:u.completion_tokens}; return {ok:true, text:(((j.choices||[])[0]||{}).message||{}).content||'', vao:u.prompt_tokens, ra:u.completion_tokens}; }
+    return {ok:false, loi:'Nhà cung cấp lạ '+mh.nha_cung_cap};
+  }catch(e){ return {ok:false, loi:'Không gọi được AI: '+e.message}; } }
+const chiPhiMoHinh=(mh, vao, ra)=>mh?((so(vao)*so(mh.gia_vao)+so(ra)*so(mh.gia_ra))/1e6):0;
+// kho mẫu: mỗi lượt gọi có định tuyến → một dòng (đầu vào/đầu ra chính); tap KIEM cho ~20% để đánh giá mô hình mở
+async function ghiMauAI(env, {tinh_nang, mo_hinh_id, doi_tuong=null, doi_tuong_id=null, dau_vao, dau_ra, dau_ra_mo=null, mo_hinh_mo_id=null, giong_mo=null, nhan=null}){ const id=uid('ma'); const tap=(parseInt(id.slice(-2),36)%5===0)?'KIEM':'HOC';
+  await env.DB.prepare(`INSERT INTO mau_hoc_ai (id,tinh_nang,mo_hinh_id,doi_tuong,doi_tuong_id,dau_vao,dau_ra,dau_ra_mo,mo_hinh_mo_id,giong_mo,nhan,tap,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`).bind(id, tinh_nang, mo_hinh_id||null, doi_tuong, doi_tuong_id, JSON.stringify(dau_vao||{}).slice(0,8000), dau_ra==null?null:JSON.stringify(dau_ra).slice(0,6000), dau_ra_mo==null?null:JSON.stringify(dau_ra_mo).slice(0,6000), mo_hinh_mo_id, giong_mo, nhan==null?null:JSON.stringify(nhan).slice(0,2000), tap, nowISO()).run(); return id; }
+// gắn mẫu vừa tạo với đối tượng (bài máy vừa soạn) để phán quyết người (duyệt/trả) chảy về kho mẫu
+async function ganMauAI(env, tinh_nang, doi_tuong, doi_tuong_id){ const r=await env.DB.prepare(`SELECT id FROM mau_hoc_ai WHERE tinh_nang=? AND doi_tuong_id IS NULL AND created_at>=? ORDER BY created_at DESC LIMIT 1`).bind(tinh_nang, new Date(Date.now()-120000).toISOString()).first(); if(r) await env.DB.prepare(`UPDATE mau_hoc_ai SET doi_tuong=?, doi_tuong_id=? WHERE id=?`).bind(doi_tuong, doi_tuong_id, r.id).run(); return r?r.id:null; }
+async function goiAI(env, {system, messages, max_tokens=4000, tinh_nang='khac', me=null}){
+  const {dt, mh, du_phong, thieu_key}=await chonMoHinh(env, tinh_nang);
+  // chưa có định tuyến (tính năng lạ) → Anthropic mặc định như trước
+  const macDinh=!mh?(env.ANTHROPIC_API_KEY?{id:null, nha_cung_cap:'anthropic', model_id:env.ANTHROPIC_MODEL||AI_MODEL_MAC_DINH, gia_vao:null}:null):null;
+  const m1=mh||macDinh; if(!m1) return {ok:false, thieu_key:true, loi:'Chưa cắm '+(thieu_key||'ANTHROPIC_API_KEY')+(dt?(' cho mô hình của tính năng '+tinh_nang):'')};
+  const ns=await kiemNganSachAI(env,{hoc:/^hoc_/.test(tinh_nang)}); if(!ns.ok) return ns;
+  const cfg=(await docCauHinh(env)).ai||{}; const muc=dt?dt.muc:'API';
+  const chay=async(m)=>{ const t0=Date.now(); const r=await goiNhaCungCap(env, m, {system, messages, max_tokens}); const chi=m.gia_vao==null?tinhChiPhiAI(cfg,m.model_id,r.vao,r.ra):chiPhiMoHinh(m,r.vao,r.ra);
+    await ghiAIUsage(env,{provider:m.nha_cung_cap, model:m.model_id, tinh_nang, me, tokens_vao:r.vao, tokens_ra:r.ra, ok:r.ok, ms:Date.now()-t0, loi:r.ok?null:r.loi, chi_phi_usd:chi, mo_hinh_id:m.id, muc}); return {...r, model:m.model_id, mo_hinh_id:m.id}; };
+  let r=await chay(m1); if(!r.ok && du_phong){ const r2=await chay(du_phong); if(r2.ok) r={...r2, du_phong:true, loi_chinh:r.loi}; }
+  if(!r.ok) return {ok:false, loi:r.loi};
+  // kho mẫu + bóng: có định tuyến → lưu mẫu; mức BÓNG/MỞ với mô hình mở → xếp lệnh cho máy ghép chạy song song
+  if(dt){ const mauId=await ghiMauAI(env,{tinh_nang, mo_hinh_id:r.mo_hinh_id, dau_vao:{system:String(system||'').slice(0,3000), user:messages.map(x=>String(x.content||'')).join('\n').slice(0,4000)}, dau_ra:r.text.slice(0,6000)});
+    if(['BONG','MO'].includes(dt.muc)&&dt.mo_hinh_mo){ const mayId=await mayChoViec(env,'mo_hinh'); if(mayId) await taoLenhTram(env,'mo_hinh_bong',{tinh_nang}, MAY('Máy (bộ não)'), mayId); } r.mau_id=mauId; }
+  return {ok:true, text:r.text, usage:{input_tokens:r.vao, output_tokens:r.ra}, model:r.model, mo_hinh_id:r.mo_hinh_id, du_phong:!!r.du_phong, mau_id:r.mau_id};
 }
+// máy ghép đang bật có khả năng X (mo_hinh | huan_luyen | dung_video) → id, không có → null
+async function mayChoViec(env, khaNang){ const ds=(await mayGhepSong(env)).filter(x=>x.song&&x.kha_nang.includes(khaNang)); return ds.length?ds[0].id:null; }
+// điểm & đề nghị định tuyến: NGON_NGU BÓNG = giống trung bình mở↔chính (×100); NHIN = % mẫu người chấm mà mô hình mở chọn đúng; đủ ngưỡng & mẫu (& có phiên bản duyệt với NHIN) → đề nghị LÊN, việc cho Trưởng MKT
+async function tinhDinhTuyen(env){ const ds=(await env.DB.prepare(`SELECT * FROM dinh_tuyen`).all()).results; const kq=[]; let len=0;
+  for(const d of ds){ let diem=0, soMau=0;
+    if(d.loai==='NHIN'){ const r=await env.DB.prepare(`SELECT COUNT(*) n, SUM(CASE WHEN dau_ra_mo IS NOT NULL AND json_extract(dau_ra_mo,'$.tai_san_id')=json_extract(nhan,'$.tai_san_id') THEN 1 ELSE 0 END) dung, SUM(CASE WHEN dau_ra_mo IS NOT NULL THEN 1 ELSE 0 END) co_mo FROM mau_hoc_ai WHERE tinh_nang=? AND nhan IS NOT NULL`).bind(d.tinh_nang).first(); soMau=so(r&&r.n); diem=so(r&&r.co_mo)?Math.round(so(r.dung)/so(r.co_mo)*100):0; }
+    else { const r=await env.DB.prepare(`SELECT COUNT(*) n, AVG(giong_mo) g FROM mau_hoc_ai WHERE tinh_nang=? AND giong_mo IS NOT NULL`).bind(d.tinh_nang).first(); soMau=so(r&&r.n); diem=Math.round(so(r&&r.g)*100); }
+    const mo=await docMoHinh(env, d.mo_hinh_mo); const coPhienBan=!!(mo&&mo.phien_ban); const duocMo=d.loai!=='NGON_NGU'; // NGON_NGU MỞ thuộc 009c
+    let deNghi=null, lyDo=null; if(d.muc!=='MO' && d.mo_hinh_mo && soMau>=so(d.min_mau,30) && diem>=so(d.nguong,80) && (d.loai!=='NHIN'||coPhienBan)){ if(d.muc==='API'){ deNghi='LEN'; lyDo='Mô hình mở khớp '+diem+'/100 trên '+soMau+' mẫu — bật BÓNG để theo dõi'; } else if(duocMo){ deNghi='LEN'; lyDo='Bóng khớp '+diem+'/100 trên '+soMau+' mẫu, có phiên bản đã duyệt — có thể gạt MỞ (tiết kiệm API)'; } }
+    else if(d.muc==='MO' && soMau>=so(d.min_mau,30) && diem<Math.max(0,so(d.nguong,80)-20)){ deNghi='XUONG'; lyDo='Mô hình mở chỉ khớp '+diem+'/100 gần đây — nên hạ về BÓNG'; }
+    await env.DB.prepare(`UPDATE dinh_tuyen SET diem=?, so_mau=?, de_nghi=?, de_nghi_ly_do=? WHERE tinh_nang=?`).bind(diem, soMau, deNghi, lyDo, d.tinh_nang).run(); if(mo && soMau>0) await env.DB.prepare(`UPDATE mo_hinh SET diem=?, so_mau=? WHERE id=?`).bind(diem, soMau, mo.id).run();   // một mô hình mở có thể phục vụ nhiều tính năng — chỉ tính năng có mẫu mới cập nhật điểm
+    const key='dinh_tuyen:'+d.tinh_nang+':'+(deNghi||'');
+    if(deNghi){ const cu=await env.DB.prepare(`SELECT id FROM cong_viec WHERE loai='GAT_DINH_TUYEN' AND doi_tuong_id=? AND trang_thai='MO'`).bind(key).first(); if(!cu){ await env.DB.prepare(`INSERT INTO cong_viec (id,loai,tieu_de,doi_tuong,doi_tuong_id,giao_cho_vai_tro,han,trang_thai,tao_boi,ly_do,created_at) VALUES (?,?,?,?,?,?,?,'MO',?,?,?)`).bind(uid('cv'),'GAT_DINH_TUYEN',(deNghi==='LEN'?'Nâng mức AI: ':'Hạ mức AI: ')+d.ten,'dinh_tuyen',key,'TRUONG_MKT',ngayVN(Date.now()+3*864e5),'Máy (bộ não)',lyDo+' — Máy › Bộ não AI › Định tuyến',nowISO()).run(); len++; } }
+    else await env.DB.prepare(`UPDATE cong_viec SET trang_thai='BO', xong_at=?, xong_boi='Máy' WHERE loai='GAT_DINH_TUYEN' AND doi_tuong_id LIKE ? AND trang_thai='MO'`).bind(nowISO(),'dinh_tuyen:'+d.tinh_nang+':%').run();
+    kq.push({tinh_nang:d.tinh_nang, diem, so_mau:soMau, de_nghi:deNghi}); }
+  return {kq, len}; }
 
 // ============================================================
 //  BỘ QUYỀN: đọc mức bước, gạt mức
@@ -439,6 +518,7 @@ async function taoMucTuYTuong(env, ytId, boi){
 }
 // Mẫu học: ghi một quyết định của người kèm đầu ra máy để chấm điểm sẵn sàng
 async function ghiMauHoc(env, buoc, o){
+  if(o.doi_tuong_id) try{ await env.DB.prepare(`UPDATE mau_hoc_ai SET phan_quyet=?, giong=COALESCE(?,giong), cham_at=?, cham_boi='NGUOI' WHERE doi_tuong_id=? AND phan_quyet IS NULL`).bind(JSON.stringify(o.dau_ra_nguoi||{}).slice(0,2000), o.giong==null?null:Math.max(0,Math.min(1,so(o.giong))), nowISO(), o.doi_tuong_id).run(); }catch(e){}   // ADR-009: kho mẫu AI nhận phán quyết
   await env.DB.prepare(`INSERT INTO mau_hoc (id,buoc,ngay,doi_tuong_id,dau_vao,dau_ra_nguoi,dau_ra_may,giong,ghi_chu,created_at) VALUES (?,?,?,?,?,?,?,?,?,?)`)
     .bind(uid('mh'), buoc, ngayVN(), o.doi_tuong_id||null, JSON.stringify(o.dau_vao||{}).slice(0,2000), JSON.stringify(o.dau_ra_nguoi||{}).slice(0,2000), o.dau_ra_may==null?null:JSON.stringify(o.dau_ra_may).slice(0,2000), o.giong==null?null:Math.max(0,Math.min(1,so(o.giong))), chuoi(o.ghi_chu,300), nowISO()).run();
 }
@@ -558,7 +638,7 @@ async function dangN8n(env, bd, nd, kenh){ const url=env.N8N_WEBHOOK_URL; if(!ur
 // ===== ADR-004 — TRẠM MÁY VĂN PHÒNG (masfico-tram, hợp đồng hub1) =====
 // Trạm sau NAT nên chiều nào cũng do Trạm chủ động gọi: hỏi lệnh /hub/lenh (20 giây), đẩy dữ liệu /hub/nap, nhịp tim /hub/trang_thai (2 phút).
 // Content OS chỉ được sai Trạm bằng bộ lệnh VIEC_HUB của Trạm; agent của Content OS trên Trạm là "content_os" (may/agents.mjs).
-const VIEC_TRAM=['chay_agent','chay_hang_loat','lich_viec','zalo_qr','gui_otp','huy_dang_nhap','dung_video'];   // dung_video: lệnh cho máy con (ADR-008)
+const VIEC_TRAM=['chay_agent','chay_hang_loat','lich_viec','zalo_qr','gui_otp','huy_dang_nhap','dung_video','mo_hinh_bong','huan_luyen'];   // dung_video/mo_hinh_bong/huan_luyen: lệnh cho máy ghép (ADR-008/009)   // dung_video: lệnh cho máy con (ADR-008)
 // Món Content OS nhận từ Trạm: kết quả đăng/đo của chính agent content_os + tin đối thủ (→ ý tưởng) + bình luận TikTok
 const MON_HUB=[{viec:'content_os.dang', bang:['content_os.dang_ket_qua']},{viec:'content_os.do_luong', bang:['content_os.ket_qua']},{viec:'content_os.dung_video', bang:['content_os.video']},{viec:'doi_thu.quet', bang:['doi_thu_tin']},{viec:'doi_thu.quet_nhom', bang:['doi_thu_tin']},{viec:'doi_thu.quet_nhom_trua', bang:['doi_thu_tin']},{viec:'tiktok_cn.binh_luan', bang:['fchat_events']},{viec:'content_os.seeding_dang', bang:['content_os.seeding_dang_ket_qua']},{viec:'content_os.seeding_kiem', bang:['content_os.seeding_kiem']},{viec:'zalo.tin', bang:['zalo.tin']}];
 async function sha256Hex(s){ const b=await crypto.subtle.digest('SHA-256', new TextEncoder().encode(String(s))); return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join(''); }
@@ -595,7 +675,10 @@ async function napLoTram(env, b){
       const thieu=(Array.isArray(d.thieu_hinh)?d.thieu_hinh:[]).map(x=>chuoi(x,120)).filter(Boolean).slice(0,20); const nguon=chuoi(d.may,60)||'Trạm'; const ten=(nd.tieu_de||nd.hook||'').slice(0,80);
       const tsId=uid('ts'); await env.DB.prepare(`INSERT INTO tai_san (id,loai,ten,mo_ta,media_url,media_type,muc_id,noi_dung_id,nguon,created_at,created_by_name) VALUES (?,'VIDEO_XUAT',?,?,?,'VIDEO',?,?,'TRAM',?,?)`).bind(tsId,'Video nháp máy dựng: '+ten, chuoi(d.mo_ta,400)+(thieu.length?(' · thiếu hình: '+thieu.join('; ')):''), chuoi(d.media_url,500), nd.muc_id, nd.id, nowISO(), nguon).run();
       let goiUrl=''; if(chuoi(d.goi_url)){ goiUrl=chuoi(d.goi_url,500); await env.DB.prepare(`INSERT INTO tai_san (id,loai,ten,mo_ta,media_url,media_type,muc_id,noi_dung_id,nguon,created_at,created_by_name) VALUES (?,'GOI_DUNG',?,?,?,'FILE',?,?,'TRAM',?,?)`).bind(uid('ts'),'Gói dựng tiếp (CapCut): '+ten,'từng cảnh đã cắt + giọng đọc từng cảnh + phụ đề SRT + nhạc nền + bản nháp — giải nén rồi kéo vào CapCut', goiUrl, nd.muc_id, nd.id, nowISO(), nguon).run(); }
-      await env.DB.prepare(`UPDATE noi_dung SET chi_tiet=?, updated_at=? WHERE id=?`).bind(JSON.stringify(lamSachChiTiet({...docJSON(nd.chi_tiet,{}), video_url:chuoi(d.media_url,500), video_tai_san_id:tsId, video_luc:nowISO(), goi_dung_url:goiUrl, thieu_hinh:thieu.join(' | ')})), nowISO(), nd.id).run();
+      // ADR-009: mỗi cảnh máy chọn = một mẫu chon_canh (đầu ra quy tắc + đầu ra mô hình mở nếu chạy bóng) chờ người chấm
+      const canhChon=(Array.isArray(d.canh_chon)?d.canh_chon:[]).slice(0,20).map(c=>({ k:so(c.k), label:chuoi(c.label,60), hinh:chuoi(c.hinh,200), text:chuoi(c.text,300), chon:chuoi(c.chon,40), chon_mo:chuoi(c.chon_mo,40)||null, cach:chuoi(c.cach,12)||'TU_KHOA', ung_vien:(Array.isArray(c.ung_vien)?c.ung_vien:[]).slice(0,12).map(u=>({id:chuoi(u.id,40), ten:chuoi(u.ten,120), mo_ta:chuoi(u.mo_ta,200), media_url:chuoi(u.media_url,500), media_type:chuoi(u.media_type,10), diem:so(u.diem), diem_mo:u.diem_mo==null?null:so(u.diem_mo)})) }));
+      const mauIds=[]; for(const c of canhChon){ if(!c.ung_vien.length) continue; mauIds.push(await ghiMauAI(env,{tinh_nang:'chon_canh', mo_hinh_id:null, doi_tuong:'noi_dung', doi_tuong_id:nd.id, dau_vao:{k:c.k, label:c.label, hinh:c.hinh, text:c.text, ung_vien:c.ung_vien}, dau_ra:{tai_san_id:c.chon, cach:c.cach}, dau_ra_mo:c.chon_mo?{tai_san_id:c.chon_mo}:null, mo_hinh_mo_id:c.chon_mo?'clip-vit-b16':null, giong_mo:c.chon_mo?(c.chon_mo===c.chon?1:0):null})); }
+      await env.DB.prepare(`UPDATE noi_dung SET chi_tiet=?, updated_at=? WHERE id=?`).bind(JSON.stringify(lamSachChiTiet({...docJSON(nd.chi_tiet,{}), video_url:chuoi(d.media_url,500), video_tai_san_id:tsId, video_luc:nowISO(), goi_dung_url:goiUrl, thieu_hinh:thieu.join(' | '), canh_chon:JSON.stringify(canhChon.map((c,i)=>({...c, mau_id:mauIds[i]||null}))).slice(0,5000)})), nowISO(), nd.id).run();
       // B8 vẫn NGƯỜI: người xem, chỉnh (CapCut) và duyệt bản nháp; thiếu hình → việc quay bổ sung
       const cu=await env.DB.prepare(`SELECT id FROM cong_viec WHERE loai='DUYET_VIDEO_NHAP' AND doi_tuong_id=? AND trang_thai='MO'`).bind(nd.id).first();
       if(!cu) await env.DB.prepare(`INSERT INTO cong_viec (id,loai,tieu_de,doi_tuong,doi_tuong_id,giao_cho_vai_tro,han,trang_thai,tao_boi,ly_do,created_at) VALUES (?,?,?,?,?,?,?,'MO',?,?,?)`).bind(uid('cv'),'DUYET_VIDEO_NHAP','Xem & duyệt video nháp: '+ten.slice(0,60),'noi_dung',nd.id,'MARKETING',ngayVN(Date.now()+864e5),nguon,'Mở thẻ › Sản xuất: xem bản nháp'+(goiUrl?', tải gói CapCut nếu cần dựng sâu':'')+', gắn bản cuối rồi qua tab Đăng',nowISO()).run();
@@ -927,7 +1010,7 @@ const AGENTS = [
       let soan=0, gui=0; const loi=[]; let usd=0;
       for(const m of muc){ const r=await aiVietNoiDung(env,{dinh_dang:m.dinh_dang, tieu_de:m.tieu_de, framework_id:m.framework_id, san_pham_id:m.san_pham_id, kenh_id:m.kenh_id, pillar_id:m.pillar_id, muc_tieu:m.muc_tieu, angle:m.ghi_chu}, null, 'soan_nhap_agent');
         if(!r.ok){ loi.push(m.tieu_de+': '+r.loi); if(r.vuot_ngan_sach) break; continue; }
-        const t=await taoNoiDung(env,{...r.noi_dung, muc_id:m.id, ly_do_may:'Soạn từ mục kế hoạch · '+(r.so_vi_du?(r.so_vi_du+' ví dụ đã duyệt'):'chưa có ví dụ')}, MAY('Máy (B4)')); if(!t.ok){ loi.push(m.tieu_de+': '+t.loi); continue; } soan++;
+        const t=await taoNoiDung(env,{...r.noi_dung, muc_id:m.id, ly_do_may:'Soạn từ mục kế hoạch · '+(r.so_vi_du?(r.so_vi_du+' ví dụ đã duyệt'):'chưa có ví dụ')}, MAY('Máy (B4)')); if(!t.ok){ loi.push(m.tieu_de+': '+t.loi); continue; } soan++; await ganMauAI(env,'soan_nhap_agent','noi_dung',t.id);
         if(b4.nguoi_thuc_hien==='AI_TU_LAM'){ const nd=await env.DB.prepare(`SELECT * FROM noi_dung WHERE id=?`).bind(t.id).first(); const g=await guiDuyet(env, nd, MAY('Máy (B4)')); if(g.ok&&!g.tu_tra_lai) gui++; } }
       return { ok:soan>0||!loi.length, doc:muc.length, ghi:soan, tom_tat:'Soạn '+soan+'/'+muc.length+' bài'+(gui?(' · gửi duyệt '+gui):'')+(loi.length?(' · lỗi '+loi.length):''), chi_tiet:{loi:loi.slice(0,10)} }; } },
   // B4 học: bản nháp bóng cho bài người gửi duyệt 7 ngày gần đây chưa có mẫu (tối đa N/ngày, ngân sách học)
@@ -970,6 +1053,9 @@ const AGENTS = [
     chay: async (env)=>{ const ds=(await env.DB.prepare(`SELECT n.* FROM noi_dung n JOIN muc_noi_dung m ON m.id=n.muc_id WHERE n.trang_thai='DUYET' AND n.dinh_dang='VIDEO' AND m.giai_doan='SAN_XUAT' AND (n.chi_tiet IS NULL OR n.chi_tiet NOT LIKE '%"video_url":"/%' AND n.chi_tiet NOT LIKE '%"video_url":"http%') ORDER BY n.updated_at LIMIT 10`).all()).results; if(!ds.length) return {bo_qua:'Không có kịch bản video đã duyệt chờ dựng'};
       let giao=0, trung=0, loi=''; for(const nd of ds){ const r=await giaoDung(env, nd, {tacNhan:MAY('Máy (B8)')}); if(!r.ok){ loi=r.loi; break; } if(r.trung) trung++; else giao++; }
       if(!giao&&!trung) return {bo_qua:loi||'Không có máy dựng đang bật'}; return { ok:true, doc:ds.length, ghi:giao, tom_tat:'Giao dựng '+giao+' video nháp'+(trung?(' · '+trung+' đang chờ máy'):'') }; } },
+  // ADR-009 · bộ não: chấm điểm mô hình mở theo tính năng, đề nghị nâng/hạ mức (người gạt)
+  { ma:'TINH_DINH_TUYEN', ten:'Chấm mô hình mở & đề nghị mức API/BÓNG/MỞ', loai:'HE_THONG', buoc:null,
+    chay: async (env)=>{ const r=await tinhDinhTuyen(env); const co=r.kq.filter(x=>x.so_mau>0); return { ok:true, doc:co.length, ghi:r.len, tom_tat: co.length?('Chấm '+co.length+' tính năng: '+co.map(x=>x.tinh_nang+'='+x.diem+'/100 ('+x.so_mau+' mẫu'+(x.de_nghi?(', đề nghị '+x.de_nghi):'')+')').join(', ')):'Chưa có mẫu bóng/nhãn nào' }; } },
   { ma:'HOC_DE_XUAT', ten:'Học từ kết quả → đề xuất cải tiến (G4)', loai:'THUC_HIEN', buoc:'B12',
     chay: async (env, ctx)=>{ const d=new Date(Date.now()+7*36e5); if(!(ctx&&ctx.thu) && d.getUTCDate()!==2) return {bo_qua:'Chạy ngày 2 hằng tháng (sau báo cáo tháng)'}; return chayDeXuat(env,{ep:!!(ctx&&ctx.thu)}); } },
 ];
@@ -1012,7 +1098,7 @@ async function dieuPhoi(env, {thu=false, chi=null}={}){
 const docJSON=(v,mac)=>{ try{ const o=JSON.parse(v||''); return o==null?mac:o; }catch(e){ return mac; } };
 function layToken(env, kenh){ const ma=String((kenh&&kenh.api_ma)||'').trim().toUpperCase().replace(/[^A-Z0-9_]/g,''); return ma? (env['TOKEN_'+ma]||null) : null; }
 async function bootstrap(env, u){
-  const all=async s=>(await env.DB.prepare(s).all()).results;
+  const all=async(s,...a)=>(await env.DB.prepare(s).bind(...a).all()).results;
   const staff=isStaff(u), xem=canXemMkt(u);
   const [users, cl, pillars, frameworks, spR, claims, kenhR, buoc, runs, cv] = await Promise.all([
     canNguoiDung(u) ? all(`SELECT id,ho_ten,email,vai_tro,active,doi_mat_khau,created_at FROM users ORDER BY created_at`) : Promise.resolve([]),
@@ -1084,10 +1170,17 @@ async function bootstrap(env, u){
     // khoá Trạm không bao giờ ra khỏi server — chỉ cờ co_khoa ở tram
     module_config: xem ? {...cfg, tram:{...(cfg.tram||{}), khoa:undefined}} : {duyet:cfg.duyet},
     ai_thang: xem ? await tongHopAI(env, thangHienTai()) : null,
-    san_sang: { tts:!!env.GOOGLE_TTS_KEY,  ai:!!env.ANTHROPIC_API_KEY, youtube:!!env.YOUTUBE_API_KEY, n8n:!!(env.N8N_TOKEN&&env.N8N_WEBHOOK_URL), media:!!env.MEDIA },
+    san_sang: { tts:!!env.GOOGLE_TTS_KEY, gemini:!!env.GEMINI_API_KEY, openai:!!env.OPENAI_API_KEY,  ai:!!env.ANTHROPIC_API_KEY, youtube:!!env.YOUTUBE_API_KEY, n8n:!!(env.N8N_TOKEN&&env.N8N_WEBHOOK_URL), media:!!env.MEDIA },
     // ADR-004: Trạm — cờ có khoá (không bao giờ trả khoá), nhịp tim & phiên, lệnh/lô gần đây
     tram: xem ? { co_khoa:!!chuoi((cfg.tram||{}).khoa), bat:(cfg.tram||{}).bat!==false, trang_thai: await docTramTrangThai(env),
       lenh:(await all(`SELECT * FROM tram_lenh ORDER BY created_at DESC LIMIT 20`)).map(l=>({...l, tham_so:docJSON(l.tham_so,{})})), lo:(await all(`SELECT id,viec,bang,luot,so_dong,xu_ly,created_at FROM tram_lo ORDER BY created_at DESC LIMIT 20`)).map(l=>{ const x=docJSON(l.xu_ly,{}); delete x.dong; return {...l, xu_ly:x}; }) } : null,
+    ai_nao: xem ? await (async()=>{ const th=thangHienTai(); return {
+      mo_hinh:(await all(`SELECT * FROM mo_hinh ORDER BY loai, cach_goi, created_at`)).map(x=>({...x, co_khoa: x.cach_goi==='API'?!!env[KHOA_NCC[x.nha_cung_cap]||(x.loai==='TTS'?'GOOGLE_TTS_KEY':'')]:null})),
+      dinh_tuyen: await all(`SELECT * FROM dinh_tuyen ORDER BY loai, tinh_nang`),
+      phien_ban:(await all(`SELECT * FROM mo_hinh_phien_ban ORDER BY created_at DESC LIMIT 20`)).map(p=>({...p, danh_gia:docJSON(p.danh_gia,{})})),
+      mau_thong_ke: await all(`SELECT tinh_nang, COUNT(*) tong, SUM(CASE WHEN phan_quyet IS NOT NULL OR nhan IS NOT NULL THEN 1 ELSE 0 END) da_cham, SUM(CASE WHEN dau_ra_mo IS NOT NULL THEN 1 ELSE 0 END) co_bong, SUM(CASE WHEN tap='KIEM' THEN 1 ELSE 0 END) kiem FROM mau_hoc_ai GROUP BY tinh_nang`),
+      chi_phi: await all(`SELECT COALESCE(mo_hinh_id, model) mo_hinh, provider, COUNT(*) so_lan, COALESCE(SUM(chi_phi_usd),0) usd, COALESCE(SUM(tokens_vao),0) vao, COALESCE(SUM(tokens_ra),0) ra FROM ai_usage WHERE thang=? GROUP BY COALESCE(mo_hinh_id, model), provider ORDER BY usd DESC`, th),
+      lenh_hoc:(await all(`SELECT * FROM tram_lenh WHERE viec IN ('huan_luyen','mo_hinh_bong') ORDER BY created_at DESC LIMIT 10`)).map(l=>({...l, tham_so:docJSON(l.tham_so,{})})) }; })() : null,
     may_ghep: xem ? (await mayGhepSong(env)).map(x=>({id:x.id, ten:x.ten, chu_user_id:x.chu_user_id, chu_ten:x.chu_ten, kha_nang:x.kha_nang, ban:x.ban, nhan_luc:x.nhan_luc, song:x.song, than:x.than})) : null,
     mo_phong: !!(cfg.mo_phong&&cfg.mo_phong.bat),
     dot: 1,
@@ -1174,7 +1267,7 @@ async function handleApi(request, env){
     const xt=await xacThucHub(env, request); if(!xt.ok) return json({error:xt.loi}, xt.status);
     if(path==='/hub/ping' && method==='GET') return json({ ok:true, app:'content_os', ten:'Kingsmen Content OS', ban:'2.0.'+4, hop_dong:1, mon:MON_HUB, nhan_lenh:true, may_id:xt.may_id });
     // ADR-008 — máy con tải script mới nhất từ app (kèm hash để máy chỉ chạy đúng bản app phát) — mã dựng nằm ở app, không nằm trên máy
-    if((m=path.match(/^\/hub\/script\/([a-z0-9-]+)$/)) && method==='GET'){ if(!['dung-video'].includes(m[1])) return json({error:'Không có script '+m[1]},404); const r=await env.ASSETS.fetch(new Request(url.origin+'/tools/may-dung/'+m[1]+'.mjs')); if(!r.ok) return json({error:'App chưa đóng gói script '+m[1]},503); const script=await r.text(); const hash=await sha256Hex(script); return json({ ten:m[1], ban:hash.slice(0,12), hash, script }); }
+    if((m=path.match(/^\/hub\/script\/([a-z0-9-]+)$/)) && method==='GET'){ if(!['dung-video','nhin','mo-hinh','huan-luyen'].includes(m[1])) return json({error:'Không có script '+m[1]},404); const r=await env.ASSETS.fetch(new Request(url.origin+'/tools/may-dung/'+m[1]+'.mjs')); if(!r.ok) return json({error:'App chưa đóng gói script '+m[1]},503); const script=await r.text(); const hash=await sha256Hex(script); return json({ ten:m[1], ban:hash.slice(0,12), hash, script }); }
     // ADR-008 — giọng đọc tiếng Việt: khoá Google ở Worker, máy con chỉ nhận mp3; tính vào ngân sách AI (tính năng 'tts')
     if(path==='/hub/tts' && method==='POST'){ const text=chuoi(body.text,1500); if(!text) return json({error:'Thiếu text'},400); const key=env.GOOGLE_TTS_KEY; if(!key) return json({error:'Chưa cắm GOOGLE_TTS_KEY — video nháp không có giọng đọc', thieu_key:true},503);
       const cfg=(await docCauHinh(env)).dung_video||{}; const ns=await kiemNganSachAI(env); if(!ns.ok) return json({error:ns.loi, vuot_ngan_sach:true},402); const giong=chuoi(body.giong,40)||cfg.tts_giong||'vi-VN-Neural2-D'; const t0=Date.now();
@@ -1189,7 +1282,25 @@ async function handleApi(request, env){
       return json({ lenh: ds.map(l=>({id:l.id, viec:l.viec, tham_so:docJSON(l.tham_so,{})})) }); }
     if(path==='/hub/lenh_xong' && method==='POST'){ const l=await env.DB.prepare(`SELECT * FROM tram_lenh WHERE id=?`).bind(String(body.id||'')).first(); if(!l) return json({error:'không có lệnh'},404);
       await env.DB.prepare(`UPDATE tram_lenh SET trang_thai=?, ket_qua=?, xong_at=? WHERE id=?`).bind(body.ok?'XONG':'HONG', chuoi(body.msg,400), nowISO(), l.id).run(); await logAudit(env, MAY('Trạm'), 'Trạm '+(body.ok?'làm xong':'báo hỏng')+' lệnh', 'tram_lenh', l.id, l.viec+' · '+chuoi(body.msg,200)); return json({ok:true}); }
-    if(path==='/hub/trang_thai' && method==='POST' && xt.may_id!=='tram'){ await env.DB.prepare(`UPDATE may_ghep SET nhan_luc=?, ban=?, than=? WHERE id=?`).bind(nowISO(), chuoi(body.ban,20), JSON.stringify({ may:chuoi(body.may,80), gio_may:chuoi(body.gio_may,40), ffmpeg:body.ffmpeg!==false, dang_lam:chuoi(body.dang_lam,120) }).slice(0,4000), xt.may_id).run(); return json({ok:true, ban:'2.0.4', may_id:xt.may_id}); }
+    if(path==='/hub/trang_thai' && method==='POST' && xt.may_id!=='tram'){ const kn=[...new Set(['dung_video', ...(Array.isArray(body.kha_nang)?body.kha_nang.map(x=>chuoi(x,30)).filter(x=>['dung_video','mo_hinh','huan_luyen'].includes(x)):[])])];
+      await env.DB.prepare(`UPDATE may_ghep SET nhan_luc=?, ban=?, than=?, kha_nang=? WHERE id=?`).bind(nowISO(), chuoi(body.ban,20), JSON.stringify({ may:chuoi(body.may,80), gio_may:chuoi(body.gio_may,40), ffmpeg:body.ffmpeg!==false, gpu:chuoi(body.gpu,60), ollama:body.ollama===true, dang_lam:chuoi(body.dang_lam,120) }).slice(0,4000), JSON.stringify(kn), xt.may_id).run(); return json({ok:true, ban:'2.0.5', may_id:xt.may_id, kha_nang:kn}); }
+    // ADR-009 — bóng: máy ghép lấy mẫu chưa có đầu ra mở của các tính năng đang BÓNG/MỞ → chạy mô hình mở → trả /hub/bong
+    if(path==='/hub/viec/bong' && method==='GET'){ const ds=(await env.DB.prepare(`SELECT m.id, m.tinh_nang, m.dau_vao, d.mo_hinh_mo FROM mau_hoc_ai m JOIN dinh_tuyen d ON d.tinh_nang=m.tinh_nang WHERE m.dau_ra_mo IS NULL AND d.muc IN ('BONG','MO') AND d.mo_hinh_mo IS NOT NULL AND d.loai='NGON_NGU' AND m.created_at>=? ORDER BY m.created_at DESC LIMIT 10`).bind(new Date(Date.now()-7*864e5).toISOString()).all()).results;
+      const out=[]; for(const r of ds){ const mo=await docMoHinh(env, r.mo_hinh_mo); if(!mo) continue; out.push({ mau_id:r.id, tinh_nang:r.tinh_nang, dau_vao:docJSON(r.dau_vao,{}), mo_hinh:{id:mo.id, nha_cung_cap:mo.nha_cung_cap, model_id:mo.model_id} }); } return json({ viec: out }); }
+    if(path==='/hub/bong' && method==='POST'){ let cap=0; for(const d of (Array.isArray(body.dong)?body.dong:[body]).slice(0,50)){ const r=d.mau_id?await env.DB.prepare(`SELECT * FROM mau_hoc_ai WHERE id=?`).bind(String(d.mau_id)).first():null; if(!r) continue; const ra=chuoi(d.dau_ra_mo,6000); const g=ra?giongVanBan(docJSON(r.dau_ra,r.dau_ra)||'', ra):0;
+        await env.DB.prepare(`UPDATE mau_hoc_ai SET dau_ra_mo=?, mo_hinh_mo_id=?, giong_mo=? WHERE id=?`).bind(JSON.stringify(ra||('(lỗi) '+chuoi(d.loi,200))), chuoi(d.mo_hinh_id,60)||r.mo_hinh_mo_id, ra?g:0, r.id).run(); await ghiAIUsage(env,{provider:'may_ghep', model:chuoi(d.model_id,80), tinh_nang:r.tinh_nang, tokens_vao:so(d.tokens_vao), tokens_ra:so(d.tokens_ra), ok:!!ra, ms:so(d.ms), loi:d.loi?chuoi(d.loi,200):null, chi_phi_usd:0, mo_hinh_id:chuoi(d.mo_hinh_id,60), muc:'BONG'}); cap++; } return json({ok:true, cap}); }
+    // ADR-009 — tập mẫu để huấn luyện đầu nhìn: mẫu có nhãn người (chon_canh: cảnh + ứng viên + tài sản người chọn); link tuyệt đối để máy tải khung hình
+    if(path==='/hub/tap-mau' && method==='GET'){ const tn=chuoi(url.searchParams.get('tinh_nang'),40)||'chon_canh'; const goc=env.APP_BASE_URL||url.origin; const tuyet=u=>/^https?:/.test(u||'')?u:goc+u;
+      const ds=(await env.DB.prepare(`SELECT id, tap, dau_vao, nhan, dau_ra FROM mau_hoc_ai WHERE tinh_nang=? AND nhan IS NOT NULL ORDER BY created_at DESC LIMIT 2000`).bind(tn).all()).results;
+      return json({ tinh_nang:tn, mau: ds.map(r=>{ const dv=docJSON(r.dau_vao,{}); return { id:r.id, tap:r.tap, hinh:dv.hinh, text:dv.text, ung_vien:(dv.ung_vien||[]).map(u=>({...u, media_url:tuyet(u.media_url)})), nhan:docJSON(r.nhan,{}) }; }) }); }
+    // máy dựng hỏi: tính năng nhìn đang ở mức nào, mô hình mở + checkpoint đã duyệt
+    if((m=path.match(/^\/hub\/mo-hinh\/([a-z_]+)$/)) && method==='GET'){ const dt=await env.DB.prepare(`SELECT * FROM dinh_tuyen WHERE tinh_nang=?`).bind(m[1]).first(); if(!dt) return json({error:'Không có tính năng '+m[1]},404); const mo=await docMoHinh(env, dt.mo_hinh_mo); const goc=env.APP_BASE_URL||url.origin;
+      return json({ tinh_nang:dt.tinh_nang, muc:dt.muc, mo_hinh_mo: mo?{ id:mo.id, model_id:mo.model_id, phien_ban:mo.phien_ban, checkpoint_url: mo.checkpoint_url?(/^https?:/.test(mo.checkpoint_url)?mo.checkpoint_url:goc+mo.checkpoint_url):null }:null }); }
+    // máy huấn luyện gửi checkpoint + đánh giá → phiên bản CHỜ DUYỆT + việc Trưởng MKT (G4)
+    if(path==='/hub/mo-hinh/phien-ban' && method==='POST'){ const mo=await docMoHinh(env, chuoi(body.mo_hinh_id,60)); if(!mo) return json({error:'Không có mô hình'},404); const dg=(body.danh_gia&&typeof body.danh_gia==='object')?body.danh_gia:{}; const pb=chuoi(body.phien_ban,40)||('v'+ngayVN().replace(/-/g,'')+'-'+uid('').slice(-4)); const id=uid('pb');
+      await env.DB.prepare(`INSERT INTO mo_hinh_phien_ban (id,mo_hinh_id,tinh_nang,phien_ban,checkpoint_url,danh_gia,so_mau,may,trang_thai,created_at) VALUES (?,?,?,?,?,?,?,?,'CHO_DUYET',?)`).bind(id, mo.id, chuoi(body.tinh_nang,40)||'chon_canh', pb, chuoi(body.checkpoint_url,500), JSON.stringify({diem:so(dg.diem), n_kiem:so(dg.n_kiem), n_hoc:so(dg.n_hoc), diem_truoc:so(dg.diem_truoc), ghi_chu:chuoi(dg.ghi_chu,300)}), so(dg.n_hoc)+so(dg.n_kiem), chuoi(body.may,80)||(xt.may?xt.may.ten:'máy'), nowISO()).run();
+      await env.DB.prepare(`INSERT INTO cong_viec (id,loai,tieu_de,doi_tuong,doi_tuong_id,giao_cho_vai_tro,han,trang_thai,tao_boi,ly_do,created_at) VALUES (?,?,?,?,?,?,?,'MO',?,?,?)`).bind(uid('cv'),'DUYET_MO_HINH','Duyệt phiên bản mô hình '+mo.ten+' '+pb+' — khớp người '+so(dg.diem)+'/100 trên '+so(dg.n_kiem)+' mẫu kiểm','mo_hinh_phien_ban',id,'TRUONG_MKT',ngayVN(Date.now()+3*864e5),'Máy huấn luyện',(dg.diem_truoc?('phiên bản trước '+so(dg.diem_truoc)+'/100 · '):'')+'Máy › Bộ não AI › Huấn luyện',nowISO()).run();
+      await logAudit(env, MAY('Máy huấn luyện'), 'gửi phiên bản mô hình', 'mo_hinh', mo.id, pb+' · '+so(dg.diem)+'/100'); return json({ok:true, id, phien_ban:pb}); }
     if(path==='/hub/trang_thai' && method==='POST'){ const than=JSON.stringify({ may:chuoi(body.may,80), ban:chuoi(body.ban,20), khoi_luc:chuoi(body.khoi_luc,40), gio_may:chuoi(body.gio_may,40), dung_nha:body.dung_nha!==false, phien:(body.phien&&typeof body.phien==='object')?body.phien:{}, hang_loat:body.hang_loat||null }).slice(0,20000);
       await env.DB.prepare(`INSERT INTO tram_trang_thai (id,than,nhan_luc) VALUES ('tram',?,?) ON CONFLICT(id) DO UPDATE SET than=excluded.than, nhan_luc=excluded.nhan_luc`).bind(than, nowISO()).run(); return json({ok:true, ban:'2.0.3'}); }
     if(path==='/hub/nap' && method==='POST'){ const r=await napLoTram(env, body); return json(r); }
@@ -1592,6 +1703,34 @@ async function handleApi(request, env){
     await logAudit(env,me,'quyết việc seeding','viec_seeding',v.id,q+' · '+chuoi(body.ly_do,200)); return json({ db: await bootstrap(env,me) }); }
   if((m=path.match(/^\/seeding\/lead\/([^/]+)$/)) && method==='PATCH'){ if(!isStaff(me)) return json({error:'Không có quyền'},403); const l=await env.DB.prepare(`SELECT * FROM lead_seeding WHERE id=?`).bind(m[1]).first(); if(!l) return json({error:'Không tìm thấy'},404); const tt=['MOI','DA_TRA_LOI','CHUYEN_SALE'].includes(String(body.trang_thai||'').toUpperCase())?String(body.trang_thai).toUpperCase():l.trang_thai;
     await env.DB.prepare(`UPDATE lead_seeding SET trang_thai=?, ghi_chu=?, tra_loi_at=CASE WHEN ?<>'MOI' THEN ? ELSE tra_loi_at END, tra_loi_boi=CASE WHEN ?<>'MOI' THEN ? ELSE tra_loi_boi END WHERE id=?`).bind(tt, body.ghi_chu!=null?chuoi(body.ghi_chu,500):l.ghi_chu, tt, nowISO(), tt, me.ho_ten, l.id).run(); if(tt!=='MOI') await env.DB.prepare(`UPDATE cong_viec SET trang_thai='XONG', xong_at=?, xong_boi=? WHERE loai='LEAD_SEEDING' AND doi_tuong_id=? AND trang_thai='MO'`).bind(nowISO(), me.ho_ten, l.id).run(); return json({ db: await bootstrap(env,me) }); }
+  // ===== ADR-009 — bộ não AI: mô hình, định tuyến, kho mẫu, huấn luyện, phiên bản =====
+  if(path==='/ai/mo-hinh' && method==='POST'){ if(me.vai_tro!==ROLES.ADMIN) return json({error:'Chỉ Admin thêm mô hình'},403); const id=chuoi(body.id,60).toLowerCase().replace(/[^a-z0-9-]/g,'-'); if(!id||!chuoi(body.ten)) return json({error:'Thiếu id/tên'},400); if(await docMoHinh(env,id)) return json({error:'Trùng id'},409);
+    await env.DB.prepare(`INSERT INTO mo_hinh (id,ten,nha_cung_cap,loai,cach_goi,model_id,gia_vao,gia_ra,don_vi,kha_nang,trang_thai,ghi_chu,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,'[]','BAT',?,?,?)`).bind(id, chuoi(body.ten,80), chuoi(body.nha_cung_cap,30)||'anthropic', ['NGON_NGU','NHIN','NGHE','TTS','ANH'].includes(body.loai)?body.loai:'NGON_NGU', body.cach_goi==='MAY_GHEP'?'MAY_GHEP':'API', chuoi(body.model_id,120), Math.max(0,so(body.gia_vao)), Math.max(0,so(body.gia_ra)), body.don_vi==='1M_ky_tu'?'1M_ky_tu':'1M_token', chuoi(body.ghi_chu,300), nowISO(), nowISO()).run(); await logAudit(env,me,'thêm mô hình AI','mo_hinh',id,chuoi(body.ten,80)); return json({ db: await bootstrap(env,me), id }); }
+  if((m=path.match(/^\/ai\/mo-hinh\/([^/]+)(?:\/(thu))?$/))){ const mo=await docMoHinh(env,m[1]); if(!mo) return json({error:'Không có mô hình'},404);
+    if(m[2]==='thu' && method==='POST'){ if(!canGat(me)) return json({error:'Không có quyền'},403); if(mo.cach_goi!=='API'||mo.loai!=='NGON_NGU') return json({error:'Chỉ thử được mô hình ngôn ngữ gọi API; mô hình mở thử qua máy ghép (bóng)'},409); const t0=Date.now(); const r=await goiNhaCungCap(env, mo, {system:'Trả lời đúng một câu ngắn tiếng Việt.', messages:[{role:'user',content:'Kingsmen là thương hiệu gì? (nếu không biết, nói không biết)'}], max_tokens:60}); await ghiAIUsage(env,{provider:mo.nha_cung_cap, model:mo.model_id, tinh_nang:'thu_mo_hinh', me, tokens_vao:r.vao, tokens_ra:r.ra, ok:r.ok, ms:Date.now()-t0, loi:r.ok?null:r.loi, chi_phi_usd:chiPhiMoHinh(mo,r.vao,r.ra), mo_hinh_id:mo.id, muc:'THU'}); return json({ ok:r.ok, loi:r.loi, text:(r.text||'').slice(0,300), ms:Date.now()-t0, tokens:{vao:so(r.vao), ra:so(r.ra)}, usd:chiPhiMoHinh(mo,r.vao,r.ra) }); }
+    if(method==='PATCH'){ if(me.vai_tro!==ROLES.ADMIN) return json({error:'Chỉ Admin sửa mô hình'},403); await env.DB.prepare(`UPDATE mo_hinh SET ten=?, model_id=?, gia_vao=?, gia_ra=?, trang_thai=?, ghi_chu=?, updated_at=? WHERE id=?`).bind(body.ten!=null?chuoi(body.ten,80):mo.ten, body.model_id!=null?chuoi(body.model_id,120):mo.model_id, body.gia_vao!=null?Math.max(0,so(body.gia_vao)):mo.gia_vao, body.gia_ra!=null?Math.max(0,so(body.gia_ra)):mo.gia_ra, body.trang_thai==='TAT'?'TAT':body.trang_thai==='BAT'?'BAT':mo.trang_thai, body.ghi_chu!=null?chuoi(body.ghi_chu,300):mo.ghi_chu, nowISO(), mo.id).run(); await logAudit(env,me,'sửa mô hình AI','mo_hinh',mo.id,''); return json({ db: await bootstrap(env,me) }); } }
+  if((m=path.match(/^\/ai\/dinh-tuyen\/([a-z_]+)$/)) && method==='PATCH'){ if(!canGat(me)) return json({error:'Chỉ Trưởng MKT/Admin định tuyến'},403); const dt=await env.DB.prepare(`SELECT * FROM dinh_tuyen WHERE tinh_nang=?`).bind(m[1]).first(); if(!dt) return json({error:'Không có tính năng'},404);
+    const layMo=async(id, loaiCan, cachCan)=>{ if(id===undefined) return undefined; if(!id) return null; const x=await docMoHinh(env,String(id)); if(!x||x.loai!==loaiCan||(cachCan&&x.cach_goi!==cachCan)) throw new Error('Mô hình '+id+' không hợp ('+loaiCan+(cachCan?(' · '+cachCan):'')+')'); return x.id; };
+    let chinh, duPhong, mo; try{ chinh=await layMo(body.mo_hinh_chinh, dt.loai, 'API'); duPhong=await layMo(body.mo_hinh_du_phong, dt.loai, 'API'); mo=await layMo(body.mo_hinh_mo, dt.loai, 'MAY_GHEP'); }catch(e){ return json({error:e.message},422); }
+    const mucMoi=body.muc!=null?String(body.muc).toUpperCase():dt.muc; if(!['API','BONG','MO'].includes(mucMoi)) return json({error:'Mức phải là API | BONG | MO'},400); const moId=mo===undefined?dt.mo_hinh_mo:mo;
+    if(mucMoi!=='API' && !moId) return json({error:'Cần chọn mô hình mở trước khi bật BÓNG/MỞ'},422);
+    if(mucMoi==='MO'){ if(dt.loai==='NGON_NGU') return json({error:'Mô hình ngôn ngữ mở tự làm thuộc ADR-009c (cần máy ghép luôn bật + hàng đợi) — hiện chỉ BÓNG'},422); const moX=await docMoHinh(env,moId); if(dt.loai==='NHIN'&&!(moX&&moX.phien_ban)) return json({error:'Mô hình mở chưa có phiên bản đã duyệt — huấn luyện & duyệt trước'},422); if(so(dt.diem)<so(body.nguong!=null?body.nguong:dt.nguong)||so(dt.so_mau)<so(body.min_mau!=null?body.min_mau:dt.min_mau)) return json({error:'Chưa đủ điều kiện gạt MỞ: cần điểm ≥ '+dt.nguong+' và ≥ '+dt.min_mau+' mẫu (hiện '+dt.diem+'/100, '+dt.so_mau+' mẫu)'},422); }
+    await env.DB.prepare(`UPDATE dinh_tuyen SET mo_hinh_chinh=?, mo_hinh_du_phong=?, mo_hinh_mo=?, muc=?, nguong=?, min_mau=?, updated_at=?, updated_by_name=? WHERE tinh_nang=?`).bind(chinh===undefined?dt.mo_hinh_chinh:chinh, duPhong===undefined?dt.mo_hinh_du_phong:duPhong, moId, mucMoi, body.nguong!=null?Math.max(0,Math.min(100,so(body.nguong))):dt.nguong, body.min_mau!=null?Math.max(1,so(body.min_mau)):dt.min_mau, nowISO(), me.ho_ten, dt.tinh_nang).run();
+    if(mucMoi!==dt.muc) await env.DB.prepare(`UPDATE cong_viec SET trang_thai='XONG', xong_at=?, xong_boi=? WHERE loai='GAT_DINH_TUYEN' AND doi_tuong_id LIKE ? AND trang_thai='MO'`).bind(nowISO(), me.ho_ten, 'dinh_tuyen:'+dt.tinh_nang+':%').run();
+    await logAudit(env,me,'định tuyến AI','dinh_tuyen',dt.tinh_nang,dt.muc+' → '+mucMoi+(chinh!==undefined?(' · chính '+chinh):'')); await tinhDinhTuyen(env); return json({ db: await bootstrap(env,me) }); }
+  if(path==='/ai/mau' && method==='GET'){ if(!isStaff(me)) return json({error:'Không có quyền'},403); const tn=chuoi(url.searchParams.get('tinh_nang'),40); const ds=(await env.DB.prepare(`SELECT * FROM mau_hoc_ai ${tn?'WHERE tinh_nang=?':''} ORDER BY created_at DESC LIMIT 60`).bind(...(tn?[tn]:[])).all()).results; return json({ mau: ds.map(r=>({...r, dau_vao:docJSON(r.dau_vao,{}), dau_ra:docJSON(r.dau_ra,r.dau_ra), dau_ra_mo:docJSON(r.dau_ra_mo,r.dau_ra_mo), phan_quyet:docJSON(r.phan_quyet,r.phan_quyet), nhan:docJSON(r.nhan,null)})) }); }
+  if((m=path.match(/^\/ai\/mau\/([^/]+)$/)) && method==='PATCH'){ if(!isStaff(me)) return json({error:'Không có quyền'},403); const r=await env.DB.prepare(`SELECT * FROM mau_hoc_ai WHERE id=?`).bind(m[1]).first(); if(!r) return json({error:'Không có mẫu'},404); const pq=String(body.phan_quyet||'').toUpperCase(); if(!['DUNG','SAI'].includes(pq)) return json({error:'phan_quyet DUNG | SAI'},400);
+    const nhan=(body.nhan&&typeof body.nhan==='object')?body.nhan:(pq==='DUNG'?docJSON(r.dau_ra,{}):{}); if(r.tinh_nang==='chon_canh'&&!nhan.tai_san_id) return json({error:'Cần nhãn: tài sản đúng cho cảnh'},400);
+    const giong=r.tinh_nang==='chon_canh'?(nhan.tai_san_id===(docJSON(r.dau_ra,{})||{}).tai_san_id?1:0):(pq==='DUNG'?1:0);
+    await env.DB.prepare(`UPDATE mau_hoc_ai SET phan_quyet=?, nhan=?, giong=?, cham_at=?, cham_boi=? WHERE id=?`).bind(pq, JSON.stringify(nhan).slice(0,2000), giong, nowISO(), me.ho_ten, r.id).run(); await logAudit(env,me,'chấm mẫu AI','mau_hoc_ai',r.id,r.tinh_nang+' · '+pq); return json({ db: await bootstrap(env,me) }); }
+  if(path==='/ai/huan-luyen' && method==='POST'){ if(!canGat(me)) return json({error:'Chỉ Trưởng MKT/Admin ra lệnh huấn luyện'},403); const tn=chuoi(body.tinh_nang,40)||'chon_canh'; const dt=await env.DB.prepare(`SELECT * FROM dinh_tuyen WHERE tinh_nang=?`).bind(tn).first(); if(!dt||dt.loai!=='NHIN') return json({error:'009b chỉ huấn luyện tính năng NHÌN (chon_canh, loc_footage)'},409); if(!dt.mo_hinh_mo) return json({error:'Tính năng chưa gán mô hình mở'},422);
+    const n=so((await env.DB.prepare(`SELECT COUNT(*) n FROM mau_hoc_ai WHERE tinh_nang=? AND nhan IS NOT NULL`).bind(tn).first()||{}).n); const minHl=10; if(n<minHl) return json({error:'Cần ≥ '+minHl+' mẫu người đã chấm (hiện '+n+') — chấm cảnh ở thẻ video › Sản xuất'},409);
+    const mayId=await mayChoViec(env,'huan_luyen'); if(!mayId) return json({error:'Không có máy huấn luyện đang bật — bật máy con có GPU (thuê) với kha_nang huan_luyen rồi thử lại'},409);
+    const r=await taoLenhTram(env,'huan_luyen',{tinh_nang:tn, mo_hinh_id:dt.mo_hinh_mo}, me, mayId); await logAudit(env,me,'ra lệnh huấn luyện','dinh_tuyen',tn,dt.mo_hinh_mo+' · '+n+' mẫu'); return json({ db: await bootstrap(env,me), lenh_id:r.id, trung:!!r.trung, so_mau:n }); }
+  if((m=path.match(/^\/ai\/phien-ban\/([^/]+)\/(duyet|tu-choi)$/)) && method==='POST'){ if(!canGat(me)) return json({error:'Chỉ Trưởng MKT/Admin duyệt phiên bản mô hình'},403); const pb=await env.DB.prepare(`SELECT * FROM mo_hinh_phien_ban WHERE id=?`).bind(m[1]).first(); if(!pb) return json({error:'Không có phiên bản'},404); if(pb.trang_thai!=='CHO_DUYET') return json({error:'Phiên bản không chờ duyệt'},409);
+    const q=m[2]==='duyet'?'DUYET':'TU_CHOI'; if(q==='TU_CHOI'&&!chuoi(body.ly_do)) return json({error:'Từ chối phải ghi lý do'},400); await env.DB.prepare(`UPDATE mo_hinh_phien_ban SET trang_thai=?, duyet_boi=?, duyet_at=?, ly_do=? WHERE id=?`).bind(q, me.ho_ten, nowISO(), chuoi(body.ly_do,300), pb.id).run();
+    if(q==='DUYET'){ const dg=docJSON(pb.danh_gia,{}); await env.DB.prepare(`UPDATE mo_hinh SET phien_ban=?, checkpoint_url=?, diem=?, so_mau=?, updated_at=? WHERE id=?`).bind(pb.phien_ban, pb.checkpoint_url, so(dg.diem), so(pb.so_mau), nowISO(), pb.mo_hinh_id).run(); }
+    await env.DB.prepare(`UPDATE cong_viec SET trang_thai='XONG', xong_at=?, xong_boi=? WHERE loai='DUYET_MO_HINH' AND doi_tuong_id=? AND trang_thai='MO'`).bind(nowISO(), me.ho_ten, pb.id).run(); await logAudit(env,me,q==='DUYET'?'duyệt phiên bản mô hình':'từ chối phiên bản mô hình','mo_hinh',pb.mo_hinh_id,pb.phien_ban+' · '+chuoi(body.ly_do,200)); await tinhDinhTuyen(env); return json({ db: await bootstrap(env,me) }); }
   // ===== ADR-008 — máy dựng ghép theo tài khoản =====
   if(path==='/may-ghep' && method==='POST'){ if(!isStaff(me)) return json({error:'Không có quyền'},403); const ten=chuoi(body.ten,80)||('Máy của '+me.ho_ten); const id=uid('may'); const khoa='kmay_'+crypto.randomUUID().replace(/-/g,'')+crypto.randomUUID().replace(/-/g,'').slice(0,8);
     await env.DB.prepare(`INSERT INTO may_ghep (id,ten,chu_user_id,chu_ten,khoa_hash,kha_nang,active,created_at) VALUES (?,?,?,?,?,?,1,?)`).bind(id, ten, me.id, me.ho_ten, await sha256Hex(khoa), JSON.stringify(['dung_video']), nowISO()).run();

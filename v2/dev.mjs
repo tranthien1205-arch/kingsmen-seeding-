@@ -19,7 +19,7 @@ const ASSETS = { fetch: async (req) => {
   const f = path.join(DIST, p); if (!f.startsWith(DIST) || !fs.existsSync(f)) return new Response('Not found', { status: 404 });
   return new Response(fs.readFileSync(f), { headers: { 'content-type': MIME[path.extname(f)] || 'application/octet-stream', 'cache-control': 'no-store' } });
 } };
-const env = { DB: taoD1(DBFILE), ASSETS, ...Object.fromEntries(Object.entries(process.env).filter(([k]) => /^(ANTHROPIC_|YOUTUBE_|N8N_|TOKEN_|GOOGLE_|APP_BASE_URL)/.test(k))) };
+const env = { DB: taoD1(DBFILE), ASSETS, ...Object.fromEntries(Object.entries(process.env).filter(([k]) => /^(ANTHROPIC_|YOUTUBE_|N8N_|TOKEN_|GOOGLE_|GEMINI_|OPENAI_|APP_BASE_URL)/.test(k))) };
 const worker = (await import('./worker/index.js')).default;
 http.createServer(async (req, res) => {
   const chunks = []; for await (const c of req) chunks.push(c);

@@ -1,0 +1,10 @@
+{
+  "name": "kingsmen-may-dung",
+  "version": "1.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Máy con Kingsmen Content OS: dựng video nháp + mô hình nhìn mở (CLIP) + huấn luyện đầu học. Cài: npm install (tuỳ chọn, cần cho phần AI).",
+  "dependencies": {
+    "@huggingface/transformers": "^3.3.0"
+  }
+}
