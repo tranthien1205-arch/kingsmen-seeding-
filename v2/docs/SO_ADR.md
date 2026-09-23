@@ -169,6 +169,30 @@ Lộ trình  : 009a danh mục + định tuyến + ai_usage theo mô hình + má
 Người duyệt: Thiện · Trạng thái: ĐÃ DUYỆT (2026-09-24, 009a + 009b; huấn luyện trên GPU thuê khi cần, suy luận CPU) · ĐÃ LÀM 009a+b
 ```
 
+```
+ADR-009c · 2026-09-24 · BỘ NÃO AI (phần 3) — mô hình mở TỰ LÀM cho ngôn ngữ, giọng đọc mở, Whisper lọc footage, LoRA trên GPU thuê
+Bối cảnh : 009a+b đã có định tuyến, bóng, kho mẫu, đầu nhìn. Ngôn ngữ mở mới dừng ở BÓNG vì Worker không gọi được máy ghép đồng bộ;
+            TTS vẫn trả tiền Google; lọc footage chưa có AI. Thiện: "mô hình mã nguồn mở cần học để làm tốt và tiết kiệm chi phí".
+Quyết định: (1) HÀNG ĐỢI AI (ai_viec): tính năng ngôn ngữ ở mức MỞ → Worker không gọi API mà tạo việc {tinh_nang, dau_vao, doi_tuong}
+            + lệnh mo_hinh_chay cho máy ghép có Ollama; máy trả /hub/ai-xong; agent điều phối (15') nhận kết quả và đi tiếp đúng
+            như API (soạn nháp → taoNoiDung, chấm ý tưởng → điểm, biến thể seeding → gói, báo cáo → nhận định); guardrail
+            duyetVanBanAI/claim áp y hệt. Người bấm ✨ ở mức MỞ: app trả "máy ghép đang viết", màn tự hỏi lại 5 giây/lần rồi đổ vào
+            form. Máy im quá ai.cho_may_phut (mặc định 10) → tự rơi về API dự phòng và ghi mẫu "mở trễ" (điểm hạ). (2) HUẤN LUYỆN
+            NGÔN NGỮ: /hub/tap-mau?tinh_nang=soan_nhap_agent xuất cặp (system, user, bài người đã duyệt + bài máy bị trả kèm lý do)
+            dạng JSONL; script huan-luyen-ngon-ngu (Python/unsloth) chạy trên GPU thuê (RunPod/Colab) → LoRA Qwen2.5-7B → GGUF →
+            Ollama model kingsmen-qwen:vN → máy con gửi /hub/mo-hinh/phien-ban với đánh giá = giống trung bình trên tập KIỂM so
+            với bài người → Trưởng MKT duyệt → mo_hinh.model_id đổi sang bản mới. (3) TTS MỞ: Piper tiếng Việt chạy trên máy con
+            (tải giọng một lần); tính năng tts mức BÓNG = máy sinh cả Google và Piper, gói CapCut có thư mục giong-mo/, người nghe
+            và chấm "dùng được / không" ở Sản xuất → mẫu; MỞ = dùng Piper, Google dự phòng; tiết kiệm toàn bộ phí TTS. (4) LỌC
+            FOOTAGE (loc_footage): máy con chạy Whisper base trên footage thô → lời + mốc thời gian; kết hợp điểm CLIP theo gợi ý
+            hình → đề xuất đoạn cắt "chuẩn" cho từng bước kịch bản; BÓNG so với đoạn người giữ trong công cụ Lọc (công cụ gửi
+            lựa chọn người về app thay vì chỉ lưu cục bộ); đủ mẫu → huấn luyện đầu loc_footage như chon_canh. (5) Chi phí: bảng
+            "tiết kiệm so với API" theo tháng ở Bộ não AI › Chi phí (số lượt MỞ × giá API tương đương).
+Lộ trình  : 009c-1 hàng đợi AI + MỞ ngôn ngữ + tiết kiệm · 009c-2 TTS Piper (bóng → mở) · 009c-3 Whisper lọc footage + công cụ Lọc gửi mẫu
+            · 009c-4 xuất tập mẫu + script LoRA cho GPU thuê + nhận phiên bản Ollama.
+Người duyệt: Thiện · Trạng thái: CHỜ DUYỆT (đề xuất 24/09)
+```
+
 ## Changelog
 
 ### 2026-09-24 · ADR-009a+b (Bộ não AI)
