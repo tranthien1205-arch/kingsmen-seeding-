@@ -3331,8 +3331,9 @@ const BAT_DAU_BUOC=[
 ];
 function BatDau({go}){
   const { me } = useApp();
-  const [an,setAn]=useState(()=>{ try{ return localStorage.getItem(BAT_DAU_KEY)==='1'; }catch(e){ return false; } });
-  const doi=(v)=>{ setAn(v); try{ v?localStorage.setItem(BAT_DAU_KEY,'1'):localStorage.removeItem(BAT_DAU_KEY); }catch(e){} };
+  const key=BAT_DAU_KEY+':'+(me&&me.id||'');   // nhớ theo TỪNG tài khoản trên máy này, không phải cả trình duyệt
+  const [an,setAn]=useState(()=>{ try{ return localStorage.getItem(key)==='1'; }catch(e){ return false; } });
+  const doi=(v)=>{ setAn(v); try{ v?localStorage.setItem(key,'1'):localStorage.removeItem(key); }catch(e){} };
   if(an) return <div className="text-[11px] text-ink-muted -mb-2">📖 <LinkBtn onClick={()=>doi(false)}>Xem lại hướng dẫn "Bắt đầu"</LinkBtn></div>;
   const vaiTro = me.vai_tro===ROLES.TRUONG_MKT ? 'Anh/chị duyệt cổng Nội dung và sửa cấu hình; soạn được như Marketing.'
     : me.vai_tro===ROLES.KY_THUAT ? 'Anh/chị giữ cổng Claim: chỉ Duyệt/Trả về, không sửa nội dung; quản Sản phẩm & Claim cấm.'
