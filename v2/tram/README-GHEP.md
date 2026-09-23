@@ -12,6 +12,8 @@ may/content-os-do-luong.mjs     ← v2/tram/content-os-do-luong.mjs
 may/content-os-dung-video.mjs   ← v2/tram/content-os-dung-video.mjs
 may/content-os-seeding-dang.mjs ← v2/tram/content-os-seeding-dang.mjs   (ADR-007)
 may/content-os-seeding-kiem.mjs ← v2/tram/content-os-seeding-kiem.mjs   (ADR-007)
+may/content-os-seeding-binh-luan.mjs ← v2/tram/content-os-seeding-binh-luan.mjs   (ADR-007b)
+may/content-os-seeding-nuoi.mjs ← v2/tram/content-os-seeding-nuoi.mjs   (ADR-007b)
 ```
 Trong `may/agents.mjs`: thêm `NHOM.noi_dung` và mục `AGENT_CONTENT_OS` (xem `agents-content_os.mjs`) vào mảng `AGENTS`. Tăng `VER` trong `tram.mjs`, commit, push `main` → trên trang Trạm bấm **Cài đặt → 🔄 Cập nhật Trạm** (Trạm tự `node --check` từng file rồi khởi động lại).
 

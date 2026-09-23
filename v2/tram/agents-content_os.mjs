@@ -25,5 +25,10 @@ export const AGENT_CONTENT_OS = {
     { id: "seeding_kiem", ten: "Kiểm & đo bài seeding + bắt lead", script: "content-os-seeding-kiem.mjs", lich: true, san_sang: true,
       gio: "07:30", lap: "ngay",
       mo_ta: "mở link bài seeding đã đăng 2 & 7 ngày → còn sống / nội dung / react / bình luận + danh sách bình luận (Content OS bắt lead hỏi mua) → content_os.seeding_kiem" },
+    // ADR-007b — bình luận dẫn dắt bằng tài khoản khác trong nhóm; nuôi tài khoản (xem, thả tim)
+    { id: "seeding_binh_luan", ten: "Bình luận dẫn dắt dưới bài seeding", script: "content-os-seeding-binh-luan.mjs", lich: false, san_sang: true,
+      mo_ta: "hỏi /hub/viec/seeding_binh_luan → mở link bài bằng hồ sơ tài khoản MKT khác → bình luận theo vai → content_os.seeding_binh_luan_ket_qua" },
+    { id: "seeding_nuoi", ten: "Nuôi tài khoản seeding (xem, thả tim)", script: "content-os-seeding-nuoi.mjs", lich: false, san_sang: true,
+      mo_ta: "hỏi /hub/viec/seeding_nuoi → mở nhóm bằng hồ sơ tài khoản → cuộn xem vài phút, thả tim vài bài → content_os.seeding_nuoi_ket_qua" },
   ],
 };

@@ -192,7 +192,7 @@ function ChiPhiAI(){
 function CauHinhMay(){
   const { db, me, goi, notify } = useApp(); const duoc=laGat(me); const mc=db.module_config||{};
   const [may,setMay]=useState({...mc.may}); const [ai,setAi]=useState({ngan_sach_thang_usd:mc.ai.ngan_sach_thang_usd, ngan_sach_hoc_pct:mc.ai.ngan_sach_hoc_pct, canh_bao_pct:mc.ai.canh_bao_pct, chan_khi_vuot:mc.ai.chan_khi_vuot, ty_gia_vnd:mc.ai.ty_gia_vnd});
-  const [trend,setTrend]=useState({tu_khoa:(mc.trend.tu_khoa_nganh||[]).join('\n'), chong_trung_ngay:mc.trend.chong_trung_ngay, nguong_tu_duyet:mc.trend.nguong_tu_duyet}); const [kh,setKh]=useState({...mc.ke_hoach}); const [nd,setNd]=useState({...mc.noi_dung}); const [dv,setDv]=useState({...(mc.dung_video||{})});
+  const [trend,setTrend]=useState({tu_khoa:(mc.trend.tu_khoa_nganh||[]).join('\n'), chong_trung_ngay:mc.trend.chong_trung_ngay, nguong_tu_duyet:mc.trend.nguong_tu_duyet}); const [kh,setKh]=useState({...mc.ke_hoach}); const [nd,setNd]=useState({...mc.noi_dung}); const [dv,setDv]=useState({...(mc.dung_video||{})}); const [sd,setSd]=useState({...(mc.seeding||{})});
   const luu=async(key,val)=>{ const body={cau_hinh:Object.fromEntries(Object.entries(val).map(([k,v])=>[k, typeof (mc[key]||{})[k]==='number'?Number(v):typeof (mc[key]||{})[k]==='boolean'?!!v:v]))}; const r=await goi('/cau-hinh/'+key,{method:'PUT',body}); if(r.ok) notify('Đã lưu — áp dụng ngay'); else notify(r.msg,'err'); };
   const luuTrend=async()=>{ const r=await goi('/cau-hinh/trend',{method:'PUT',body:{cau_hinh:{tu_khoa_nganh:trend.tu_khoa.split('\n').map(s=>s.trim()).filter(Boolean).slice(0,100), chong_trung_ngay:Number(trend.chong_trung_ngay)||30, nguong_tu_duyet:Number(trend.nguong_tu_duyet)||70}}}); if(r.ok) notify('Đã lưu'); else notify(r.msg,'err'); };
   const SoF=({o,set,k,l,h})=><Field label={l} hint={h}><Input type="number" value={o[k]??''} disabled={!duoc} onChange={e=>set({...o,[k]:e.target.value})}/></Field>;
@@ -227,6 +227,17 @@ function CauHinhMay(){
       <SoF o={dv} set={setDv} k="giay_toi_da" l="Thời lượng tối đa (giây)"/>
       <SoF o={dv} set={setDv} k="tts_usd_1m_ky_tu" l="Giá TTS (USD / 1 triệu ký tự)" h="Neural2: 16 · Standard: 4 — tính vào ngân sách AI"/>
       {duoc && <Btn variant="brand" onClick={()=>luu('dung_video',dv)}>💾 Lưu</Btn>}</Card>
+    <Card><SectionTitle className="mb-2">Seeding hội nhóm (B13–B17)</SectionTitle>
+      <SoF o={sd} set={setSd} k="binh_luan_moi_bai" l="Bình luận dẫn dắt mỗi bài (tài khoản khác)" h="0 = tắt"/>
+      <SoF o={sd} set={setSd} k="binh_luan_tre_min" l="Bình luận sau đăng ít nhất (phút)"/>
+      <SoF o={sd} set={setSd} k="binh_luan_tre_max" l="Bình luận sau đăng nhiều nhất (phút)"/>
+      <SoF o={sd} set={setSd} k="nuoi_moi_ngay" l="Lượt nuôi mỗi tài khoản mỗi ngày" h="0 = tắt"/>
+      <SoF o={sd} set={setSd} k="nuoi_phut" l="Mỗi lượt nuôi xem bao nhiêu phút"/>
+      <SoF o={sd} set={setSd} k="nuoi_tim" l="Thả bao nhiêu tim mỗi lượt"/>
+      <SoF o={sd} set={setSd} k="go_bai_ha_nhip" l="Nhóm bị gỡ bao nhiêu bài/30 ngày thì máy tự hạ nhịp"/>
+      <SoF o={sd} set={setSd} k="checkpoint_ha_nhip" l="Tài khoản gặp checkpoint bao nhiêu lần/30 ngày thì tự hạ nhịp"/>
+      <label className="flex items-center gap-2 text-sm mb-3"><Toggle on={sd.nhip_tu_chinh!==false} disabled={!duoc} onChange={v=>setSd({...sd,nhip_tu_chinh:v})}/> Máy tự hạ nhịp khi có dấu hiệu xấu (tăng luôn qua G4)</label>
+      {duoc && <Btn variant="brand" onClick={()=>luu('seeding',{binh_luan_moi_bai:sd.binh_luan_moi_bai, binh_luan_tre_min:sd.binh_luan_tre_min, binh_luan_tre_max:sd.binh_luan_tre_max, nuoi_moi_ngay:sd.nuoi_moi_ngay, nuoi_phut:sd.nuoi_phut, nuoi_tim:sd.nuoi_tim, go_bai_ha_nhip:sd.go_bai_ha_nhip, checkpoint_ha_nhip:sd.checkpoint_ha_nhip, nhip_tu_chinh:sd.nhip_tu_chinh!==false})}>💾 Lưu</Btn>}</Card>
     <Card><SectionTitle className="mb-2">Chi phí AI</SectionTitle>
       <SoF o={ai} set={setAi} k="ngan_sach_thang_usd" l="Ngân sách tháng (USD)" h="0 = không giới hạn"/>
       <SoF o={ai} set={setAi} k="ngan_sach_hoc_pct" l="Phần dành cho chế độ học (%)"/>

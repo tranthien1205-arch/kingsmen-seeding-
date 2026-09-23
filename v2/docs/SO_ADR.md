@@ -193,7 +193,31 @@ Lộ trình  : 009c-1 hàng đợi AI + MỞ ngôn ngữ + tiết kiệm · 009c
 Người duyệt: Thiện · Trạng thái: ĐÃ DUYỆT (2026-09-24, "ADR-009c cả 4 bước") · ĐÃ LÀM
 ```
 
+```
+ADR-007b · 2026-09-24 · SEEDING NÂNG CAO — bình luận dẫn dắt đa tài khoản, lead AI phân loại, nuôi tài khoản, tự chỉnh nhịp
+Bối cảnh : 007a đã có gói → lịch → Trạm đăng → kiểm/lead từ khoá → học. Bản vẽ §11.9 để lại 007b. Thiện: "tiếp tục 007b".
+Quyết định: (1) BÌNH LUẬN DẪN DẮT: bài lên (có link) → máy lên lịch N bình luận (mặc định 2) cho N tài khoản KHÁC người đăng đang ở
+            trong nhóm, theo vai trong biến thể (hỏi kinh nghiệm / xác nhận / hỏi mua — nhóm cấm bán hàng thì bỏ hỏi mua), giãn
+            30–180 phút, không trùng; tới giờ Trạm bình luận (việc seeding_binh_luan), B15 NGƯỜI → giao tay; lỗi thử lại 1 lần;
+            checkpoint → tạm dừng tài khoản. (2) LEAD AI: bình luận dưới bài (bỏ bình luận của chính tài khoản seeding) → một lượt
+            AI (tính năng phan_loai_lead, Haiku) phân loại HOI_MUA | HOI_GIA | HOI_KY_THUAT | TIEU_CUC | KHAC + mức 1–3 + gợi ý trả
+            lời tự nhiên (không giá, không bịa); tiêu cực → việc XU_LY_TIEU_CUC; không AI → từ khoá; người vẫn trả lời. (3) NUÔI TÀI
+            KHOẢN: mỗi ngày mỗi tài khoản sống có nhóm 1 lượt (giờ ngẫu nhiên 8–21h, tránh giờ đăng ±90'): Trạm mở nhóm cuộn xem
+            N phút, thả N tim, không bình luận/đăng → suc_khoe.nuoi_so. (4) TỰ CHỈNH NHỊP: HẠ thì máy tự làm có audit + báo Trưởng
+            MKT (tài khoản ≥ 2 checkpoint/30 ngày → nhip_ngay −1 & dừng 72 giờ; nhóm bị gỡ ≥ 2 bài/30 ngày → nhip_tuan −1, một lần/
+            tháng); TĂNG phải qua G4 (nhóm ≥ 8 bài đạt, 0 gỡ, react tb ≥ 5 → đề xuất SEEDING_NHIP). Công tắc seeding.nhip_tu_chinh.
+            (5) Bảng binh_luan_seeding, nuoi_seeding; lead_seeding thêm loai, muc_do, goi_y. (6) Trạm: việc seeding_binh_luan,
+            seeding_nuoi (v9.156).
+Người duyệt: Thiện · Trạng thái: ĐÃ DUYỆT (2026-09-24, "tiếp tục 007b") · ĐÃ LÀM
+```
+
 ## Changelog
+
+### 2026-09-24 · ADR-007b (seeding nâng cao)
+- **Worker**: bảng `binh_luan_seeding, nuoi_seeding`, `lead_seeding.loai/muc_do/goi_y`; config seeding `binh_luan_moi_bai, binh_luan_tre_min/max, nuoi_moi_ngay, nuoi_phut, nuoi_tim, nhip_tu_chinh, go_bai_ha_nhip, checkpoint_ha_nhip`; định tuyến `phan_loai_lead`; helpers `lenBinhLuan, chayBinhLuanSeeding, napBinhLuan, ghiCheckpoint (lịch sử + tự hạ nhịp), lenLichNuoi, chayNuoi, napNuoi, chinhNhipSeeding, phanLoaiBinhLuan`; agents `BINH_LUAN_SEEDING` (15'), `NUOI_TAI_KHOAN` (15'), `LEN_LICH_NUOI` (ngày: nuôi + chỉnh nhịp); hub `/hub/viec/seeding_binh_luan`, `/hub/viec/seeding_nuoi`, lô `content_os.seeding_binh_luan_ket_qua`, `content_os.seeding_nuoi_ket_qua`; endpoints `/seeding/binh-luan/:id/(huy|da-dang)`, `/seeding/nuoi/:id/huy`; `apDungDeXuat` SEEDING_NHIP; bootstrap `seeding.binh_luan, nuoi`.
+- **Trạm** (`v2/tram/`): `content-os-seeding-binh-luan.mjs`, `content-os-seeding-nuoi.mjs`, agents entry +2 việc → masfico-insight v9.156.
+- **Giao diện**: Seeding › tab **Bình luận & nuôi**; Lead hiện loại/mức/gợi ý trả lời; Máy › Cấu hình › thẻ Seeding.
+- Test `tests/adr007b.test.mjs`: 6 nhóm.
 
 ### 2026-09-24 · ADR-009c (Bộ não AI phần 3)
 - **Worker**: bảng `ai_viec` (hàng đợi mô hình mở); config `ai.cho_may_phut`; `goiAI` mức MỞ ngôn ngữ (tính năng hỗ trợ: soan_noi_dung, soan_nhap_agent, cham_y_tuong, bao_cao) → tạo việc + lệnh `mo_hinh_chay`, trả `cho_may`; `xuLyAIViec` đi tiếp theo ngữ cảnh (guardrail duyetVanBanAI/claim y hệt API) · `chayLaiAPI` máy trễ → API dự phòng + mẫu "mở trễ"; agent `NHAN_AI_MO` (15'); `GET /ai/viec/:id` (người bấm ✨ hỏi lại); hub `/hub/viec/ai`, `/hub/ai-xong`, `/hub/viec/loc_footage`, `/hub/tap-mau-ngon-ngu`, phiên bản có `model_id` (duyệt → đổi model Ollama); lô `content_os.video.tts_mo` → mẫu tts (chấm giọng mở); lô `content_os.loc_footage` → tài sản FOOTAGE nguồn MÁY + mẫu loc_footage + việc; `POST /noi-dung/:id/loc`; PATCH mẫu tts/loc_footage → giong_mo, bỏ đoạn → gỡ tài sản; `tietKiemMo` (USD tương đương theo giá mô hình chính); bootstrap `ai_nao.tiet_kiem, mo_ho_tro, ai_viec`.
