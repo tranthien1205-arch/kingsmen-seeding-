@@ -12,7 +12,7 @@ binding = "ASSETS"
 [[d1_databases]]
 binding = "DB"
 database_name = "kingsmen-content-os-db"
-database_id = "DIEN_DATABASE_ID_SAU_KHI_TAO"
+database_id = "8870aa58-0d2d-4ff2-8689-e2fbd7fafd90"
 
 # Tài sản media (ảnh, footage, video xuất). Tạo: npx wrangler r2 bucket create kingsmen-content-os-media
 [[r2_buckets]]
@@ -20,7 +20,13 @@ binding = "MEDIA"
 bucket_name = "kingsmen-content-os-media"
 
 # Agent điều phối bám nhịp 15' — tự chốt mỗi việc 1 lượt/ngày đúng giờ cấu hình
+# Tên miền riêng (zone masfico.vn trên Cloudflare) — độc lập với app cũ kingsmen-app-seeding
+routes = [{ pattern = "content.masfico.vn", custom_domain = true }]
+
+[vars]
+APP_BASE_URL = "https://content.masfico.vn"
+
 [triggers]
 crons = ["*/15 * * * *"]
 
-# Secrets (npx wrangler secret put <TÊN>): ANTHROPIC_API_KEY, YOUTUBE_API_KEY, N8N_TOKEN, N8N_WEBHOOK_URL, TOKEN_<MÃ KÊNH>
+# Secrets (npx wrangler secret put <TÊN>): ANTHROPIC_API_KEY, GEMINI_API_KEY, OPENAI_API_KEY, GROQ_API_KEY, DEEPINFRA_API_KEY, GOOGLE_TTS_KEY, YOUTUBE_API_KEY, N8N_TOKEN, N8N_WEBHOOK_URL, TOKEN_<MÃ KÊNH>
