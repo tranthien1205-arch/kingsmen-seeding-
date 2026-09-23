@@ -1,0 +1,4 @@
+.dev.sqlite
+.build-*/
+node_modules/
+danh-muc.json

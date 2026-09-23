@@ -1,0 +1,26 @@
+# KINGSMEN CONTENT OS — app mới (bản vẽ docs/CONTENT_OS_V2_BAN_VE.md)
+# Cloudflare project RIÊNG, D1 RIÊNG — không dùng chung với app cũ (kingsmen-app-seeding).
+name = "kingsmen-content-os"
+main = "worker/index.js"
+compatibility_date = "2025-06-01"
+
+[assets]
+directory = "./dist"
+binding = "ASSETS"
+
+# Tạo một lần: npx wrangler d1 create kingsmen-content-os-db  → dán database_id vào đây
+[[d1_databases]]
+binding = "DB"
+database_name = "kingsmen-content-os-db"
+database_id = "DIEN_DATABASE_ID_SAU_KHI_TAO"
+
+# Tài sản media (ảnh, footage, video xuất). Tạo: npx wrangler r2 bucket create kingsmen-content-os-media
+[[r2_buckets]]
+binding = "MEDIA"
+bucket_name = "kingsmen-content-os-media"
+
+# Agent điều phối bám nhịp 15' — tự chốt mỗi việc 1 lượt/ngày đúng giờ cấu hình
+[triggers]
+crons = ["*/15 * * * *"]
+
+# Secrets (npx wrangler secret put <TÊN>): ANTHROPIC_API_KEY, YOUTUBE_API_KEY, N8N_TOKEN, N8N_WEBHOOK_URL, TOKEN_<MÃ KÊNH>
