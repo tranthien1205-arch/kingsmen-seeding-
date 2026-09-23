@@ -1,0 +1,17 @@
+# Máy dựng video — Kingsmen Content OS (ADR-008)
+
+Máy con rút gọn: nhận lệnh **dựng video nháp** từ app cho tài khoản của bạn. Không cài Playwright, không giữ tài khoản mạng xã hội. Mã dựng nằm ở app — máy tải bản mới nhất mỗi lần chạy.
+
+## Cài một lần (Windows)
+1. Cài **Node.js 22** (https://nodejs.org) và **ffmpeg**: mở PowerShell, chạy `winget install Gyan.FFmpeg`, đóng mở lại cửa sổ.
+2. Tạo thư mục, ví dụ `C:\may-dung`, tải 3 file vào đó: `may-dung.mjs`, `BAT-DAU.bat`, `README.md` (link ở app › Hồ sơ › Máy dựng).
+3. Trong app: **Hồ sơ › Máy dựng › ＋ Kết nối máy này** → copy mã ghép (hiện một lần).
+4. Chạy `BAT-DAU.bat`, dán mã ghép khi được hỏi. Máy báo nhịp tim 2 phút/lần; app hiện 🟢 ở Hồ sơ › Máy dựng.
+
+## Dùng
+- Ở thẻ video đã duyệt › tab **Sản xuất** › **🎬 Dựng trên máy…** chọn máy của bạn. Máy tải footage/ảnh của thẻ, đọc lời bình bằng giọng Google (nếu Admin đã cắm khoá), trộn nhạc nền, in phụ đề, xuất **bản nháp** và **gói CapCut** (từng cảnh + giọng + SRT + nhạc) về thẻ.
+- Máy nào cũng chạy được lệnh của người khác nếu người đó chọn máy bạn; máy chỉ nhận lệnh gửi đích danh cho nó.
+- Kết quả xem ở thẻ › Sản xuất; việc "Xem & duyệt video nháp" xuất hiện ở Việc của tôi.
+
+## Gỡ
+Xoá máy ở app (Hồ sơ › Máy dựng › Gỡ) → khoá hết hiệu lực; xoá thư mục là xong.

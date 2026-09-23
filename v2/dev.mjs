@@ -13,13 +13,13 @@ const PORT = Number(opt('--port', 5180));
 const DBFILE = path.join(ROOT, '.dev.sqlite');
 if (args.includes('--fresh')) fs.rmSync(DBFILE, { force: true });
 const DIST = path.join(ROOT, 'dist');
-const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'application/javascript', '.css': 'text/css', '.json': 'application/json', '.png': 'image/png', '.svg': 'image/svg+xml', '.ico': 'image/x-icon' };
+const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'application/javascript', '.mjs': 'application/javascript', '.mp3': 'audio/mpeg', '.zip': 'application/zip', '.bat': 'text/plain', '.md': 'text/plain; charset=utf-8', '.css': 'text/css', '.json': 'application/json', '.png': 'image/png', '.svg': 'image/svg+xml', '.ico': 'image/x-icon' };
 const ASSETS = { fetch: async (req) => {
   let p = decodeURIComponent(new URL(req.url).pathname); if (p === '/' || !path.extname(p)) p = '/index.html';
   const f = path.join(DIST, p); if (!f.startsWith(DIST) || !fs.existsSync(f)) return new Response('Not found', { status: 404 });
   return new Response(fs.readFileSync(f), { headers: { 'content-type': MIME[path.extname(f)] || 'application/octet-stream', 'cache-control': 'no-store' } });
 } };
-const env = { DB: taoD1(DBFILE), ASSETS, ...Object.fromEntries(Object.entries(process.env).filter(([k]) => /^(ANTHROPIC_|YOUTUBE_|N8N_|TOKEN_)/.test(k))) };
+const env = { DB: taoD1(DBFILE), ASSETS, ...Object.fromEntries(Object.entries(process.env).filter(([k]) => /^(ANTHROPIC_|YOUTUBE_|N8N_|TOKEN_|GOOGLE_|APP_BASE_URL)/.test(k))) };
 const worker = (await import('./worker/index.js')).default;
 http.createServer(async (req, res) => {
   const chunks = []; for await (const c of req) chunks.push(c);

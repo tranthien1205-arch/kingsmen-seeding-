@@ -29,5 +29,8 @@ node scripts/xuat-danh-muc-cu.mjs https://kingsmen-app-seeding.tranthien1205.wor
 ```
 Script hỏi mật khẩu app cũ, ghi `danh-muc.json`; dán nội dung vào **Máy › Nhập danh mục**. Không nhập nội dung/kịch bản/kết quả cũ (đã chốt bỏ dữ liệu cũ).
 
+## Máy dựng video theo tài khoản (ADR-008)
+Mỗi nhân viên ghép máy tính của mình ở **Hồ sơ › Máy dựng**, tải `tools/may-dung/` (Node 22 + ffmpeg), chạy `BAT-DAU.bat`, dán mã ghép. Mã dựng (`tools/may-dung/dung-video.mjs`) phát từ app qua `/hub/script/dung-video`, máy kiểm hash rồi chạy. Giọng đọc: `wrangler secret put GOOGLE_TTS_KEY`. Kết quả: bản nháp + gói CapCut về thẻ.
+
 ## Cấu trúc
 - `worker/index.js` — API + schema + agent điều phối (cron) · `app/src/*.jsx` — 5 màn, gộp theo thứ tự tên · `tests/` — D1 giả lập + test theo ADR · `dist/` — bản build (commit kèm).

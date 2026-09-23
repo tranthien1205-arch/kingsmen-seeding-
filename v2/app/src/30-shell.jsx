@@ -40,13 +40,21 @@ function Shell(){
   </div>;
 }
 function HoSoModal({open,onClose,onLogout}){
-  const { me, goi, notify } = useApp(); const [ten,setTen]=useState(me.ho_ten); const [pw,setPw]=useState('');
+  const { me, db, goi, notify } = useApp(); const [ten,setTen]=useState(me.ho_ten); const [pw,setPw]=useState(''); const [ma,setMa]=useState(''); const [busy,setBusy]=useState(false);
   useEffect(()=>{ setTen(me.ho_ten); },[me.ho_ten]);
   const luu=async()=>{ const r=await goi('/me',{method:'PATCH',body:{ho_ten:ten, ...(pw?{password:pw}:{})}}); if(r.ok){ notify('Đã lưu'); setPw(''); onClose(); } else notify(r.msg,'err'); };
+  const mayCuaToi=(db.may_ghep||[]).filter(m=>m.chu_user_id===me.id);
+  const ghep=async()=>{ const t=prompt('Tên máy (VD: Laptop Ngọc):', 'Máy của '+me.ho_ten); if(t===null) return; setBusy(true); const r=await goi('/may-ghep',{method:'POST',body:{ten:t}}); setBusy(false); if(r.ok){ setMa(r.ma_ghep); notify('Đã tạo mã ghép — dán vào máy con'); } else notify(r.msg,'err'); };
+  const go=async(m)=>{ if(!confirm('Gỡ máy "'+m.ten+'"? Khoá hết hiệu lực, lệnh đang chờ bị huỷ.')) return; const r=await goi('/may-ghep/'+m.id,{method:'DELETE'}); if(r.ok) notify('Đã gỡ'); else notify(r.msg,'err'); };
   return <Modal open={open} onClose={onClose} title="Hồ sơ của tôi">
     <Field label="Tên hiển thị"><Input value={ten} onChange={e=>setTen(e.target.value)}/></Field>
     <Field label="Mật khẩu mới" hint="để trống nếu không đổi"><PasswordInput value={pw} onChange={e=>setPw(e.target.value)}/></Field>
     <div className="text-[11px] text-ink-muted mb-3">{me.email} · {ROLE_LABEL[me.vai_tro]}</div>
+    {laStaff(me)&&<div className="rounded-xl border border-line p-3 mb-3">
+      <div className="flex items-center justify-between gap-2"><div><div className="text-sm font-semibold text-ink">🖥 Máy dựng của tôi</div><div className="text-[11px] text-ink-muted">Máy tính của bạn dựng video nháp cho thẻ video đã duyệt. Mã dựng tải từ app, máy chỉ cần Node + ffmpeg.</div></div><Btn variant="soft" className="!py-1 !px-2 text-[11px]" onClick={ghep} disabled={busy}>＋ Kết nối máy này</Btn></div>
+      {mayCuaToi.length>0&&<div className="mt-2 space-y-1">{mayCuaToi.map(m=><div key={m.id} className="flex items-center gap-2 text-xs"><span className={m.song?'text-emerald-600':'text-slate-400'}>{m.song?'🟢':'⚪'}</span><span className="font-semibold text-ink">{m.ten}</span><span className="text-ink-muted">{m.song?('đang bật · '+(m.than.may||'')+(m.than.ffmpeg===false?' · ⚠ chưa có ffmpeg':'')+(m.than.dang_lam?(' · đang: '+m.than.dang_lam):'')):(m.nhan_luc?('im từ '+fmtDate(m.nhan_luc)):'chưa nối lần nào')}</span><LinkBtn tone="danger" className="ml-auto" onClick={()=>go(m)}>Gỡ</LinkBtn></div>)}</div>}
+      {ma&&<div className="mt-2"><div className="text-[11px] text-ink-muted mb-1">Mã ghép (hiện một lần). Trên máy: tải <a className="underline" href="/tools/may-dung/may-dung.mjs" download>may-dung.mjs</a> · <a className="underline" href="/tools/may-dung/BAT-DAU.bat" download>BAT-DAU.bat</a> · <a className="underline" href="/tools/may-dung/README.md" target="_blank" rel="noreferrer">hướng dẫn</a> vào một thư mục, chạy BAT-DAU.bat rồi dán mã:</div><Textarea rows="3" readOnly value={ma} onFocus={e=>e.target.select()} className="text-[11px] font-mono"/><LinkBtn onClick={()=>{ navigator.clipboard&&navigator.clipboard.writeText(ma); notify('Đã copy'); }}>📋 Copy mã ghép</LinkBtn></div>}
+    </div>}
     <div className="flex gap-2 justify-between"><Btn variant="ghost" onClick={onLogout}>Đăng xuất</Btn><Btn variant="brand" onClick={luu}>Lưu</Btn></div>
   </Modal>;
 }

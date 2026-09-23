@@ -77,7 +77,21 @@ function TramTab(){
         {(t.lenh||[]).length>0&&<div className="mt-3 text-[11px]"><div className="font-semibold text-ink-muted mb-0.5">Lệnh gần đây</div>{(t.lenh||[]).slice(0,8).map(l=><div key={l.id} className="py-0.5 border-t border-line flex gap-2"><Pill cls={l.trang_thai==='XONG'?'bg-emerald-100 text-emerald-800':l.trang_thai==='HONG'?'bg-rose-100 text-rose-700':l.trang_thai==='DA_GUI'?'bg-sky-100 text-sky-800':'bg-slate-100 text-ink'}>{l.trang_thai}</Pill><span className="text-ink">{l.viec} {l.tham_so.id?(l.tham_so.id+'/'+l.tham_so.viec):''}</span><span className="text-ink-muted min-w-0 flex-1 truncate">{l.ket_qua||''}</span><span className="text-slate-400 shrink-0">{fmtDate(l.created_at)}</span></div>)}</div>}
       </Card>
     </div>
+    <MayGhepCard/>
     {(t.lo||[]).length>0&&<Card pad="p-3"><SectionTitle className="mb-1">Lô dữ liệu Trạm đẩy về</SectionTitle>{(t.lo||[]).map(l=><div key={l.id} className="text-[11px] py-0.5 border-t border-line flex gap-2"><span className="text-slate-400 shrink-0">{fmtDate(l.created_at)}</span><span className="font-semibold text-ink">{l.bang}</span><span className="text-ink-muted">{l.so_dong} dòng · +{l.xu_ly.moi||0} mới · {l.xu_ly.cap_nhat||0} cập nhật{(l.xu_ly.loi||[]).length?(' · lỗi: '+l.xu_ly.loi.join('; ')):''}</span></div>)}</Card>}
+  </div>;
+}
+// ADR-008 — máy dựng ghép theo tài khoản + kho nhạc nền dùng chung
+function MayGhepCard(){
+  const { db, me, goi, notify } = useApp(); const ds=db.may_ghep||[]; const nhac=(db.tai_san||[]).filter(t=>t.loai==='NHAC'); const fileRef=useRef(null); const [busy,setBusy]=useState(false); const cfg=(db.module_config||{}).dung_video||{};
+  const go=async(m)=>{ if(!confirm('Gỡ máy "'+m.ten+'" của '+m.chu_ten+'?')) return; const r=await goi('/may-ghep/'+m.id,{method:'DELETE'}); if(r.ok) notify('Đã gỡ'); else notify(r.msg,'err'); };
+  const upload=async(file)=>{ if(!file) return; setBusy(true); try{ const tok=localStorage.getItem('kingsmen_os_token'); const r=await fetch('/api/tai-san/upload?type='+encodeURIComponent(file.type||'audio/mpeg'),{method:'POST',headers:{Authorization:'Bearer '+tok,'Content-Type':file.type||'audio/mpeg'},body:file}); const j=await r.json(); if(!r.ok) throw new Error(j.error||'Lỗi tải lên'); const mo=prompt('Mô tả nhạc (để máy chọn theo kịch bản, VD: nhẹ nhàng, công trình, năng động):','')||''; const x=await goi('/tai-san',{method:'POST',body:{ten:file.name, mo_ta:mo, media_url:j.media_url, media_type:'AUDIO', loai:'NHAC'}}); if(x.ok) notify('Đã thêm nhạc nền'); else notify(x.msg,'err'); }catch(e){ notify(e.message,'err'); } setBusy(false); };
+  const xoa=async(t)=>{ if(!confirm('Xoá nhạc "'+t.ten+'"?')) return; const r=await goi('/tai-san/'+t.id,{method:'DELETE'}); if(r.ok) notify('Đã xoá'); else notify(r.msg,'err'); };
+  return <div className="grid lg:grid-cols-2 gap-3">
+    <Card pad="p-3"><SectionTitle className="mb-1">🖥 Máy dựng đã ghép ({ds.filter(m=>m.song).length}/{ds.length} đang bật)</SectionTitle><div className="text-[11px] text-ink-muted mb-2">Mỗi người ghép máy của mình ở Hồ sơ › Máy dựng. Mã dựng tải từ app mỗi lần chạy. Giọng đọc: {db.san_sang.tts?('Google '+(cfg.tts_giong||'')):'chưa cắm GOOGLE_TTS_KEY (wrangler secret put GOOGLE_TTS_KEY)'}.</div>
+      {ds.length===0?<div className="text-xs text-ink-muted">Chưa có máy nào.</div>:<div className="space-y-1">{ds.map(m=><div key={m.id} className="flex items-center gap-2 text-xs"><span>{m.song?'🟢':'⚪'}</span><span className="font-semibold text-ink">{m.ten}</span><span className="text-ink-muted">{m.chu_ten} · {m.song?('đang bật'+(m.than.ffmpeg===false?' · ⚠ chưa ffmpeg':'')+(m.than.dang_lam?(' · '+m.than.dang_lam):'')):(m.nhan_luc?('im từ '+fmtDate(m.nhan_luc)):'chưa nối')}{m.ban?(' · v'+m.ban):''}</span>{(me.vai_tro==='ADMIN'||m.chu_user_id===me.id)&&<LinkBtn tone="danger" className="ml-auto" onClick={()=>go(m)}>Gỡ</LinkBtn>}</div>)}</div>}</Card>
+    <Card pad="p-3"><div className="flex items-center justify-between gap-2"><SectionTitle>🎵 Kho nhạc nền ({nhac.length})</SectionTitle>{laStaff(me)&&<><input ref={fileRef} type="file" accept="audio/*" className="hidden" onChange={e=>upload(e.target.files[0])}/><Btn variant="ghost" className="!py-1 !px-2 text-[11px]" onClick={()=>fileRef.current.click()} disabled={busy||!db.san_sang.media}>⬆ Thêm nhạc</Btn></>}</div><div className="text-[11px] text-ink-muted mb-2">Nhạc MKT đã có quyền dùng. Máy dựng chọn bài có mô tả khớp kịch bản, trộn nhỏ dưới giọng đọc (−{cfg.nhac_giam_db||18} dB).</div>
+      {nhac.length===0?<div className="text-xs text-ink-muted">Chưa có nhạc — bản nháp sẽ không có nhạc nền.</div>:<div className="space-y-1">{nhac.map(t=><div key={t.id} className="flex items-center gap-2 text-xs"><span>🎵</span><span className="font-semibold text-ink truncate">{t.ten}</span><span className="text-ink-muted truncate">{t.mo_ta}</span><a className="text-brand-dark underline ml-auto shrink-0" href={t.media_url} target="_blank" rel="noreferrer">nghe</a>{laStaff(me)&&<LinkBtn tone="danger" onClick={()=>xoa(t)}>xoá</LinkBtn>}</div>)}</div>}</Card>
   </div>;
 }
 function NhatKyMay(){
@@ -105,8 +119,8 @@ function ChiPhiAI(){
 function CauHinhMay(){
   const { db, me, goi, notify } = useApp(); const duoc=laGat(me); const mc=db.module_config||{};
   const [may,setMay]=useState({...mc.may}); const [ai,setAi]=useState({ngan_sach_thang_usd:mc.ai.ngan_sach_thang_usd, ngan_sach_hoc_pct:mc.ai.ngan_sach_hoc_pct, canh_bao_pct:mc.ai.canh_bao_pct, chan_khi_vuot:mc.ai.chan_khi_vuot, ty_gia_vnd:mc.ai.ty_gia_vnd});
-  const [trend,setTrend]=useState({tu_khoa:(mc.trend.tu_khoa_nganh||[]).join('\n'), chong_trung_ngay:mc.trend.chong_trung_ngay, nguong_tu_duyet:mc.trend.nguong_tu_duyet}); const [kh,setKh]=useState({...mc.ke_hoach}); const [nd,setNd]=useState({...mc.noi_dung});
-  const luu=async(key,val)=>{ const body={cau_hinh:Object.fromEntries(Object.entries(val).map(([k,v])=>[k, typeof mc[key][k]==='number'?Number(v):typeof mc[key][k]==='boolean'?!!v:v]))}; const r=await goi('/cau-hinh/'+key,{method:'PUT',body}); if(r.ok) notify('Đã lưu — áp dụng ngay'); else notify(r.msg,'err'); };
+  const [trend,setTrend]=useState({tu_khoa:(mc.trend.tu_khoa_nganh||[]).join('\n'), chong_trung_ngay:mc.trend.chong_trung_ngay, nguong_tu_duyet:mc.trend.nguong_tu_duyet}); const [kh,setKh]=useState({...mc.ke_hoach}); const [nd,setNd]=useState({...mc.noi_dung}); const [dv,setDv]=useState({...(mc.dung_video||{})});
+  const luu=async(key,val)=>{ const body={cau_hinh:Object.fromEntries(Object.entries(val).map(([k,v])=>[k, typeof (mc[key]||{})[k]==='number'?Number(v):typeof (mc[key]||{})[k]==='boolean'?!!v:v]))}; const r=await goi('/cau-hinh/'+key,{method:'PUT',body}); if(r.ok) notify('Đã lưu — áp dụng ngay'); else notify(r.msg,'err'); };
   const luuTrend=async()=>{ const r=await goi('/cau-hinh/trend',{method:'PUT',body:{cau_hinh:{tu_khoa_nganh:trend.tu_khoa.split('\n').map(s=>s.trim()).filter(Boolean).slice(0,100), chong_trung_ngay:Number(trend.chong_trung_ngay)||30, nguong_tu_duyet:Number(trend.nguong_tu_duyet)||70}}}); if(r.ok) notify('Đã lưu'); else notify(r.msg,'err'); };
   const SoF=({o,set,k,l,h})=><Field label={l} hint={h}><Input type="number" value={o[k]??''} disabled={!duoc} onChange={e=>set({...o,[k]:e.target.value})}/></Field>;
   return <div className="grid lg:grid-cols-2 gap-3">
@@ -132,6 +146,14 @@ function CauHinhMay(){
       <SoF o={may} set={setMay} k="ngay_gan" l="'Gần đây' = bao nhiêu ngày"/>
       <SoF o={may} set={setMay} k="mau_ha" l="Cần ít nhất bao nhiêu mẫu gần đây mới xét hạ"/>
       {duoc && <Btn variant="brand" onClick={()=>luu('may',may)}>💾 Lưu</Btn>}</Card>
+    <Card><SectionTitle className="mb-2">Video nháp máy dựng (B8 · ADR-008)</SectionTitle>
+      <Field label="Giọng đọc Google TTS" hint="vi-VN-Neural2-D (nam) · vi-VN-Neural2-A (nữ) · vi-VN-Wavenet-B…"><Input value={dv.tts_giong||''} disabled={!duoc} onChange={e=>setDv({...dv,tts_giong:e.target.value})}/></Field>
+      <SoF o={dv} set={setDv} k="tts_toc_do" l="Tốc độ đọc (0.5–2)"/>
+      <SoF o={dv} set={setDv} k="nhac_giam_db" l="Nhạc nền giảm bao nhiêu dB dưới giọng"/>
+      <SoF o={dv} set={setDv} k="canh_toi_da" l="Số cảnh tối đa"/>
+      <SoF o={dv} set={setDv} k="giay_toi_da" l="Thời lượng tối đa (giây)"/>
+      <SoF o={dv} set={setDv} k="tts_usd_1m_ky_tu" l="Giá TTS (USD / 1 triệu ký tự)" h="Neural2: 16 · Standard: 4 — tính vào ngân sách AI"/>
+      {duoc && <Btn variant="brand" onClick={()=>luu('dung_video',dv)}>💾 Lưu</Btn>}</Card>
     <Card><SectionTitle className="mb-2">Chi phí AI</SectionTitle>
       <SoF o={ai} set={setAi} k="ngan_sach_thang_usd" l="Ngân sách tháng (USD)" h="0 = không giới hạn"/>
       <SoF o={ai} set={setAi} k="ngan_sach_hoc_pct" l="Phần dành cho chế độ học (%)"/>

@@ -92,6 +92,8 @@ const CONFIG_MAC_DINH = {
   // ADR-004: Trạm máy văn phòng (masfico-tram, hợp đồng hub1). khoa = khoá X-Hub-Key do Admin tạo trong màn Máy › Trạm;
   // so_ngay_do: bài đã đăng trong N ngày được đưa cho Trạm đo; im_lang_phut: quá N phút không nhịp tim → coi là mất Trạm
   tram:    { khoa:'', bat:true, so_ngay_do:30, im_lang_phut:6 },
+  // ADR-008: video nháp máy dựng — giọng Google TTS vi-VN (Neural2-D nam / -A nữ), tốc độ, nhạc nền giảm dB, số cảnh & giây tối đa, giá TTS USD/1 triệu ký tự
+  dung_video: { tts_giong:'vi-VN-Neural2-D', tts_toc_do:1, nhac_giam_db:18, canh_toi_da:12, giay_toi_da:90, tts_usd_1m_ky_tu:16 },
   // ADR-005: đo lường & báo cáo & học. so_ngay_do: bài đã đăng trong N ngày còn được đo; min_mau: số bài tối thiểu mỗi nhóm
   // để máy được rút đề xuất (bằng chứng ≥ min_mau, không có số thì không đề xuất); gui_n8n: báo cáo bắn sang N8N_WEBHOOK_URL (Zalo/mail)
   do_luong:{ so_ngay_do:30 },
@@ -167,6 +169,8 @@ async function ensureSchema(env){
     // ADR-004 — Trạm: hàng đợi lệnh (Trạm hỏi 20 giây/lần), trạng thái nhịp tim, lô dữ liệu Trạm đẩy về
     `CREATE TABLE IF NOT EXISTS tram_lenh (id TEXT PRIMARY KEY, viec TEXT, tham_so TEXT, trang_thai TEXT DEFAULT 'CHO', ket_qua TEXT, tao_boi TEXT, created_at TEXT, gui_at TEXT, xong_at TEXT)`,
     `CREATE TABLE IF NOT EXISTS tram_trang_thai (id TEXT PRIMARY KEY, than TEXT, nhan_luc TEXT)`,
+    // ADR-008 — máy ghép theo tài khoản (máy con dựng video): khoá chỉ lưu hash; kha_nang ['dung_video']; than = nhịp tim gần nhất
+    `CREATE TABLE IF NOT EXISTS may_ghep (id TEXT PRIMARY KEY, ten TEXT, chu_user_id TEXT, chu_ten TEXT, khoa_hash TEXT, kha_nang TEXT, ban TEXT, nhan_luc TEXT, than TEXT, active INTEGER DEFAULT 1, created_at TEXT)`,
     `CREATE TABLE IF NOT EXISTS tram_lo (id TEXT PRIMARY KEY, viec TEXT, bang TEXT, luot TEXT, phan TEXT, so_dong INTEGER, xu_ly TEXT, created_at TEXT)`,
     // ADR-005 — kết quả (3 mức tin cậy, không cộng dồn), báo cáo, đề xuất cải tiến
     // ket_qua: muc_tin_cay TRUC_TIEP|GIAN_TIEP|KHONG_QUY_DON · nguon API_KENH|TRAM|SAN|NHAP_TAY|NGOAI · ky = ngày (API) hoặc kỳ đối soát
@@ -190,7 +194,8 @@ async function ensureSchema(env){
     // lead từ bình luận hỏi mua/hỏi giá dưới bài seeding → giao MKT trả lời (luôn người)
     `CREATE TABLE IF NOT EXISTS lead_seeding (id TEXT PRIMARY KEY, viec_id TEXT, nguoi TEXT, noi_dung_hoi TEXT, link_bl TEXT, trang_thai TEXT DEFAULT 'MOI', giao_cho TEXT, tra_loi_at TEXT, tra_loi_boi TEXT, ghi_chu TEXT, created_at TEXT)`,
   );
-  try{ await env.DB.prepare(`ALTER TABLE bai_dang ADD COLUMN ma_theo_doi TEXT`).run(); }catch(e){}   // mã/voucher để đối soát sàn quy đơn
+  try{ await env.DB.prepare(`ALTER TABLE bai_dang ADD COLUMN ma_theo_doi TEXT`).run(); }catch(e){}
+  try{ await env.DB.prepare(`ALTER TABLE tram_lenh ADD COLUMN may_id TEXT`).run(); }catch(e){}   // ADR-008: lệnh có máy đích ('tram' = Trạm văn phòng, NULL = Trạm)   // mã/voucher để đối soát sàn quy đơn
   // ADR-006: điểm N ngày gần nhất + đề nghị của máy (LEN | XUONG | null) cho từng bước
   for(const s of [`ALTER TABLE buoc_thuc_hien ADD COLUMN san_sang_gan INTEGER DEFAULT 0`,`ALTER TABLE buoc_thuc_hien ADD COLUMN so_mau_gan INTEGER DEFAULT 0`,`ALTER TABLE buoc_thuc_hien ADD COLUMN de_nghi TEXT`,`ALTER TABLE buoc_thuc_hien ADD COLUMN de_nghi_ly_do TEXT`,`ALTER TABLE buoc_thuc_hien ADD COLUMN de_nghi_at TEXT`]) try{ await env.DB.prepare(s).run(); }catch(e){}
   for(const s of q) await env.DB.prepare(s).run();
@@ -225,7 +230,7 @@ function tinhChiPhiAI(cfg, model, vao, ra){ const g=(cfg.gia||{})[model]; if(!g)
 async function ghiAIUsage(env, o){
   const cfg=(await docCauHinh(env)).ai||{};
   try{ await env.DB.prepare(`INSERT INTO ai_usage (id,at,thang,provider,model,tinh_nang,user_id,user_name,tokens_vao,tokens_ra,chi_phi_usd,ok,ms,loi) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
-    .bind(uid('ai'), nowISO(), thangHienTai(), o.provider||'anthropic', o.model||'', chuoi(o.tinh_nang||'khac',40), (o.me&&o.me.id)||null, (o.me&&o.me.ho_ten)||'Agent', so(o.tokens_vao), so(o.tokens_ra), tinhChiPhiAI(cfg,o.model,o.tokens_vao,o.tokens_ra), bool(o.ok!==false), so(o.ms), o.loi?chuoi(o.loi,300):null).run(); }catch(e){}
+    .bind(uid('ai'), nowISO(), thangHienTai(), o.provider||'anthropic', o.model||'', chuoi(o.tinh_nang||'khac',40), (o.me&&o.me.id)||null, (o.me&&o.me.ho_ten)||'Agent', so(o.tokens_vao), so(o.tokens_ra), (o.chi_phi_usd!=null?so(o.chi_phi_usd):tinhChiPhiAI(cfg,o.model,o.tokens_vao,o.tokens_ra)), bool(o.ok!==false), so(o.ms), o.loi?chuoi(o.loi,300):null).run(); }catch(e){}
 }
 async function tongHopAI(env, thang){
   const t=await env.DB.prepare(`SELECT COUNT(*) so_lan, COALESCE(SUM(tokens_vao),0) vao, COALESCE(SUM(tokens_ra),0) ra, COALESCE(SUM(chi_phi_usd),0) usd FROM ai_usage WHERE thang=?`).bind(thang).first()||{};
@@ -553,14 +558,31 @@ async function dangN8n(env, bd, nd, kenh){ const url=env.N8N_WEBHOOK_URL; if(!ur
 // ===== ADR-004 — TRẠM MÁY VĂN PHÒNG (masfico-tram, hợp đồng hub1) =====
 // Trạm sau NAT nên chiều nào cũng do Trạm chủ động gọi: hỏi lệnh /hub/lenh (20 giây), đẩy dữ liệu /hub/nap, nhịp tim /hub/trang_thai (2 phút).
 // Content OS chỉ được sai Trạm bằng bộ lệnh VIEC_HUB của Trạm; agent của Content OS trên Trạm là "content_os" (may/agents.mjs).
-const VIEC_TRAM=['chay_agent','chay_hang_loat','lich_viec','zalo_qr','gui_otp','huy_dang_nhap'];
+const VIEC_TRAM=['chay_agent','chay_hang_loat','lich_viec','zalo_qr','gui_otp','huy_dang_nhap','dung_video'];   // dung_video: lệnh cho máy con (ADR-008)
 // Món Content OS nhận từ Trạm: kết quả đăng/đo của chính agent content_os + tin đối thủ (→ ý tưởng) + bình luận TikTok
 const MON_HUB=[{viec:'content_os.dang', bang:['content_os.dang_ket_qua']},{viec:'content_os.do_luong', bang:['content_os.ket_qua']},{viec:'content_os.dung_video', bang:['content_os.video']},{viec:'doi_thu.quet', bang:['doi_thu_tin']},{viec:'doi_thu.quet_nhom', bang:['doi_thu_tin']},{viec:'doi_thu.quet_nhom_trua', bang:['doi_thu_tin']},{viec:'tiktok_cn.binh_luan', bang:['fchat_events']},{viec:'content_os.seeding_dang', bang:['content_os.seeding_dang_ket_qua']},{viec:'content_os.seeding_kiem', bang:['content_os.seeding_kiem']},{viec:'zalo.tin', bang:['zalo.tin']}];
-async function xacThucHub(env, request){ const cfg=(await docCauHinh(env)).tram||{}; const k=chuoi(cfg.khoa,200); if(!k||cfg.bat===false) return {ok:false, status:503, loi:'Content OS chưa bật Trạm / chưa tạo khoá'}; if((request.headers.get('X-Hub-Key')||'')!==k) return {ok:false, status:401, loi:'Sai khoá Trạm'}; return {ok:true}; }
-async function taoLenhTram(env, viec, tham_so, tacNhan){ if(!VIEC_TRAM.includes(viec)) return {ok:false, loi:'Trạm không nhận lệnh '+viec};
+async function sha256Hex(s){ const b=await crypto.subtle.digest('SHA-256', new TextEncoder().encode(String(s))); return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join(''); }
+const b64url=str=>btoa(String.fromCharCode(...new TextEncoder().encode(str))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+// Khoá Trạm văn phòng (module_config.tram.khoa) → may_id 'tram'; khoá máy con kmay_* → tra hash trong may_ghep (ADR-008)
+async function xacThucHub(env, request){ const cfg=(await docCauHinh(env)).tram||{}; const k=chuoi(cfg.khoa,200); const h=request.headers.get('X-Hub-Key')||'';
+  if(k && cfg.bat!==false && h===k) return {ok:true, may_id:'tram', may:null};
+  if(h.startsWith('kmay_')){ const mg=await env.DB.prepare(`SELECT * FROM may_ghep WHERE khoa_hash=? AND active=1`).bind(await sha256Hex(h)).first(); if(mg) return {ok:true, may_id:mg.id, may:{...mg, kha_nang:docJSON(mg.kha_nang,[])}}; return {ok:false, status:401, loi:'Máy ghép không còn hiệu lực — ghép lại ở Hồ sơ › Máy dựng'}; }
+  if(!k||cfg.bat===false) return {ok:false, status:503, loi:'Content OS chưa bật Trạm / chưa tạo khoá'}; if(h!==k) return {ok:false, status:401, loi:'Sai khoá Trạm'}; return {ok:true, may_id:'tram', may:null}; }
+async function taoLenhTram(env, viec, tham_so, tacNhan, mayId=null){ if(!VIEC_TRAM.includes(viec)) return {ok:false, loi:'Trạm không nhận lệnh '+viec};
   // gộp: cùng việc & tham số đang CHỜ/ĐÃ GỬI (chưa xong) thì không xếp thêm
-  const ts=JSON.stringify(tham_so||{}); const cu=await env.DB.prepare(`SELECT id FROM tram_lenh WHERE viec=? AND tham_so=? AND trang_thai IN ('CHO','DA_GUI')`).bind(viec, ts).first(); if(cu) return {ok:true, id:cu.id, trung:true};
-  const id=uid('tl'); await env.DB.prepare(`INSERT INTO tram_lenh (id,viec,tham_so,trang_thai,tao_boi,created_at) VALUES (?,?,?,'CHO',?,?)`).bind(id, viec, ts, (tacNhan&&tacNhan.ho_ten)||'Máy', nowISO()).run(); return {ok:true, id}; }
+  const ts=JSON.stringify(tham_so||{}); const cu=await env.DB.prepare(`SELECT id FROM tram_lenh WHERE viec=? AND tham_so=? AND COALESCE(may_id,'tram')=? AND trang_thai IN ('CHO','DA_GUI')`).bind(viec, ts, mayId||'tram').first(); if(cu) return {ok:true, id:cu.id, trung:true};
+  const id=uid('tl'); await env.DB.prepare(`INSERT INTO tram_lenh (id,viec,tham_so,trang_thai,tao_boi,created_at,may_id) VALUES (?,?,?,'CHO',?,?,?)`).bind(id, viec, ts, (tacNhan&&tacNhan.ho_ten)||'Máy', nowISO(), mayId||'tram').run(); return {ok:true, id}; }
+// ADR-008 — máy ghép: sống = có nhịp tim trong im_lang_phut; chọn máy dựng: máy chỉ định > máy của người > máy ít việc chờ; không có → Trạm văn phòng nếu sống
+async function mayGhepSong(env){ const cfg=(await docCauHinh(env)).tram||{}; const han=Date.now()-Math.max(2,so(cfg.im_lang_phut,6))*60000; return (await env.DB.prepare(`SELECT * FROM may_ghep WHERE active=1 ORDER BY created_at`).all()).results.map(x=>({...x, kha_nang:docJSON(x.kha_nang,[]), than:docJSON(x.than,{}), song:!!x.nhan_luc&&Date.parse(x.nhan_luc)>han})); }
+async function chonMayDung(env, {mayId=null, uuTienUserId=null}={}){ const ds=(await mayGhepSong(env)).filter(x=>x.kha_nang.includes('dung_video'));
+  if(mayId){ const x=ds.find(q=>q.id===mayId); return x?{may:x, ly_do:x.song?'':'máy đang im — lệnh chờ tới khi máy bật'}:null; }
+  const song=ds.filter(x=>x.song); if(!song.length) return null; const cho={}; for(const l of (await env.DB.prepare(`SELECT may_id, COUNT(*) n FROM tram_lenh WHERE trang_thai IN ('CHO','DA_GUI') AND may_id IS NOT NULL GROUP BY may_id`).all()).results) cho[l.may_id]=so(l.n);
+  song.sort((a,b)=>((a.chu_user_id===uuTienUserId)?-1:0)-((b.chu_user_id===uuTienUserId)?-1:0) || so(cho[a.id])-so(cho[b.id])); return {may:song[0], ly_do:''}; }
+async function giaoDung(env, nd, {mayId=null, uuTienUserId=null, tacNhan}){ const c=await chonMayDung(env,{mayId, uuTienUserId});
+  if(c){ const r=await taoLenhTram(env,'dung_video',{noi_dung_id:nd.id}, tacNhan, c.may.id); if(!r.ok) return r; if(!r.trung) await logAudit(env, tacNhan, 'giao dựng video nháp', 'noi_dung', nd.id, 'máy '+c.may.ten+(c.ly_do?(' · '+c.ly_do):'')); return {ok:true, id:r.id, trung:!!r.trung, may_ten:c.may.ten, may_id:c.may.id, ly_do:c.ly_do}; }
+  if(mayId) return {ok:false, loi:'Máy đã chọn không còn ghép hoặc không dựng được video'};
+  const tt=await docTramTrangThai(env); if(tt&&tt.song){ const r=await taoLenhTram(env,'chay_agent',{id:'content_os', viec:'dung_video'}, tacNhan, 'tram'); return {ok:true, id:r.id, trung:!!r.trung, may_ten:'Trạm văn phòng', may_id:'tram', ly_do:''}; }
+  return {ok:false, loi:'Không có máy dựng nào đang bật. Ghép máy của bạn ở Hồ sơ › Máy dựng (tải máy con từ app), hoặc bật Trạm văn phòng.'}; }
 async function docTramTrangThai(env){ const r=await env.DB.prepare(`SELECT * FROM tram_trang_thai WHERE id='tram'`).first(); if(!r) return null; const cfg=(await docCauHinh(env)).tram||{}; const im=Date.now()-Date.parse(r.nhan_luc||0); return { ...docJSON(r.than,{}), nhan_luc:r.nhan_luc, im_phut:Math.round(im/60000), song: im < Math.max(2,so(cfg.im_lang_phut,6))*60000 }; }
 // Trạm đẩy một lô dữ liệu về — xử lý theo tên bảng; bảng lạ chỉ ghi sổ (không đoán)
 async function napLoTram(env, b){
@@ -570,8 +592,15 @@ async function napLoTram(env, b){
       if(d.ok===true){ await env.DB.prepare(`UPDATE bai_dang SET trang_thai='DA_DANG', link=?, posted_at=?, loi=NULL, updated_at=? WHERE id=?`).bind(chuoi(d.link,500)||bd.link||'', nowISO(), nowISO(), bd.id).run(); await datGiaiDoan(env, bd.muc_id, 'DA_DANG', 'Trạm đăng xong', MAY('Trạm')); cap++; }
       else { await env.DB.prepare(`UPDATE bai_dang SET trang_thai='LOI', loi=?, lan_thu=lan_thu+1, updated_at=? WHERE id=?`).bind('Trạm: '+chuoi(d.loi||'không rõ',300), nowISO(), bd.id).run(); cap++; } } }
   else if(bang==='content_os.video'){ for(const d of dong){ const nd=d.noi_dung_id?await env.DB.prepare(`SELECT * FROM noi_dung WHERE id=?`).bind(String(d.noi_dung_id)).first():null; if(!nd||!chuoi(d.media_url)){ loi.push('thiếu nội dung/media '+(d.noi_dung_id||'')); continue; }
-      const tsId=uid('ts'); await env.DB.prepare(`INSERT INTO tai_san (id,loai,ten,mo_ta,media_url,media_type,muc_id,noi_dung_id,nguon,created_at,created_by_name) VALUES (?,'VIDEO_XUAT',?,?,?,'VIDEO',?,?,'TRAM',?,?)`).bind(tsId,'Video Trạm dựng: '+(nd.tieu_de||nd.hook).slice(0,80), chuoi(d.mo_ta,500), chuoi(d.media_url,500), nd.muc_id, nd.id, nowISO(), 'Trạm').run();
-      await env.DB.prepare(`UPDATE noi_dung SET chi_tiet=?, updated_at=? WHERE id=?`).bind(JSON.stringify(lamSachChiTiet({...docJSON(nd.chi_tiet,{}), video_url:chuoi(d.media_url,500), video_tai_san_id:tsId, video_luc:nowISO()})), nowISO(), nd.id).run(); moi++; } }
+      const thieu=(Array.isArray(d.thieu_hinh)?d.thieu_hinh:[]).map(x=>chuoi(x,120)).filter(Boolean).slice(0,20); const nguon=chuoi(d.may,60)||'Trạm'; const ten=(nd.tieu_de||nd.hook||'').slice(0,80);
+      const tsId=uid('ts'); await env.DB.prepare(`INSERT INTO tai_san (id,loai,ten,mo_ta,media_url,media_type,muc_id,noi_dung_id,nguon,created_at,created_by_name) VALUES (?,'VIDEO_XUAT',?,?,?,'VIDEO',?,?,'TRAM',?,?)`).bind(tsId,'Video nháp máy dựng: '+ten, chuoi(d.mo_ta,400)+(thieu.length?(' · thiếu hình: '+thieu.join('; ')):''), chuoi(d.media_url,500), nd.muc_id, nd.id, nowISO(), nguon).run();
+      let goiUrl=''; if(chuoi(d.goi_url)){ goiUrl=chuoi(d.goi_url,500); await env.DB.prepare(`INSERT INTO tai_san (id,loai,ten,mo_ta,media_url,media_type,muc_id,noi_dung_id,nguon,created_at,created_by_name) VALUES (?,'GOI_DUNG',?,?,?,'FILE',?,?,'TRAM',?,?)`).bind(uid('ts'),'Gói dựng tiếp (CapCut): '+ten,'từng cảnh đã cắt + giọng đọc từng cảnh + phụ đề SRT + nhạc nền + bản nháp — giải nén rồi kéo vào CapCut', goiUrl, nd.muc_id, nd.id, nowISO(), nguon).run(); }
+      await env.DB.prepare(`UPDATE noi_dung SET chi_tiet=?, updated_at=? WHERE id=?`).bind(JSON.stringify(lamSachChiTiet({...docJSON(nd.chi_tiet,{}), video_url:chuoi(d.media_url,500), video_tai_san_id:tsId, video_luc:nowISO(), goi_dung_url:goiUrl, thieu_hinh:thieu.join(' | ')})), nowISO(), nd.id).run();
+      // B8 vẫn NGƯỜI: người xem, chỉnh (CapCut) và duyệt bản nháp; thiếu hình → việc quay bổ sung
+      const cu=await env.DB.prepare(`SELECT id FROM cong_viec WHERE loai='DUYET_VIDEO_NHAP' AND doi_tuong_id=? AND trang_thai='MO'`).bind(nd.id).first();
+      if(!cu) await env.DB.prepare(`INSERT INTO cong_viec (id,loai,tieu_de,doi_tuong,doi_tuong_id,giao_cho_vai_tro,han,trang_thai,tao_boi,ly_do,created_at) VALUES (?,?,?,?,?,?,?,'MO',?,?,?)`).bind(uid('cv'),'DUYET_VIDEO_NHAP','Xem & duyệt video nháp: '+ten.slice(0,60),'noi_dung',nd.id,'MARKETING',ngayVN(Date.now()+864e5),nguon,'Mở thẻ › Sản xuất: xem bản nháp'+(goiUrl?', tải gói CapCut nếu cần dựng sâu':'')+', gắn bản cuối rồi qua tab Đăng',nowISO()).run();
+      if(thieu.length && !(await env.DB.prepare(`SELECT id FROM cong_viec WHERE loai='QUAY_BO_SUNG' AND doi_tuong_id=? AND trang_thai='MO'`).bind(nd.id).first())) await env.DB.prepare(`INSERT INTO cong_viec (id,loai,tieu_de,doi_tuong,doi_tuong_id,giao_cho_vai_tro,han,trang_thai,tao_boi,ly_do,created_at) VALUES (?,?,?,?,?,?,?,'MO',?,?,?)`).bind(uid('cv'),'QUAY_BO_SUNG','Quay bổ sung '+thieu.length+' cảnh thiếu hình: '+ten.slice(0,50),'noi_dung',nd.id,'MARKETING',ngayVN(Date.now()+3*864e5),nguon,'Máy không tìm được footage khớp gợi ý hình: '+thieu.join('; ')+' — quay/tải lên tài sản của thẻ rồi bấm dựng lại',nowISO()).run();
+      moi++; } }
   else if(bang==='content_os.seeding_dang_ket_qua'){ const r=await napSeedingDang(env, dong); cap+=r.cap; loi.push(...r.loi); }
   else if(bang==='content_os.seeding_kiem'){ const r=await napSeedingKiem(env, dong); cap+=r.cap; loi.push(...r.loi); }
   else if(bang==='zalo.tin'){ const r=await napZaloTin(env, dong); cap+=r.cap; }
@@ -936,6 +965,11 @@ const AGENTS = [
       const cho=await env.DB.prepare(`SELECT COUNT(*) n FROM viec_seeding WHERE trang_thai IN ('DA_DANG','DAT','CHO_QUAN_TRI') AND COALESCE(link,'')<>'' AND ((so_lan_kiem=0 AND dang_at<=?) OR (so_lan_kiem=1 AND dang_at<=?))`).bind(new Date(Date.now()-Math.max(0,so(cfg.ngay_kiem,2))*864e5).toISOString(), new Date(Date.now()-Math.max(1,so(cfg.ngay_kiem_2,7))*864e5).toISOString()).first(); const tt=await docTramTrangThai(env); let lenh=null; if(so(cho&&cho.n)&&tt&&tt.song) lenh=await taoLenhTram(env,'chay_agent',{id:'content_os', viec:'seeding_kiem'}, MAY('Máy (B16)'));
       if(!qua.length&&!so(cho&&cho.n)) return {bo_qua:'Không có bài seeding tới hạn kiểm'}; return { ok:true, doc:so(cho&&cho.n)+qua.length, ghi:qua.length, tom_tat:so(cho&&cho.n)+' bài chờ Trạm kiểm'+(lenh?' (đã xếp lệnh)':(tt&&tt.song?'':' · Trạm đang im'))+' · '+qua.length+' quá hạn → nghi ngờ' }; } },
   { ma:'HOC_SEEDING', ten:'Học seeding → đề xuất nhóm/giọng/thông điệp (G4)', loai:'THUC_HIEN', buoc:'B17', chay: async (env, ctx)=>{ const d=new Date(Date.now()+7*36e5); if(!(ctx&&ctx.thu) && d.getUTCDate()!==3) return {bo_qua:'Chạy ngày 3 hằng tháng'}; return chayHocSeeding(env,{ep:!!(ctx&&ctx.thu)}); } },
+  // ADR-008 · B8: máy CHUẨN BỊ video nháp — giao kịch bản VIDEO đã duyệt chưa có video cho máy dựng đang bật (B8 vẫn NGƯỜI: người xem, chỉnh, duyệt)
+  { ma:'CHUAN_BI_DUNG', ten:'Giao dựng video nháp cho máy ghép', loai:'HE_THONG', buoc:'B8',
+    chay: async (env)=>{ const ds=(await env.DB.prepare(`SELECT n.* FROM noi_dung n JOIN muc_noi_dung m ON m.id=n.muc_id WHERE n.trang_thai='DUYET' AND n.dinh_dang='VIDEO' AND m.giai_doan='SAN_XUAT' AND (n.chi_tiet IS NULL OR n.chi_tiet NOT LIKE '%"video_url":"/%' AND n.chi_tiet NOT LIKE '%"video_url":"http%') ORDER BY n.updated_at LIMIT 10`).all()).results; if(!ds.length) return {bo_qua:'Không có kịch bản video đã duyệt chờ dựng'};
+      let giao=0, trung=0, loi=''; for(const nd of ds){ const r=await giaoDung(env, nd, {tacNhan:MAY('Máy (B8)')}); if(!r.ok){ loi=r.loi; break; } if(r.trung) trung++; else giao++; }
+      if(!giao&&!trung) return {bo_qua:loi||'Không có máy dựng đang bật'}; return { ok:true, doc:ds.length, ghi:giao, tom_tat:'Giao dựng '+giao+' video nháp'+(trung?(' · '+trung+' đang chờ máy'):'') }; } },
   { ma:'HOC_DE_XUAT', ten:'Học từ kết quả → đề xuất cải tiến (G4)', loai:'THUC_HIEN', buoc:'B12',
     chay: async (env, ctx)=>{ const d=new Date(Date.now()+7*36e5); if(!(ctx&&ctx.thu) && d.getUTCDate()!==2) return {bo_qua:'Chạy ngày 2 hằng tháng (sau báo cáo tháng)'}; return chayDeXuat(env,{ep:!!(ctx&&ctx.thu)}); } },
 ];
@@ -1050,10 +1084,11 @@ async function bootstrap(env, u){
     // khoá Trạm không bao giờ ra khỏi server — chỉ cờ co_khoa ở tram
     module_config: xem ? {...cfg, tram:{...(cfg.tram||{}), khoa:undefined}} : {duyet:cfg.duyet},
     ai_thang: xem ? await tongHopAI(env, thangHienTai()) : null,
-    san_sang: { ai:!!env.ANTHROPIC_API_KEY, youtube:!!env.YOUTUBE_API_KEY, n8n:!!(env.N8N_TOKEN&&env.N8N_WEBHOOK_URL), media:!!env.MEDIA },
+    san_sang: { tts:!!env.GOOGLE_TTS_KEY,  ai:!!env.ANTHROPIC_API_KEY, youtube:!!env.YOUTUBE_API_KEY, n8n:!!(env.N8N_TOKEN&&env.N8N_WEBHOOK_URL), media:!!env.MEDIA },
     // ADR-004: Trạm — cờ có khoá (không bao giờ trả khoá), nhịp tim & phiên, lệnh/lô gần đây
     tram: xem ? { co_khoa:!!chuoi((cfg.tram||{}).khoa), bat:(cfg.tram||{}).bat!==false, trang_thai: await docTramTrangThai(env),
       lenh:(await all(`SELECT * FROM tram_lenh ORDER BY created_at DESC LIMIT 20`)).map(l=>({...l, tham_so:docJSON(l.tham_so,{})})), lo:(await all(`SELECT id,viec,bang,luot,so_dong,xu_ly,created_at FROM tram_lo ORDER BY created_at DESC LIMIT 20`)).map(l=>{ const x=docJSON(l.xu_ly,{}); delete x.dong; return {...l, xu_ly:x}; }) } : null,
+    may_ghep: xem ? (await mayGhepSong(env)).map(x=>({id:x.id, ten:x.ten, chu_user_id:x.chu_user_id, chu_ten:x.chu_ten, kha_nang:x.kha_nang, ban:x.ban, nhan_luc:x.nhan_luc, song:x.song, than:x.than})) : null,
     mo_phong: !!(cfg.mo_phong&&cfg.mo_phong.bat),
     dot: 1,
   };
@@ -1116,7 +1151,7 @@ async function handleApi(request, env){
     if(!request.body||len<=0) return json({error:'File rỗng'},400); if(len>200*1024*1024) return json({error:'File quá lớn (>200MB) — dán link Drive'},413);
     const ext=((ct.split('/')[1]||'bin').split(';')[0]).replace(/[^a-z0-9]/gi,'')||'bin'; const key='media/'+uid('m')+'.'+ext;
     await env.MEDIA.put(key, request.body, { httpMetadata:{ contentType:ct } });
-    return json({ media_url:'/media/'+key, media_type: ct.startsWith('image/')?'IMAGE':'VIDEO' });
+    return json({ media_url:'/media/'+key, media_type: ct.startsWith('image/')?'IMAGE':ct.startsWith('audio/')?'AUDIO':/zip|octet-stream|x-tar/.test(ct)?'FILE':'VIDEO' });
   }
   // n8n báo kết quả đăng (secret dùng chung, không phiên người)
   // ADR-005: n8n / agent ngoài đẩy số đo (X-App-Token). Số tích luỹ → app tính phần tăng theo ngày; không quy đơn.
@@ -1137,13 +1172,24 @@ async function handleApi(request, env){
   // ===== ADR-004 — hợp đồng hub1 với Trạm (xác thực X-Hub-Key, không phiên người) =====
   if(path.startsWith('/hub/')){
     const xt=await xacThucHub(env, request); if(!xt.ok) return json({error:xt.loi}, xt.status);
-    if(path==='/hub/ping' && method==='GET') return json({ ok:true, app:'content_os', ten:'Kingsmen Content OS', ban:'2.0.'+3, hop_dong:1, mon:MON_HUB, nhan_lenh:true });
-    if(path==='/hub/lenh' && method==='GET'){ const ds=(await env.DB.prepare(`SELECT * FROM tram_lenh WHERE trang_thai='CHO' ORDER BY created_at LIMIT 20`).all()).results; for(const l of ds) await env.DB.prepare(`UPDATE tram_lenh SET trang_thai='DA_GUI', gui_at=? WHERE id=?`).bind(nowISO(), l.id).run();
+    if(path==='/hub/ping' && method==='GET') return json({ ok:true, app:'content_os', ten:'Kingsmen Content OS', ban:'2.0.'+4, hop_dong:1, mon:MON_HUB, nhan_lenh:true, may_id:xt.may_id });
+    // ADR-008 — máy con tải script mới nhất từ app (kèm hash để máy chỉ chạy đúng bản app phát) — mã dựng nằm ở app, không nằm trên máy
+    if((m=path.match(/^\/hub\/script\/([a-z0-9-]+)$/)) && method==='GET'){ if(!['dung-video'].includes(m[1])) return json({error:'Không có script '+m[1]},404); const r=await env.ASSETS.fetch(new Request(url.origin+'/tools/may-dung/'+m[1]+'.mjs')); if(!r.ok) return json({error:'App chưa đóng gói script '+m[1]},503); const script=await r.text(); const hash=await sha256Hex(script); return json({ ten:m[1], ban:hash.slice(0,12), hash, script }); }
+    // ADR-008 — giọng đọc tiếng Việt: khoá Google ở Worker, máy con chỉ nhận mp3; tính vào ngân sách AI (tính năng 'tts')
+    if(path==='/hub/tts' && method==='POST'){ const text=chuoi(body.text,1500); if(!text) return json({error:'Thiếu text'},400); const key=env.GOOGLE_TTS_KEY; if(!key) return json({error:'Chưa cắm GOOGLE_TTS_KEY — video nháp không có giọng đọc', thieu_key:true},503);
+      const cfg=(await docCauHinh(env)).dung_video||{}; const ns=await kiemNganSachAI(env); if(!ns.ok) return json({error:ns.loi, vuot_ngan_sach:true},402); const giong=chuoi(body.giong,40)||cfg.tts_giong||'vi-VN-Neural2-D'; const t0=Date.now();
+      const res=await fetch('https://texttospeech.googleapis.com/v1/text:synthesize?key='+encodeURIComponent(key),{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({input:{text}, voice:{languageCode:'vi-VN', name:giong}, audioConfig:{audioEncoding:'MP3', speakingRate:Math.min(2,Math.max(0.5,so(cfg.tts_toc_do,1)||1))}})});
+      const j=await res.json().catch(()=>({})); const usd=text.length*so(cfg.tts_usd_1m_ky_tu,16)/1e6;
+      if(!res.ok||!j.audioContent){ await ghiAIUsage(env,{provider:'google',model:giong,tinh_nang:'tts',tokens_vao:text.length,ok:false,ms:Date.now()-t0,loi:(j.error&&j.error.message)||('HTTP '+res.status),chi_phi_usd:0}); return json({error:'TTS lỗi: '+((j.error&&j.error.message)||('HTTP '+res.status))},502); }
+      await ghiAIUsage(env,{provider:'google',model:giong,tinh_nang:'tts',tokens_vao:text.length,ok:true,ms:Date.now()-t0,chi_phi_usd:usd});
+      const bin=Uint8Array.from(atob(j.audioContent), c=>c.charCodeAt(0)); return new Response(bin,{headers:{'content-type':'audio/mpeg','x-tts-giong':giong,'x-tts-ky-tu':String(text.length)}}); }
+    if(path==='/hub/lenh' && method==='GET'){ const ds=(await env.DB.prepare(`SELECT * FROM tram_lenh WHERE trang_thai='CHO' AND COALESCE(may_id,'tram')=? ORDER BY created_at LIMIT 20`).bind(xt.may_id).all()).results; for(const l of ds) await env.DB.prepare(`UPDATE tram_lenh SET trang_thai='DA_GUI', gui_at=? WHERE id=?`).bind(nowISO(), l.id).run();
       // lệnh đã gửi quá 30 phút mà Trạm không báo xong → coi là hỏng (Trạm tắt giữa chừng)
-      await env.DB.prepare(`UPDATE tram_lenh SET trang_thai='HONG', ket_qua='Trạm không báo kết quả sau 30 phút', xong_at=? WHERE trang_thai='DA_GUI' AND gui_at<?`).bind(nowISO(), new Date(Date.now()-30*60000).toISOString()).run();
+      await env.DB.prepare(`UPDATE tram_lenh SET trang_thai='HONG', ket_qua='Máy không báo kết quả sau 30 phút (dựng video: 3 giờ)', xong_at=? WHERE trang_thai='DA_GUI' AND ((viec='dung_video' AND gui_at<?) OR (viec<>'dung_video' AND gui_at<?))`).bind(nowISO(), new Date(Date.now()-180*60000).toISOString(), new Date(Date.now()-30*60000).toISOString()).run();
       return json({ lenh: ds.map(l=>({id:l.id, viec:l.viec, tham_so:docJSON(l.tham_so,{})})) }); }
     if(path==='/hub/lenh_xong' && method==='POST'){ const l=await env.DB.prepare(`SELECT * FROM tram_lenh WHERE id=?`).bind(String(body.id||'')).first(); if(!l) return json({error:'không có lệnh'},404);
       await env.DB.prepare(`UPDATE tram_lenh SET trang_thai=?, ket_qua=?, xong_at=? WHERE id=?`).bind(body.ok?'XONG':'HONG', chuoi(body.msg,400), nowISO(), l.id).run(); await logAudit(env, MAY('Trạm'), 'Trạm '+(body.ok?'làm xong':'báo hỏng')+' lệnh', 'tram_lenh', l.id, l.viec+' · '+chuoi(body.msg,200)); return json({ok:true}); }
+    if(path==='/hub/trang_thai' && method==='POST' && xt.may_id!=='tram'){ await env.DB.prepare(`UPDATE may_ghep SET nhan_luc=?, ban=?, than=? WHERE id=?`).bind(nowISO(), chuoi(body.ban,20), JSON.stringify({ may:chuoi(body.may,80), gio_may:chuoi(body.gio_may,40), ffmpeg:body.ffmpeg!==false, dang_lam:chuoi(body.dang_lam,120) }).slice(0,4000), xt.may_id).run(); return json({ok:true, ban:'2.0.4', may_id:xt.may_id}); }
     if(path==='/hub/trang_thai' && method==='POST'){ const than=JSON.stringify({ may:chuoi(body.may,80), ban:chuoi(body.ban,20), khoi_luc:chuoi(body.khoi_luc,40), gio_may:chuoi(body.gio_may,40), dung_nha:body.dung_nha!==false, phien:(body.phien&&typeof body.phien==='object')?body.phien:{}, hang_loat:body.hang_loat||null }).slice(0,20000);
       await env.DB.prepare(`INSERT INTO tram_trang_thai (id,than,nhan_luc) VALUES ('tram',?,?) ON CONFLICT(id) DO UPDATE SET than=excluded.than, nhan_luc=excluded.nhan_luc`).bind(than, nowISO()).run(); return json({ok:true, ban:'2.0.3'}); }
     if(path==='/hub/nap' && method==='POST'){ const r=await napLoTram(env, body); return json(r); }
@@ -1158,9 +1204,10 @@ async function handleApi(request, env){
     if(path==='/hub/viec/seeding_kiem' && method==='GET'){ const cfg=(await docCauHinh(env)).seeding||{}; const d1=new Date(Date.now()-Math.max(0,so(cfg.ngay_kiem,2))*864e5).toISOString(), d2=new Date(Date.now()-Math.max(1,so(cfg.ngay_kiem_2,7))*864e5).toISOString();
       const ds=(await env.DB.prepare(`SELECT v.id, v.link, v.trang_thai, v.so_lan_kiem, n.link_hoac_id, t.tram_id FROM viec_seeding v JOIN nhom_seeding n ON n.id=v.nhom_id LEFT JOIN tai_khoan_seeding t ON t.id=v.tai_khoan_id WHERE v.trang_thai IN ('DA_DANG','DAT','CHO_QUAN_TRI') AND COALESCE(v.link,'')<>'' AND ((v.so_lan_kiem=0 AND v.dang_at<=?) OR (v.so_lan_kiem=1 AND v.dang_at<=?)) ORDER BY v.dang_at LIMIT 50`).bind(d1,d2).all()).results;
       return json({ viec: ds.map(v=>({ viec_id:v.id, link:v.link, lan:so(v.so_lan_kiem)+1, cho_quan_tri:v.trang_thai==='CHO_QUAN_TRI', nhom:v.link_hoac_id, tai_khoan:{tram_id:v.tram_id||'facebook'} })) }); }
-    if(path==='/hub/viec/dung_video' && method==='GET'){ const ds=(await env.DB.prepare(`SELECT n.id, n.tieu_de, n.hook, n.sections, n.cta, n.chi_tiet, n.muc_id FROM noi_dung n LEFT JOIN muc_noi_dung m ON m.id=n.muc_id WHERE n.trang_thai='DUYET' AND n.dinh_dang='VIDEO' AND m.giai_doan='SAN_XUAT' ORDER BY n.updated_at DESC LIMIT 20`).all()).results;
-      const goc=env.APP_BASE_URL||''; const out=[]; for(const n of ds){ const ct=docJSON(n.chi_tiet,{}); if(ct.video_url) continue; const ts=(await env.DB.prepare(`SELECT media_url,media_type,loai,ten FROM tai_san WHERE (muc_id=? OR noi_dung_id=?) AND loai IN ('FOOTAGE','ANH')`).bind(n.muc_id, n.id).all()).results;
-        out.push({ noi_dung_id:n.id, tieu_de:n.tieu_de, hook:n.hook, sections:docSections(n.sections), cta:n.cta, tai_san:ts.map(t=>({...t, media_url:/^https?:/.test(t.media_url)?t.media_url:goc+t.media_url})) }); } return json({ viec: out }); }
+    if(path==='/hub/viec/dung_video' && method==='GET'){ const chi=chuoi(url.searchParams.get('noi_dung_id'),40); const ds=(await env.DB.prepare(`SELECT n.id, n.tieu_de, n.hook, n.sections, n.cta, n.chi_tiet, n.muc_id, m.tieu_de muc_tieu_de FROM noi_dung n LEFT JOIN muc_noi_dung m ON m.id=n.muc_id WHERE n.trang_thai='DUYET' AND n.dinh_dang='VIDEO' AND m.giai_doan='SAN_XUAT' ${chi?'AND n.id=?':''} ORDER BY n.updated_at DESC LIMIT 20`).bind(...(chi?[chi]:[])).all()).results;
+      const goc=env.APP_BASE_URL||url.origin; const tuyet=u=>/^https?:/.test(u||'')?u:goc+u; const cfg=(await docCauHinh(env)).dung_video||{}; const nhac=(await env.DB.prepare(`SELECT id,ten,mo_ta,media_url FROM tai_san WHERE loai='NHAC' ORDER BY created_at DESC LIMIT 20`).all()).results.map(t=>({...t, media_url:tuyet(t.media_url)}));
+      const out=[]; for(const nd of ds){ const ct=docJSON(nd.chi_tiet,{}); if(ct.video_url&&!chi) continue; const ts=(await env.DB.prepare(`SELECT id,media_url,media_type,loai,ten,mo_ta FROM tai_san WHERE (muc_id=? OR noi_dung_id=?) AND loai IN ('FOOTAGE','ANH')`).bind(nd.muc_id, nd.id).all()).results;
+        out.push({ noi_dung_id:nd.id, tieu_de:nd.tieu_de||nd.muc_tieu_de, hook:nd.hook, sections:docSections(nd.sections), cta:nd.cta, tai_san:ts.map(t=>({...t, media_url:tuyet(t.media_url)})), nhac, cau_hinh:{ tts_giong:cfg.tts_giong, nhac_giam_db:so(cfg.nhac_giam_db,18), canh_toi_da:so(cfg.canh_toi_da,12), giay_toi_da:so(cfg.giay_toi_da,90) } }); } return json({ viec: out }); }
     return json({error:'Không có đường hub '+path},404);
   }   // công cụ Lọc video hỏi nhạc nền — không có trên web
 
@@ -1441,7 +1488,7 @@ async function handleApi(request, env){
     await logAudit(env,me,q==='DUYET'?'duyệt nội dung (G3)':'trả lại nội dung','noi_dung',d.doi_tuong_id,chuoi(body.ly_do,200)); return json({ db: await bootstrap(env,me) }); }
   // Tài sản media
   if((path==='/tai-san'||path==='/footage') && method==='POST'){ if(!isStaff(me)) return json({error:'Không có quyền'},403); const media_url=chuoi(body.media_url,500); if(!media_url) return json({error:'Cần file hoặc link media'},400);
-    const loai=['FOOTAGE','ANH','VIDEO_XUAT','GOI_DUNG','KHAC'].includes(String(body.loai||'').toUpperCase())?String(body.loai).toUpperCase():(String(body.media_type||'').toUpperCase()==='IMAGE'?'ANH':'FOOTAGE'); const id=uid('ts');
+    const mt=String(body.media_type||'').toUpperCase(); const loai=['FOOTAGE','ANH','VIDEO_XUAT','GOI_DUNG','NHAC','KHAC'].includes(String(body.loai||'').toUpperCase())?String(body.loai).toUpperCase():(mt==='IMAGE'?'ANH':mt==='AUDIO'?'NHAC':mt==='FILE'?'KHAC':'FOOTAGE'); const id=uid('ts');
     await env.DB.prepare(`INSERT INTO tai_san (id,loai,ten,mo_ta,media_url,media_type,muc_id,noi_dung_id,nguon,created_at,created_by_name) VALUES (?,?,?,?,?,?,?,?,?,?,?)`).bind(id, loai, chuoi(body.ten,200)||media_url.split('/').pop(), chuoi(body.mo_ta,500), media_url, String(body.media_type||(loai==='ANH'?'IMAGE':'VIDEO')).toUpperCase(), body.muc_id||null, body.noi_dung_id||null, chuoi(body.nguon,40)||'NGUOI', nowISO(), me.ho_ten).run();
     await logAudit(env,me,'thêm tài sản','tai_san',id,chuoi(body.ten,100)); return json({ db: await bootstrap(env,me), id }); }
   if((m=path.match(/^\/tai-san\/([^/]+)$/)) && method==='DELETE'){ if(!isStaff(me)) return json({error:'Không có quyền'},403); const t=await env.DB.prepare(`SELECT * FROM tai_san WHERE id=?`).bind(m[1]).first(); if(!t) return json({error:'Không tìm thấy'},404);
@@ -1545,6 +1592,15 @@ async function handleApi(request, env){
     await logAudit(env,me,'quyết việc seeding','viec_seeding',v.id,q+' · '+chuoi(body.ly_do,200)); return json({ db: await bootstrap(env,me) }); }
   if((m=path.match(/^\/seeding\/lead\/([^/]+)$/)) && method==='PATCH'){ if(!isStaff(me)) return json({error:'Không có quyền'},403); const l=await env.DB.prepare(`SELECT * FROM lead_seeding WHERE id=?`).bind(m[1]).first(); if(!l) return json({error:'Không tìm thấy'},404); const tt=['MOI','DA_TRA_LOI','CHUYEN_SALE'].includes(String(body.trang_thai||'').toUpperCase())?String(body.trang_thai).toUpperCase():l.trang_thai;
     await env.DB.prepare(`UPDATE lead_seeding SET trang_thai=?, ghi_chu=?, tra_loi_at=CASE WHEN ?<>'MOI' THEN ? ELSE tra_loi_at END, tra_loi_boi=CASE WHEN ?<>'MOI' THEN ? ELSE tra_loi_boi END WHERE id=?`).bind(tt, body.ghi_chu!=null?chuoi(body.ghi_chu,500):l.ghi_chu, tt, nowISO(), tt, me.ho_ten, l.id).run(); if(tt!=='MOI') await env.DB.prepare(`UPDATE cong_viec SET trang_thai='XONG', xong_at=?, xong_boi=? WHERE loai='LEAD_SEEDING' AND doi_tuong_id=? AND trang_thai='MO'`).bind(nowISO(), me.ho_ten, l.id).run(); return json({ db: await bootstrap(env,me) }); }
+  // ===== ADR-008 — máy dựng ghép theo tài khoản =====
+  if(path==='/may-ghep' && method==='POST'){ if(!isStaff(me)) return json({error:'Không có quyền'},403); const ten=chuoi(body.ten,80)||('Máy của '+me.ho_ten); const id=uid('may'); const khoa='kmay_'+crypto.randomUUID().replace(/-/g,'')+crypto.randomUUID().replace(/-/g,'').slice(0,8);
+    await env.DB.prepare(`INSERT INTO may_ghep (id,ten,chu_user_id,chu_ten,khoa_hash,kha_nang,active,created_at) VALUES (?,?,?,?,?,?,1,?)`).bind(id, ten, me.id, me.ho_ten, await sha256Hex(khoa), JSON.stringify(['dung_video']), nowISO()).run();
+    const goc=(env.APP_BASE_URL||url.origin).replace(/\/+$/,''); const ma='MAY1.'+b64url(JSON.stringify({ id:'content_os', ten:'Kingsmen Content OS', url:goc+'/api', khoa, may_id:id, may_ten:ten, kha_nang:['dung_video'] }));
+    await logAudit(env,me,'ghép máy dựng','may_ghep',id,ten); return json({ ok:true, id, ma_ghep:ma, db: await bootstrap(env,me) }); }
+  if((m=path.match(/^\/may-ghep\/([^/]+)$/)) && method==='DELETE'){ const x=await env.DB.prepare(`SELECT * FROM may_ghep WHERE id=? AND active=1`).bind(m[1]).first(); if(!x) return json({error:'Không tìm thấy máy'},404); if(x.chu_user_id!==me.id&&me.vai_tro!==ROLES.ADMIN) return json({error:'Chỉ chủ máy hoặc Admin gỡ'},403);
+    await env.DB.prepare(`UPDATE may_ghep SET active=0 WHERE id=?`).bind(x.id).run(); await env.DB.prepare(`UPDATE tram_lenh SET trang_thai='HONG', ket_qua='máy đã gỡ', xong_at=? WHERE may_id=? AND trang_thai IN ('CHO','DA_GUI')`).bind(nowISO(), x.id).run(); await logAudit(env,me,'gỡ máy dựng','may_ghep',x.id,x.ten); return json({ db: await bootstrap(env,me) }); }
+  if((m=path.match(/^\/noi-dung\/([^/]+)\/dung$/)) && method==='POST'){ if(!isStaff(me)) return json({error:'Không có quyền'},403); const nd=await env.DB.prepare(`SELECT n.*, m.giai_doan FROM noi_dung n LEFT JOIN muc_noi_dung m ON m.id=n.muc_id WHERE n.id=?`).bind(m[1]).first(); if(!nd) return json({error:'Không tìm thấy'},404); if(nd.dinh_dang!=='VIDEO'||nd.trang_thai!=='DUYET') return json({error:'Chỉ dựng kịch bản VIDEO đã duyệt (G3)'},409);
+    const r=await giaoDung(env, nd, {mayId:chuoi(body.may_id,40)||null, uuTienUserId:me.id, tacNhan:me}); if(!r.ok) return json({error:r.loi},409); return json({ db: await bootstrap(env,me), lenh_id:r.id, may_ten:r.may_ten, may_id:r.may_id, trung:r.trung, ly_do:r.ly_do }); }
   // ADR-004 — Trạm: tạo khoá & mã ghép (Admin), xếp lệnh (staff)
   if(path==='/tram/khoa' && method==='POST'){ if(me.vai_tro!==ROLES.ADMIN) return json({error:'Chỉ Admin tạo khoá Trạm'},403);
     const khoa='kcos_'+crypto.randomUUID().replace(/-/g,'')+crypto.randomUUID().replace(/-/g,'').slice(0,8); await datCauHinh(env,'tram',{khoa, bat:true}, me.ho_ten);

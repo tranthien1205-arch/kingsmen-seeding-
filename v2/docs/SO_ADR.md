@@ -115,7 +115,38 @@ Quyết định: (1) Ba tầng: định vị → BẢN ĐỒ THÔNG ĐIỆP (thu
 Người duyệt: Thiện · Trạng thái: ĐÃ DUYỆT (2026-09-23, "thiết kế bản vẽ trước" + 3 câu trả lời) · ADR-007a ĐÃ LÀM
 ```
 
+```
+ADR-008 · 2026-09-24 · MÁY DỰNG GHÉP THEO TÀI KHOẢN — mã dựng video nằm ở app, máy nào cần thì ghép vào chạy
+Bối cảnh : Dựng video đang là một việc của agent content_os trên Trạm Ngoc-Han: Trạm chỉ là bộ quản lý, tay máy là script ffmpeg
+            chạy trên máy đó; Worker Cloudflare không chạy được ffmpeg. Thiện: "nguồn code để dựng video ở app, tài khoản nào cần
+            dựng thì kết nối với máy tính đó để chạy module dựng". Trạm đầy đủ kéo theo Playwright/Zalo/AMIS — không nên cài lên máy
+            nhân viên. Bản dựng nháp hiện thô: footage xoay vòng, 4s/cảnh, chữ đè, không tiếng.
+Quyết định: (1) MÁY GHÉP: bảng may_ghep (id, ten, chu_user_id, khoa_hash, kha_nang[], ban, nhan_luc, trang_thai); Trạm Ngoc-Han
+            cũng là một máy ghép với kha_nang [dang, do_luong, seeding_dang, seeding_kiem]; máy nhân viên có kha_nang [dung_video].
+            Hợp đồng hub1 giữ nguyên, khoá xác thực trả về may_id; tram_lenh thêm may_id; /hub/lenh chỉ trả lệnh của máy hỏi.
+            Mỗi người dùng ghép máy của mình ở Hồ sơ › "Kết nối máy này" (mã ghép hiện một lần, khoá chỉ lưu hash). (2) MÁY CON
+            (may-dung): trình chạy rút gọn ~200 dòng Node, không Playwright, không tài khoản MXH; tải về từ app
+            (/tools/may-dung/), cần Node 22 + ffmpeg (winget). Mỗi lần chạy nó hỏi /hub/script/dung_video → nhận script mới nhất
+            kèm hash; script đổi ở app là mọi máy dùng bản mới; máy chỉ chạy script có hash app xác nhận. (3) ĐỊNH TUYẾN: nút
+            "🎬 Dựng trên máy tôi" ở thẻ video → lệnh dung_video gắn máy của người bấm; agent B8 tự động → máy rảnh có kha_nang
+            dung_video, ưu tiên máy của người phụ trách thẻ; máy im > 6' → lệnh chờ, không đổi máy nếu người chọn đích danh.
+            (4) PIPELINE DỰNG v2 (008b): chọn footage theo "gợi ý hình" từng cảnh (so từ khoá với tên/mô tả tài sản, thiếu → báo
+            "cảnh N thiếu hình" + việc quay bổ sung); giọng đọc tiếng Việt qua TTS gọi từ Worker (khoá ở Worker, máy con chỉ tải
+            mp3) — thời lượng cảnh = độ dài câu đọc; nhạc nền từ tài sản loại NHAC do MKT duyệt, trộn −18 dB; phụ đề theo câu đúng
+            nhịp giọng đọc; xuất 1080×1920 → R2 → tài sản VIDEO_XUAT + việc "xem & duyệt video nháp" (B8 giữ NGƯỜI). (5) Công cụ
+            Lọc/Dựng trong trình duyệt giữ cho sửa nhanh; footage lọc và video dựng đẩy thẳng vào tài sản của thẻ. (6) Chi phí TTS
+            tính vào ngân sách AI (L6), tính năng 'tts'.
+Lộ trình  : 008a máy ghép + máy con + script dựng hiện tại chạy trên máy ghép · 008b pipeline dựng v2 (footage theo cảnh, TTS, nhạc, phụ đề).
+Người duyệt: Thiện · Trạng thái: ĐÃ DUYỆT (2026-09-24, "ok đề suất" — cả 008a + 008b, TTS Google; thêm: xuất gói dựng tiếp cho CapCut) · ĐÃ LÀM
+```
+
 ## Changelog
+
+### 2026-09-24 · ADR-008 (máy dựng ghép theo tài khoản)
+- **Worker**: bảng `may_ghep` (khoá chỉ lưu hash, kha_nang, nhịp tim); `tram_lenh.may_id`; `xacThucHub` nhận khoá Trạm (may_id 'tram') hoặc khoá máy con `kmay_*`; `taoLenhTram(…, mayId)`, `mayGhepSong, chonMayDung, giaoDung`; config `dung_video {tts_giong, tts_toc_do, nhac_giam_db, canh_toi_da, giay_toi_da, tts_usd_1m_ky_tu}`; hub `/hub/script/dung-video` (script + sha256), `/hub/tts` (Google TTS, khoá `GOOGLE_TTS_KEY` ở Worker, ghi ai_usage 'tts' theo ký tự), `/hub/lenh` lọc theo máy, `/hub/trang_thai` máy con, `/hub/viec/dung_video?noi_dung_id` kèm gợi ý hình + kho nhạc + cấu hình; lô `content_os.video` nhận `goi_url` (tài sản GOI_DUNG) + `thieu_hinh` → việc DUYET_VIDEO_NHAP & QUAY_BO_SUNG; endpoints `/may-ghep` (POST/DELETE), `/noi-dung/:id/dung`; agent `CHUAN_BI_DUNG` (B8, HE_THONG); tài sản loại NHAC / media_type AUDIO, FILE; bootstrap `may_ghep`, `san_sang.tts`.
+- **Máy con** `v2/tools/may-dung/` (phát qua dist/tools): `may-dung.mjs` (ghép bằng mã MAY1, nhịp tim 2', hỏi lệnh 30", tải script từ app, kiểm hash rồi mới chạy), `dung-video.mjs` (pipeline v2: footage theo gợi ý hình, TTS từng câu, phụ đề đúng nhịp, nhạc nền −18 dB, gói CapCut zip bằng bsdtar, tải lên R2, lô content_os.video), `BAT-DAU.bat`, `README.md`.
+- **Giao diện**: Hồ sơ › 🖥 Máy dựng của tôi (kết nối máy, mã ghép một lần, link tải máy con, gỡ); thẻ video › Sản xuất: chọn máy + 🎬 Dựng ngay, lệnh gần đây, bản nháp + 📦 Tải gói CapCut + thiếu hình; Máy › Trạm: máy dựng đã ghép + 🎵 kho nhạc nền; Cấu hình: Video nháp máy dựng.
+- Test `tests/adr008.test.mjs`: 8 nhóm.
 
 ### 2026-09-23 · ADR-007a (Seeding hội nhóm Facebook)
 - **Worker**: bước B13–B17; config `seeding {so_bien_the, so_ngay_lich, khoang_cach_phut, gio_vang, khop_toi_thieu, ngay_kiem, ngay_kiem_2, ngay_kiem_toi_da, goi_tu_dong_ngay, react_bat_thuong_x, tam_dung_gio, ty_le_link_toi_da, seeding_tuan_mac_dinh, thong_diep_doi_ngay, nhom_go_bai_pct}`; `lamSachChiTieu.seeding_tuan`; bảng `thong_diep_seeding, tai_khoan_seeding, nhom_seeding, goi_seeding, bien_the, viec_seeding, lead_seeding`; helpers `thongDiepDoi, soanBienThe, chamGoiMay, taoGoiSeeding, xepLichGoi, chayDangSeeding, napSeedingDang, chamSeeding, napSeedingKiem, chayHocSeeding`; agents `TAO_GOI_SEEDING (B13), XEP_LICH_SEEDING (B14), DANG_SEEDING (B15, 15'), KIEM_SEEDING (B16), HOC_SEEDING (B17, ngày 3)`; endpoints `/seeding/thong-diep[/:id] (+de_xuat_ai)`, `/seeding/tai-khoan[/:id]`, `/seeding/nhom[/:id]`, `/seeding/goi` + `/:id/(duyet|tra-lai|gui-duyet|xep-lich)`, `/seeding/bien-the/:id`, `/seeding/viec/:id/(quyet|huy|dang-ngay|da-dang)`, `/seeding/lead/:id`; hub `/hub/viec/seeding_dang|seeding_kiem`, lô `content_os.seeding_dang_ket_qua|seeding_kiem`; `apDungDeXuat` SEEDING_NHOM/GIONG/THONG_DIEP; bootstrap `seeding {giong, dang_bai, thong_diep, tai_khoan, nhom, goi, bien_the, viec, lead}`.
