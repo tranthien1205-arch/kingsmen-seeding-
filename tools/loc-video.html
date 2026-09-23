@@ -6924,6 +6924,56 @@ function setEditStatus(m){
   var e=document.getElementById("editStatus"); if(e) e.textContent=m;
   if(m) jobShow(true,"🎬"); else jobShow(false);
 }
+// ====== GÓI DỰNG — bàn giao sang phần mềm dựng chuyên nghiệp ======
+// Phương án đã chốt với Thiện (2026-09-23): tool của app lo số lượng; video cần trau chuốt thì bàn giao
+// gói này cho editor. Không có phần mềm nào nhúng được vào web, nên "gói" = các shot đã cắt (đã có sẵn
+// trong folder vN) + timeline ở 3 chuẩn mà editor đọc được. Thuần hàm: taoGoiDung() để test được.
+function tcOf(sec, fps){ var fr=Math.round(sec*fps); var ff=fr%fps; var t=Math.floor(fr/fps); var h=Math.floor(t/3600), m=Math.floor(t%3600/60), ss=t%60;
+  var p=function(x){ return String(x).padStart(2,"0"); }; return p(h)+":"+p(m)+":"+p(ss)+":"+p(ff); }
+function xmlEsc(x){ return String(x==null?"":x).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
+function taoGoiDung(picked, actualDur, tenTheoIdx, doc916, tenDuAn){
+  var fps=30, W=doc916?720:1920, H=doc916?1280:1080;
+  var rows=[]; var t=0;
+  picked.forEach(function(x,k){
+    var ten=tenTheoIdx[k]; if(!ten) return;                       // shot lỗi/không ghi được → không vào timeline
+    var dur=(actualDur&&actualDur[k]!=null)?Number(actualDur[k]):Number(x.dur)||0; if(!(dur>0)) return;
+    rows.push({stt:rows.length+1, file:ten, buoc:x.step||"", batDau:t, dur:dur, loiBinh:x.note||"", tuNhan:(x.keys||[]).join(" · "), goc:x.name||""});
+    t+=dur;
+  });
+  var tong=t;
+  // CSV (BOM để Excel đọc tiếng Việt)
+  var q=function(v){ return '"'+String(v==null?"":v).replace(/"/g,'""')+'"'; };
+  var csv=String.fromCharCode(0xFEFF)+["STT","File (trong folder này)","Bước","Bắt đầu (giây)","Thời lượng (giây)","Lời bình / voice","Từ nhấn","Clip gốc"].map(q).join(",")+"\n"+
+    rows.map(function(r){ return [r.stt,r.file,r.buoc,r.batDau.toFixed(2),r.dur.toFixed(2),r.loiBinh,r.tuNhan,r.goc].map(q).join(","); }).join("\n")+"\n";
+  // EDL CMX3600 — Premiere / DaVinci / Avid đều nhập được; media nối lại theo tên file trong cùng folder
+  var edl="TITLE: "+(tenDuAn||"GOI_DUNG")+"\nFCM: NON-DROP FRAME\n\n";
+  rows.forEach(function(r){
+    var ri=tcOf(r.batDau,fps), ro=tcOf(r.batDau+r.dur,fps), so=tcOf(r.dur,fps);
+    edl+=String(r.stt).padStart(3,"0")+"  AX       AA/V  C        00:00:00:00 "+so+" "+ri+" "+ro+"\n* FROM CLIP NAME: "+r.file+"\n"+(r.loiBinh?("* COMMENT: "+r.loiBinh.replace(/\s+/g," ")+"\n"):"")+"\n";
+  });
+  // FCPXML 1.9 — DaVinci / Final Cut / (Premiere qua bộ chuyển). Thời lượng làm tròn theo khung hình.
+  var fr=function(sec){ return Math.round(sec*fps)+"/"+fps+"s"; };
+  var res=rows.map(function(r,i){ return '    <asset id="a'+(i+1)+'" name="'+xmlEsc(r.file)+'" src="file:./'+encodeURIComponent(r.file)+'" start="0s" duration="'+fr(r.dur)+'" hasVideo="1" hasAudio="1" format="r1"/>'; }).join("\n");
+  var clips=rows.map(function(r,i){ return '          <asset-clip ref="a'+(i+1)+'" offset="'+fr(r.batDau)+'" name="'+xmlEsc(r.buoc? (r.stt+" · "+r.buoc) : r.file)+'" start="0s" duration="'+fr(r.dur)+'">'+(r.loiBinh?('<note>'+xmlEsc(r.loiBinh)+'</note>'):'')+'</asset-clip>'; }).join("\n");
+  var fcp='<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE fcpxml>\n<fcpxml version="1.9">\n  <resources>\n    <format id="r1" name="FFVideoFormat'+H+'p30" frameDuration="1/'+fps+'s" width="'+W+'" height="'+H+'"/>\n'+res+
+    '\n  </resources>\n  <library>\n    <event name="Kingsmen">\n      <project name="'+xmlEsc(tenDuAn||"GOI_DUNG")+'">\n        <sequence format="r1" duration="'+fr(tong)+'" tcStart="0s" tcFormat="NDF">\n        <spine>\n'+clips+'\n        </spine>\n        </sequence>\n      </project>\n    </event>\n  </library>\n</fcpxml>\n';
+  var hd=String.fromCharCode(0xFEFF)+"GÓI DỰNG — bàn giao sang phần mềm dựng chuyên nghiệp\n"+
+    "Folder này có: các shot ĐÃ CẮT đúng thứ tự (01 - …, 02 - …), KICH_BAN.txt (lời bình), phụ đề .srt (nếu bật), và 3 file timeline:\n"+
+    "  · GOI_DUNG.edl    — Premiere: File › Import › chọn .edl (chọn "+W+"×"+H+", "+fps+"fps) → Relink media về folder này.\n"+
+    "                     DaVinci: File › Import › Timeline › .edl (Import source clips vào Media Pool trước).\n"+
+    "  · GOI_DUNG.fcpxml — DaVinci / Final Cut: File › Import › Timeline → chọn .fcpxml; media đã nằm cùng folder nên tự nối, không tự nối thì Relink.\n"+
+    "  · GOI_DUNG.csv    — bảng shot: thứ tự · bước · giây bắt đầu · thời lượng · lời bình · từ nhấn (mở bằng Excel).\n"+
+    "  · CapCut không đọc EDL/XML: kéo cả folder shot (đã đánh số) vào timeline theo thứ tự, mở KICH_BAN.txt để đọc lời bình.\n"+
+    "Dựng xong: xuất MP4 rồi đưa vào app › Kho footage (kéo thả ở tab Dựng video, hoặc nút 📤 nếu dựng bằng tool).\n"+
+    "Tổng thời lượng theo timeline: "+tong.toFixed(1)+" giây · "+rows.length+" shot · "+W+"×"+H+" · "+fps+"fps.\n";
+  return {csv:csv, edl:edl, fcpxml:fcp, huongDan:hd, soShot:rows.length, tong:tong};
+}
+function ghiGoiDung(out, picked, actualDur, tenTheoIdx, doc916){
+  var g=taoGoiDung(picked, actualDur, tenTheoIdx, doc916, XUAT_VER? (XUAT_VER.root+"_v"+XUAT_VER.n) : "GOI_DUNG");
+  if(!g.soShot) return Promise.resolve();
+  var ghi=function(ten, noiDung){ return out.getFileHandle(ten,{create:true}).then(function(fh){ return fh.createWritable(); }).then(function(w){ return w.write(noiDung).then(function(){ return w.close(); }); }); };
+  return ghi("GOI_DUNG.csv", g.csv).then(function(){ return ghi("GOI_DUNG.edl", g.edl); }).then(function(){ return ghi("GOI_DUNG.fcpxml", g.fcpxml); }).then(function(){ return ghi("GOI_DUNG_HUONG_DAN.txt", g.huongDan); });
+}
 function buildPackage(){
   var picked=pickShots();
   if(!picked.length){ announce("Kịch bản đang trống — đặt số shot cho ít nhất một bước.","err"); return; }
@@ -6949,7 +6999,7 @@ function buildPackage(){
       var wrap=document.getElementById("editProgWrap");
       wrap.classList.remove("hidden");
       var tongGiay=picked.reduce(function(s,x){ return s+x.dur; },0);
-      var i=0, errs=[], okNames=[], ghepNames=[], actualDur={}, canhLech=[], voiceTronSo=0, daGhep=false, daVoice=false, lyDoKhongVoice="", lines=[
+      var i=0, errs=[], okNames=[], ghepNames=[], actualDur={}, tenTheoIdx={}, canhLech=[], voiceTronSo=0, daGhep=false, daVoice=false, lyDoKhongVoice="", lines=[
         "KỊCH BẢN DỰNG — tạo bởi app Lọc Video Masfico",
         "Video đích ~"+tongGiay+" giây · "+picked.length+" shot. Cắt mỗi shot theo số giây gợi ý.",
         document.getElementById("tiktokOn").checked
@@ -7080,7 +7130,9 @@ function buildPackage(){
               .then(function(fh){ return fh.createWritable(); })
               .then(function(w){ return w.write(duAnTxt).then(function(){ return w.close(); }); })
               .catch(function(){});
-            return Promise.all([ghiSrt, ghiDuAn]).then(function(){
+            // GÓI DỰNG cho phần mềm chuyên nghiệp (EDL · FCPXML · CSV) — cùng folder vN, trỏ vào đúng các shot đã cắt
+            var ghiGoi=ghiGoiDung(out, picked, actualDur, tenTheoIdx, document.getElementById("tiktokOn").checked).catch(function(e){ lines.push("⚠ Không ghi được gói dựng: "+(e&&e.message||e)); });
+            return Promise.all([ghiSrt, ghiDuAn, ghiGoi]).then(function(){
             return out.getFileHandle("KICH_BAN.txt",{create:true})
               .then(function(fh){ return fh.createWritable(); })
               .then(function(w){ return w.write(String.fromCharCode(0xFEFF)+txt).then(function(){ return w.close(); }); })
@@ -7089,6 +7141,7 @@ function buildPackage(){
                   ? "⚠️ Gói dựng xong nhưng "+errs.length+" file lỗi:<br>"+esc(errs.join("; "))
                   : "✅ <b>Gói dựng đã xong: "+okNames.length+" shot</b>"+
                     (daGhep ? (daVoice ? " + <b>video ghép KÈM VOICE (00-GHEP_CO_VOICE)</b>" : " + <b>video ghép sẵn 00-GHEP_SAN</b> để xem thử") : "")+
+                    " + <b>gói dựng</b> (GOI_DUNG.edl · .fcpxml · .csv) cho Premiere/DaVinci"+
                     " trong “"+esc(XUAT_VER? XUAT_VER.root+"/v"+XUAT_VER.n : out.name)+"” — xem lại ở 📚 Thư viện bản xuất.";
                 if(!daGhep && lyDoKhongGhep){
                   thongBao += "<br>🎞️ <b>Không có video ghép</b> vì: "+esc(lyDoKhongGhep)+".";
@@ -7236,7 +7289,7 @@ function buildPackage(){
                 return w.write(data).then(function(){ return w.close(); });
               });
             }).then(function(){
-              okNames.push(ten);
+              okNames.push(ten); tenTheoIdx[i]=ten;
               // CHI ghep cac shot DONG CHUAN: khi xuat 9:16, shot nao khong chuan hoa duoc
               // (convert916 fail ca 2 luot -> giu khung goc, con tieng goc) se DE ROI —
               // tron no vao concat la nguon loi "ghép lỗi codec/timestamp" lam mat ca ban ghep.
