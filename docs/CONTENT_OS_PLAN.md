@@ -514,5 +514,7 @@ Tokens Tailwind (inline config trong `seeding-app.html`): `ink #0b3543` (soft #1
 
 - ✅ **DEMO offline chạy lại được** — `seedDB()` gọi `now()` mà không định nghĩa → `DEMO=true` vỡ ngay lúc mở (lỗi có từ trước, mỗi lần kiểm thử phải vá tạm). Thêm `const now=()=>nowISO()` đầu `seedDB`; seed sẵn 2 cụm claim demo (1 CHẶN "vĩnh viễn", 1 cảnh báo "tốt nhất") để thử guardrail. Cách kiểm UI chuẩn từ nay: `sed 's/^const DEMO = false;/const DEMO = true;/' seeding-app.html > /tmp/demo.html && node build.mjs --src /tmp/demo.html --out /tmp/demo` rồi mở bằng static server; tài khoản demo: mkt · truongmkt · sale1 · admin · gd · dev@masfico.vn (123456 / Dev2026!).
 
+- ✅ **Sửa lỗi trắng màn khi chọn sản phẩm trong Studio** (Thiện báo 2026-09-23) — `san_pham.thong_so` lưu dạng `[{k,v}]` nhưng `ScriptEditor` vẽ từng phần tử thẳng vào `<Chip>` và `generateScript` `join('; ')` → React gặp object là vỡ cả trang (lỗi có từ bản Studio cũ; demo không có sản phẩm nên không lộ). Thêm `specTextArr(product)` → `"k: v"` dùng ở cả 2 chỗ. **Lưới an toàn `ManAnToan`** (error boundary) bọc `render()` trong `Shell`: màn nào vỡ chỉ màn đó hiện hộp lỗi + dòng lỗi + nút Tải lại / Về trang đầu, không trắng cả app; đổi trang là tự reset. **Quy ước:** mọi chỗ hiển thị `thong_so` phải qua `specTextArr`.
+
 ### ⚙️ Quy trình deploy (CẬP NHẬT)
 `npm run build` (build.mjs: biên dịch JSX, build CSS Tailwind từ chính khối `tailwind.config` trong seeding-app.html, chép vendor React và `tools/`) → `node --check worker/index.js` → commit cả `dist/` → push. `node_modules/` đã trong .gitignore.

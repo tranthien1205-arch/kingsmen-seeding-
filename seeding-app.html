@@ -265,11 +265,16 @@ const FW_TEMPLATES = {
 };
 function fwKey(name){ return String(name||'').trim().toLowerCase(); }
 // Sinh nháp kịch bản rule-based từ framework + sản phẩm thật + góc nhìn/đối tượng. KHÔNG bịa số liệu.
+// Thông số sản phẩm lưu dạng [{k,v}] (xem ProductClaimManager); mọi chỗ HIỂN THỊ phải qua đây, không render object
+function specTextArr(product){
+  const arr = product && Array.isArray(product.thong_so) ? product.thong_so : [];
+  return arr.map(t=> typeof t==='string' ? t : (t && (t.k||t.v)) ? [t.k, t.v].filter(Boolean).join(': ') : '').filter(Boolean);
+}
 function generateScript({framework, product, angle, audience}){
   const tpl = FW_TEMPLATES[fwKey(framework&&framework.ten)] || { hook:'{SP} — {ANGLE}', secs:[['Nội dung','{SPEC}']], cta:'Nhắn tin để tư vấn {SP}.' };
   const SP = (product&&product.ten) || '[sản phẩm]';
   const DONG = (product&&product.dong) || '[dòng sản phẩm]';
-  const specArr = product && Array.isArray(product.thong_so) ? product.thong_so.filter(Boolean) : [];
+  const specArr = specTextArr(product);
   const SPEC = specArr.length ? specArr.join('; ') : '[điền thông số thật của sản phẩm]';
   const STD = (product&&product.tieu_chuan) || '[điền tiêu chuẩn/chứng nhận thật]';
   const GUIDE = (product&&product.huong_dan) || '[điền hướng dẫn sử dụng thật]';
@@ -1609,6 +1614,20 @@ NAV_GROUPS[ROLES.GIAM_DOC] = [
 // Đợt 4 (2026-09-23): Content OS ra mắt toàn bộ — BETA_KEYS rỗng. Giữ cơ chế để module mới sau này
 // có thể ẩn cho tài khoản is_dev trước khi mở rộng (thêm key vào Set là ẩn với user thường).
 const BETA_KEYS = new Set([]);
+// Lưới an toàn: một màn vẽ lỗi thì chỉ màn đó báo lỗi (kèm nút tải lại), không trắng cả app
+class ManAnToan extends React.Component{
+  constructor(p){ super(p); this.state={loi:null}; }
+  static getDerivedStateFromError(e){ return {loi:e}; }
+  componentDidCatch(e){ try{ console.error('Màn lỗi:', e); }catch(_){} }
+  componentDidUpdate(prev){ if(prev.khoa!==this.props.khoa && this.state.loi) this.setState({loi:null}); }
+  render(){ if(!this.state.loi) return this.props.children;
+    return <div className="bg-white rounded-2xl border border-rose-200 shadow-card p-4 space-y-2">
+      <div className="text-sm font-semibold text-rose-700">Màn này gặp lỗi khi hiển thị</div>
+      <div className="text-[11px] text-ink-muted break-all">{String(this.state.loi&&this.state.loi.message||this.state.loi)}</div>
+      <div className="flex gap-2"><Btn variant="brand" onClick={()=>location.reload()}>Tải lại</Btn><Btn variant="ghost" onClick={()=>this.props.veTrangDau&&this.props.veTrangDau()}>Về trang đầu</Btn></div>
+      <div className="text-[10px] text-slate-400">Gửi dòng lỗi phía trên cho người quản trị để sửa.</div>
+    </div>; }
+}
 function Shell(){
   const { me, logout, db } = useApp();
   // Lọc module đang nâng cấp → bỏ nhóm rỗng
@@ -1760,7 +1779,7 @@ function Shell(){
 
       <main className="p-3 sm:p-2 w-full">{/* ADR-002: máy giao việc ngay trang đầu tiên mỗi vai trò nhìn thấy khi mở app (không phải Sales) */}
         {me.vai_tro!==ROLES.SALES && page===((allItems[0]||{}).key) && <div className="mb-4 space-y-4"><BatDau go={setPage}/>{me.vai_tro!==ROLES.GIAM_DOC && <VietCuaToi go={setPage}/>}</div>}
-        {render()}</main>
+        <ManAnToan khoa={page} veTrangDau={()=>setPage((allItems[0]||{}).key)}>{render()}</ManAnToan></main>
     </div>
 
     {/* Bottom nav mobile — CHỈ 5 nhóm lớn, chia đều, không cuộn ngang */}
@@ -3059,7 +3078,7 @@ function ScriptEditor({init, onClose, onDung, onMo}){
   const flags = scanClaims(scriptTextFE(f), db.claim_cam);
   const blocked = flags.filter(x=>x.muc_do==='CHAN');
   const warns = flags.filter(x=>x.muc_do!=='CHAN');
-  const specArr = product && Array.isArray(product.thong_so) ? product.thong_so.filter(Boolean) : [];
+  const specArr = specTextArr(product);   // thong_so là [{k,v}] — vẽ thẳng object là React vỡ trang
   const anhKho = khoMediaFE(db).filter(x=>x.media_type==='IMAGE' && x.media_url);
 
   const geminiSanSang=useMemo(()=>keyGemini(),[]);
