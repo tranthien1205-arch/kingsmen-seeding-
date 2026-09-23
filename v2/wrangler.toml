@@ -3,6 +3,8 @@
 name = "kingsmen-content-os"
 main = "worker/index.js"
 compatibility_date = "2025-06-01"
+# Tên miền riêng (zone masfico.vn trên Cloudflare) — độc lập với app cũ kingsmen-app-seeding. Phải đặt TRƯỚC mọi [bảng] TOML.
+routes = [{ pattern = "content.masfico.vn", custom_domain = true }]
 
 [assets]
 directory = "./dist"
@@ -20,9 +22,6 @@ binding = "MEDIA"
 bucket_name = "kingsmen-content-os-media"
 
 # Agent điều phối bám nhịp 15' — tự chốt mỗi việc 1 lượt/ngày đúng giờ cấu hình
-# Tên miền riêng (zone masfico.vn trên Cloudflare) — độc lập với app cũ kingsmen-app-seeding
-routes = [{ pattern = "content.masfico.vn", custom_domain = true }]
-
 [vars]
 APP_BASE_URL = "https://content.masfico.vn"
 
