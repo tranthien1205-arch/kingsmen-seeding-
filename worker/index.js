@@ -250,6 +250,8 @@ async function ensureSchema(env){
   try { await env.DB.prepare(`ALTER TABLE footage ADD COLUMN nguon_id TEXT`).run(); } catch(e){}
   // ADR-004: san_xuat ngừng là bảng làm việc — mỗi dòng chuyển vào content_items đúng 1 lần
   try { await env.DB.prepare(`ALTER TABLE san_xuat ADD COLUMN da_chuyen INTEGER DEFAULT 0`).run(); } catch(e){}
+  // ADR-007: mục kế hoạch quy định định dạng nội dung (tool nào soạn); null = chưa quy định
+  try { await env.DB.prepare(`ALTER TABLE content_items ADD COLUMN dinh_dang TEXT`).run(); } catch(e){}
   try { await chuyenSanXuatVaoKeHoach(env); } catch(e){ console.error('chuyenSanXuatVaoKeHoach', e && e.message); }
   // ADR-002: gộp giai đoạn cũ về 6 giai đoạn mới (chạy lại vô hại)
   try { await env.DB.prepare(`UPDATE content_items SET trang_thai='SAN_XUAT' WHERE trang_thai IN ('QUAY','DUNG','DUYET')`).run(); } catch(e){}
@@ -1411,10 +1413,12 @@ function duyetKichBanAI(text, cacBuoc, claims, dinhDang){
   if(chan.length) return {ok:false, loi:'AI viết trúng cụm bị CHẶN ('+chan.map(c=>c.cum_tu).join(', ')+') — hãy thử lại hoặc sửa góc nhìn', blocked:chan.map(c=>c.cum_tu)};
   return {ok:true, kich_ban:kb, canh_bao:flags.filter(f=>f.muc_do!=='CHAN')};
 }
+// ADR-007: định dạng của mục kế hoạch — hợp lệ hoặc null (chưa quy định); giá trị lạ → null, không đoán
+function dinhDangKeHoach(v){ const d=String(v||'').toUpperCase(); return DINH_DANG.includes(d)?d:null; }
 async function insertContentItem(env, me, body){
   const id=uid('ci');
-  await env.DB.prepare(`INSERT INTO content_items (id,loai,tieu_de,loai_muc_tieu,pillar_id,framework_id,san_pham_id,kenh_id,thang,trang_thai,pic,chi_tiet,links,created_at,created_by,created_by_name,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
-    .bind(id, body.loai||'SOCIAL', (body.tieu_de||'').trim(), body.loai_muc_tieu||'', body.pillar_id||null, body.framework_id||null, body.san_pham_id||null, body.kenh_id||null, (body.thang||'').trim(), (PIPELINE_BE.includes(body.trang_thai)?body.trang_thai:'Y_TUONG'), JSON.stringify(body.pic||{}), JSON.stringify(body.chi_tiet||{}), JSON.stringify(body.links||{}), nowISO(), me.id, me.ho_ten, nowISO()).run();
+  await env.DB.prepare(`INSERT INTO content_items (id,loai,tieu_de,loai_muc_tieu,pillar_id,framework_id,san_pham_id,kenh_id,thang,trang_thai,pic,chi_tiet,links,created_at,created_by,created_by_name,updated_at,dinh_dang) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+    .bind(id, body.loai||'SOCIAL', (body.tieu_de||'').trim(), body.loai_muc_tieu||'', body.pillar_id||null, body.framework_id||null, body.san_pham_id||null, body.kenh_id||null, (body.thang||'').trim(), (PIPELINE_BE.includes(body.trang_thai)?body.trang_thai:'Y_TUONG'), JSON.stringify(body.pic||{}), JSON.stringify(body.chi_tiet||{}), JSON.stringify(body.links||{}), nowISO(), me.id, me.ho_ten, nowISO(), dinhDangKeHoach(body.dinh_dang)).run();
   return id;
 }
 
@@ -2098,8 +2102,10 @@ async function handleApi(request, env){
     const pic = body.pic!=null?JSON.stringify(body.pic):r.pic;
     const chi_tiet = body.chi_tiet!=null?JSON.stringify(body.chi_tiet):r.chi_tiet;
     const links = body.links!=null?JSON.stringify(body.links):r.links;
-    await env.DB.prepare(`UPDATE content_items SET loai=?, tieu_de=?, loai_muc_tieu=?, pillar_id=?, framework_id=?, san_pham_id=?, kenh_id=?, thang=?, trang_thai=?, pic=?, chi_tiet=?, links=?, updated_at=? WHERE id=?`)
-      .bind(g('loai',r.loai),g('tieu_de',r.tieu_de),g('loai_muc_tieu',r.loai_muc_tieu),body.pillar_id!==undefined?(body.pillar_id||null):r.pillar_id,body.framework_id!==undefined?(body.framework_id||null):r.framework_id,body.san_pham_id!==undefined?(body.san_pham_id||null):r.san_pham_id,body.kenh_id!==undefined?(body.kenh_id||null):r.kenh_id,g('thang',r.thang),g('trang_thai',r.trang_thai),pic,chi_tiet,links,nowISO(),id).run();
+    if(body.dinh_dang!=null && body.dinh_dang!=='' && !dinhDangKeHoach(body.dinh_dang)) return json({error:'Định dạng không hợp lệ'},400);
+    const dinh_dang = body.dinh_dang!==undefined ? dinhDangKeHoach(body.dinh_dang) : (r.dinh_dang||null);
+    await env.DB.prepare(`UPDATE content_items SET loai=?, tieu_de=?, loai_muc_tieu=?, pillar_id=?, framework_id=?, san_pham_id=?, kenh_id=?, thang=?, trang_thai=?, pic=?, chi_tiet=?, links=?, updated_at=?, dinh_dang=? WHERE id=?`)
+      .bind(g('loai',r.loai),g('tieu_de',r.tieu_de),g('loai_muc_tieu',r.loai_muc_tieu),body.pillar_id!==undefined?(body.pillar_id||null):r.pillar_id,body.framework_id!==undefined?(body.framework_id||null):r.framework_id,body.san_pham_id!==undefined?(body.san_pham_id||null):r.san_pham_id,body.kenh_id!==undefined?(body.kenh_id||null):r.kenh_id,g('thang',r.thang),g('trang_thai',r.trang_thai),pic,chi_tiet,links,nowISO(),dinh_dang,id).run();
     await logAudit(env,me,'sửa nội dung','content_items',id);
     return json({ db: await bootstrap(env, me) });
   }
@@ -2190,6 +2196,14 @@ async function handleApi(request, env){
     await env.DB.prepare(`UPDATE scripts SET chi_tiet=?, updated_at=? WHERE id=?`).bind(JSON.stringify(lamSachChiTiet(ct)), nowISO(), id).run();
     await logAudit(env,me,'gắn video đã dựng','scripts',id,media_url);
     return json({ db: await bootstrap(env, me) });
+  }
+  // ADR-007: KHO KỊCH BẢN cho công cụ Dựng video — chỉ kịch bản VIDEO đã duyệt 2 cổng, kèm tên mục kế hoạch/kênh
+  if(path==='/scripts/kho' && method==='GET'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    const rows=(await env.DB.prepare(`SELECT s.id,s.tieu_de,s.hook,s.sections,s.cta,s.chi_tiet,s.san_pham_id,s.kenh_id,s.content_item_id,s.updated_at,s.created_by_name, c.tieu_de ke_hoach, c.thang, k.ten kenh_ten
+      FROM scripts s LEFT JOIN content_items c ON c.id=s.content_item_id LEFT JOIN kenh k ON k.id=s.kenh_id
+      WHERE s.trang_thai='DUYET' AND COALESCE(s.dinh_dang,'VIDEO')='VIDEO' ORDER BY s.updated_at DESC LIMIT 100`).all()).results;
+    return json({ kich_ban: rows.map(r=>({ ...r, sections:JSON.parse(r.sections||'[]'), chi_tiet:docChiTiet(r.chi_tiet) })) });
   }
   if((m=path.match(/^\/scripts\/(.+)\/versions$/)) && method==='GET'){
     if(!isStaff(me)) return json({error:'Không có quyền'},403);

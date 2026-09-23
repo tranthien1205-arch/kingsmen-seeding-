@@ -220,6 +220,32 @@ Thay cho : (không)
             màn Bộ não AI 4 tab; công cụ Dựng video báo lượt Gemini (tool_vision, tool_tts).
 Người duyệt: Thiện · Trạng thái: ĐÃ DUYỆT (2026-09-23)
 ```
+```
+ADR-006 · 2026-09-23 · Kế hoạch tháng → tuần (định hướng chảy xuống)
+Bối cảnh : chưa có thực thể "kế hoạch tháng"; mục nội dung chỉ có tháng + ngày đăng; tuần không tồn tại.
+Quyết định: bảng ke_hoach_thang (thang, chi_tieu[] {pillar_id, kenh_id, dinh_dang, so_bai}, dinh_huong, nguon)
+            đề xuất từ pillar % + kết quả tháng trước, sửa tay được. Tuần = cột content_items.tuan (ISO, T2–CN),
+            chỉ tiêu tuần = tháng chia đều (sửa tay). Màn Kế hoạch thêm lớp Tháng (chỉ tiêu vs thực tế) và Tuần
+            (còn thiếu gì theo pillar/kênh/định dạng).
+Người duyệt: Thiện · Trạng thái: ĐÃ DUYỆT (2026-09-23) — làm sau ADR-007
+
+ADR-007 · 2026-09-23 · Mục kế hoạch quy định ĐỊNH DẠNG; tool tạo nội dung mở TỪ kế hoạch; Dựng chọn từ kho kịch bản
+Bối cảnh : Studio tạo tự do rồi mới nối kế hoạch; công cụ Dựng còn dán kịch bản tay → nội dung trôi ngoài luồng.
+Quyết định: (1) content_items.dinh_dang (VIDEO|POST|ANH|CAROUSEL|null). (2) Nút "✍️ Soạn nội dung" trên mục kế
+            hoạch → Studio mở đúng định dạng, bối cảnh (pillar/framework/sản phẩm/kênh) điền sẵn, liên kết kế hoạch
+            KHOÁ; mục đã có kịch bản thì mở kịch bản đó. Tạo tự do trong Studio vẫn được nhưng mang nhãn "chưa
+            thuộc kế hoạch" (không tính KPI — đã có). (3) GET /scripts/kho: kịch bản VIDEO đã duyệt; công cụ Dựng
+            có ô 📚 Kho kịch bản để chọn; mở trong app thì ẩn ô dán tay.
+Người duyệt: Thiện · Trạng thái: ĐÃ DUYỆT (2026-09-23)
+
+ADR-008 · 2026-09-23 · Đo lường sau air tự động: API nền tảng + agent
+Bối cảnh : kết quả nhập tay/import; token Page đã có cho tự đăng.
+Quyết định: agent đo lường trong app (cron ngày, giống agent trend): bài DA_DANG có link + kênh có token → gọi
+            Facebook Graph Insights / YouTube Data API → ghi ket_qua nguồn API_KENH, mức KHÔNG QUY ĐƠN (giữ ranh
+            giới 3 mức); mỗi ngày một dòng. Nền tảng không có API (TikTok chưa audit, Shopee) → đường n8n/agent
+            ngoài (webhook nhận số) hoặc import như cũ; TUYỆT ĐỐI không cào. Anh Thiện có token Facebook Page.
+Người duyệt: Thiện · Trạng thái: ĐÃ DUYỆT (2026-09-23) — làm sau ADR-006
+```
 **Ánh xạ trường theo định dạng** (một nguồn: `DINH_DANG` worker ⟷ `DINH_DANG_FE` frontend):
 | Định dạng | `hook` | `sections[]` | `cta` | `chi_tiet` |
 |---|---|---|---|---|
@@ -545,6 +571,12 @@ Tokens Tailwind (inline config trong `seeding-app.html`): `ink #0b3543` (soft #1
   - **Frontend:** `BoNaoAI` 4 tab — 📊 Tổng quan (4 thẻ số: chi phí tháng USD≈VND · ngân sách % · lượt/lỗi · token vào/ra; thanh ngân sách đổi màu 80/100%; biểu đồ cột theo ngày; bảng theo tính năng/model/người) · 🔌 Kết nối (Anthropic secret + Gemini máy này, kiểm tra kết nối có ghi lượt `kiem_tra`) · 💰 Chi phí & ngân sách (ngân sách USD, cảnh báo %, tỷ giá, chặn khi vượt, **bảng giá theo model sửa được**, lưu qua `setModuleConfig('ai')`) · 🕑 Nhật ký (lọc tháng). `goiGemini` trả `usage`; Studio (Gemini) và Kiểm tra kết nối báo lượt qua `baoAIUsage`. "Việc của tôi" nhắc Admin/Trưởng MKT khi ≥ ngưỡng cảnh báo. Công cụ Dựng video báo lượt Gemini (`tool_vision`, `tool_tts`) khi có phiên app.
   - Test `test_ai_usage.mjs` **24/24** (ghi lượt, chi phí đúng token×giá, lỗi vẫn ghi, gemini/model lạ, chặn & mở chặn, validator, RBAC, lọc tháng); hồi quy 100/100 · 28/28 · 26/26.
   - ⚠️ Chi phí là **ước tính**: bảng giá mặc định theo giá công bố lúc cài (Sonnet 4.5 $3/$15, Haiku 4.5 $1/$5, Opus 4.1 $15/$75, Gemini 2.5 Flash $0.3/$2.5, Flash-Lite $0.1/$0.4, Pro $1.25/$10 mỗi 1M token) — Admin đối chiếu hoá đơn và sửa ở tab Chi phí.
+
+- ✅ **ADR-007 — Mục kế hoạch quy định định dạng · tool mở từ kế hoạch · Dựng chọn từ kho kịch bản.**
+  - `content_items.dinh_dang` (VIDEO|POST|ANH|CAROUSEL|null; `dinhDangKeHoach()`: lạ → null khi tạo, 400 khi PATCH, `''` = bỏ quy định). Form Kế hoạch có ô "Định dạng nội dung".
+  - Kế hoạch (thẻ kanban + bảng): nút **✍️ Soạn nội dung** (chưa đặt định dạng → nhắc đặt). `soanTuKeHoach`: đã có kịch bản → mở kịch bản; chưa → `window.__studioMo={moi:{dinh_dang, content_item_id, framework/sp/kênh, _tuKeHoach:true}}` rồi `window.__kingsmenGo('studio')` (móc điều hướng đặt ở `Shell`). Studio đọc `__studioMo` lúc mount. Trình soạn mở từ kế hoạch: ô "Thuộc mục kế hoạch" **khoá**, header hiện chip 📋 tên mục. Thư viện Studio: chip 📋 mục kế hoạch / "chưa thuộc kế hoạch".
+  - `GET /scripts/kho` (staff): kịch bản VIDEO `DUYET` kèm `ke_hoach`, `kenh_ten`, sections/chi_tiet đã parse. Công cụ Dựng: ô **📚 Kho kịch bản đã duyệt** (`napKhoKB/chonKhoKB`, chỉ khi có phiên app) → nạp kịch bản + `KB_STUDIO` + localStorage handoff, nên 📤 vẫn gắn video về đúng kịch bản.
+  - Test `test_adr7.mjs` 10/10; hồi quy 100/100 · 28/28 · 26/26 · 24/24.
 
 ### ⚙️ Quy trình deploy (CẬP NHẬT)
 `npm run build` (build.mjs: biên dịch JSX, build CSS Tailwind từ chính khối `tailwind.config` trong seeding-app.html, chép vendor React và `tools/`) → `node --check worker/index.js` → commit cả `dist/` → push. `node_modules/` đã trong .gitignore.

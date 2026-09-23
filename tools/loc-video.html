@@ -819,6 +819,12 @@
     </div>
     <details id="kbDetails" open style="margin-top:8px">
       <summary style="cursor:pointer;font-size:12.5px;font-weight:700;color:var(--teal)">📜 Kịch bản <span id="kbCount" style="color:var(--mgray)"></span></summary>
+      <!-- ADR-007: nguồn kịch bản chính thức = kho kịch bản VIDEO đã duyệt trong app -->
+      <div class="strow" id="khoKBRow" style="margin-top:6px">
+        <select id="khoKBSel" style="flex:1;font-size:12px;min-width:0" onchange="chonKhoKB(this.value)"><option value="">📚 Kho kịch bản đã duyệt — chọn để nạp…</option></select>
+        <button class="stbtn" onclick="napKhoKB(true)" title="Tải lại danh sách từ app">↻</button>
+      </div>
+      <div class="note" id="khoKBNote" style="margin:4px 0 0"></div>
       <div class="strow" style="margin-top:8px;align-items:stretch">
         <textarea id="scriptText" rows="3" style="flex:1;font-size:12px"
           placeholder="Dán kịch bản vào đây — dán nguyên kịch bản dài cũng được, AI tự tách cảnh, tự căn giây theo lời bình"></textarea>
@@ -7890,6 +7896,36 @@ if(!window.showDirectoryPicker){
 // ====== NỐI VỚI APP KINGSMEN — 2 công cụ trên cùng một mã nguồn (không tách file để khỏi thành 2 bản song song) ======
 //   ?mode=loc  → "Lọc source sau buổi quay": chỉ tab Lọc (+ Dạy AI, Cài đặt)
 //   ?mode=dung → "Dựng video ngắn": chỉ tab Dựng (+ Dạy AI, Cài đặt); tự nạp kịch bản Creative Studio gửi sang
+// ===== ADR-007: KHO KỊCH BẢN — kịch bản VIDEO đã duyệt trong app là nguồn dựng chính thức =====
+var KHO_KB=[];
+function kbSangText(s){
+  var d=[]; if((s.hook||"").trim()) d.push("Hook: "+String(s.hook).trim());
+  (s.sections||[]).forEach(function(x,i){ if(!x||!(x.text||x.hinh)) return; d.push((x.label||("Cảnh "+(i+1)))+": "+String(x.text||"").trim()+(x.hinh?" ("+String(x.hinh).trim()+")":"")); });
+  if((s.cta||"").trim()) d.push("CTA: "+String(s.cta).trim());
+  return d.join("\n");
+}
+function napKhoKB(baoLoi){
+  var sel=document.getElementById("khoKBSel"), note=document.getElementById("khoKBNote"); if(!sel) return;
+  var tok=appToken();
+  if(!tok){ if(note) note.textContent="Mở công cụ từ trong app (đã đăng nhập) để thấy kho kịch bản đã duyệt."; return; }
+  if(note) note.textContent="Đang tải kho kịch bản…";
+  fetch("/api/scripts/kho",{headers:{Authorization:"Bearer "+tok}}).then(function(r){ return r.json(); }).then(function(j){
+    KHO_KB=(j&&j.kich_ban)||[];
+    var cur=sel.value;
+    sel.innerHTML='<option value="">📚 Kho kịch bản đã duyệt — chọn để nạp… ('+KHO_KB.length+')</option>'+KHO_KB.map(function(s){
+      return '<option value="'+escAttr(s.id)+'">'+esc((s.tieu_de||s.hook||"(không tên)")+(s.ke_hoach?(" · 📋 "+s.ke_hoach):" · chưa thuộc kế hoạch")+(s.kenh_ten?(" · "+s.kenh_ten):"")+(s.chi_tiet&&s.chi_tiet.video_url?" · 🎞 đã dựng":""))+'</option>'; }).join("");
+    if(window.KB_STUDIO && KHO_KB.some(function(s){ return s.id===window.KB_STUDIO.script_id; })) sel.value=window.KB_STUDIO.script_id; else if(cur) sel.value=cur;
+    if(note) note.textContent=KHO_KB.length?"Chỉ kịch bản Video ĐÃ DUYỆT 2 cổng mới vào kho — đúng luồng soạn → duyệt → dựng.":"Kho trống: chưa có kịch bản Video nào được duyệt.";
+  }).catch(function(){ if(note) note.textContent="Không tải được kho kịch bản"+(baoLoi?" — kiểm tra đăng nhập app.":"."); });
+}
+function chonKhoKB(id){
+  var s=KHO_KB.find(function(x){ return x.id===id; }); if(!s) return;
+  var ta=document.getElementById("scriptText"); if(ta){ ta.value=kbSangText(s); ta.classList.remove("hidden"); var tn=document.getElementById("scriptTextN"); if(tn) tn.value=ta.value; }
+  window.KB_STUDIO={ script_id:s.id, tieu_de:s.tieu_de||s.hook||"", text:kbSangText(s), san_pham_id:s.san_pham_id||null, kenh_id:s.kenh_id||null, luc:Date.now() };
+  try{ localStorage.setItem("kingsmen_kichban_dung", JSON.stringify(window.KB_STUDIO)); }catch(e){}
+  var st=document.getElementById("scriptStatus"); if(st) st.innerHTML='📜 Đã nạp từ kho: <b>'+esc(s.tieu_de||"")+'</b>'+(s.ke_hoach?(' · 📋 '+esc(s.ke_hoach)):'')+' — chọn kho đã lọc rồi bấm 🪄 AI DỰNG; kết xuất xong 📤 là video tự gắn về kịch bản này.';
+  announce("📚 Đã nạp kịch bản “"+esc(s.tieu_de||"")+"” từ kho.","ok");
+}
 // ===== BÀN DỰNG kiểu CapCut (đợt A): di chuyển các khối có sẵn vào lưới 3 khung + timeline dưới. Giữ nguyên mọi id/hàm. =====
 function layoutDungWorkspace(){
   try{
@@ -7934,6 +7970,7 @@ function layoutDungWorkspace(){
   var MODE=""; try{ MODE=new URLSearchParams(location.search).get("mode")||""; }catch(e){}
   window.APP_MODE=MODE;
   layoutDungWorkspace();
+  napKhoKB(false);
   // Phím tắt bàn dựng (đợt B): Space phát/dừng · ←/→ cảnh trước/sau · Delete xoá cảnh · [ ] bớt/thêm 1 giây. Không bắt khi đang gõ.
   document.addEventListener("keydown", function(ev){
     var tab=document.getElementById("tab-dung"); if(!tab || tab.classList.contains("hidden")) return;

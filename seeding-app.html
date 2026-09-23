@@ -1797,6 +1797,8 @@ function Shell(){
     if(typeof location!=='undefined' && /[?&]bm_ten=/.test(location.search)) return 'trend';
     return (allItems[0]||{}).key||'home';
   });
+  // ADR-007: màn khác điều hướng tới trang (Kế hoạch → "Soạn nội dung" → Studio) qua một móc toàn cục
+  useEffect(()=>{ window.__kingsmenGo=setPage; return ()=>{ if(window.__kingsmenGo===setPage) delete window.__kingsmenGo; }; },[]);
   useEffect(()=>{
     if(typeof location==='undefined') return;
     const q=new URLSearchParams(location.search);
@@ -2546,6 +2548,14 @@ function ContentPlan(){
   const lech = pillars.map(p=>{ const actual= withP? (dist[p.id]||0)/withP*100 : 0; return {p, actual, diff:actual-(Number(p.ty_trong)||0)}; }).filter(x=>Math.abs(x.diff)>lechNguong);
   const showLech = withP>=5 && lech.length>0;
   const move=(it,st)=> upsertContentItem({id:it.id, trang_thai:st});
+  // ADR-007: soạn nội dung TỪ mục kế hoạch — Studio mở đúng định dạng, bối cảnh điền sẵn, liên kết khoá; đã có kịch bản thì mở kịch bản đó
+  const kbCua=it=>(db.scripts||[]).filter(s=>s.content_item_id===it.id).sort((a,b)=>String(b.updated_at||'').localeCompare(String(a.updated_at||'')))[0];
+  const soanTuKeHoach=(it)=>{ const sc=kbCua(it);
+    window.__studioMo = sc ? {script_id:sc.id} : {moi:{ dinh_dang:it.dinh_dang, content_item_id:it.id, framework_id:it.framework_id||'', san_pham_id:it.san_pham_id||'', kenh_id:it.kenh_id||'', tieu_de:it.tieu_de||'', chi_tiet:{}, _tuKeHoach:true }};
+    if(window.__kingsmenGo) window.__kingsmenGo('studio'); };
+  const NutSoan=({it,nho})=>!chiXem && (it.dinh_dang
+    ? <button onClick={e=>{ e.stopPropagation(); soanTuKeHoach(it); }} className={(nho?'text-[10px] px-1.5 py-0.5 ':'text-[11px] px-2 py-0.5 ')+"rounded-full bg-brand/10 text-brand-dark font-semibold hover:bg-brand/20 whitespace-nowrap"} title="Mở tool đúng định dạng, bối cảnh theo mục này">{DINH_DANG_FE[it.dinh_dang].icon} {kbCua(it)?'Mở nội dung':'Soạn nội dung'}</button>
+    : <button onClick={e=>{ e.stopPropagation(); setEdit(it); }} className={(nho?'text-[10px] px-1.5 py-0.5 ':'text-[11px] px-2 py-0.5 ')+"rounded-full bg-amber-50 text-amber-700 whitespace-nowrap"} title="Đặt định dạng để biết tool nào soạn">⚠ chưa đặt định dạng</button>);
   const Card=({it})=>{ const pil=pillars.find(p=>p.id===it.pillar_id); const kn=kenhs.find(k=>k.id===it.kenh_id); const pic=db.users.find(u=>u.id===(it.pic&&it.pic.chinh));
     return <div className="bg-white rounded-xl border border-line p-2.5 shadow-card text-left">
       <div className="flex items-start gap-1.5">
@@ -2558,6 +2568,7 @@ function ContentPlan(){
         {kn && <span className="text-[9px] px-1 py-0.5 rounded-full bg-sky-50 text-sky-700">{kn.ten}</span>}
       </div>
       {(()=>{ const nc=nhanConKeHoach(db,it); return nc.length>0 && <div className="flex flex-wrap gap-1 mt-1">{nc.map((x,i)=><span key={i} className={"text-[9px] px-1 py-0.5 rounded-full "+x.cls}>{x.t}</span>)}</div>; })()}
+      <div className="mt-1.5"><NutSoan it={it} nho/></div>
       <div className="flex items-center justify-between mt-1.5 gap-1">
         <span className="text-[9px] text-slate-400 truncate">{pic?('👤 '+pic.ho_ten):(it.created_by_name||'')}</span>
         <div className="flex gap-1 shrink-0">
@@ -2629,7 +2640,7 @@ function ContentPlan(){
             <Td>{chiXem ? pipeLabel(it.trang_thai) : <select value={it.trang_thai} onChange={e=>move(it,e.target.value)} className="text-xs border border-line rounded px-1 py-0.5">{PIPELINE.map(s=><option key={s.k} value={s.k}>{s.label}</option>)}</select>}</Td>
             <Td><SanXuatCell it={it}/></Td>
             <Td><SeedingCell it={it} onDay={()=>setDay(it)}/></Td>
-            <Td>{!chiXem && <><button onClick={()=>setEdit(it)} className={LINK.edit}>Sửa</button> <button onClick={()=>{ if(confirm('Xoá?')) deleteContentItem(it.id).then(ok=>ok&&notify('Đã xoá')); }} className={LINK.danger}>Xoá</button></>}</Td>
+            <Td><div className="flex items-center gap-2"><NutSoan it={it} nho/>{!chiXem && <><button onClick={()=>setEdit(it)} className={LINK.edit}>Sửa</button> <button onClick={()=>{ if(confirm('Xoá?')) deleteContentItem(it.id).then(ok=>ok&&notify('Đã xoá')); }} className={LINK.danger}>Xoá</button></>}</div></Td>
           </tr>)}</tbody>
         </table>
       </div>}
@@ -2696,7 +2707,7 @@ function ContentItemModal({edit, onClose}){
     if(!f.pillar_id) return notify('Chọn pillar','warn');
     if(!f.framework_id) return notify('Chọn nhóm kịch bản (framework)','warn');
     if(!f.kenh_id) return notify('Chọn kênh','warn');
-    const ok=await upsertContentItem({...(edit.id?{id:edit.id}:{}), loai:f.loai, tieu_de:f.tieu_de.trim(), loai_muc_tieu:f.loai_muc_tieu, pillar_id:f.pillar_id, framework_id:f.framework_id, san_pham_id:f.san_pham_id||null, kenh_id:f.kenh_id, thang:f.thang, trang_thai:f.trang_thai, pic:f.pic, chi_tiet:f.chi_tiet, links:f.links});
+    const ok=await upsertContentItem({...(edit.id?{id:edit.id}:{}), loai:f.loai, dinh_dang:f.dinh_dang||null, tieu_de:f.tieu_de.trim(), loai_muc_tieu:f.loai_muc_tieu, pillar_id:f.pillar_id, framework_id:f.framework_id, san_pham_id:f.san_pham_id||null, kenh_id:f.kenh_id, thang:f.thang, trang_thai:f.trang_thai, pic:f.pic, chi_tiet:f.chi_tiet, links:f.links});
     if(ok){ notify(edit.id?'Đã lưu':'Đã thêm nội dung'); onClose(); }
   };
   return <Modal open={true} onClose={onClose} title={(edit.id?'Sửa ':'Thêm ')+'nội dung'} wide>
@@ -2712,6 +2723,7 @@ function ContentItemModal({edit, onClose}){
       <Field label="Kênh" required><Select value={f.kenh_id} onChange={e=>set('kenh_id',e.target.value)}><option value="">— chọn —</option>{(db.kenh||[]).map(x=><option key={x.id} value={x.id}>{x.ten}</option>)}</Select></Field>
       <Field label="Ngày đăng dự kiến" hint="để lên Lịch"><Input type="date" value={f.chi_tiet.ngay_dang||''} onChange={e=>setSub('chi_tiet','ngay_dang',e.target.value)}/></Field>
       <Field label="Giai đoạn"><Select value={f.trang_thai} onChange={e=>set('trang_thai',e.target.value)}>{PIPELINE.map(s=><option key={s.k} value={s.k}>{s.label}</option>)}</Select></Field>
+      <Field label="Định dạng nội dung" hint="quy định tool nào sẽ soạn (ADR-007)"><Select value={f.dinh_dang||''} onChange={e=>set('dinh_dang',e.target.value)}><option value="">— chưa quy định —</option>{Object.keys(DINH_DANG_FE).map(k=><option key={k} value={k}>{DINH_DANG_FE[k].icon} {DINH_DANG_FE[k].label}</option>)}</Select></Field>
       <Field label="Người phụ trách chính"><Select value={(f.pic&&f.pic.chinh)||''} onChange={e=>setSub('pic','chinh',e.target.value)}><option value="">—</option>{users.map(u=><option key={u.id} value={u.id}>{u.ho_ten}</option>)}</Select></Field>
       {f.loai==='SOCIAL' && <Field label="Format"><Input value={f.chi_tiet.format||''} onChange={e=>setSub('chi_tiet','format',e.target.value)} placeholder="Video / Multi-photos…"/></Field>}
       {f.loai==='ECOM' && <Field label="Loại video"><Input value={f.chi_tiet.loai_video||''} onChange={e=>setSub('chi_tiet','loai_video',e.target.value)} placeholder="Gắn giỏ hàng…"/></Field>}
@@ -3144,6 +3156,9 @@ function CreativeStudio(){
   const scripts = (db.scripts||[]);
   const [edit,setEdit]=useState(null);           // nội dung đang soạn (null = thư viện)
   const [moId,setMoId]=useState(null);           // id bản vừa chuyển định dạng → mở khi db đã có
+  // ADR-007: mở từ Kế hoạch (window.__studioMo): kịch bản có sẵn → mở; chưa có → tạo mới đúng định dạng, liên kết khoá
+  useEffect(()=>{ const p=window.__studioMo; if(!p) return; delete window.__studioMo;
+    if(p.script_id){ const sc=(db.scripts||[]).find(x=>x.id===p.script_id); if(sc) setEdit(sc); } else if(p.moi) setEdit(p.moi); },[]);
   useEffect(()=>{ if(!moId) return; const sc=(db.scripts||[]).find(x=>x.id===moId); if(sc){ setEdit(sc); setMoId(null); } },[moId, db.scripts]);
   const [q,setQ]=useState(''); const [loc,setLoc]=useState('ALL'); const [st,setSt]=useState('');
   const [tab,setTab]=useState('sang_tao');
@@ -3199,6 +3214,7 @@ function CreativeStudio(){
             {nameById(db.san_pham,s.san_pham_id) && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-600">{nameById(db.san_pham,s.san_pham_id)}</span>}
             {nameById(db.kenh,s.kenh_id) && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-600">{nameById(db.kenh,s.kenh_id)}</span>}
             {warn>0 && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700">⚠ {warn} cảnh báo</span>}
+            {(()=>{ const kh=(db.content_items||[]).find(c=>c.id===s.content_item_id); return kh ? <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-brand/10 text-brand-dark truncate max-w-[160px]" title={kh.tieu_de}>📋 {kh.tieu_de}</span> : <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-700">chưa thuộc kế hoạch</span>; })()}
           </div>
           <div className="mt-auto pt-2 text-[10px] text-slate-400">v{s.version||1} · {s.created_by_name||''}{s.updated_at?' · '+fmtDate(s.updated_at):''}</div>
         </button>;
@@ -3239,6 +3255,8 @@ function ScriptEditor({init, onClose, onDung, onMo}){
     brand_voice:init.brand_voice||brandVoice0, trang_thai:init.trang_thai||'NHAP',
   }));
   const [goc,setGoc]=useState(()=>JSON.stringify(f));   // bản đã lưu gần nhất — để biết còn thay đổi chưa lưu
+  const tuKH=!!init._tuKeHoach;                          // ADR-007: mở từ Kế hoạch → liên kết kế hoạch KHOÁ
+  const mucKH=(db.content_items||[]).find(c=>c.id===f.content_item_id);
   const [pane,setPane]=useState('soan');                // mobile: soan · xem · boi_canh
   const [moBoiCanh,setMoBoiCanh]=useState(!init.id);   // desktop vừa: bối cảnh gấp gọn khi sửa bản đã có
   const [angle,setAngle]=useState(''); const [busy,setBusy]=useState(false); const [vers,setVers]=useState(null);
@@ -3338,6 +3356,7 @@ function ScriptEditor({init, onClose, onDung, onMo}){
     <PageHeader back="Thư viện" onBack={dong}
       title={<span>{D.icon} {f.id?(f.tieu_de||D.label):(D.label+' mới')}</span>}
       right={<>
+        {mucKH && <StatusPill size="md" cls={TONE.brand} className="max-w-[220px] truncate" title={mucKH.tieu_de}>📋 {mucKH.tieu_de}</StatusPill>}
         <StatusPill size="md" cls={SCRIPT_ST_STYLE[curTrangThai]||SCRIPT_ST_STYLE.NHAP}>{SCRIPT_ST[curTrangThai]||'Nháp'}</StatusPill>
         {f.id && <span className="text-[11px] text-slate-400">v{cur.version||init.version||1}</span>}
         {dirty && <span className="text-[11px] text-amber-600 font-semibold">● Chưa lưu</span>}
@@ -3359,8 +3378,8 @@ function ScriptEditor({init, onClose, onDung, onMo}){
           {!moBoiCanh && <div className="hidden lg:block 2xl:hidden text-xs text-ink-muted -mt-1">{tomTatBoiCanh}</div>}
           <div className={(moBoiCanh?'':'lg:hidden 2xl:block ')+"space-y-3"}>
             {/* Nối về mục kế hoạch — thiếu liên kết này thì Kế hoạch vs Thực hiện và Dashboard đếm sai */}
-            <Field label="Thuộc mục kế hoạch nào" hint="Nối để đối chiếu Kế hoạch vs Thực hiện và xếp đúng hệ KPI">
-              <Select value={f.content_item_id} onChange={e=>{ const id=e.target.value; const ci=(db.content_items||[]).find(c=>c.id===id);
+            <Field label="Thuộc mục kế hoạch nào" hint={tuKH?'Khoá theo mục kế hoạch đã chọn (ADR-007)':'Nối để đối chiếu Kế hoạch vs Thực hiện và xếp đúng hệ KPI'}>
+              <Select disabled={tuKH} value={f.content_item_id} onChange={e=>{ const id=e.target.value; const ci=(db.content_items||[]).find(c=>c.id===id);
                 setF(v=>({...v, content_item_id:id, ...(ci?{ framework_id:v.framework_id||ci.framework_id||'', san_pham_id:v.san_pham_id||ci.san_pham_id||'', kenh_id:v.kenh_id||ci.kenh_id||'' }:{}) })); }}>
                 <option value="">— Chưa nối (nên chọn) —</option>
                 {(db.content_items||[]).map(c=><option key={c.id} value={c.id}>{(c.tieu_de||'(không tên)')+(c.thang?(' · '+c.thang):'')}</option>)}
