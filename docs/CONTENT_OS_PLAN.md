@@ -44,7 +44,7 @@ App hiện tại KHÔNG phải Next.js/Supabase như brief gốc. Ta **thích �
 3. **Validate (không cần trình duyệt):**
    - Worker: `node --check worker/index.js`.
    - Frontend: cài tạm `@babel/standalone`, transform khối `<script type="text/plain" id="app-src">` với preset `react`. Phải in `BABEL OK`. (Nhớ `rm -rf node_modules` trước khi commit.)
-4. **Test tích hợp backend** (mô phỏng D1 bằng `node:sqlite`): tạo `DatabaseSync(':memory:')` làm adapter cho `env.DB.prepare().bind().first()/all()/run()` + `env.DB.batch()`, gọi `worker.fetch(new Request('https://x/api'+path,...), env, {waitUntil(){}})`. Seed Marketing mặc định: **`mkt@kingsmen.vn` / `123456`**. Mẫu test ở `/tmp/.../scratchpad/test_*.mjs`.
+4. **Test tích hợp backend** (mô phỏng D1 bằng `node:sqlite`; mẫu đầy đủ: bootstrap song song, `/reviews/bulk`, `/admin/migrate-proofs` — 20 test): tạo `DatabaseSync(':memory:')` làm adapter cho `env.DB.prepare().bind().first()/all()/run()` + `env.DB.batch()`, gọi `worker.fetch(new Request('https://x/api'+path,...), env, {waitUntil(){}})`. Seed Marketing mặc định: **`mkt@kingsmen.vn` / `123456`**. Mẫu test ở `/tmp/.../scratchpad/test_*.mjs`.
 5. **Deploy:** `git push origin HEAD:main` → Cloudflare tự build. (User đã cho phép push thẳng main.)
    - Commit identity: `git config user.email noreply@anthropic.com && user.name Claude`.
    - HTML có header `no-cache` nhưng vẫn nên hard-refresh (Ctrl/Cmd+Shift+R) 1 lần.

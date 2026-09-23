@@ -861,6 +861,8 @@ function AppProvider({children}){
       cleanupMedia: async () => { const cut=new Date(Date.now()-30*864e5).toISOString(); let n=0; S.project_filmings.forEach(p=>{ if(!['DAT','DA_CHI'].includes(p.trang_thai) && (p.created_at||'')<cut){ n+=(p.uploads||[]).length; p.uploads=[]; } }); commit(); notify('Đã dọn media của '+n+' nguồn hết hạn'); return true; },
       upsertGuide: async (key, g) => { S.guides=S.guides||{}; S.guides[key]={ noi_dung:g.noi_dung||'', video_url:g.video_url||'' }; commit(); return true; },
     };
+    demoApi.bulkReview = async items => { let n=0, dup=0; for(const it of items){ const r = it.kind==='post' ? await demoApi.reviewPost(it.id,it.result,it.reason) : await demoApi.reviewCmtSeed(it.id,it.result,it.reason); if(r){ n++; if(r.deduped) dup++; } } return {ok:true, n, dup, errors:[]}; };
+    demoApi.migrateProofs = async () => ({ done:0, remaining:0 });
     return <AppCtx.Provider value={demoApi}>{children}{toast && <Toast toast={toast}/>}</AppCtx.Provider>;
   }
 
@@ -905,7 +907,7 @@ function AppProvider({children}){
     catch(e){ notify(e.message,'err'); return false; }
   };
 
-  const api = {
+  const api = useMemo(()=>({
     db, me, meId, notify, loading, token,
     login, logout,
     refresh: () => call('/bootstrap').then(r=>setDb(r.db)).catch(()=>{}),
@@ -1023,6 +1025,8 @@ function AppProvider({children}){
       catch(e){ return {ok:false,msg:e.message}; } },
     createCmtSeed: c => mut('/cmtseed', {method:'POST', body:c}),
     reviewCmtSeed: (id, result, reason) => mut(`/cmtseed/${id}/review`, {method:'POST', body:{result, reason}}),
+    bulkReview: async items => { try { const r=await call('/reviews/bulk',{method:'POST', body:{items}}); if(r&&r.db) setDb(r.db); return {ok:true, n:r.n||0, dup:r.dup||0, errors:r.errors||[]}; } catch(e){ notify(e.message,'err'); return {ok:false}; } },
+    migrateProofs: async () => { try { return await call('/admin/migrate-proofs',{method:'POST', body:{limit:15}}); } catch(e){ notify(e.message,'err'); return null; } },
     markPaid: (sales_id, ky) => mut('/markpaid', {method:'POST', body:{sales_id, ky}}),
     // QUAY CÔNG TRÌNH (route Worker sẽ bổ sung khi tích hợp backend)
     upsertFilmTemplate: t => mut(t.id?`/filming/templates/${t.id}`:'/filming/templates', {method:t.id?'PATCH':'POST', body:t}),
@@ -1049,7 +1053,8 @@ function AppProvider({children}){
       xhr.ontimeout = ()=> reject(new Error('Hết thời gian tải lên — thử lại hoặc dùng link Drive'));
       xhr.send(file);
     }),
-  };
+  }), [db, loading, token]); // notify/setDb ổn định; các hàm chỉ phụ thuộc db/token
+
   return <AppCtx.Provider value={api}>
     {children}
     {toast && <Toast toast={toast}/>}
@@ -1476,11 +1481,13 @@ function Shell(){
   useEffect(()=>{ const el=subNavRef.current&&subNavRef.current.querySelector('[data-navkey="'+page+'"]'); if(el&&el.scrollIntoView) el.scrollIntoView({inline:'center', block:'nearest'}); }, [page]);
 
   // badge số việc chờ duyệt cho Marketing
-  const pendingCount = db.post_seedings.filter(p=>p.trang_thai===ST.CHO_DUYET).length
-                     + db.cmt_seedings.filter(c=>c.trang_thai===ST.CHO_DUYET).length;
-  const pendingFilming = (db.project_filmings||[]).filter(f=>f.trang_thai===ST.CHO_DUYET).length;
-  // P6 — chỉ đếm việc thuộc cổng mà chính người này được quyết
-  const pendingApprove = (db.approvals||[]).filter(a=>a.trang_thai==='CHO' && canDecideGateFE(me,a.cong)).length;
+  // Đếm badge một lần mỗi khi db đổi (Shell render lại ở mọi thao tác)
+  const { pendingCount, pendingFilming, pendingApprove } = useMemo(()=>({
+    pendingCount: db.post_seedings.filter(p=>p.trang_thai===ST.CHO_DUYET).length + db.cmt_seedings.filter(c=>c.trang_thai===ST.CHO_DUYET).length,
+    pendingFilming: (db.project_filmings||[]).filter(f=>f.trang_thai===ST.CHO_DUYET).length,
+    // P6 — chỉ đếm việc thuộc cổng mà chính người này được quyết
+    pendingApprove: (db.approvals||[]).filter(a=>a.trang_thai==='CHO' && canDecideGateFE(me,a.cong)).length,
+  }), [db, me]);
   const badgeFor = (k) => k==='queue' ? pendingCount : k==='approve' ? pendingApprove : (k==='filming' && me.vai_tro===ROLES.MARKETING) ? pendingFilming : 0;
   const groupBadge = (g) => g.items.reduce((s,it)=>s+badgeFor(it.key),0);
   // mở nhóm: về module con đầu tiên (hoặc giữ nguyên nếu đang ở trong nhóm)
@@ -1900,12 +1907,19 @@ function SalesNewPost({go}){
    11. SALES — TẠO CMT (Mình đăng / Dạo)
 ============================================================ */
 function ImageUploader({images, setImages}){
-  const { notify } = useApp();
+  const { notify, uploadMedia } = useApp();
   const ref = useRef();
   const onPick = async (e) => {
     const files = Array.from(e.target.files||[]);
     for(const f of files){
-      try{ const b64 = await compressImage(f); setImages(prev=>[...prev, {id:uid('img'), image_url:b64, uploaded_at:nowISO()}]); }
+      try{
+        const b64 = await compressImage(f);
+        // Ảnh lên R2 (chỉ lưu URL vào db). Trước đây base64 nằm trong db và được gửi kèm mọi lần tải dữ liệu.
+        let url = b64;
+        try{ const blob = await (await fetch(b64)).blob(); const r = await uploadMedia(blob); if(r && r.media_url) url = r.media_url; }
+        catch(_){ /* R2 chưa cấu hình → giữ base64 như cũ */ }
+        setImages(prev=>[...prev, {id:uid('img'), image_url:url, uploaded_at:nowISO()}]);
+      }
       catch(err){ notify('Lỗi đọc ảnh','err'); }
     }
     e.target.value='';
@@ -1913,7 +1927,7 @@ function ImageUploader({images, setImages}){
   return <div>
     <div className="flex flex-wrap gap-2 mb-2">
       {images.map(im=><div key={im.id} className="relative w-20 h-20 rounded-lg overflow-hidden border">
-        <img src={im.image_url} className="w-full h-full object-cover"/>
+        <img loading="lazy" decoding="async" src={im.image_url} className="w-full h-full object-cover"/>
         <button onClick={()=>setImages(prev=>prev.filter(x=>x.id!==im.id))} className="absolute top-0.5 right-0.5 bg-black/60 text-white w-5 h-5 rounded-full text-xs leading-none">×</button>
       </div>)}
       <button onClick={()=>ref.current.click()} className="w-20 h-20 rounded-lg border-2 border-dashed border-slate-300 text-slate-400 flex flex-col items-center justify-center text-xs hover:border-brand">
@@ -3127,7 +3141,7 @@ function AirEditor({post, onClose}){
             <button key={ft.id} onClick={()=>{ setF(v=>({...v,media_url:ft.media_url})); setPickFt(false); }}
               className="rounded-xl border border-line overflow-hidden hover:border-brand transition text-left">
               <div className="bg-slate-900 aspect-video">
-                {ft.media_type==='IMAGE'?<img src={ft.media_url} className="w-full h-full object-cover"/>:<video src={ft.media_url} className="w-full h-full object-cover" preload="metadata"/>}
+                {ft.media_type==='IMAGE'?<img loading="lazy" decoding="async" src={ft.media_url} className="w-full h-full object-cover"/>:<video src={ft.media_url} className="w-full h-full object-cover" preload="metadata"/>}
               </div>
               <div className="p-1.5 text-[11px] font-semibold text-ink truncate">{ft.ten||'(chưa đặt tên)'}</div>
             </button>)}
@@ -4318,7 +4332,7 @@ function FootageLib(){
         <div key={f.id} className="bg-white rounded-2xl border border-line shadow-card overflow-hidden">
           <div className="bg-slate-900 aspect-video flex items-center justify-center">
             {f.media_type==='IMAGE'
-              ? <img src={f.media_url} alt={f.ten} className="w-full h-full object-cover"/>
+              ? <img loading="lazy" decoding="async" src={f.media_url} alt={f.ten} className="w-full h-full object-cover"/>
               : <video src={f.media_url} className="w-full h-full object-cover" controls preload="metadata"/>}
           </div>
           <div className="p-2">
@@ -4409,7 +4423,7 @@ function ShotListTab({onBack}){
               </div>
               {ft && <div className="mt-2 flex items-center gap-2 rounded-xl bg-slate-50 border border-line p-2">
                 <div className="w-16 h-10 bg-slate-900 rounded overflow-hidden shrink-0">
-                  {ft.media_type==='IMAGE' ? <img src={ft.media_url} className="w-full h-full object-cover"/> : <video src={ft.media_url} className="w-full h-full object-cover" preload="metadata"/>}
+                  {ft.media_type==='IMAGE' ? <img loading="lazy" decoding="async" src={ft.media_url} className="w-full h-full object-cover"/> : <video src={ft.media_url} className="w-full h-full object-cover" preload="metadata"/>}
                 </div>
                 <span className="text-xs text-ink flex-1 truncate">{ft.ten||'(footage)'}</span>
                 <button onClick={()=>patchShot(s.id,{footage_id:''}).then(ok=>ok&&notify('Đã gỡ'))} className={LINK.danger+" shrink-0"}>Gỡ</button>
@@ -4430,7 +4444,7 @@ function ShotListTab({onBack}){
             <button key={f.id} onClick={()=>{ patchShot(pick.id,{footage_id:f.id}).then(ok=>{ if(ok){ notify('Đã gắn footage'); setPick(null); } }); }}
               className="rounded-xl border border-line overflow-hidden hover:border-brand transition text-left">
               <div className="bg-slate-900 aspect-video">
-                {f.media_type==='IMAGE' ? <img src={f.media_url} className="w-full h-full object-cover"/> : <video src={f.media_url} className="w-full h-full object-cover" preload="metadata"/>}
+                {f.media_type==='IMAGE' ? <img loading="lazy" decoding="async" src={f.media_url} className="w-full h-full object-cover"/> : <video src={f.media_url} className="w-full h-full object-cover" preload="metadata"/>}
               </div>
               <div className="p-1.5 text-[11px] font-semibold text-ink truncate">{f.ten||'(chưa đặt tên)'}</div>
             </button>)}
@@ -5103,7 +5117,7 @@ function SanPhamTab(){
       <div className="grid sm:grid-cols-2 gap-3">{list.map(p=>
         <div key={p.id} className={"bg-white rounded-2xl border border-line shadow-card p-4 "+(p.active?'':'opacity-50')}>
           <div className="flex items-start gap-3">
-            {p.anh ? <img src={p.anh} className="w-14 h-14 rounded-xl object-cover border border-line shrink-0"/> : <div className="w-14 h-14 rounded-xl bg-slate-100 flex items-center justify-center text-2xl shrink-0">🧴</div>}
+            {p.anh ? <img loading="lazy" decoding="async" src={p.anh} className="w-14 h-14 rounded-xl object-cover border border-line shrink-0"/> : <div className="w-14 h-14 rounded-xl bg-slate-100 flex items-center justify-center text-2xl shrink-0">🧴</div>}
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap"><span className="font-semibold text-sm text-ink">{p.ten||'(chưa tên)'}</span><HeChip he={p.dong}/></div>
               {p.ma && <div className="text-[11px] text-slate-400">Mã: {p.ma}{p.don_vi?' · '+p.don_vi:''}</div>}
@@ -5181,7 +5195,7 @@ function SanPhamModal({edit,onClose}){
     <Field label="Bảo hành (cam kết chính thức — AI được trích vào kịch bản)"><Input value={f.bao_hanh||''} onChange={e=>set('bao_hanh',e.target.value)} placeholder="VD: 10 năm chống ố vàng · 30 năm chống thấm bền vật liệu"/></Field>
     <div className="grid grid-cols-2 gap-2">
       <Field label="Tiêu chuẩn áp dụng"><Input value={f.tieu_chuan} onChange={e=>set('tieu_chuan',e.target.value)} placeholder="VD: TCVN…"/></Field>
-      <Field label="Ảnh sản phẩm"><div className="flex items-center gap-2">{f.anh && <img src={f.anh} className="w-10 h-10 rounded-lg object-cover border"/>}<Btn variant="ghost" onClick={()=>imgRef.current&&imgRef.current.click()} disabled={busy}>{busy?'…':(f.anh?'Đổi ảnh':'Tải ảnh')}</Btn><input ref={imgRef} type="file" accept="image/*" className="hidden" onChange={onImg}/></div></Field>
+      <Field label="Ảnh sản phẩm"><div className="flex items-center gap-2">{f.anh && <img loading="lazy" decoding="async" src={f.anh} className="w-10 h-10 rounded-lg object-cover border"/>}<Btn variant="ghost" onClick={()=>imgRef.current&&imgRef.current.click()} disabled={busy}>{busy?'…':(f.anh?'Đổi ảnh':'Tải ảnh')}</Btn><input ref={imgRef} type="file" accept="image/*" className="hidden" onChange={onImg}/></div></Field>
     </div>
     <Field label="Hướng dẫn thi công (tóm tắt)"><Textarea rows="2" value={f.huong_dan} onChange={e=>set('huong_dan',e.target.value)}/></Field>
     <div className="flex gap-2 mt-2"><Btn variant="ghost" onClick={onClose}>Huỷ</Btn><Btn variant="brand" className="flex-1" onClick={save}>{edit.id?'Lưu':'Thêm'}</Btn></div>
@@ -5268,7 +5282,7 @@ function ImageLibrary(){
         {filtered.map(im=>{ const checked=selMode&&sel.has(im.id); const topic=topics.find(t=>t.id===im.topic_id);
           return <div key={im.id} className={"bg-white rounded-2xl border overflow-hidden shadow-card "+(checked?'border-brand ring-2 ring-brand/30':'border-line')+(im.active===false?' opacity-60':'')}>
             <div className="relative aspect-square bg-slate-100 cursor-pointer" onClick={()=> selMode?toggleSel(im.id):setPreview(im)}>
-              <img src={im.media_url} className="w-full h-full object-cover"/>
+              <img loading="lazy" decoding="async" src={im.media_url} className="w-full h-full object-cover"/>
               {selMode && <span className={"absolute top-2 left-2 w-6 h-6 rounded-md border flex items-center justify-center text-xs font-bold "+(checked?'bg-brand text-white border-brand':'bg-white/90 text-transparent')}>✓</span>}
               <span className="absolute bottom-2 left-2 text-[9px] px-1.5 py-0.5 rounded-full bg-black/60 text-white">{mucDichLabel(im.muc_dich)}</span>
               {im.active===false && <span className="absolute top-2 right-2 text-[9px] px-1.5 py-0.5 rounded-full bg-slate-700 text-white">Ẩn</span>}
@@ -5288,7 +5302,7 @@ function ImageLibrary(){
     <LibImgEdit img={edit} onClose={()=>setEdit(null)}/>
     {preview && <div className="fixed inset-0 z-[55] bg-black/80 flex items-center justify-center p-4" onClick={()=>setPreview(null)}>
       <div className="max-w-2xl w-full" onClick={e=>e.stopPropagation()}>
-        <img src={preview.media_url} className="w-full max-h-[74vh] object-contain rounded-xl"/>
+        <img loading="lazy" decoding="async" src={preview.media_url} className="w-full max-h-[74vh] object-contain rounded-xl"/>
         <div className="mt-2 flex items-center justify-between gap-2">
           <div className="text-white text-sm min-w-0"><div className="truncate">{preview.caption||'—'}</div><div className="text-white/50 text-xs">{mucDichLabel(preview.muc_dich)} · bởi {preview.uploaded_by_name}</div></div>
           <div className="flex gap-2 shrink-0"><Btn variant="brand" onClick={()=>dl(preview)}>⬇ Tải ảnh</Btn><Btn variant="ghost" onClick={()=>setPreview(null)}>Đóng</Btn></div>
@@ -5304,7 +5318,7 @@ function LibImgEdit({img, onClose}){
   if(!img||!f) return null;
   const save=async()=>{ const ok=await patchLibImg(img.id, { caption:f.caption.trim(), muc_dich:f.muc_dich, topic_id:f.topic_id||null, tags:f.tags.split(',').map(s=>s.trim()).filter(Boolean), active:f.active }); if(ok){ notify('Đã lưu'); onClose(); } };
   return <Modal open={!!img} onClose={onClose} title="Sửa ảnh">
-    <div className="rounded-xl overflow-hidden aspect-video bg-slate-100 mb-3"><img src={img.media_url} className="w-full h-full object-contain"/></div>
+    <div className="rounded-xl overflow-hidden aspect-video bg-slate-100 mb-3"><img loading="lazy" decoding="async" src={img.media_url} className="w-full h-full object-contain"/></div>
     <Field label="Mô tả"><Input value={f.caption} onChange={e=>setF({...f,caption:e.target.value})} placeholder="VD: Keo ColorMatch nền gạch trắng"/></Field>
     <div className="grid grid-cols-2 gap-2">
       <Field label="Mục đích"><Select value={f.muc_dich} onChange={e=>setF({...f,muc_dich:e.target.value})}>{MUC_DICH_LIB.map(m=><option key={m.v} value={m.v}>{m.ten}</option>)}</Select></Field>
@@ -5686,7 +5700,7 @@ function UserImportBtn(){
    15. MARKETING — HÀNG CHỜ NGHIỆM THU
 ============================================================ */
 function MktQueue(){
-  const { db, reviewPost, reviewCmtSeed, notify } = useApp();
+  const { db, reviewPost, reviewCmtSeed, bulkReview, notify } = useApp();
   const [tab, setTab] = useState('post');
   const [sel, setSel] = useState({}); // id->true để duyệt hàng loạt
   const [rejFor, setRejFor] = useState(null);
@@ -5724,7 +5738,9 @@ function MktQueue(){
   const curItems = (tab==='post'?postItems.map(x=>({...x,_t:'post'})):tab==='mine'?cmtMine.map(x=>({...x,_t:'cmt'})):cmtDao.map(x=>({...x,_t:'cmt'})));
   const selIds = Object.keys(sel).filter(k=>sel[k]);
   const bulkApprove = async () => {
-    for(const i of curItems.filter(i=>sel[i.id])) await approve(i);
+    const items = curItems.filter(i=>sel[i.id]).map(i=>({kind:i._t, id:i.id, result:ST.DAT}));
+    const r = await bulkReview(items); if(!r||!r.ok) return;
+    notify('✅ Đã duyệt '+r.n+' mục'+(r.dup?(' · '+r.dup+' bài trùng → Loại, không tính tiền'):'')+(r.errors.length?(' · '+r.errors.length+' lỗi'):''), r.dup||r.errors.length?'warn':undefined);
     setSel({});
   };
 
@@ -5793,7 +5809,7 @@ function QueueCard({item, checked, onCheck, onApprove, onReject, dupInfo}){
           {item._t==='cmt' && <span>💬 {item.so_cmt_seeding} cmt · 👍 {item.react}</span>}
         </div>
         {item.proofs && item.proofs.length>0 && <div className="flex gap-2 mt-2 flex-wrap">
-          {item.proofs.map(p=><a key={p.id} href={p.image_url} target="_blank"><img src={p.image_url} className="w-16 h-16 object-cover rounded-lg border"/></a>)}
+          {item.proofs.map(p=><a key={p.id} href={p.image_url} target="_blank"><img loading="lazy" decoding="async" src={p.image_url} className="w-16 h-16 object-cover rounded-lg border"/></a>)}
         </div>}
         <div className="flex items-center justify-between mt-3">
           <span className="text-xs text-slate-400">Nếu Đạt: <b className="text-emerald-600">{fmtVND(tien)}</b></span>
@@ -5811,18 +5827,20 @@ function QueueCard({item, checked, onCheck, onApprove, onReject, dupInfo}){
    16. MARKETING — BÁO CÁO THANH TOÁN (3 bảng tổng hợp)
 ============================================================ */
 function allRows(db){
-  const posts = db.post_seedings.map(p=>({
+  // Tra bằng Map (trước: 4 lần .find trên users/topics/groups cho MỖI dòng → O(N×M))
+  const U=new Map(db.users.map(u=>[u.id,u])), T=new Map(db.content_topics.map(t=>[t.id,t])), G=new Map(db.groups.map(g=>[g.id,g])), C=new Map(db.cmt_suggestions.map(c=>[c.id,c]));
+  const posts = db.post_seedings.map(p=>{ const t=T.get(p.topic_id); return {
     ...p, _t:'POST',
-    sales: db.users.find(u=>u.id===p.sales_id)?.ho_ten||'—',
-    chu_de: db.content_topics.find(t=>t.id===p.topic_id)?.chu_de||'—',
-    loai_bai: db.content_topics.find(t=>t.id===p.topic_id)?.loai_bai||'—',
-    group: db.groups.find(g=>g.id===p.group_id)?.ten_group||'—',
+    sales: U.get(p.sales_id)?.ho_ten||'—',
+    chu_de: t?.chu_de||'—',
+    loai_bai: t?.loai_bai||'—',
+    group: G.get(p.group_id)?.ten_group||'—',
     link: p.link_bai,
-  }));
+  }; });
   const cmts = db.cmt_seedings.map(c=>({
     ...c, _t: c.loai===CMT_LOAI.MINH_DANG?'CMT_MINE':'CMT_DAO',
-    sales: db.users.find(u=>u.id===c.sales_id)?.ho_ten||'—',
-    sug: db.cmt_suggestions.find(s=>s.id===c.suggestion_id)?.noi_dung_goi_y||'—',
+    sales: U.get(c.sales_id)?.ho_ten||'—',
+    sug: C.get(c.suggestion_id)?.noi_dung_goi_y||'—',
     link: c.post_link,
   }));
   return { posts, cmts };
@@ -5832,7 +5850,7 @@ function MktPayReport(){
   const [tab, setTab] = useState('post');
   const [from, setFrom] = useState(''); const [to, setTo] = useState('');
   const [fSales, setFSales] = useState(''); const [fSt, setFSt] = useState('');
-  const { posts, cmts } = allRows(db);
+  const { posts, cmts } = useMemo(()=>allRows(db), [db]);
   const flt = r => inRangeOrAll(r.created_at,from,to) && (!fSales||r.sales_id===fSales) && (!fSt||r.trang_thai===fSt);
   function inRangeOrAll(iso,f,t){ if(!f&&!t) return true; return inRange(iso,f,t); }
 
@@ -5872,7 +5890,7 @@ function MktPayReport(){
             <Td>{fmtDay(r.created_at)}</Td><Td>{r.sales}</Td>
             <Td>{r.link?<a href={r.link} target="_blank" className="text-blue-500 underline">link</a>:'—'}</Td>
             <Td className="max-w-[220px] truncate">{r.sug}</Td><Td r>{r.so_cmt_seeding}</Td>
-            <Td>{(r.proofs||[]).length? <span className="flex gap-1">{r.proofs.slice(0,3).map(p=><a key={p.id} href={p.image_url} target="_blank"><img src={p.image_url} className="w-8 h-8 object-cover rounded"/></a>)}</span> : '—'}</Td>
+            <Td>{(r.proofs||[]).length? <span className="flex gap-1">{r.proofs.slice(0,3).map(p=><a key={p.id} href={p.image_url} target="_blank"><img loading="lazy" decoding="async" src={p.image_url} className="w-8 h-8 object-cover rounded"/></a>)}</span> : '—'}</Td>
             <Td><Badge st={r.trang_thai}/></Td><Td r><b>{r.thanh_tien?fmtVND(r.thanh_tien):'—'}</b></Td>
           </tr>)}
         </tbody>
@@ -6089,7 +6107,25 @@ function AdminPricing(){
       </div>
       <Btn variant="brand" onClick={save}>Lưu đơn giá</Btn>
     </div>
+    <MigrateProofsCard/>
   </div>;
+}
+// Chuyển ảnh bằng chứng CMT cũ (base64 trong db) sang kho R2 — chạy theo lô tới khi hết
+function MigrateProofsCard(){
+  const { db, migrateProofs, notify } = useApp();
+  const [busy,setBusy]=useState(false); const [log,setLog]=useState('');
+  const conB64 = useMemo(()=>db.cmt_seedings.reduce((n,c)=>n+(c.proofs||[]).filter(p=>String(p.image_url||'').startsWith('data:')).length,0), [db]);
+  const chay=async()=>{ setBusy(true); let tong=0;
+    for(let i=0;i<200;i++){ const r=await migrateProofs(); if(!r){ break; } tong+=r.done||0; setLog('Đã chuyển '+tong+' ảnh · còn '+r.remaining); if(!r.remaining||!r.done) break; }
+    setBusy(false); notify('Xong — đã chuyển '+tong+' ảnh sang kho R2'); };
+  return <Card>
+    <SectionTitle>🗜 Dọn kho dữ liệu — ảnh bằng chứng CMT</SectionTitle>
+    <div className="text-xs text-ink-muted mt-1 mb-3">Ảnh cũ đang nằm dạng base64 trong database, gửi kèm mọi lần tải dữ liệu nên app càng ngày càng chậm. Chuyển sang kho R2 thì database chỉ còn giữ đường dẫn. Chạy được nhiều lần, an toàn.</div>
+    <div className="flex items-center gap-3 flex-wrap">
+      <Btn variant="brand" onClick={chay} disabled={busy||conB64===0}>{busy?'Đang chuyển…':'Chuyển ảnh sang R2'}</Btn>
+      <span className="text-xs text-ink-muted">{conB64===0 ? '✓ Không còn ảnh base64 nào' : ('Đang có '+conB64+' ảnh base64')}{log?(' · '+log):''}</span>
+    </div>
+  </Card>;
 }
 
 /* ============================================================
@@ -6098,7 +6134,7 @@ function AdminPricing(){
 function AdminPayroll(){
   const { db, markPaid:apiMarkPaid, notify } = useApp();
   const [ky, setKy] = useState('');
-  const { posts, cmts } = allRows(db);
+  const { posts, cmts } = useMemo(()=>allRows(db), [db]);
   const all = [...posts, ...cmts];
   const kyList = [...new Set(all.filter(x=>x.trang_thai===ST.DAT||x.trang_thai===ST.DA_CHI).map(x=>x.ky_thanh_toan||kyOf(x.created_at)))].sort().reverse();
 
@@ -6184,14 +6220,14 @@ function EmbedMedia({url, className='w-full h-full', autoplay=false}){
   const yt=ytId(url); if(yt) return <iframe src={"https://www.youtube.com/embed/"+yt+"?rel=0&playsinline=1&modestbranding=1"+(autoplay?"&autoplay=1":"")} title="mẫu" className={className} allow="accelerometer; autoplay; encrypted-media; picture-in-picture; fullscreen" allowFullScreen frameBorder="0"/>;
   const dv=driveId(url); if(dv) return <iframe src={"https://drive.google.com/file/d/"+dv+"/preview"} title="mẫu" className={className} allow="autoplay; fullscreen" allowFullScreen frameBorder="0"/>;
   if(isAppMedia(url) || /\.(mp4|webm|mov|m4v)(\?|#|$)/i.test(url)) return <video src={url} controls autoPlay={autoplay} playsInline preload="metadata" className={className+" bg-black object-contain"}/>;
-  if(/\.(png|jpe?g|gif|webp)(\?|#|$)/i.test(url) || url.startsWith('data:image')) return <img src={url} className={className+" object-contain bg-slate-900"}/>;
+  if(/\.(png|jpe?g|gif|webp)(\?|#|$)/i.test(url) || url.startsWith('data:image')) return <img loading="lazy" decoding="async" src={url} className={className+" object-contain bg-slate-900"}/>;
   return <div className={className+" flex flex-col items-center justify-center bg-slate-900 text-white/70"}><span className="text-4xl">🔗</span><a href={url} target="_blank" className="text-xs underline mt-2">Mở link mẫu</a></div>;
 }
 // khung hình đại diện video mẫu để hiển thị trên thẻ cảnh (không tự phát)
 function SampleThumb({url}){
-  const yt=ytId(url); if(yt) return <img src={"https://img.youtube.com/vi/"+yt+"/hqdefault.jpg"} className="absolute inset-0 w-full h-full object-cover"/>;
+  const yt=ytId(url); if(yt) return <img loading="lazy" decoding="async" src={"https://img.youtube.com/vi/"+yt+"/hqdefault.jpg"} className="absolute inset-0 w-full h-full object-cover"/>;
   if(isAppMedia(url) || /\.(mp4|webm|mov|m4v)(\?|#|$)/i.test(url)) return <video src={isAppMedia(url)?url+"#t=0.1":url} muted playsInline preload="metadata" className="absolute inset-0 w-full h-full object-cover"/>;
-  if(/\.(png|jpe?g|gif|webp)(\?|#|$)/i.test(url) || (url||'').startsWith('data:image')) return <img src={url} className="absolute inset-0 w-full h-full object-cover"/>;
+  if(/\.(png|jpe?g|gif|webp)(\?|#|$)/i.test(url) || (url||'').startsWith('data:image')) return <img loading="lazy" decoding="async" src={url} className="absolute inset-0 w-full h-full object-cover"/>;
   return null;
 }
 // Nút + popup xem hướng dẫn (văn bản + video) theo khoá (post/cmt/filming)
@@ -6213,7 +6249,7 @@ const posterUrl = (m)=> (m.media_type!==MEDIA_TYPE.IMAGE && isAppMedia(m.media_u
 // Thumbnail nhỏ dùng lại nhiều nơi (ảnh / khung hình video / link)
 function MediaThumb({m, className='w-full h-full'}){
   const isImg = m.media_type===MEDIA_TYPE.IMAGE; const link = isDriveLink(m);
-  if(isImg && m.media_url && !link) return <img src={m.media_url} className={className+' object-cover'}/>;
+  if(isImg && m.media_url && !link) return <img loading="lazy" decoding="async" src={m.media_url} className={className+' object-cover'}/>;
   if(!isImg && m.media_url && !link) return <span className={className+' relative block'}><video src={posterUrl(m)} muted playsInline preload="metadata" className="w-full h-full object-cover"/><span className="absolute inset-0 flex items-center justify-center text-white text-xl drop-shadow pointer-events-none">▶</span></span>;
   return <span className={className+' flex flex-col items-center justify-center text-slate-400 text-[10px]'}><span className="text-xl">{link?'🔗':(isImg?'🖼️':'🎬')}</span><span>{link?'Link':(isImg?'Ảnh':'Video')}</span></span>;
 }
@@ -6228,7 +6264,7 @@ function MediaView({m, className='w-full h-full'}){
   const isImg = m.media_type===MEDIA_TYPE.IMAGE;
   const link = isDriveLink(m);
   if(link) return <div className={className+" flex flex-col items-center justify-center text-white/70 bg-slate-900"}><span className="text-5xl">🔗</span><a href={m.media_url} target="_blank" className="text-xs underline mt-2">Mở link Google Drive</a></div>;
-  if(isImg) return <img src={m.media_url} className={className+" object-contain bg-slate-900"}/>;
+  if(isImg) return <img loading="lazy" decoding="async" src={m.media_url} className={className+" object-contain bg-slate-900"}/>;
   return <video src={m.media_url} controls autoPlay muted loop playsInline preload="metadata" className={className+" bg-black object-contain"}/>;
 }
 // biểu tượng trực quan theo tên cảnh (gợi nhớ tốt hơn)
@@ -6570,7 +6606,7 @@ function FilmingDetailSales({project, template, onBack}){
           </div>
           {md.length>0 && <div className="flex gap-2 mt-2 flex-wrap">{md.map(m=>
             <button key={m.id} onClick={()=>setPreview(m)} className={"relative w-20 h-20 rounded-lg border overflow-hidden bg-slate-50 "+(m.dat_item===true?'border-emerald-400':m.dat_item===false?'border-rose-300 opacity-60':'border-slate-200')}>
-              {m.media_type===MEDIA_TYPE.IMAGE && !isDriveLink(m) ? <img src={m.media_url} className="w-full h-full object-cover"/>
+              {m.media_type===MEDIA_TYPE.IMAGE && !isDriveLink(m) ? <img loading="lazy" decoding="async" src={m.media_url} className="w-full h-full object-cover"/>
                 : !isDriveLink(m) ? <video src={m.media_url} muted preload="metadata" className="w-full h-full object-cover"/>
                 : <span className="w-full h-full flex items-center justify-center text-xl">🔗</span>}
               {m.dat_item===true&&(()=>{ const L=filmLevelOf(filmSrcLevel(m)); return <span className={"absolute top-0.5 right-0.5 text-white text-[9px] px-1 rounded-full "+(filmSrcLevel(m)===1?'bg-amber-500':filmSrcLevel(m)===2?'bg-sky-500':'bg-emerald-500')}>{L?L.ten:'✓'}</span>; })()}
@@ -6606,7 +6642,7 @@ function MktFilming(){
 }
 function MediaThumbMini({r}){
   const m=r.up;
-  if(m.media_type===MEDIA_TYPE.IMAGE && !isDriveLink(m)) return <img src={m.media_url} className="w-full h-full object-cover"/>;
+  if(m.media_type===MEDIA_TYPE.IMAGE && !isDriveLink(m)) return <img loading="lazy" decoding="async" src={m.media_url} className="w-full h-full object-cover"/>;
   if(!isDriveLink(m)) return <video src={m.media_url} muted preload="metadata" className="w-full h-full object-cover"/>;
   return <span className="w-full h-full flex items-center justify-center text-lg">🔗</span>;
 }
@@ -6865,7 +6901,7 @@ function FilmReview({project, template, onBack}){
               {md.map(m=>{ const st=rate[m.id]; const L=filmLevelOf(st);
                 return <div key={m.id} className={"w-28 rounded-lg border overflow-hidden "+(st>=1?'border-emerald-400 ring-1 ring-emerald-200':st===0?'border-rose-300 opacity-70':'border-slate-200')}>
                   <button onClick={()=>setPreview(m)} className="block w-full h-16 bg-slate-100 relative">
-                    {m.media_type===MEDIA_TYPE.IMAGE && !isDriveLink(m) ? <img src={m.media_url} className="w-full h-full object-cover"/>
+                    {m.media_type===MEDIA_TYPE.IMAGE && !isDriveLink(m) ? <img loading="lazy" decoding="async" src={m.media_url} className="w-full h-full object-cover"/>
                       : (!isDriveLink(m)) ? <video src={m.media_url} muted preload="metadata" className="w-full h-full object-cover"/>
                       : <span className="absolute inset-0 flex items-center justify-center text-2xl">🔗</span>}
                     {L&&<span className={"absolute top-0.5 right-0.5 text-white text-[9px] px-1 rounded-full "+(st===1?'bg-amber-500':st===2?'bg-sky-500':'bg-emerald-500')}>{L.ten}</span>}
