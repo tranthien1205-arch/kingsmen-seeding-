@@ -33,7 +33,7 @@ const ffmpegOk = (() => { const r = spawnSync("ffmpeg", ["-version"], { encoding
 if (!ffmpegOk) console.error("⚠ Chưa có ffmpeg trong PATH — cài: winget install Gyan.FFmpeg rồi mở lại cửa sổ này. Máy vẫn ghép nhưng không dựng được.");
 
 export async function goiApp(duong, opt = {}) {
-  const r = await fetch(APP.url.replace(/\/+$/, "") + duong, { ...opt, headers: { "Content-Type": "application/json", "X-Hub-Key": APP.khoa, ...(opt.headers || {}) } });
+  let r; try { r = await fetch(APP.url.replace(/\/+$/, "") + duong, { ...opt, headers: { "Content-Type": "application/json", "X-Hub-Key": APP.khoa, ...(opt.headers || {}) } }); } catch (e) { return { ok: false, status: 0, d: { error: "không nối được app: " + String(e.message || e).slice(0, 80) }, headers: new Headers() }; }
   const ct = r.headers.get("content-type") || ""; let d = null;
   if (ct.includes("json")) { try { d = await r.json(); } catch {} } else d = Buffer.from(await r.arrayBuffer());
   return { ok: r.ok, status: r.status, d, headers: r.headers };
@@ -74,7 +74,8 @@ if (args[0] === "xuat-tap-mau" || args[0] === "phien-ban") {
   const kq = await mod.default({ app: APP, goiApp, lenh: { viec: "danh_gia", tham_so: args[0] === "xuat-tap-mau" ? { xuat: true, tinh_nang: args[1] || "soan_nhap_agent" } : { model_id: args[1], tinh_nang: args[2] || "soan_nhap_agent" } }, dir: join(DIR, "out"), log, may: os.hostname() });
   log(kq.ok ? "✓" : "✗", kq.msg); process.exit(kq.ok ? 0 : 1);
 }
-const ping = await goiApp("/hub/ping"); if (!ping.ok) { console.error("Không nối được app (HTTP " + ping.status + "): " + ((ping.d && ping.d.error) || "")); process.exit(1); }
+// app chưa lên (dev server khởi động lại, mất mạng) → chờ 30 giây rồi thử lại, không thoát
+let ping = await goiApp("/hub/ping"); while (!ping.ok) { log("Chưa nối được app (" + (ping.status || "mạng") + "): " + ((ping.d && ping.d.error) || "") + " — thử lại sau 30 giây"); await new Promise((x) => setTimeout(x, 30000)); ping = await goiApp("/hub/ping"); }
 log("Máy dựng '" + APP.may_ten + "' (" + os.hostname() + ") đã nối " + APP.url + " · app v" + ping.d.ban + " · ffmpeg " + (ffmpegOk ? "có" : "KHÔNG") + " · AI nhìn " + (coTransformers ? "có" : "chưa (npm install)") + (gpu ? " · GPU " + gpu : ""));
 await nhipTim();
 if (args.includes("--mot-lan")) { const n = await motLuot(); log("xong", n, "lệnh"); process.exit(0); }

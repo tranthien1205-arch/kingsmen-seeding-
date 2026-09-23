@@ -11,7 +11,10 @@ Máy con rút gọn: nhận lệnh **dựng video nháp** từ app cho tài kho�
 ## Bật phần AI (tuỳ chọn — ADR-009)
 - Mô hình nhìn mở (chọn cảnh, huấn luyện đầu học): trong thư mục máy con chạy `npm install` (tải @huggingface/transformers; CLIP ~150 MB tải lần đầu). Máy sẽ khai `mo_hinh` + `huan_luyen` với app. Có GPU NVIDIA thì nhanh hơn, không bắt buộc.
 - Mô hình ngôn ngữ mở chạy bóng: cài Ollama (https://ollama.com) rồi `ollama pull qwen2.5:7b`. Máy tự nhận ra Ollama đang chạy.
-- Mã các phần này (`nhin.mjs`, `mo-hinh.mjs`, `huan-luyen.mjs`) cũng phát từ app, máy chỉ giữ bản cache theo hash.
+- Giọng đọc mở (Piper, ADR-009c): tự tải `piper` + giọng `vi_VN-vais1000-medium` vào thư mục `piper/` lần đầu dựng khi tính năng tts ở mức BÓNG/MỞ.
+- Lọc footage (Whisper + CLIP): cần `npm install` (whisper-base tải lần đầu ~150 MB); bấm 🤖 Máy lọc footage ở thẻ video.
+- LoRA ngôn ngữ: `node may-dung.mjs xuat-tap-mau soan_nhap_agent` → đưa `.train.jsonl` + `huan-luyen-ngon-ngu.py` lên GPU thuê → `ollama create kingsmen-qwen:v1` → `node may-dung.mjs phien-ban kingsmen-qwen:v1` → Trưởng MKT duyệt trong app.
+- Mã các phần này cũng phát từ app, máy chỉ giữ bản cache theo hash.
 
 ## Dùng
 - Ở thẻ video đã duyệt › tab **Sản xuất** › **🎬 Dựng trên máy…** chọn máy của bạn. Máy tải footage/ảnh của thẻ, đọc lời bình bằng giọng Google (nếu Admin đã cắm khoá), trộn nhạc nền, in phụ đề, xuất **bản nháp** và **gói CapCut** (từng cảnh + giọng + SRT + nhạc) về thẻ.
