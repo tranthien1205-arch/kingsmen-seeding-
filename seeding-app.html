@@ -973,6 +973,7 @@ function AppProvider({children}){
       aiSinhKichBan: async o=>({ok:false, thieu_key:true, loi:'Chế độ offline không gọi AI được'}),
       aiSinhKichBanGemini: async o=>({ok:false, loi:'Chế độ offline không gọi AI được'}),
       baoAIUsage: async ()=>{}, layAIUsage: async ()=>({tong_hop:null, rows:[], thangs:[]}),
+      chayThuDoLuong: async ()=>({ok:false, loi:'Chế độ offline không gọi API nền tảng được'}),
       luuKeHoachThang: async (thang,o)=>{ S.ke_hoach_thang ||= []; const i=S.ke_hoach_thang.findIndex(k=>k.thang===thang); const rec={ thang, dinh_huong:o.dinh_huong||'', chi_tieu:o.chi_tieu||{tong_bai:0,theo_pillar:{},theo_dinh_dang:{},theo_kenh:{}}, nguon:o.nguon||'tay', updated_at:now(), updated_by_name:meRef.current.ho_ten };
         if(i>=0) S.ke_hoach_thang[i]=rec; else S.ke_hoach_thang.unshift(rec); commit(); return {ok:true}; },
       chuyenDinhDang: async (id, dd)=>{ const src=(S.scripts||[]).find(x=>x.id===id); if(!src) return {ok:false,msg:'Không tìm thấy'}; if(dd===ddOf(src)) return {ok:false,msg:'Đã là định dạng này rồi'};
@@ -1097,6 +1098,7 @@ function AppProvider({children}){
     // ADR-005: lượt gọi AI từ trình duyệt (Gemini key cá nhân) báo về để tính chi phí; tổng hợp theo tháng
     baoAIUsage: o => call('/ai/usage',{method:'POST',body:o}).catch(()=>{}),
     luuKeHoachThang: async (thang,o) => { try { const r=await call('/kehoach-thang/'+thang,{method:'PUT',body:o}); if(r&&r.db) setDb(r.db); return {ok:true}; } catch(e){ return {ok:false,msg:e.message}; } },
+    chayThuDoLuong: async () => { try { const r=await call('/doluong/chay-thu',{method:'POST',body:{}}); if(r&&r.db) setDb(r.db); return r; } catch(e){ return {ok:false,loi:e.message}; } },
     layAIUsage: thang => call('/ai/usage'+(thang?('?thang='+encodeURIComponent(thang)):'')),
     audit: ()=>{},
     updateProfile: patch => mut('/me', {method:'PATCH', body:patch}),
@@ -4532,6 +4534,12 @@ const CONFIG_SCHEMA = {
     {k:'canh_bao_tre', loai:'so', label:'Cảnh báo trễ hạn trước (ngày)', hint:'0 = chỉ báo khi đã quá hạn'} ]},
   air: { ten:'Đăng bài', truong:[
     {k:'checklist', loai:'checklist', label:'Checklist trước khi đăng', hint:'Mục "bắt buộc" phải tick hết mới cho đánh dấu đã đăng'} ]},
+  // ADR-008
+  doluong: { ten:'Đo lường sau air', truong:[
+    {k:'agent_bat', loai:'bat', label:'Bật Agent đo lường tự chạy trong app',
+      hint:'Mỗi ngày 1 lượt: gọi Facebook Graph Insights (kênh có secret TOKEN_<mã API>) và YouTube Data API (YOUTUBE_API_KEY) cho bài ĐÃ ĐĂNG có link. Ghi vào Kết quả mức "Không quy đơn", nguồn API kênh. Không cào web.'},
+    {k:'agent_gio', loai:'so', label:'Đo lúc mấy giờ (giờ Việt Nam)', hint:'0–23. Nên đo sáng sớm để số của hôm qua đã chốt.'},
+    {k:'so_ngay_do', loai:'so', label:'Đo bài đăng trong bao nhiêu ngày gần nhất', hint:'Mặc định 30. Bài cũ hơn không đo nữa (hết vòng đời).'} ]},
   trend: { ten:'Trend', truong:[
     {k:'checklist', loai:'checklist', label:'Checklist đánh giá trend', hint:'Cố ý KHÔNG nên thêm mục dự đoán viral — không ai đoán được'},
     {k:'tu_dong_duyet', loai:'bat', label:'Cho AI tự duyệt trend',
@@ -5520,6 +5528,7 @@ function KenhManager(){
           {cap && cap.duoc && k.tu_dong_dang && <div className="text-[11px] text-ink-muted mt-1">
             Mã API: <code>{k.api_ma||'—'}</code> · ID đối tượng: <code>{k.api_object_id||'—'}</code> · Secret cần có: <code>TOKEN_{k.api_ma||'?'}</code>
           </div>}
+          {/FANPAGE|FACEBOOK/i.test(k.loai||'') && <div className="text-[11px] mt-1"><span className={k.co_token?'text-emerald-700':'text-ink-muted'}>{k.co_token?'● Đo lường sau air: có token':'○ Đo lường sau air: cần secret TOKEN_'+(k.api_ma||'<mã API>')+' + Page ID'}</span></div>}
           <div className="flex justify-end gap-2 mt-2 pt-2 border-t border-line/60">
             <button onClick={()=>setEdit(k)} className={LINK.edit}>Sửa</button>
             <button onClick={()=>{ if(confirm('Xoá kênh "'+k.ten+'"?')) deleteKenh(k.id).then(ok=>ok&&notify('Đã xoá')); }} className={LINK.danger}>Xoá</button>
@@ -5607,8 +5616,8 @@ function KetQua(){
         </div>}
     <div className="text-[10px] text-slate-400 mt-1.5 leading-snug">{note}</div>
   </div>; };
-  return <div className="space-y-4">
-    <PageHeader title={<>📈 Kết quả</>} right={<><Btn variant="ghost" onClick={()=>setImp(true)}>⬆ Import đối soát</Btn> <Btn variant="brand" onClick={()=>setForm({muc_tin_cay:'TRUC_TIEP',nguon:'TIKTOK_SHOP'})}>＋ Nhập kết quả</Btn></>}/>
+  // ADR-008: bọc ModuleShell để có nút ⚙️ Cấu hình (mục "Đo lường sau air")
+  return <ModuleShell moduleKey="doluong" title={<>📈 Kết quả</>} right={<><Btn variant="ghost" onClick={()=>setImp(true)}>⬆ Import đối soát</Btn> <Btn variant="brand" onClick={()=>setForm({muc_tin_cay:'TRUC_TIEP',nguon:'TIKTOK_SHOP'})}>＋ Nhập kết quả</Btn></>}>
 
     <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3">
       <div className="text-xs font-semibold text-amber-800">⚠️ 3 mức tin cậy KHÔNG được cộng dồn</div>
@@ -5629,6 +5638,7 @@ function KetQua(){
       <MucCard m="KHONG_QUY_DON" note="Chỉ số hiển thị/tương tác. KHÔNG suy ra doanh thu."/>
     </div>
 
+    <AgentDoLuong/>
     <Tabs size="sm" active={tab} onChange={setTab} tabs={[{key:'tong_hop',label:'Bản ghi',count:KQ.filter(inKy).length},{key:'hang_doi',label:'Hàng đợi gán tay',count:cho.length}]}/>
 
     {tab==='tong_hop' ? (KQ.filter(inKy).length===0 ? <Empty>Chưa có kết quả nào.</Empty> :
@@ -5688,6 +5698,52 @@ function KetQua(){
           </button>)}
         </div>}
     </Modal>}
+  </ModuleShell>;
+}
+// ADR-008 — bảng điều khiển agent đo lường: trạng thái, kênh sẵn sàng, chạy thử, nhật ký, đường n8n
+function AgentDoLuong(){
+  const { db, chayThuDoLuong, notify, me } = useApp();
+  const [mo,setMo]=useState(false); const [busy,setBusy]=useState(false); const [kq,setKq]=useState(null);
+  const cfg={agent_bat:false, agent_gio:7, so_ngay_do:30, ...((db.module_config||{}).doluong||{})};
+  const kenhFB=(db.kenh||[]).filter(k=>k.active!==false && /FANPAGE|FACEBOOK/i.test(k.loai||''));
+  const coToken=kenhFB.filter(k=>k.co_token);
+  const logs=(db.agent_log||[]).filter(l=>/^DO_LUONG/.test(l.loai||'')).slice(0,5);
+  const daDang=(db.air_posts||[]).filter(a=>a.trang_thai==='DA_DANG' && (a.link_bai||'').trim()).length;
+  const chayThu=async()=>{ setBusy(true); setKq(null); const r=await chayThuDoLuong(); setBusy(false); setKq(r);
+    if(r&&r.ok) notify('Đã đo xong — '+(r.tom_tat||'')); else notify((r&&(r.bo_qua||r.tom_tat||r.loi))||'Không chạy được','err'); };
+  const base=(typeof location!=='undefined'?location.origin:'')+'/api/ketqua/ingest';
+  return <div className="bg-white rounded-2xl border border-line shadow-card p-4">
+    <button onClick={()=>setMo(!mo)} className="w-full flex items-center justify-between text-left">
+      <div className="min-w-0">
+        <div className="text-sm font-semibold text-ink">📡 Agent đo lường sau air</div>
+        <div className="text-[11px] text-ink-muted mt-0.5">
+          {cfg.agent_bat?('Đang BẬT — đo '+cfg.agent_gio+'h mỗi ngày, bài trong '+cfg.so_ngay_do+' ngày'):'Đang tắt (bật trong ⚙️ Cấu hình › Đo lường sau air)'} · {coToken.length}/{kenhFB.length} kênh Facebook có token · {db.youtube_san_sang?'có YouTube':'chưa có YouTube key'} · {daDang} bài đã đăng có link
+        </div>
+      </div>
+      <span className="text-slate-400 shrink-0 ml-2">{mo?'▲':'▼'}</span>
+    </button>
+    {mo && <div className="mt-3 space-y-3 border-t border-line pt-3">
+      <div className="rounded-xl border border-brand/40 bg-brand-bg p-3 space-y-2">
+        <div className="text-sm font-semibold text-ink">Cách 1 — Agent trong app gọi API nền tảng</div>
+        <div className="text-[11px] text-ink-soft leading-relaxed">Facebook: cần secret Worker <code>TOKEN_&lt;mã API kênh&gt;</code> (token Page, cùng quy ước đăng tự động) và <b>ID đối tượng</b> = Page ID trong Kênh. YouTube: cần <code>YOUTUBE_API_KEY</code>. Số ghi vào mức <b>Không quy đơn</b>, nguồn API kênh, mỗi ngày một dòng là phần tăng so với hôm trước.</div>
+        <div className="flex flex-wrap gap-3 text-[11px]">
+          {kenhFB.map(k=><span key={k.id} className={k.co_token?'text-emerald-700 font-semibold':'text-amber-700'}>{k.co_token?'● ':'○ '}{k.ten}{k.co_token?'':' — thiếu TOKEN_'+(k.api_ma||'?')}</span>)}
+          {kenhFB.length===0 && <span className="text-ink-muted">Chưa có kênh Facebook nào</span>}
+        </div>
+        {laStaffFE(me) && <Btn variant="brand" onClick={chayThu} disabled={busy}>{busy?'Đang đo…':'▶ Đo thử ngay'}</Btn>}
+        {kq && <div className={"rounded-xl p-2.5 text-[11px] "+(kq.ok?'bg-white border border-line text-ink-soft':'bg-rose-50 border border-rose-200 text-rose-700')}>
+          <b>{kq.ok?'Xong:':'Không chạy được:'}</b> {kq.tom_tat||kq.bo_qua||kq.loi||'—'}
+          {Array.isArray(kq.chi_tiet)&&kq.chi_tiet.length>0 && <div className="mt-1 space-y-0.5">{kq.chi_tiet.slice(0,8).map((c,i)=><div key={i} className="text-ink-muted">· {c.bai}: {c.ly_do||(c.tich_luy?(c.tich_luy.xem+' xem · '+c.tich_luy.tt+' tương tác (+'+c.tang.xem+' hôm nay)'):'')}</div>)}</div>}
+        </div>}
+        {logs.length>0 && <div className="text-[11px] text-ink-muted"><div className="font-semibold mb-0.5">Các lượt gần đây</div>
+          {logs.map(l=><div key={l.id} className="flex gap-2 py-0.5 border-t border-line"><span className="shrink-0">{l.ok?'✓':'✗'}</span><span className="shrink-0 text-slate-400">{String(l.at||'').slice(5,16).replace('T',' ')}</span><span className="shrink-0 text-slate-400">{l.loai==='DO_LUONG_THU'?'(thử)':l.loai==='DO_LUONG_NGOAI'?'(n8n)':''}</span><span className="min-w-0 flex-1">{l.tom_tat}</span></div>)}
+        </div>}
+      </div>
+      <div className="rounded-xl border border-line p-3 space-y-1.5">
+        <div className="text-sm font-semibold text-ink">Cách 2 — n8n / agent ngoài đẩy số về (TikTok, Threads, Zalo…)</div>
+        <div className="text-[11px] text-ink-soft leading-relaxed">Nền tảng không có API chính thức: để n8n hoặc agent riêng lấy số rồi <code>POST {base}</code> với header <code>X-App-Token: &lt;N8N_TOKEN&gt;</code>. Body: <code>{'{"items":[{"link":"<link đã đăng>","luot_xem":1200,"luot_tuong_tac":80,"luot_click":10,"nen":"TIKTOK"}]}'}</code> — số là <b>tích luỹ</b>, app tự tính phần tăng theo ngày. App không cào web hộ.</div>
+      </div>
+    </div>}
   </div>;
 }
 function KetQuaForm({init,onClose}){

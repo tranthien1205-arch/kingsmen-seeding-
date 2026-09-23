@@ -684,6 +684,8 @@ const CONFIG_MAC_DINH = {
   hoc:     { min_mau:5 },
   dash:    { min_mau:5, lech_pillar:15 },
   ketqua:  { nguon_mac_dinh:{ TIKTOK_SHOP:'TRUC_TIEP', SHOPEE:'GIAN_TIEP', API_KENH:'KHONG_QUY_DON', NHAP_TAY:'KHONG_QUY_DON' } },
+  // ADR-008: agent đo lường sau air — mặc định TẮT; đo bài DA_DANG có link trong so_ngay_do ngày gần nhất.
+  doluong: { agent_bat:false, agent_gio:7, so_ngay_do:30 },
   lich:    { timeout_phut:60, max_lan_thu:3 },
 };
 async function docCauHinh(env){
@@ -1037,6 +1039,104 @@ async function layYouTubeVN(env){
   return { ds:(j.items||[]).filter(v=>v&&v.snippet&&v.snippet.title).map(v=>({
     ten:String(v.snippet.title).trim(), nguon:'YOUTUBE',
     link:'https://www.youtube.com/watch?v='+v.id, mo_ta:String(v.snippet.description||'').slice(0,500) })) };
+}
+// ===== ADR-008 — ĐO LƯỜNG SAU AIR qua API nền tảng =====
+// Không cào web. Facebook: Graph API với token Page (secret TOKEN_<api_ma>, cùng quy ước đăng tự động);
+// YouTube: Data API v3 (YOUTUBE_API_KEY, chỉ số công khai). Nền tảng khác → đi đường n8n/agent ngoài (POST /ketqua/ingest).
+const GRAPH_VER='v21.0';
+// Nhận diện bài từ link đã đăng. Trả {nen, id, loai} hoặc null (không đọc được).
+function layIdBaiTuLink(link){
+  const s=String(link||'').trim(); if(!s) return null;
+  let u; try{ u=new URL(/^https?:\/\//i.test(s)?s:'https://'+s); }catch(e){ return null; }
+  const host=u.hostname.replace(/^www\.|^m\.|^web\./,'').toLowerCase(); const p=u.pathname; const q=u.searchParams;
+  if(/(^|\.)youtube\.com$/.test(host)||host==='youtu.be'){
+    const id=host==='youtu.be'?p.split('/')[1]:(q.get('v')||(p.match(/^\/(shorts|live|embed)\/([\w-]{6,})/)||[])[2]);
+    return id?{nen:'YOUTUBE', id, loai:'video'}:null;
+  }
+  if(/(^|\.)facebook\.com$/.test(host)||host==='fb.watch'||host==='fb.com'){
+    let m;
+    if((m=p.match(/\/(videos|reel|reels)\/(\d+)/))) return {nen:'FACEBOOK', id:m[2], loai:'video'};
+    if((m=p.match(/\/posts\/(pfbid[\w]+|\d+)/))) return {nen:'FACEBOOK', id:m[1], loai:'post'};
+    if((m=p.match(/\/photos\/[^/]*\/(\d+)/))) return {nen:'FACEBOOK', id:m[1], loai:'post'};
+    if(q.get('story_fbid')) return {nen:'FACEBOOK', id:q.get('story_fbid'), loai:'post'};
+    if(q.get('v')) return {nen:'FACEBOOK', id:q.get('v'), loai:'video'};
+    if(q.get('fbid')) return {nen:'FACEBOOK', id:q.get('fbid'), loai:'post'};
+    if(host==='fb.watch' && p.length>1) return {nen:'FACEBOOK', id:p.slice(1).replace(/\/$/,''), loai:'video'};
+    return null; // link /share/... hoặc link Page — Graph không suy ra bài được
+  }
+  return null;
+}
+function soAn(v){ const n=Number(v); return Number.isFinite(n)&&n>0?Math.round(n):0; }
+// Đọc chỉ số Facebook. Trả {ok, xem, tt, click, raw} — KHÔNG đoán khi API lỗi.
+async function doFacebook(env, kenh, bai){
+  const token=layToken(env, kenh); if(!token) return {ok:false, loi:'Chưa cắm secret TOKEN_'+(kenh.api_ma||'?')+' cho kênh '+kenh.ten};
+  const pageId=String(kenh.api_object_id||'').trim();
+  // bài post số → cần dạng {page_id}_{post_id}; pfbid và video dùng thẳng
+  const obj=(bai.loai==='post' && /^\d+$/.test(bai.id) && pageId && !bai.id.includes('_')) ? pageId+'_'+bai.id : bai.id;
+  const fields=bai.loai==='video'
+    ? 'video_insights.metric(total_video_impressions,total_video_views){name,values},likes.summary(true).limit(0),comments.summary(true).limit(0)'
+    : 'insights.metric(post_impressions,post_engaged_users,post_clicks){name,values},likes.summary(true).limit(0),comments.summary(true).limit(0),shares';
+  const url='https://graph.facebook.com/'+GRAPH_VER+'/'+encodeURIComponent(obj)+'?fields='+encodeURIComponent(fields)+'&access_token='+encodeURIComponent(token);
+  let r, j; try{ r=await fetch(url); j=await r.json().catch(()=>({})); }catch(e){ return {ok:false, loi:'Không gọi được Graph API: '+e.message}; }
+  if(!r.ok||j.error) return {ok:false, loi:'Graph API: '+((j.error&&j.error.message)||('HTTP '+r.status))};
+  const m={}; ((j.insights||j.video_insights||{}).data||[]).forEach(x=>{ const v=(x.values||[])[0]; m[x.name]=typeof (v&&v.value)==='object'?Object.values(v.value).reduce((s,n)=>s+(Number(n)||0),0):Number(v&&v.value)||0; });
+  const likes=soAn(j.likes&&j.likes.summary&&j.likes.summary.total_count), cmts=soAn(j.comments&&j.comments.summary&&j.comments.summary.total_count), shares=soAn(j.shares&&j.shares.count);
+  const xem=soAn(m.post_impressions!=null?m.post_impressions:(m.total_video_views!=null?m.total_video_views:m.total_video_impressions));
+  const tt=m.post_engaged_users!=null?soAn(m.post_engaged_users):(likes+cmts+shares);
+  return {ok:true, xem, tt, click:soAn(m.post_clicks), obj, raw:{...m, likes, comments:cmts, shares}};
+}
+async function doYouTube(env, bai){
+  const key=env.YOUTUBE_API_KEY; if(!key) return {ok:false, loi:'Chưa cắm YOUTUBE_API_KEY'};
+  let r, j; try{ r=await fetch('https://www.googleapis.com/youtube/v3/videos?part=statistics&id='+encodeURIComponent(bai.id)+'&key='+encodeURIComponent(key)); j=await r.json().catch(()=>({})); }catch(e){ return {ok:false, loi:'Không gọi được YouTube API: '+e.message}; }
+  if(!r.ok) return {ok:false, loi:'YouTube API: HTTP '+r.status};
+  const st=((j.items||[])[0]||{}).statistics; if(!st) return {ok:false, loi:'YouTube không thấy video '+bai.id};
+  return {ok:true, xem:soAn(st.viewCount), tt:soAn(st.likeCount)+soAn(st.commentCount), click:0, obj:bai.id, raw:st};
+}
+// Ghi 1 dòng/ngày cho bài: số API là TÍCH LUỸ → lưu PHẦN TĂNG so với lần đo trước (để tổng các dòng = tích luỹ, dashboard cộng dồn không bị phình).
+// Lần đo đầu ghi cả tích luỹ. Đo lại trong ngày → thay dòng hôm nay.
+async function ghiKetQuaAPI(env, ap, so, ky, meta){
+  const truoc=(await env.DB.prepare(`SELECT ghi_chu FROM ket_qua WHERE air_post_id=? AND nguon='API_KENH' AND ky<? ORDER BY ky DESC LIMIT 1`).bind(ap.id, ky).first());
+  let tl={xem:0,tt:0,click:0}; try{ const g=JSON.parse((truoc&&truoc.ghi_chu)||'{}'); if(g&&g.tich_luy) tl={xem:soAn(g.tich_luy.xem),tt:soAn(g.tich_luy.tt),click:soAn(g.tich_luy.click)}; }catch(e){}
+  const d={ xem:Math.max(0,so.xem-tl.xem), tt:Math.max(0,so.tt-tl.tt), click:Math.max(0,so.click-tl.click) };
+  await env.DB.prepare(`DELETE FROM ket_qua WHERE air_post_id=? AND nguon='API_KENH' AND ky=?`).bind(ap.id, ky).run();
+  const ghi=JSON.stringify({ ...meta, tich_luy:{xem:so.xem,tt:so.tt,click:so.click} }).slice(0,2000);
+  const id=uid('kq');
+  await env.DB.prepare(`INSERT INTO ket_qua (id,air_post_id,muc_tin_cay,nguon,ky,doanh_thu,so_don,luot_xem,luot_tuong_tac,luot_click,ma_theo_doi,ghi_chu,created_at,created_by,created_by_name) VALUES (?,?,'KHONG_QUY_DON','API_KENH',?,0,0,?,?,?,?,?,?,?,?)`)
+    .bind(id, ap.id, ky, d.xem, d.tt, d.click, ap.ma_theo_doi||'', ghi, nowISO(), '', meta.boi||'Agent đo lường').run();
+  await dayGiaiDoan(env, null, await ciCuaAir(env, ap), 'DA_DO', 'agent đo lường có số');
+  return {id, tang:d};
+}
+// Agent chạy trong app: cron 15' gọi vào, tự chốt 1 lượt/ngày đúng giờ cấu hình. ep=true = chạy thử (ghi log loại riêng).
+async function chayAgentDoLuong(env, {ep=false}={}){
+  await ensureSchema(env);
+  const cfg={ ...CONFIG_MAC_DINH.doluong, ...((await docCauHinh(env)).doluong||{}) };
+  const hn=ngayVN();
+  if(!ep){
+    if(!cfg.agent_bat) return {bo_qua:'Agent đo lường đang tắt'};
+    const gio=Number(cfg.agent_gio); const gioChay=isFinite(gio)&&gio>=0&&gio<=23?gio:7;
+    if(gioVN()!==gioChay) return {bo_qua:'Chưa tới giờ'};
+    const daChay=await env.DB.prepare(`SELECT id FROM agent_log WHERE loai='DO_LUONG' AND ngay=? AND ok=1`).bind(hn).first();
+    if(daChay) return {bo_qua:'Hôm nay đã chạy rồi'};
+  }
+  const loai=ep?'DO_LUONG_THU':'DO_LUONG';
+  const soNgay=Math.max(1, Math.min(365, Number(cfg.so_ngay_do)||30));
+  const tu=new Date(Date.now()-soNgay*864e5).toISOString();
+  const bai=(await env.DB.prepare(`SELECT * FROM air_posts WHERE trang_thai='DA_DANG' AND COALESCE(link_bai,'')<>'' AND COALESCE(posted_at,updated_at,created_at)>=? ORDER BY posted_at DESC LIMIT 200`).bind(tu).all()).results||[];
+  const kenhMap={}; ((await env.DB.prepare(`SELECT * FROM kenh`).all()).results||[]).forEach(k=>kenhMap[k.id]=k);
+  const kq={da_do:0, bo_qua:0, loi:0, chi_tiet:[]};
+  for(const ap of bai){
+    const b=layIdBaiTuLink(ap.link_bai);
+    if(!b){ kq.bo_qua++; kq.chi_tiet.push({bai:ap.tieu_de, ly_do:'link không nhận diện được bài (nền tảng chưa có API → dùng n8n/agent ngoài)'}); continue; }
+    const kenh=kenhMap[ap.kenh_id]||{};
+    const r= b.nen==='FACEBOOK' ? await doFacebook(env, kenh, b) : await doYouTube(env, b);
+    if(!r.ok){ kq.loi++; kq.chi_tiet.push({bai:ap.tieu_de, ly_do:r.loi}); continue; }
+    const g=await ghiKetQuaAPI(env, ap, r, hn, {api:b.nen, obj:r.obj, raw:r.raw, boi:'Agent đo lường'});
+    kq.da_do++; kq.chi_tiet.push({bai:ap.tieu_de, api:b.nen, tich_luy:{xem:r.xem,tt:r.tt,click:r.click}, tang:g.tang});
+  }
+  const tom_tat='Đo '+kq.da_do+'/'+bai.length+' bài'+(kq.loi?(' · lỗi '+kq.loi):'')+(kq.bo_qua?(' · bỏ qua '+kq.bo_qua):'');
+  const ok=bai.length===0 || kq.da_do>0;
+  await ghiAgentLog(env,{loai, ok, tom_tat, chi_tiet:{so_bai:bai.length, ...kq, chi_tiet:kq.chi_tiet.slice(0,40)}});
+  return {ok, tom_tat, ...kq};
 }
 async function ghiAgentLog(env, o){
   try{ await env.DB.prepare(`INSERT INTO agent_log (id,at,loai,ngay,ok,tom_tat,chi_tiet) VALUES (?,?,?,?,?,?,?)`)
@@ -1516,7 +1616,7 @@ async function bootstrap(env, u){
   const pillars = pillarsR.map(r=>({ ...r, active:uBool(r.active), ty_trong:r.ty_trong==null?0:Number(r.ty_trong) }));
   const content_strategy = stratR || { okr:'', big_idea:'', purpose:'', audience:'', swot:'', brand_voice:'' };
   const frameworks = fwR.map(r=>({ ...r, active:uBool(r.active) }));
-  const kenh = kenhR.map(r=>({ ...r, active:uBool(r.active), tu_dong_dang:uBool(r.tu_dong_dang) }));
+  const kenh = kenhR.map(r=>({ ...r, active:uBool(r.active), tu_dong_dang:uBool(r.tu_dong_dang), co_token:!!layToken(env,r) }));
   const content_items = ciR.map(r=>({ ...r, pic: JSON.parse(r.pic||'{}'), chi_tiet: JSON.parse(r.chi_tiet||'{}'), links: JSON.parse(r.links||'{}') }));
   // ADR-006: 12 tháng kế hoạch gần nhất (chỉ tiêu đã parse)
   const ke_hoach_thang = canContent ? (await all(`SELECT * FROM ke_hoach_thang ORDER BY thang DESC LIMIT 12`)).map(r=>({ ...r, chi_tieu: lamSachChiTieu(docChiTiet(r.chi_tieu)) })) : [];
@@ -1698,6 +1798,26 @@ async function handleApi(request, env){
   // MÁY TỰ GOM TREND đẩy vào đây (n8n chạy cron, lấy Google Trends / YouTube VN…).
   // Không phải người dùng nên KHÔNG dùng phiên đăng nhập — xác thực bằng secret dùng chung.
   // Chưa cấu hình N8N_TOKEN thì TỪ CHỐI, tuyệt đối không mở cửa không khoá.
+  // ADR-008: n8n / agent ngoài đẩy số đo về (nền tảng không có API chính thức: TikTok, Threads…). Chỉ số tích luỹ → app tự tính phần tăng.
+  if(path==='/ketqua/ingest' && method==='POST'){
+    if(!env.N8N_TOKEN) return json({error:'Chưa cấu hình N8N_TOKEN'},503);
+    if((request.headers.get('X-App-Token')||'')!==env.N8N_TOKEN) return json({error:'Sai token'},401);
+    await ensureSchema(env);
+    const ds=Array.isArray(body.items)?body.items:(Array.isArray(body)?body:[]);
+    if(!ds.length) return json({error:'Không có items nào trong body'},400);
+    const hn=ngayVN(); let ghi=0; const loi=[];
+    for(const o of ds.slice(0,200)){
+      let ap=null;
+      if(o.air_post_id) ap=await env.DB.prepare(`SELECT * FROM air_posts WHERE id=?`).bind(String(o.air_post_id)).first();
+      else if(o.link) ap=await env.DB.prepare(`SELECT * FROM air_posts WHERE link_bai=? ORDER BY posted_at DESC LIMIT 1`).bind(String(o.link).trim()).first();
+      if(!ap){ loi.push({item:o.air_post_id||o.link||'?', ly_do:'không khớp bài đăng nào'}); continue; }
+      const ky=/^\d{4}-\d{2}-\d{2}$/.test(o.ky||'')?o.ky:hn;
+      await ghiKetQuaAPI(env, ap, {xem:soAn(o.luot_xem), tt:soAn(o.luot_tuong_tac), click:soAn(o.luot_click)}, ky, {api:String(o.nen||'NGOAI').slice(0,30), boi:String(o.boi||'n8n').slice(0,60), raw:o.raw&&typeof o.raw==='object'?o.raw:undefined});
+      ghi++;
+    }
+    await ghiAgentLog(env,{loai:'DO_LUONG_NGOAI', ok:ghi>0, tom_tat:'n8n đẩy về '+ghi+'/'+ds.length+' bài'+(loi.length?(' · lỗi '+loi.length):''), chi_tiet:{loi:loi.slice(0,40)}});
+    return json({ok:true, ghi, loi});
+  }
   if(path==='/trends/ingest' && method==='POST'){
     if(!env.N8N_TOKEN) return json({error:'Chưa cấu hình N8N_TOKEN'},503);
     if((request.headers.get('X-App-Token')||'')!==env.N8N_TOKEN) return json({error:'Sai token'},401);
@@ -2214,6 +2334,13 @@ async function handleApi(request, env){
     await env.DB.prepare(`UPDATE scripts SET chi_tiet=?, updated_at=? WHERE id=?`).bind(JSON.stringify(lamSachChiTiet(ct)), nowISO(), id).run();
     await logAudit(env,me,'gắn video đã dựng','scripts',id,media_url);
     return json({ db: await bootstrap(env, me) });
+  }
+  // ADR-008: chạy thử agent đo lường (ghi log loại riêng, không chiếm lượt của ngày)
+  if(path==='/doluong/chay-thu' && method==='POST'){
+    if(!canCauHinh(me)) return json({error:'Chỉ Admin hoặc Marketing được chạy agent'},403);
+    const r=await chayAgentDoLuong(env,{ep:true});
+    await logAudit(env,me,'chạy thử agent đo lường','agent_log','',r.tom_tat||r.bo_qua||'');
+    return json({ ...r, db: await bootstrap(env, me) });
   }
   // ADR-006: kế hoạch tháng — upsert theo tháng. Đề xuất từ chiến lược tính ở FE (thuần từ pillar % + thực tế tháng trước), server chỉ lưu.
   if((m=path.match(/^\/kehoach-thang\/(\d{4}-\d{2})$/)) && method==='PUT'){
@@ -3223,6 +3350,8 @@ export default {
       // Agent bám nhịp 15' để người tự chọn được GIỜ chạy trong Cấu hình;
       // bên trong nó tự chốt mỗi ngày đúng 1 lần nên không chạy lặp.
       ctx.waitUntil(chayAgentTrend(env).catch(()=>{}));
+      ctx.waitUntil(chayAgentDoLuong(env).catch(()=>{}));   // ADR-008: đo lường sau air, cũng chốt 1 lượt/ngày
+
     } else {
       ctx.waitUntil(ensurePostSlots(env).catch(()=>{})); // sinh suất lịch đăng (trước chạy trong mọi bootstrap)
       ctx.waitUntil(cleanupOldMedia(env));        // dọn media quá hạn

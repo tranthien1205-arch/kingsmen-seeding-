@@ -247,7 +247,9 @@ Quyết định: agent đo lường trong app (cron ngày, giống agent trend):
             Facebook Graph Insights / YouTube Data API → ghi ket_qua nguồn API_KENH, mức KHÔNG QUY ĐƠN (giữ ranh
             giới 3 mức); mỗi ngày một dòng. Nền tảng không có API (TikTok chưa audit, Shopee) → đường n8n/agent
             ngoài (webhook nhận số) hoặc import như cũ; TUYỆT ĐỐI không cào. Anh Thiện có token Facebook Page.
-Người duyệt: Thiện · Trạng thái: ĐÃ DUYỆT (2026-09-23) — làm sau ADR-006
+Người duyệt: Thiện · Trạng thái: ĐÃ LÀM (2026-09-23, commit ADR-008). Token Facebook Page dùng lại quy ước secret Worker
+            TOKEN_<api_ma> của đăng tự động (không lưu D1); YouTube dùng YOUTUBE_API_KEY. Mỗi ngày ghi PHẦN TĂNG so với
+            lần đo trước (tích luỹ giữ trong ghi_chu) để dashboard cộng dồn không phình. Đường n8n: POST /api/ketqua/ingest.
 ```
 **Ánh xạ trường theo định dạng** (một nguồn: `DINH_DANG` worker ⟷ `DINH_DANG_FE` frontend):
 | Định dạng | `hook` | `sections[]` | `cta` | `chi_tiet` |
@@ -588,6 +590,13 @@ Tokens Tailwind (inline config trong `seeding-app.html`): `ink #0b3543` (soft #1
 - **Việc của tôi**: mục 🗓️ "Tuần N còn thiếu X bài theo kế hoạch tháng" (hoặc "đủ số bài nhưng lệch cơ cấu") cho staff.
 - Kết quả tháng chảy ngược: đề xuất tháng sau lấy số bài + cơ cấu định dạng/kênh của tháng trước (chưa dùng ket_qua — chờ ADR-008 có số đo thật).
 - Test `test_adr6.mjs` 21/21; hồi quy 10/10 · 100/100 · 28/28 · 26/26 · 24/24. DEMO: đề xuất → lưu → Tuần → thêm mục ngày 08/09 rơi vào tuần 2 → đổi sang tuần 3 OK.
+
+### 2026-09-23 · ADR-008 — Agent ĐO LƯỜNG sau air (API nền tảng + n8n/agent ngoài)
+- **BE**: `CONFIG_MAC_DINH.doluong {agent_bat:false, agent_gio:7, so_ngay_do:30}`; `layIdBaiTuLink` (Facebook posts/videos/reel/story_fbid/fbid/v=/photos/fb.watch; YouTube watch?v=/youtu.be/shorts; link /share/ hoặc nền tảng khác → không nhận diện, không cào); `doFacebook` (Graph v21.0: post → `{page_id}_{post_id}` + insights post_impressions/post_engaged_users/post_clicks; video → video_insights total_video_views + like/comment); `doYouTube` (Data API v3 statistics); `ghiKetQuaAPI` (1 dòng/ngày/bài, nguồn API_KENH, mức KHÔNG QUY ĐƠN, doanh thu/đơn = 0, luot_* = phần tăng so với dòng API_KENH gần nhất trước ngày đó, `ghi_chu` JSON {api,obj,raw,tich_luy}; đo lại trong ngày = thay dòng; xong đẩy mục kế hoạch → DA_DO); `chayAgentDoLuong` (cron 15' gọi, chốt 1 lượt/ngày đúng giờ, log `agent_log` loại DO_LUONG / DO_LUONG_THU / DO_LUONG_NGOAI, chi tiết từng bài: đo/lỗi/bỏ qua kèm lý do); `POST /doluong/chay-thu` (staff); `POST /ketqua/ingest` (X-App-Token = N8N_TOKEN; items[{air_post_id|link, ky?, luot_xem, luot_tuong_tac, luot_click, nen, boi}], số tích luỹ); bootstrap `kenh[].co_token` (chỉ cờ, không bao giờ trả token).
+- **FE**: ⚙️ Cấu hình có mục **Đo lường sau air** (bật, giờ, số ngày); trang **Kết quả** có bảng 📡 **Agent đo lường sau air** (trạng thái, kênh Facebook có/thiếu TOKEN_, YouTube key, ▶ Đo thử ngay, kết quả từng bài, nhật ký 5 lượt, hướng dẫn Cách 2 n8n với URL + body mẫu); thẻ Kênh Fanpage hiện "● Đo lường sau air: có token / ○ cần secret TOKEN_… + Page ID".
+- Không làm: cào web, đo TikTok/Threads trực tiếp (đi đường ingest), quy đơn từ số API (mức KHÔNG QUY ĐƠN bắt buộc).
+- Test `test_adr8.mjs` 20/20 (fetch giả Graph/YouTube; token sai → không bịa số; delta; dedupe ngày; ingest auth; Sales 403; cron tắt không gọi API); hồi quy 21/21 · 10/10 · 100/100 · 28/28 · 26/26 · 24/24.
+- Chưa kiểm được ở đây: Graph API thật (tên metric có thể lệch theo loại bài/phiên bản — lỗi hiện rõ trong "Đo thử ngay" từng bài để chỉnh), quota YouTube.
 
 ### ⚙️ Quy trình deploy (CẬP NHẬT)
 `npm run build` (build.mjs: biên dịch JSX, build CSS Tailwind từ chính khối `tailwind.config` trong seeding-app.html, chép vendor React và `tools/`) → `node --check worker/index.js` → commit cả `dist/` → push. `node_modules/` đã trong .gitignore.
