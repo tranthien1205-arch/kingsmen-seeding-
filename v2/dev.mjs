@@ -19,6 +19,8 @@ const ASSETS = { fetch: async (req) => {
   const f = path.join(DIST, p); if (!f.startsWith(DIST) || !fs.existsSync(f)) return new Response('Not found', { status: 404 });
   return new Response(fs.readFileSync(f), { headers: { 'content-type': MIME[path.extname(f)] || 'application/octet-stream', 'cache-control': 'no-store' } });
 } };
+// khoá API để ở .env.local (không commit) — Thiện tự dán, app không lưu khoá vào D1
+try { for (const line of fs.readFileSync(path.join(ROOT, '.env.local'), 'utf8').split(/\r?\n/)) { const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*?)\s*$/); if (m && !line.trim().startsWith('#') && !(m[1] in process.env)) process.env[m[1]] = m[2].replace(/^["']|["']$/g, ''); } } catch {}
 const env = { DB: taoD1(DBFILE), ASSETS, ...Object.fromEntries(Object.entries(process.env).filter(([k]) => /^(ANTHROPIC_|YOUTUBE_|N8N_|TOKEN_|GOOGLE_|GEMINI_|OPENAI_|APP_BASE_URL)/.test(k))) };
 const worker = (await import('./worker/index.js')).default;
 http.createServer(async (req, res) => {
