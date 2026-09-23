@@ -13,7 +13,7 @@ import os from "node:os";
 export const DIR = dirname(fileURLToPath(import.meta.url));
 const BAN = "1.1";
 // việc app giao → script phát từ app (ADR-008/009): máy chỉ chạy script đúng hash app xác nhận
-const VIEC_SCRIPT = { dung_video: "dung-video", mo_hinh_bong: "mo-hinh", huan_luyen: "huan-luyen" };
+const VIEC_SCRIPT = { dung_video: "dung-video", mo_hinh_bong: "mo-hinh", mo_hinh_chay: "mo-hinh", huan_luyen: "huan-luyen", loc_footage: "loc-footage" };
 const coTransformers = existsSync(join(DIR, "node_modules", "@huggingface", "transformers"));
 const gpu = (() => { const r = spawnSync("nvidia-smi", ["--query-gpu=name,memory.total", "--format=csv,noheader"], { encoding: "utf8" }); return !r.error && r.status === 0 ? String(r.stdout || "").trim().split("\n")[0].slice(0, 60) : ""; })();
 async function coOllama() { try { const p = await fetch("http://localhost:11434/api/tags", { signal: AbortSignal.timeout(1500) }); return p.ok; } catch { return false; } }
@@ -68,6 +68,12 @@ async function chayLenh(l) {
 }
 async function motLuot() { const r = await goiApp("/hub/lenh"); if (!r.ok) { log("hỏi lệnh lỗi HTTP", r.status, r.d && r.d.error); return 0; } const ds = (r.d && r.d.lenh) || []; for (const l of ds) await chayLenh(l); return ds.length; }
 
+// CLI 009c-4: xuất tập mẫu ngôn ngữ / đánh giá phiên bản Ollama (không cần app giao lệnh)
+if (args[0] === "xuat-tap-mau" || args[0] === "phien-ban") {
+  const sc = await layScript("danh-gia-ngon-ngu"); const mod = await import(pathToFileURL(sc.f).href);
+  const kq = await mod.default({ app: APP, goiApp, lenh: { viec: "danh_gia", tham_so: args[0] === "xuat-tap-mau" ? { xuat: true, tinh_nang: args[1] || "soan_nhap_agent" } : { model_id: args[1], tinh_nang: args[2] || "soan_nhap_agent" } }, dir: join(DIR, "out"), log, may: os.hostname() });
+  log(kq.ok ? "✓" : "✗", kq.msg); process.exit(kq.ok ? 0 : 1);
+}
 const ping = await goiApp("/hub/ping"); if (!ping.ok) { console.error("Không nối được app (HTTP " + ping.status + "): " + ((ping.d && ping.d.error) || "")); process.exit(1); }
 log("Máy dựng '" + APP.may_ten + "' (" + os.hostname() + ") đã nối " + APP.url + " · app v" + ping.d.ban + " · ffmpeg " + (ffmpegOk ? "có" : "KHÔNG") + " · AI nhìn " + (coTransformers ? "có" : "chưa (npm install)") + (gpu ? " · GPU " + gpu : ""));
 await nhipTim();
