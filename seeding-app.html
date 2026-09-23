@@ -216,6 +216,26 @@ function scriptTextFE(s){
   const ctText=Object.keys(ct).filter(k=>k!=='media_url'&&k!=='ti_le').map(k=>ct[k]).filter(Boolean).join('\n');
   return [s.tieu_de,s.hook,secs,s.cta,ctText].filter(Boolean).join('\n');
 }
+// Lát 2 — khuôn sinh (rule-based) của video đổi sang khuôn từng định dạng: không bịa, chỉ sắp lại chữ
+function khuonTheoDinhDang(g, dd){
+  const cat=(t,n)=>{ t=String(t||'').trim(); return t.length>n ? t.slice(0,n-1).trim()+'…' : t; };
+  const secs=(g.sections||[]).filter(x=>x&&x.text);
+  if(dd==='POST') return { hook:g.hook, sections:secs.map((x,i)=>({label:'Đoạn '+(i+1), text:x.text})), cta:g.cta, chi_tiet:{} };
+  if(dd==='CAROUSEL') return { hook:cat(g.hook,80), sections:secs.map((x,i)=>({label:'Slide '+(i+2), text:cat(x.text,160), hinh:''})), cta:cat(g.cta,60), chi_tiet:{caption:[g.hook,g.cta].filter(Boolean).join('\n')} };
+  if(dd==='ANH') return { hook:cat(g.hook,60), sections:[], cta:cat(g.cta,30), chi_tiet:{chu_phu:cat(secs[0]&&secs[0].text,120), caption:[g.hook,...secs.map(x=>x.text),g.cta].filter(Boolean).join('\n\n')} };
+  return g;
+}
+// Lát 3 — chuyển định dạng (demo; khớp chuyenDinhDang ở worker)
+const DD_TEN_FE = { VIDEO:'Video', POST:'Bài post', ANH:'Ảnh', CAROUSEL:'Carousel' };
+function chuyenDinhDangFE(src, dd){
+  const secs=(src.sections||[]).filter(x=>x&&(x.text||x.label)); const ct=src.chi_tiet||{};
+  const cat=(t,n)=>{ t=String(t||'').trim(); return t.length>n ? t.slice(0,n-1).trim()+'…' : t; };
+  const tieu_de=(src.tieu_de||src.hook||'')+' ('+DD_TEN_FE[dd]+')'; const chung={ chuyen_tu:src.id, hashtag:ct.hashtag||'' };
+  if(dd==='POST') return { tieu_de, hook:src.hook||'', sections:secs.map((x,i)=>({label:'Đoạn '+(i+1), text:x.text||''})), cta:src.cta||'', chi_tiet:{...chung} };
+  if(dd==='CAROUSEL') return { tieu_de, hook:cat(src.hook,80), sections:secs.map((x,i)=>({label:'Slide '+(i+2), text:cat(x.text,160), hinh:x.hinh||''})), cta:cat(src.cta,60), chi_tiet:{...chung, caption:[src.hook,src.cta].filter(Boolean).join('\n')} };
+  if(dd==='ANH') return { tieu_de, hook:cat(src.hook,60), sections:[], cta:cat(src.cta,30), chi_tiet:{...chung, chu_phu:cat(secs[0]&&secs[0].text,120), caption:[src.hook,...secs.map(x=>x.text),src.cta].filter(Boolean).join('\n\n'), brief:'Chuyển từ '+DD_TEN_FE[ddOf(src)]+' "'+(src.tieu_de||'')+'" — chọn ảnh nền từ Kho footage'} };
+  return { tieu_de, hook:src.hook||'', sections:secs.map((x,i)=>({label:x.label||('Cảnh '+(i+1)), text:x.text||'', hinh:x.hinh||''})), cta:src.cta||'', chi_tiet:{...chung} };
+}
 // Nội dung đăng/copy ghép theo định dạng — khớp noiDungDang ở worker
 function noiDungDangFE(sc){
   const ct=sc.chi_tiet||{}; const dd=ddOf(sc); const than=(sc.sections||[]).map(x=>(x&&x.text)||'');
@@ -912,6 +932,9 @@ function AppProvider({children}){
       aiDanhGiaTrend: async id=>({ok:false, thieu_key:true, loi:'Chế độ offline không gọi AI được'}),
       aiSinhKichBan: async o=>({ok:false, thieu_key:true, loi:'Chế độ offline không gọi AI được'}),
       aiSinhKichBanGemini: async o=>({ok:false, loi:'Chế độ offline không gọi AI được'}),
+      chuyenDinhDang: async (id, dd)=>{ const src=(S.scripts||[]).find(x=>x.id===id); if(!src) return {ok:false,msg:'Không tìm thấy'}; if(dd===ddOf(src)) return {ok:false,msg:'Đã là định dạng này rồi'};
+        const moi=chuyenDinhDangFE(src, dd); const flags=scanClaims(scriptTextFE(moi), S.claim_cam); if(flags.some(x=>x.muc_do==='CHAN')) return {ok:false, msg:'Nội dung gốc có cụm bị CHẶN — sửa bản gốc trước'};
+        const nid=uid('scr'); S.scripts.unshift({ id:nid, content_item_id:src.content_item_id||null, framework_id:src.framework_id||null, san_pham_id:src.san_pham_id||null, kenh_id:src.kenh_id||null, ...moi, brand_voice:src.brand_voice||'', trang_thai:'NHAP', version:1, dinh_dang:dd, claim_flags:flags, created_at:now(), created_by:meRef.current.id, created_by_name:meRef.current.ho_ten, updated_at:now() }); commit(); return {ok:true, id:nid}; },
       aiChat: async m=>({ok:false, thieu_key:true, loi:'Chế độ offline không gọi AI được'}),
       sinhWorkflowAI: async o=>({ok:false, thieu_key:true, loi:'Chế độ offline không gọi AI được'}),
       daySangSeeding: async (id,o)=>{ const ci=(S.content_items||[]).find(x=>x.id===id); if(!ci) return {ok:false,msg:'Không tìm thấy nội dung'};
@@ -1122,6 +1145,7 @@ function AppProvider({children}){
     chayThuAgent: async () => { try { const r=await call('/trends/agent/chay-thu',{method:'POST',body:{}}); if(r&&r.db) setDb(r.db); return r; } catch(e){ return {ok:false,loi:e.message}; } },
     aiDanhGiaTrend: async id => { try { const r=await call('/trends/'+id+'/ai-danh-gia',{method:'POST',body:{}}); if(r&&r.db) setDb(r.db); return r; } catch(e){ return {ok:false,loi:e.message}; } },
     aiSinhKichBan: async o => { try { return await call('/scripts/ai-sinh',{method:'POST',body:o}); } catch(e){ return {ok:false,loi:e.message}; } },
+    chuyenDinhDang: async (id, dinh_dang) => { try { const r=await call('/scripts/'+id+'/chuyen',{method:'POST',body:{dinh_dang}}); if(r&&r.db) setDb(r.db); return {ok:true, id:r.id}; } catch(e){ return {ok:false, msg:e.message, blocked:e.blocked}; } },
     // Đường AI riêng của người dùng: server dựng prompt → trình duyệt tự gọi Gemini bằng key
     // đã cắm sẵn ở công cụ Lọc video → server thẩm định lại. Key không rời máy người dùng.
     aiSinhKichBanGemini: async o => {
@@ -1132,7 +1156,7 @@ function AppProvider({children}){
         if(!p||!p.ok) return {ok:false, loi:(p&&p.error)||'Không dựng được prompt'};
         const t=await goiGemini(kg, p.system, p.user);
         if(!t.ok) return t;
-        return await call('/scripts/ai-sinh/ket-qua',{method:'POST',body:{text:t.text, cac_buoc:p.cac_buoc}});
+        return await call('/scripts/ai-sinh/ket-qua',{method:'POST',body:{text:t.text, cac_buoc:p.cac_buoc, dinh_dang:p.dinh_dang||o.dinh_dang}});
       } catch(e){ return {ok:false,loi:e.message}; }
     },
     aiChat: async messages => { try { return await call('/ai/chat',{method:'POST',body:{messages}}); } catch(e){ return {ok:false,loi:e.message}; } },
@@ -2941,13 +2965,15 @@ function CreativeStudio(){
   const { db } = useApp();
   const scripts = (db.scripts||[]);
   const [edit,setEdit]=useState(null);           // nội dung đang soạn (null = thư viện)
+  const [moId,setMoId]=useState(null);           // id bản vừa chuyển định dạng → mở khi db đã có
+  useEffect(()=>{ if(!moId) return; const sc=(db.scripts||[]).find(x=>x.id===moId); if(sc){ setEdit(sc); setMoId(null); } },[moId, db.scripts]);
   const [q,setQ]=useState(''); const [loc,setLoc]=useState('ALL'); const [st,setSt]=useState('');
   const [tab,setTab]=useState('sang_tao');
   const nameById=(arr,id)=>{ const x=(arr||[]).find(o=>o.id===id); return x?x.ten:''; };
   // "Dựng video" từ kịch bản đã duyệt: để kịch bản lại cho công cụ (cùng origin) rồi chuyển sang tab Dựng
   const dungVideo=(s)=>{ try{ localStorage.setItem(KB_DUNG_KEY, JSON.stringify({ script_id:s.id, tieu_de:s.tieu_de||s.hook||'', text:kichBanSangCongCu(s), san_pham_id:s.san_pham_id||null, kenh_id:s.kenh_id||null, luc:Date.now() })); }catch(e){}
     setEdit(null); setTab('dung'); };
-  if(edit) return <ScriptEditor init={edit} onClose={()=>setEdit(null)} onDung={dungVideo}/>;
+  if(edit) return <ScriptEditor key={edit.id||'moi'} init={edit} onClose={()=>setEdit(null)} onDung={dungVideo} onMo={setMoId}/>;
   const TabBar = <Tabs size="sm" active={tab} onChange={setTab} tabs={[{key:'sang_tao',label:'✍️ Sáng tạo nội dung'},{key:'loc',label:'🎛 Lọc source'},{key:'dung',label:'🎬 Dựng video'}]}/>;
   if(tab==='loc'||tab==='dung') return <LocVideoTool tabBar={TabBar} mode={tab}/>;
   const kw=q.trim().toLowerCase();
@@ -3002,8 +3028,8 @@ function CreativeStudio(){
   </div>;
 }
 
-function ScriptEditor({init, onClose, onDung}){
-  const { db, upsertScript, deleteScript, fetchScriptVersions, aiSinhKichBan, aiSinhKichBanGemini, notify } = useApp();
+function ScriptEditor({init, onClose, onDung, onMo}){
+  const { db, upsertScript, deleteScript, fetchScriptVersions, aiSinhKichBan, aiSinhKichBanGemini, chuyenDinhDang, notify } = useApp();
   const brandVoice0 = (db.content_strategy||{}).brand_voice||'';
   const [f,setF]=useState(()=>({
     id:init.id, dinh_dang:ddOf(init), framework_id:init.framework_id||'', san_pham_id:init.san_pham_id||'', kenh_id:init.kenh_id||'', content_item_id:init.content_item_id||'',
@@ -3037,17 +3063,17 @@ function ScriptEditor({init, onClose, onDung}){
 
   const geminiSanSang=useMemo(()=>keyGemini(),[]);
   // Bộ sinh hiện ra khung hook → các phần → CTA: khớp video / post / carousel. Ảnh đơn chưa có khuôn riêng (lát 2).
-  const coBoSinh = dd!=='ANH';
+  const coBoSinh = true;   // lát 2: AI + khuôn có cho cả 4 định dạng (prompt/khuôn đổi theo dd)
   const aiViet=async()=>{ if(!f.framework_id) return notify('Chọn framework ở phần Bối cảnh trước','warn');
     setAiBusy(true); setAiLoi('');
-    const o={framework_id:f.framework_id, san_pham_id:f.san_pham_id||null, kenh_id:f.kenh_id||null, angle};
+    const o={framework_id:f.framework_id, san_pham_id:f.san_pham_id||null, kenh_id:f.kenh_id||null, angle, dinh_dang:dd};
     let r=await aiSinhKichBan(o), quaGemini=false;
     // Chưa cắm ANTHROPIC_API_KEY mà máy này đã có key Gemini (cắm ở công cụ Lọc & dựng video)
     // thì dùng luôn key đó — cùng prompt, cùng bộ thẩm định, chỉ khác nhà cung cấp AI.
     if(r && r.ok!==true && r.thieu_key && keyGemini()){ quaGemini=true; r=await aiSinhKichBanGemini(o); }
     setAiBusy(false);
     if(r&&r.ok&&r.kich_ban){ const kb=r.kich_ban;
-      setF(v=>({...v, tieu_de:kb.tieu_de||v.tieu_de, hook:kb.hook||'', sections:kb.sections||[], cta:kb.cta||''}));
+      setF(v=>({...v, tieu_de:kb.tieu_de||v.tieu_de, hook:kb.hook||'', sections:kb.sections||[], cta:kb.cta||'', chi_tiet:{...v.chi_tiet, ...(kb.chi_tiet||{})}}));
       notify((quaGemini?'Gemini (key của bạn) ':'AI ')+'viết xong — '+
         ((r.canh_bao&&r.canh_bao.length)?('có '+r.canh_bao.length+' cụm cần rà lại'):'hãy đọc và sửa cho đúng thực tế'));
       return; }
@@ -3055,8 +3081,8 @@ function ScriptEditor({init, onClose, onDung}){
       ? 'Chưa cắm ANTHROPIC_API_KEY, mà máy này cũng chưa có key Gemini. Cách nhanh nhất: mở Creative Studio › Lọc & dựng video › 🧠 chọn Gemini và dán key — Creative Studio sẽ dùng chung key đó. Hoặc bấm “Sinh nháp theo khuôn” để làm tiếp không cần AI.'
       : ((r&&r.loi)||'AI không viết được')); };
   const gen=()=>{ if(!framework) return notify('Chọn framework ở phần Bối cảnh trước','warn');
-    const g=generateScript({framework, product, angle, audience});
-    setF(v=>({...v, hook:g.hook, sections:g.sections, cta:g.cta, tieu_de:v.tieu_de||((product&&product.ten||'')+' — '+(angle||framework.ten)) }));
+    const g=khuonTheoDinhDang(generateScript({framework, product, angle, audience}), dd);
+    setF(v=>({...v, hook:g.hook, sections:g.sections, cta:g.cta, chi_tiet:{...v.chi_tiet, ...(g.chi_tiet||{})}, tieu_de:v.tieu_de||((product&&product.ten||'')+' — '+(angle||framework.ten)) }));
     notify('Đã sinh nháp — hãy đọc & sửa cho đúng thực tế'); };
   const setCt=(k,val)=>setF(v=>({...v, chi_tiet:{...v.chi_tiet,[k]:val}}));
   const setSec=(i,k,val)=>setF(v=>{ const s=v.sections.slice(); s[i]={...s[i],[k]:val}; return {...v,sections:s}; });
@@ -3082,6 +3108,10 @@ function ScriptEditor({init, onClose, onDung}){
   const dong=()=>{ if(dirty && !confirm('Có thay đổi chưa lưu. Bỏ thay đổi và quay lại?')) return; onClose(); };
   const remove=async()=>{ if(!f.id) return onClose(); if(!confirm('Xoá nội dung này?')) return; const ok=await deleteScript(f.id); if(ok){ notify('Đã xoá'); onClose(); } };
   const loadVers=async()=>{ if(!f.id) return; const r=await fetchScriptVersions(f.id); setVers(r.versions||[]); };
+  const [chuyenBusy,setChuyenBusy]=useState(false);
+  const chuyen=async(k)=>{ if(!f.id||dirty) return; setChuyenBusy(true); const r=await chuyenDinhDang(f.id, k); setChuyenBusy(false);
+    if(r&&r.ok){ notify('Đã tạo bản '+DINH_DANG_FE[k].label+' — đang mở'); onMo&&onMo(r.id); }
+    else notify((r&&r.msg)||'Không chuyển được','err'); };
 
   const Chip=({c})=><span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">{c}</span>;
   const pc=k=>(pane===k?'block':'hidden')+' lg:block';
@@ -3170,7 +3200,7 @@ function ScriptEditor({init, onClose, onDung}){
             </div>
             {aiLoi && <div className={CALLOUT.danger}>{aiLoi}</div>}
             <p className="text-[10px] text-slate-400">AI chỉ được dùng thông số thật của sản phẩm; nếu viết trúng cụm bị chặn thì hệ thống từ chối, không đưa ra cho bạn.</p>
-          </> : <p className="text-[11px] text-ink-muted">AI và khuôn sinh cho <b>ảnh đơn</b> sẽ có ở bản sau — hiện soạn tay, khung xem trước cập nhật ngay khi gõ.</p>}
+          </> : null}
         </Card>
 
         <Card>
@@ -3234,6 +3264,14 @@ function ScriptEditor({init, onClose, onDung}){
             <Btn variant={vu?'ghost':'soft'} className="w-full mt-2" disabled={!!ly} onClick={()=>onDung&&onDung(cur.id?cur:f)} title={ly}>{vu?'🎬 Dựng lại phiên bản mới':'🎬 Dựng video từ kịch bản này'}</Btn>
             {ly && <div className="text-[11px] text-amber-600 mt-1">{ly}</div>}
           </Card>; })()}
+        {/* Lát 3 — chuyển sang định dạng khác: tạo bản nháp mới, bản này giữ nguyên */}
+        {f.id && <Card>
+          <SectionTitle className="mb-1">🔁 Chuyển định dạng</SectionTitle>
+          <div className="text-[11px] text-ink-muted mb-2">Tạo <b>bản nháp mới</b> từ nội dung này (bản này giữ nguyên), rồi nhờ AI viết lại cho hợp định dạng.</div>
+          <div className="flex flex-wrap gap-1.5">{Object.keys(DINH_DANG_FE).filter(k=>k!==dd).map(k=>
+            <Btn key={k} variant="ghost" className="!px-2.5 !py-1.5 text-xs" disabled={dirty||chuyenBusy} title={dirty?'Lưu thay đổi trước':''} onClick={()=>chuyen(k)}>{DINH_DANG_FE[k].icon} {DINH_DANG_FE[k].label}</Btn>)}</div>
+          {dirty && <div className="text-[11px] text-amber-600 mt-1">Lưu thay đổi trước khi chuyển.</div>}
+        </Card>}
         {/* Guardrail claim */}
         {flags.length>0 ? <div className={"rounded-2xl border p-3 "+(blocked.length?'bg-rose-50 border-rose-200':'bg-amber-50 border-amber-200')}>
           <div className={"text-sm font-semibold "+(blocked.length?'text-rose-700':'text-amber-700')}>{blocked.length?'⛔ Có cụm từ bị CHẶN — phải gỡ mới lưu được':'⚠ Cụm từ cần rà lại (cảnh báo)'}</div>

@@ -507,5 +507,10 @@ Tokens Tailwind (inline config trong `seeding-app.html`): `ink #0b3543` (soft #1
   - **Thứ tự trang đầu:** Bắt đầu → Việc của tôi hôm nay → nội dung trang. Giám đốc chỉ thấy Bắt đầu (không có việc giao).
   - Ảnh hưởng dữ liệu: không. Bảng vai trò §3: `TRUONG_MKT` ✅ · `GIAM_DOC` ✅ (ADR-003); `MKT_STAFF` = `MARKETING` hiện tại, không tách.
 
+- ✅ **STUDIO LÁT 2+3 — AI/khuôn theo định dạng · chuyển định dạng** (tầng tính năng, ADR-001 đã cho phép).
+  - **Lát 2:** `promptKichBan` nhận `dinh_dang` (thiếu = VIDEO → công cụ Lọc video cũ vẫn chạy): 4 khuôn `KHUON` (vai + JSON đầu ra riêng: POST hashtag; ANH headline ≤8 từ/chữ phụ/nút/caption/brief cho designer; CAROUSEL 5–7 slide + `hinh`); `cac_buoc` chỉ áp cho VIDEO. `duyetKichBanAI(text, cacBuoc, claims, dinhDang)` rút phần riêng vào `chi_tiet` (khoá lạ AI thêm bị bỏ), sections ANH = [], quét claim phủ hết (headline/chữ phụ/gợi ý hình đều bị chặn nếu chạm CHẶN). Đường Gemini gửi kèm `dinh_dang` ở `/ket-qua`. FE: nút AI + khuôn cho cả 4 định dạng; khuôn rule-based đổi qua `khuonTheoDinhDang`; kết quả AI đổ cả `chi_tiet`.
+  - **Lát 3:** `POST /scripts/:id/chuyen {dinh_dang}` → bản NHÁP mới (`chuyenDinhDang` BE ⟷ `chuyenDinhDangFE` demo, luật cố định, không bịa): video→post (cảnh → đoạn), video→carousel (cảnh → slide giữ `hinh`, caption = hook + CTA), →ảnh (headline = hook, chữ phụ = cảnh 1, caption đầy đủ, brief ghi nguồn), →video. Giữ framework/sản phẩm/kênh/kế hoạch, `chi_tiet.chuyen_tu` = id gốc; cùng định dạng → 409; nguồn dính claim CHẶN → 422; bản gốc không đổi. UI: thẻ **🔁 Chuyển định dạng** ở cột xem trước (khoá khi chưa lưu), tạo xong tự mở bản mới (`onMo` → `moId`).
+  - Test `test_dinh_dang.mjs` **100/100** (+26 mới) · hồi quy 28/28 · 26/26. **Creative Studio đa định dạng: xong cả 3 lát.**
+
 ### ⚙️ Quy trình deploy (CẬP NHẬT)
 `npm run build` (build.mjs: biên dịch JSX, build CSS Tailwind từ chính khối `tailwind.config` trong seeding-app.html, chép vendor React và `tools/`) → `node --check worker/index.js` → commit cả `dist/` → push. `node_modules/` đã trong .gitignore.
