@@ -140,6 +140,35 @@ Lộ trình  : 008a máy ghép + máy con + script dựng hiện tại chạy tr
 Người duyệt: Thiện · Trạng thái: ĐÃ DUYỆT (2026-09-24, "ok đề suất" — cả 008a + 008b, TTS Google; thêm: xuất gói dựng tiếp cho CapCut) · ĐÃ LÀM
 ```
 
+```
+ADR-009 · 2026-09-24 · BỘ NÃO AI — kết nối, chọn, quản lý, huấn luyện mô hình; mô hình mở học dần để thay API
+Bối cảnh : Bộ não hiện là một hàm goiAI gọi cứng Anthropic (claude-sonnet-4-5) cho mọi việc chữ; TTS Google; lọc/dựng video chưa
+            có AI (công cụ trình duyệt dùng CLIP + Whisper tại máy nhưng rời rạc, không học). Thiện: "kết nối, lựa chọn, quản lý và
+            huấn luyện mô hình AI; mô hình mã nguồn mở chuyên lọc và dựng video cần huấn luyện ngày càng thông minh; ban đầu dùng
+            API, mô hình mở phải học để làm tốt và tiết kiệm chi phí".
+Quyết định: (1) DANH MỤC MÔ HÌNH mo_hinh (ma, ten, nha_cung_cap, loai NGON_NGU|NHIN|NGHE|TTS|ANH, cach_goi API|MAY_GHEP, gia,
+            phien_ban/checkpoint R2, trang_thai, diem, so_mau) — API: Anthropic/Google/OpenAI (khoá ở Worker); MỞ: chạy trên máy
+            ghép có kha_nang 'mo_hinh' (Ollama cho LLM, SigLIP/CLIP cho nhìn, Whisper cho nghe, Piper/viXTTS cho TTS) — script
+            phát từ app như máy dựng. (2) ĐỊNH TUYẾN theo TÍNH NĂNG (soan_noi_dung, seeding_bien_the, cham_y_tuong, bao_cao, tts,
+            loc_footage, chon_canh, cham_video…): mỗi tính năng có mô hình chính, dự phòng, ngưỡng chất lượng và MỨC như bộ quyền
+            bước: API (thầy) → BÓNG (mô hình mở chạy song song, so với API/người, không dùng kết quả) → MỞ (mô hình mở tự làm, API
+            chỉ dự phòng). Máy đề nghị nâng mức khi điểm ≥ ngưỡng & ≥ mẫu; Admin/Trưởng MKT gạt (không tự gạt — luật L1 cho AI).
+            (3) KHO MẪU mau_hoc_ai: mỗi lượt gọi lưu đầu vào, đầu ra từng mô hình, phán quyết người (duyệt/sửa/trả, cảnh người
+            chọn, clip người giữ khi lọc, bản cuối người tải lên so với bản nháp) → nhãn huấn luyện; xuất tập JSONL + khung hình
+            từ R2. (4) HUẤN LUYỆN trên máy ghép có GPU (kha_nang 'huan_luyen'): lệnh huan_luyen {mo_hinh, tap_mau} → script phát
+            từ app: (a) nhìn: head trên embedding SigLIP/CLIP (linear/LoRA) học "footage nào khớp gợi ý hình", "clip nào là clip
+            chuẩn", "cảnh nào thợ xem lâu" — rẻ, chạy được CPU; (b) ngôn ngữ: LoRA Qwen/Gemma trên bài đã duyệt + lý do trả; (c)
+            TTS: chọn giọng mở tiếng Việt, người chấm; checkpoint → R2 → phiên bản mới → ĐÁNH GIÁ trên tập kiểm giữ lại (điểm
+            khớp người) → người duyệt bật (cổng G4) → ai_usage ghi mo_hinh_id để so chi phí API vs mở. (5) Guardrail sau đầu ra
+            (claim, dữ kiện, JSON) áp cho MỌI mô hình; mô hình mở không bao giờ được bỏ qua cổng người. (6) Màn Máy › Bộ não AI:
+            Mô hình (kết nối, thử, giá) · Định tuyến (tính năng × mức × điểm × mẫu) · Huấn luyện (kho mẫu, phiên, đánh giá, bật)
+            · Chi phí (theo mô hình, tiết kiệm so API).
+Lộ trình  : 009a danh mục + định tuyến + ai_usage theo mô hình + máy ghép chạy mô hình mở (Ollama/SigLIP/Whisper) + chế độ BÓNG cho
+            loc_footage/chon_canh & cham_y_tuong · 009b kho mẫu + huấn luyện head nhìn + đánh giá + bật MỞ cho lọc/chọn cảnh ·
+            009c LoRA ngôn ngữ + TTS mở.
+Người duyệt: Thiện · Trạng thái: CHỜ DUYỆT (đề xuất 24/09)
+```
+
 ## Changelog
 
 ### 2026-09-24 · ADR-008 (máy dựng ghép theo tài khoản)
