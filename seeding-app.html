@@ -8,8 +8,7 @@
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 <script src="https://cdn.tailwindcss.com"></script>
-<!-- Đọc Excel: TỰ HOST, không phụ thuộc CDN bên thứ ba (CDN bị chặn = không import được lần nào) -->
-<script src="/vendor/xlsx.full.min.js"></script>
+<!-- Đọc Excel (/vendor/xlsx.full.min.js, tự host): 880 KB nên chỉ tải khi mở hộp Import — xem loadXLSX() -->
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600;700;800;900&family=Maven+Pro:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script>
@@ -2373,6 +2372,14 @@ const IMPORT_FIELDS=[
   {k:'san_pham',label:'Sản phẩm'},
   {k:'ngay_dang',label:'Ngày đăng → Tháng'},
 ];
+// Tải SheetJS khi cần (tự host, không phụ thuộc CDN). Gọi nhiều lần chỉ tải một lần.
+let _xlsxP=null;
+function loadXLSX(){
+  if(typeof XLSX!=='undefined') return Promise.resolve();
+  if(_xlsxP) return _xlsxP;
+  _xlsxP=new Promise((ok,fail)=>{ const sc=document.createElement('script'); sc.src='/vendor/xlsx.full.min.js'; sc.onload=()=>ok(); sc.onerror=()=>{ _xlsxP=null; fail(new Error('Không tải được thư viện đọc Excel')); }; document.head.appendChild(sc); });
+  return _xlsxP;
+}
 function ContentImportModal({onClose}){
   const { db, importContentItems, notify } = useApp();
   const [busy,setBusy]=useState(false); const fileRef=useRef();
@@ -2398,9 +2405,9 @@ function ContentImportModal({onClose}){
       setRows(rr); const h=impDetectHeader(rr); setHi(h); setMap(impAutoMap(rr[h]||[]));
     }catch(e){ notify('Không đọc được sheet: '+e.message,'err'); } finally { setDangDoc(false); } }, 30); };
   const changeHeader=(idx)=>{ setHi(idx); setMap(impAutoMap(rows[idx]||[])); };
-  const onFile=e=>{ const fl=e.target.files&&e.target.files[0]; e.target.value=''; if(!fl) return;
+  const onFile=async e=>{ const fl=e.target.files&&e.target.files[0]; e.target.value=''; if(!fl) return;
     if(/\.(xlsx|xls)$/i.test(fl.name)){
-      if(typeof XLSX==='undefined') return notify('Thư viện đọc Excel chưa tải xong, thử lại sau vài giây','warn');
+      try{ await loadXLSX(); }catch(err){ return notify(err.message,'err'); }
       const r=new FileReader();
       r.onload=ev=>{ try{
         const buf=ev.target.result;
@@ -2441,7 +2448,8 @@ function ContentImportModal({onClose}){
     setBusy(true); const n=await importContentItems(items); setBusy(false);
     notify('Đã import '+n+' nội dung'); onClose();
   };
-  const xlsxReady = typeof XLSX!=='undefined';
+  const [xlsxErr,setXlsxErr]=useState('');
+  useEffect(()=>{ loadXLSX().then(()=>setXlsxErr(''),e=>setXlsxErr(e.message)); },[]); // tải trước khi người dùng chọn file
 
   return <Modal open={true} onClose={onClose} title="Import kế hoạch nội dung" wide>
     <div className="flex flex-wrap gap-2 mb-3">
@@ -2450,7 +2458,7 @@ function ContentImportModal({onClose}){
       {wb && <Btn variant="ghost" onClick={resetXlsx}>✕ Bỏ file Excel</Btn>}
       <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv,.tsv,.txt" className="hidden" onChange={onFile}/>
     </div>
-    {!xlsxReady && <div className="text-[11px] text-rose-600 mb-2">Không nạp được thư viện đọc Excel. Hãy tải lại trang (Ctrl/Cmd+Shift+R). Nếu vẫn lỗi, báo kỹ thuật.</div>}
+    {xlsxErr && <div className="text-[11px] text-rose-600 mb-2">Không nạp được thư viện đọc Excel. Hãy tải lại trang (Ctrl/Cmd+Shift+R). Nếu vẫn lỗi, báo kỹ thuật.</div>}
     {dangDoc && <div className="text-[11px] text-brand-dark mb-2 font-semibold">Đang đọc sheet… file nhiều sheet có thể mất vài giây.</div>}
 
     {wb ? <div className="space-y-3">

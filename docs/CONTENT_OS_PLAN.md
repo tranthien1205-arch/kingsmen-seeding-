@@ -40,7 +40,7 @@ App hiện tại KHÔNG phải Next.js/Supabase như brief gốc. Ta **thích �
 
 ## 2. QUY TRÌNH BUILD / TEST / DEPLOY (BẮT BUỘC theo đúng)
 1. **Sửa `worker/index.js` và/hoặc `seeding-app.html`.**
-2. **Đồng bộ:** `cp seeding-app.html dist/index.html`.
+2. **Build:** `npm install` (lần đầu) rồi `npm run build` → sinh `dist/index.html` + `dist/app.<hash>.js` (JSX đã biên dịch) + `dist/app.<hash>.css` (Tailwind build sẵn) + `dist/vendor/react*.js` + chép `tools/`. **Không** còn `cp seeding-app.html dist/index.html` — dist/index.html là sản phẩm build, đừng sửa tay. `seeding-app.html` vẫn mở trực tiếp được (dùng CDN) để dev nhanh.
 3. **Validate (không cần trình duyệt):**
    - Worker: `node --check worker/index.js`.
    - Frontend: cài tạm `@babel/standalone`, transform khối `<script type="text/plain" id="app-src">` với preset `react`. Phải in `BABEL OK`. (Nhớ `rm -rf node_modules` trước khi commit.)
@@ -380,4 +380,4 @@ Tokens Tailwind (inline config trong `seeding-app.html`): `ink #0b3543` (soft #1
 - ✅ **ĐÃ XONG TOÀN BỘ P1→P10.** Còn lại là các mảnh nhỏ: vai trò `TRUONG_MKT`/`GIAM_DOC` riêng, `can()` tập trung (P0), và nâng P4 lên gợi ý AI khi có `ANTHROPIC_API_KEY`.
 
 ### ⚙️ Quy trình deploy (CẬP NHẬT)
-`cp seeding-app.html dist/index.html` **và** `rm -rf dist/tools && mkdir -p dist/tools && cp -r tools/. dist/tools/` (giữ cả `tools/vendor/ffmpeg/`) → validate (`node --check worker/index.js` + Babel transform) → `rm -rf node_modules` → commit → push.
+`npm run build` (build.mjs: biên dịch JSX, build CSS Tailwind từ chính khối `tailwind.config` trong seeding-app.html, chép vendor React và `tools/`) → `node --check worker/index.js` → commit cả `dist/` → push. `node_modules/` đã trong .gitignore.

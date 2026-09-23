@@ -2830,6 +2830,12 @@ export default {
     }
     // web tĩnh
     const res = await env.ASSETS.fetch(request);
+    // Tệp build có hash trong tên (app.<hash>.js/css) và vendor: cache vĩnh viễn — đổi nội dung là đổi tên
+    if(/^\/(app\.[0-9a-f]+\.(js|css)|vendor\/.+)$/.test(url.pathname) && res.ok){
+      const h = new Headers(res.headers);
+      h.set('Cache-Control', 'public, max-age=31536000, immutable');
+      return new Response(res.body, { status:res.status, statusText:res.statusText, headers:h });
+    }
     // HTML luôn revalidate để người dùng nhận bản deploy mới ngay (tránh kẹt cache cũ)
     const ct = res.headers.get('content-type') || '';
     if(ct.includes('text/html')){
