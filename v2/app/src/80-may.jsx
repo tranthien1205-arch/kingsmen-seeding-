@@ -30,20 +30,30 @@ function BangBuoc(){
   const nguong=Number(cfg.nguong_san_sang)||80, minMau=Number(cfg.min_mau)||30;
   const gat=async(b, patch)=>{ const r=await goi('/buoc/'+b.ma,{method:'PATCH',body:patch}); if(r.ok) notify('Đã cập nhật '+b.ma); else notify(r.msg,'err'); };
   const MUCS=['NGUOI','AI_GOI_Y','AI_TU_LAM'];
+  const [mo,setMo]=useState(null); const [mau,setMau]=useState({});
+  const xemMau=async(ma)=>{ if(mo===ma){ setMo(null); return; } setMo(ma); if(!mau[ma]){ const r=await goi('/buoc/'+ma+'/mau'); if(r.ok) setMau(o=>({...o,[ma]:r})); } };
+  const NHOM={B1:1,B5:1,B9:1,B11:1,B4:2,B2:2,B3:2,B6:2,B7:2,B12:2,B10:0,B8:0};
+  const soDeNghi=(db.buoc||[]).filter(b=>b.de_nghi).length;
   return <div className="space-y-3">
-    <Callout tone="info">Mỗi bước có một <b>người thực hiện</b>: Người làm · AI gợi ý (máy soạn, người bấm) · AI tự làm. Gạt lên "AI tự làm" chỉ mở khi máy đạt <b>{nguong}/100</b> điểm sẵn sàng trên <b>≥ {minMau} mẫu</b> — điểm do máy tự chấm từ mẫu học, người không sửa được. 4 cổng G1–G4 luôn là người.{!duoc && <> <b>Bạn chỉ xem</b> — Admin/Trưởng MKT mới gạt được.</>}</Callout>
-    <Card pad=""><div className="overflow-x-auto"><table className="w-full text-xs"><thead><tr className="text-left text-ink-muted border-b border-line"><th className="px-3 py-2">Bước</th><th className="px-3 py-2">Người thực hiện</th><th className="px-3 py-2">Vai trò nhận việc</th><th className="px-3 py-2">Máy học</th><th className="px-3 py-2 w-44">Sẵn sàng</th><th className="px-3 py-2">Đổi gần nhất</th></tr></thead>
-      <tbody>{(db.buoc||[]).map(b=>{ const duSS=Number(b.san_sang)>=nguong && Number(b.so_mau)>=minMau;
-        return <tr key={b.ma} className="border-b border-line/60 align-top">
-          <td className="px-3 py-2"><div className="font-semibold text-ink">{b.ma} · {b.ten}</div><div className="text-[10px] text-ink-muted">{b.tang}{b.cong?(' · cổng '+b.cong):''} · tối đa {MUC_LABEL[b.muc_toi_da]}</div><div className="text-[10px] text-slate-400 mt-0.5">học: {b.hoc_gi}</div></td>
+    <Callout tone="info">Mỗi bước có một <b>người thực hiện</b>: Người làm · AI gợi ý (máy soạn, người bấm) · AI tự làm. Gạt lên "AI tự làm" chỉ mở khi máy đạt <b>{nguong}/100</b> điểm sẵn sàng trên <b>≥ {minMau} mẫu</b> — điểm do máy tự chấm từ mẫu học, người không sửa được. Máy chỉ <b>đề nghị</b> gạt lên/hạ xuống (giao việc cho Trưởng MKT), không tự gạt. Thứ tự nên gạt: nhóm ① B1 · B5 · B9 · B11 trước, nhóm ② B4 · B2 · B3 · B6 · B7 sau. 4 cổng G1–G4 luôn là người.{!duoc && <> <b>Bạn chỉ xem</b> — Admin/Trưởng MKT mới gạt được.</>}</Callout>
+    {soDeNghi>0 && <Callout tone="warn">🤖 Máy đang đề nghị {soDeNghi} thay đổi — xem cột "Máy đề nghị".</Callout>}
+    <Card pad=""><div className="overflow-x-auto"><table className="w-full text-xs"><thead><tr className="text-left text-ink-muted border-b border-line"><th className="px-3 py-2">Bước</th><th className="px-3 py-2">Người thực hiện</th><th className="px-3 py-2">Vai trò nhận việc</th><th className="px-3 py-2">Máy học</th><th className="px-3 py-2 w-44">Sẵn sàng</th><th className="px-3 py-2">Máy đề nghị</th><th className="px-3 py-2">Đổi gần nhất</th></tr></thead>
+      <tbody>{(db.buoc||[]).flatMap(b=>{ const duSS=Number(b.san_sang)>=nguong && Number(b.so_mau)>=minMau; const kem=(db.agents||[]).filter(a=>a.buoc===b.ma).map(a=>a.ma);
+        const rows=[<tr key={b.ma} className="border-b border-line/60 align-top">
+          <td className="px-3 py-2"><div className="font-semibold text-ink">{b.ma} · {b.ten} {NHOM[b.ma]?<Pill className="!text-[9px]">nhóm {NHOM[b.ma]===1?'①':'②'}</Pill>:null}</div><div className="text-[10px] text-ink-muted">{b.tang}{b.cong?(' · cổng '+b.cong):''} · tối đa {MUC_LABEL[b.muc_toi_da]}{kem.length?(' · tay máy: '+kem.join(', ')):(b.muc_toi_da!=='NGUOI'?' · chưa có tay máy':'')}</div><div className="text-[10px] text-slate-400 mt-0.5">học: {b.hoc_gi} · <LinkBtn onClick={()=>xemMau(b.ma)}>{mo===b.ma?'ẩn mẫu':'xem mẫu học'}</LinkBtn></div></td>
           <td className="px-3 py-2"><div className="flex gap-1 flex-wrap">{MUCS.map(m=>{ const qua=MUCS.indexOf(m)>MUCS.indexOf(b.muc_toi_da); const khoa=m==='AI_TU_LAM'&&!duSS; const chon=b.nguoi_thuc_hien===m;
             return <button key={m} disabled={!duoc||qua||(khoa&&!chon)} title={qua?'Bước này không lên tới mức này':khoa?('Cần '+nguong+'/100 và ≥'+minMau+' mẫu'):''} onClick={()=>!chon&&gat(b,{nguoi_thuc_hien:m})}
               className={"px-2 py-1 rounded-lg text-[11px] font-semibold border transition disabled:opacity-30 "+(chon?(MUC_CLS[m]+' border-transparent'):'bg-white border-line text-ink-muted hover:border-brand')}>{MUC_LABEL[m]}</button>; })}</div></td>
           <td className="px-3 py-2"><Select className="!py-1 !px-2 text-[11px] !w-auto" value={b.vai_tro_nguoi} disabled={!duoc} onChange={e=>gat(b,{vai_tro_nguoi:e.target.value})}>{Object.keys(ROLE_LABEL).map(r=><option key={r} value={r}>{ROLE_LABEL[r]}</option>)}</Select></td>
           <td className="px-3 py-2"><Toggle on={b.hoc} disabled={!duoc} onChange={v=>gat(b,{hoc:v})}/></td>
-          <td className="px-3 py-2"><div className="flex items-center gap-2"><div className="flex-1"><Thanh pct={b.san_sang} cls={duSS?'bg-emerald-500':'bg-brand'}/></div><span className="tabular-nums text-ink w-10 text-right">{b.san_sang}</span></div><div className="text-[10px] text-ink-muted mt-0.5">{b.so_mau} mẫu{duSS?' · đủ để gạt AI tự làm':''}</div></td>
+          <td className="px-3 py-2"><div className="flex items-center gap-2"><div className="flex-1"><Thanh pct={b.san_sang} cls={duSS?'bg-emerald-500':'bg-brand'}/></div><span className="tabular-nums text-ink w-10 text-right">{b.san_sang}</span></div><div className="text-[10px] text-ink-muted mt-0.5">{b.so_mau} mẫu · {cfg.ngay_gan||14} ngày gần: {b.san_sang_gan||0}/100 ({b.so_mau_gan||0} mẫu){duSS?' · đủ để gạt AI tự làm':''}</div></td>
+          <td className="px-3 py-2 text-[10px]">{b.de_nghi?<div><Pill cls={b.de_nghi==='LEN'?'bg-emerald-100 text-emerald-800':'bg-rose-100 text-rose-700'}>{b.de_nghi==='LEN'?'⬆ gạt lên':'⬇ hạ xuống'}</Pill><div className="text-ink-muted mt-0.5 max-w-[200px]">{b.de_nghi_ly_do}</div>{duoc&&<LinkBtn onClick={()=>gat(b,{nguoi_thuc_hien:b.de_nghi==='LEN'?MUCS[MUCS.indexOf(b.nguoi_thuc_hien)+1]:MUCS[Math.max(0,MUCS.indexOf(b.nguoi_thuc_hien)-1)]})}>Gạt theo đề nghị</LinkBtn>}</div>:<span className="text-slate-400">—</span>}</td>
           <td className="px-3 py-2 text-[10px] text-ink-muted">{b.doi_boi?<>{b.doi_boi}<br/>{fmtDate(b.doi_at)}</>:'—'}</td>
-        </tr>; })}</tbody></table></div></Card>
+        </tr>];
+        if(mo===b.ma){ const d=mau[b.ma]; rows.push(<tr key={b.ma+'-mau'} className="bg-slate-50"><td colSpan="7" className="px-3 py-2 text-[11px]">{!d?<span className="text-ink-muted">đang tải…</span>:<div className="grid md:grid-cols-2 gap-3">
+          <div><div className="font-semibold text-ink mb-1">Mẫu học gần đây ({d.mau.length})</div>{d.mau.length===0?<div className="text-ink-muted">Chưa có mẫu — máy học khi người làm bước này (học BẬT).</div>:d.mau.slice(0,8).map(x=><div key={x.id} className="py-1 border-t border-line flex gap-2"><span className={"font-display font-extrabold w-8 "+(x.giong>=0.8?'text-emerald-600':x.giong>=0.5?'text-amber-600':'text-rose-500')}>{Math.round((x.giong||0)*100)}</span><div className="min-w-0 flex-1"><div className="text-ink-muted">{x.ngay} · {x.ghi_chu||''}</div><div className="truncate"><b>Máy:</b> {JSON.stringify(x.dau_ra_may).slice(0,110)}</div><div className="truncate"><b>Người:</b> {JSON.stringify(x.dau_ra_nguoi).slice(0,110)}</div></div></div>)}</div>
+          <div><div className="font-semibold text-ink mb-1">Lịch sử gạt</div>{d.lich_su.length===0?<div className="text-ink-muted">Chưa gạt lần nào.</div>:d.lich_su.map((l,i)=><div key={i} className="py-1 border-t border-line text-ink-muted">{fmtDate(l.at)} · {l.by_name}: {l.detail}</div>)}</div></div>}</td></tr>); }
+        return rows; })}</tbody></table></div></Card>
   </div>;
 }
 // ADR-004 — Trạm máy văn phòng (masfico-tram): ghép bằng mã HUB1, nhịp tim, phiên, lệnh, lô dữ liệu, chạy thử agent content_os
@@ -118,6 +128,9 @@ function CauHinhMay(){
       <SoF o={may} set={setMay} k="nguong_san_sang" l="Ngưỡng sẵn sàng để gạt AI tự làm (0–100)" h="Thiện chốt 80"/>
       <SoF o={may} set={setMay} k="min_mau" l="Số mẫu tối thiểu" h="Thiện chốt 30"/>
       <SoF o={may} set={setMay} k="gio_chay" l="Giờ máy chạy hằng ngày (giờ VN, 0–23)"/>
+      <SoF o={may} set={setMay} k="nguong_ha" l="Điểm gần đây dưới bao nhiêu thì máy đề nghị HẠ mức" h="Chỉ với bước đang ở mức AI"/>
+      <SoF o={may} set={setMay} k="ngay_gan" l="'Gần đây' = bao nhiêu ngày"/>
+      <SoF o={may} set={setMay} k="mau_ha" l="Cần ít nhất bao nhiêu mẫu gần đây mới xét hạ"/>
       {duoc && <Btn variant="brand" onClick={()=>luu('may',may)}>💾 Lưu</Btn>}</Card>
     <Card><SectionTitle className="mb-2">Chi phí AI</SectionTitle>
       <SoF o={ai} set={setAi} k="ngan_sach_thang_usd" l="Ngân sách tháng (USD)" h="0 = không giới hạn"/>

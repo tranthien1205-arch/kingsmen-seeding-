@@ -16,7 +16,7 @@ test('seed: admin đầu tiên phải đổi mật khẩu, 12 bước NGƯỜI, 
   assert.equal(db.me.vai_tro, 'ADMIN'); assert.equal(db.me.doi_mat_khau, true);
   assert.equal(db.buoc.length, 12); assert.ok(db.buoc.every(b => b.nguoi_thuc_hien === 'NGUOI' && b.hoc === true && b.san_sang === 0));
   assert.equal(db.chien_luoc.phien_ban, 0); assert.equal(db.mo_phong, false);
-  assert.deepEqual(db.module_config.may, { nguong_san_sang: 80, min_mau: 30, gio_chay: 6 });
+  assert.equal(db.module_config.may.nguong_san_sang, 80); assert.equal(db.module_config.may.min_mau, 30); assert.equal(db.module_config.may.gio_chay, 6);
 });
 test('đổi mật khẩu lần đầu → cờ tắt', async () => {
   const r = await api('/me', 'PATCH', { password: 'MatKhauMoi1' }); assert.equal(r.status, 200); assert.equal(r.j.db.me.doi_mat_khau, false);

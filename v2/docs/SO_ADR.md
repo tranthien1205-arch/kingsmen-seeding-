@@ -80,7 +80,27 @@ Quyết định: (1) ket_qua: 3 mức tin cậy tách bạch (TRUC_TIEP/GIAN_TIE
 Người duyệt: Thiện · Trạng thái: ĐÃ DUYỆT (2026-09-23, "tiếp tục")
 ```
 
+```
+ADR-006 · 2026-09-23 · Gạt bước sang AI theo bằng chứng: máy đề nghị (không tự gạt), điểm gần đây, đề nghị hạ, tay máy B6
+Bối cảnh : Đợt 1–5 đã có mẫu học thật chảy về mọi bước; cần cơ chế để chuyển từ "người làm, máy học" sang "gạt từng bước" đúng
+            luật L1 (không bước nào tự gạt) và §3b (máy đề nghị hạ khi bị sửa/trả nhiều).
+Quyết định: (1) buoc_thuc_hien thêm san_sang_gan/so_mau_gan (N ngày gần nhất) + de_nghi LEN|XUONG + lý do. (2) deNghiGat sau
+            mỗi lượt chấm: LÊN khi đủ ngưỡng & mẫu (AI_GOI_Y còn cần điểm gần đây đủ), XUỐNG khi mức AI mà điểm gần đây < nguong_ha
+            (60) trên ≥ mau_ha (5) mẫu; mỗi đề nghị = việc GAT_BUOC giao TRUONG_MKT (gộp trùng theo bước+hướng+mức, tự huỷ khi
+            hết lý do); gạt xong đóng việc và tính lại. Máy tuyệt đối không đổi nguoi_thuc_hien. (3) Tay máy B6 HOAN_THIEN_BAI:
+            post/carousel đã duyệt → bài đăng (AI_GOI_Y: CHUẨN BỊ + việc lên lịch; AI_TU_LAM: lên lịch theo ngày đăng dự kiến, giờ
+            từ gợi ý G4 hoặc 19h); người sửa bản đăng/giờ khi lên lịch = mẫu học B6. (4) GET /buoc/:ma/mau: mẫu học & lịch sử gạt để
+            người thấy máy học gì trước khi gạt. (5) Thứ tự gợi ý: nhóm ① B1·B5·B9·B11, nhóm ② B4·B2·B3·B6·B7; B7 chưa có tay máy
+            (cần API ảnh) — bảng ghi rõ "chưa có tay máy".
+Người duyệt: Thiện · Trạng thái: ĐÃ DUYỆT (2026-09-23, "tiếp 006")
+```
+
 ## Changelog
+
+### 2026-09-23 · ADR-006 (gạt bước)
+- **Worker**: cột `san_sang_gan, so_mau_gan, de_nghi, de_nghi_ly_do, de_nghi_at`; config `may {nguong_ha, ngay_gan, mau_ha}`; `tinhSanSang` tính thêm điểm gần đây; `deNghiGat` (việc GAT_BUOC cho Trưởng MKT, huỷ khi hết lý do); PATCH /buoc đóng việc & tính lại; agent `HOAN_THIEN_BAI` (THUC_HIEN/B6); mẫu học B6 ở PATCH /bai-dang; `GET /buoc/:ma/mau`; cách đăng TRAM khi tạo bài đăng.
+- **Giao diện**: Máy › Bước có cột **Máy đề nghị** (⬆/⬇ + lý do + "Gạt theo đề nghị"), điểm N ngày gần nhất, nhãn nhóm ①/②, "tay máy: …" hoặc "chưa có tay máy", mở rộng **xem mẫu học** (máy vs người, điểm giống) và **lịch sử gạt**; Cấu hình › Máy thêm ngưỡng hạ / số ngày / số mẫu.
+- Test `tests/adr006.test.mjs`: 6 nhóm.
 
 ### 2026-09-23 · ADR-005 (Kết quả · Báo cáo · G4)
 - **Worker**: bảng `ket_qua, bao_cao, de_xuat`, `bai_dang.ma_theo_doi`; config `do_luong {so_ngay_do}`, `bao_cao {gui_n8n, ngay_bao_cao_thang}`, `hoc {min_mau, lech_toi_thieu_pct, buoc_doi_ty_trong}`; helpers `layIdBaiTuLink, doFacebook, doYouTube, ghiKetQuaTichLuy, chayDoLuong, soLieuBaoCao, nhanDinhLuat, nhanDinhAI, taoBaoCao, guiBaoCao, chayDeXuat, apDungDeXuat`; agent `DO_LUONG` (B10), `BAO_CAO` (B11: thứ Hai tuần, ngày 1 tháng), `HOC_DE_XUAT` (B12: ngày 2, chỉ khi ở mức AI); API `POST /ket-qua`, `POST /ket-qua/doi-soat`, `DELETE /ket-qua/:id`, `POST /bai-dang/:id/ma-theo-doi`, `POST /bao-cao`, `PATCH /bao-cao/:id`, `POST /bao-cao/:id/gui`, `POST /de-xuat/:id/quyet`, `POST /ket-qua/ingest` (X-App-Token); bootstrap `ket_qua (120 ngày), bao_cao, de_xuat, muc_tin_cay, nguon_kq`.
