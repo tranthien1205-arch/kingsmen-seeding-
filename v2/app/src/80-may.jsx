@@ -2,11 +2,12 @@
 function May(){
   const { db, me } = useApp();
   const [tab,setTab]=useState('buoc');
-  const tabs=[{key:'buoc',label:'Bước: người hay AI'},{key:'nhatky',label:'Nhật ký máy',count:(db.agent_run||[]).length},{key:'chiphi',label:'Chi phí AI'},{key:'cauhinh',label:'Cấu hình'},...(['ADMIN','TRUONG_MKT'].includes(me.vai_tro)?[{key:'nguoi',label:'Người dùng',count:(db.users||[]).length}]:[]),...(me.vai_tro==='ADMIN'?[{key:'nhap',label:'Nhập danh mục'},{key:'mophong',label:'🧪 Mô phỏng'}]:[])];
+  const tabs=[{key:'buoc',label:'Bước: người hay AI'},{key:'tram',label:'🖥 Trạm máy văn phòng'},{key:'nhatky',label:'Nhật ký máy',count:(db.agent_run||[]).length},{key:'chiphi',label:'Chi phí AI'},{key:'cauhinh',label:'Cấu hình'},...(['ADMIN','TRUONG_MKT'].includes(me.vai_tro)?[{key:'nguoi',label:'Người dùng',count:(db.users||[]).length}]:[]),...(me.vai_tro==='ADMIN'?[{key:'nhap',label:'Nhập danh mục'},{key:'mophong',label:'🧪 Mô phỏng'}]:[])];
   return <div className="space-y-4">
     <PageHeader title="🤖 Máy" sub={'Giai đoạn 1: người làm, máy học. '+(db.san_sang.ai?'● Bộ não Anthropic sẵn sàng':'○ Chưa cắm ANTHROPIC_API_KEY (secret Worker)')+' · '+(db.san_sang.youtube?'● YouTube':'○ YouTube key')+' · '+(db.san_sang.n8n?'● n8n':'○ n8n')}/>
     <Tabs size="sm" active={tab} onChange={setTab} tabs={tabs}/>
     {tab==='buoc' && <BangBuoc/>}
+    {tab==='tram' && <TramTab/>}
     {tab==='nhatky' && <NhatKyMay/>}
     {tab==='chiphi' && <ChiPhiAI/>}
     {tab==='cauhinh' && <CauHinhMay/>}
@@ -43,6 +44,30 @@ function BangBuoc(){
           <td className="px-3 py-2"><div className="flex items-center gap-2"><div className="flex-1"><Thanh pct={b.san_sang} cls={duSS?'bg-emerald-500':'bg-brand'}/></div><span className="tabular-nums text-ink w-10 text-right">{b.san_sang}</span></div><div className="text-[10px] text-ink-muted mt-0.5">{b.so_mau} mẫu{duSS?' · đủ để gạt AI tự làm':''}</div></td>
           <td className="px-3 py-2 text-[10px] text-ink-muted">{b.doi_boi?<>{b.doi_boi}<br/>{fmtDate(b.doi_at)}</>:'—'}</td>
         </tr>; })}</tbody></table></div></Card>
+  </div>;
+}
+// ADR-004 — Trạm máy văn phòng (masfico-tram): ghép bằng mã HUB1, nhịp tim, phiên, lệnh, lô dữ liệu, chạy thử agent content_os
+function TramTab(){
+  const { db, me, goi, notify } = useApp(); const t=db.tram||{}; const tt=t.trang_thai; const [ma,setMa]=useState(''); const [busy,setBusy]=useState(false);
+  const taoKhoa=async()=>{ if(!confirm('Tạo khoá mới? Khoá cũ (nếu có) hết hiệu lực — Trạm phải dán mã ghép mới.')) return; setBusy(true); const r=await goi('/tram/khoa',{method:'POST'}); setBusy(false); if(r.ok){ setMa(r.ma_ghep); notify('Đã tạo khoá — dán mã ghép vào trang Trạm'); } else notify(r.msg,'err'); };
+  const lenh=async(viec)=>{ setBusy(true); const r=await goi('/tram/lenh',{method:'POST',body:{viec:'chay_agent', tham_so:{id:'content_os', viec}}}); setBusy(false); if(r.ok) notify(r.trung?'Lệnh này đang chờ Trạm lấy rồi':'Đã xếp lệnh — Trạm lấy trong ~20 giây'); else notify(r.msg,'err'); };
+  const phien=tt&&tt.phien?Object.entries(tt.phien):[];
+  return <div className="space-y-3">
+    <Callout tone="info"><b>Trạm</b> là máy văn phòng luôn bật (masfico-tram) giữ phiên đăng nhập TikTok/Facebook/Zalo thật. Content OS ghép theo hợp đồng hub1: Trạm tự hỏi lệnh 20 giây/lần, đẩy dữ liệu về, báo nhịp tim 2 phút/lần. Content OS giao cho Trạm: <b>đăng bài</b> nền tảng không có API (kênh chọn cách đăng "Qua Trạm"), <b>đo lường</b> bằng trình duyệt đã đăng nhập, <b>dựng video</b> bằng ffmpeg, và nhận <b>tin đối thủ</b> máy quét về làm ý tưởng.</Callout>
+    <div className="grid lg:grid-cols-2 gap-3">
+      <Card><SectionTitle className="mb-1">Trạng thái</SectionTitle>
+        {!tt ? <div className="text-sm text-ink-muted">Chưa nhận nhịp tim nào từ Trạm.{!t.co_khoa&&' Tạo khoá rồi dán mã ghép vào trang Trạm.'}</div>
+        : <div className="text-sm"><div className={tt.song?'text-emerald-700 font-semibold':'text-rose-700 font-semibold'}>{tt.song?'🟢 đang chạy':'🔴 im '+tt.im_phut+' phút'} trên máy <b>{tt.may}</b> · Trạm v{tt.ban}{tt.dung_nha===false&&<span className="text-rose-600"> · ⚠ không đúng nhà</span>}</div><div className="text-[11px] text-ink-muted">nhịp tim gần nhất {fmtDate(tt.nhan_luc)} · giờ máy {tt.gio_may}</div>
+          {phien.length>0&&<div className="mt-2 space-y-0.5">{phien.map(([id,p])=><div key={id} className="text-[11px] flex gap-2"><span className={p.co_phien?'text-emerald-600':'text-slate-400'}>{p.co_phien?'●':'○'}</span><span className="font-semibold text-ink">{p.ten||id}</span><span className="text-ink-muted">{p.tt} · {p.msg}</span></div>)}</div>}</div>}
+        <div className="mt-3 flex gap-2 flex-wrap items-center">{me.vai_tro==='ADMIN'&&<Btn variant="brand" onClick={taoKhoa} disabled={busy}>{t.co_khoa?'🔑 Tạo khoá mới':'🔑 Tạo khoá & mã ghép'}</Btn>}<span className="text-[11px] text-ink-muted">{t.co_khoa?'đã có khoá':'chưa có khoá'} · {t.bat?'đang bật':'đang tắt'}</span></div>
+        {ma&&<div className="mt-2"><div className="text-[11px] text-ink-muted mb-1">Mã ghép (hiện một lần — dán vào trang Trạm › Cài đặt › Ứng dụng ghép):</div><Textarea rows="3" readOnly value={ma} onFocus={e=>e.target.select()} className="text-[11px] font-mono"/><LinkBtn onClick={()=>{ navigator.clipboard&&navigator.clipboard.writeText(ma); notify('Đã copy'); }}>📋 Copy mã ghép</LinkBtn></div>}
+      </Card>
+      <Card><SectionTitle className="mb-1">Sai Trạm chạy agent content_os</SectionTitle><div className="text-[11px] text-ink-muted mb-2">Chỉ chạy được khi Trạm đã cài agent content_os (xem v2/tram/README-GHEP.md) và đang có nhịp tim.</div>
+        <div className="flex gap-2 flex-wrap">{laStaff(me)&&<><Btn variant="ghost" onClick={()=>lenh('dang')} disabled={busy||!(tt&&tt.song)}>🚀 Đăng bài chờ Trạm</Btn><Btn variant="ghost" onClick={()=>lenh('do_luong')} disabled={busy||!(tt&&tt.song)}>📡 Đo lường</Btn><Btn variant="ghost" onClick={()=>lenh('dung_video')} disabled={busy||!(tt&&tt.song)}>🎬 Dựng video</Btn></>}</div>
+        {(t.lenh||[]).length>0&&<div className="mt-3 text-[11px]"><div className="font-semibold text-ink-muted mb-0.5">Lệnh gần đây</div>{(t.lenh||[]).slice(0,8).map(l=><div key={l.id} className="py-0.5 border-t border-line flex gap-2"><Pill cls={l.trang_thai==='XONG'?'bg-emerald-100 text-emerald-800':l.trang_thai==='HONG'?'bg-rose-100 text-rose-700':l.trang_thai==='DA_GUI'?'bg-sky-100 text-sky-800':'bg-slate-100 text-ink'}>{l.trang_thai}</Pill><span className="text-ink">{l.viec} {l.tham_so.id?(l.tham_so.id+'/'+l.tham_so.viec):''}</span><span className="text-ink-muted min-w-0 flex-1 truncate">{l.ket_qua||''}</span><span className="text-slate-400 shrink-0">{fmtDate(l.created_at)}</span></div>)}</div>}
+      </Card>
+    </div>
+    {(t.lo||[]).length>0&&<Card pad="p-3"><SectionTitle className="mb-1">Lô dữ liệu Trạm đẩy về</SectionTitle>{(t.lo||[]).map(l=><div key={l.id} className="text-[11px] py-0.5 border-t border-line flex gap-2"><span className="text-slate-400 shrink-0">{fmtDate(l.created_at)}</span><span className="font-semibold text-ink">{l.bang}</span><span className="text-ink-muted">{l.so_dong} dòng · +{l.xu_ly.moi||0} mới · {l.xu_ly.cap_nhat||0} cập nhật{(l.xu_ly.loi||[]).length?(' · lỗi: '+l.xu_ly.loi.join('; ')):''}</span></div>)}</Card>}
   </div>;
 }
 function NhatKyMay(){

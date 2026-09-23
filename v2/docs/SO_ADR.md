@@ -46,7 +46,32 @@ Quyết định: (1) noi_dung (dinh_dang bất biến, phiên bản, tao_boi NGU
 Người duyệt: Thiện · Trạng thái: ĐÃ DUYỆT (2026-09-23, "ok tiếp tục")
 ```
 
+```
+ADR-004 · 2026-09-23 · Dùng chung Trạm máy văn phòng (masfico-tram) làm "tay máy" của Content OS theo hợp đồng hub1
+Bối cảnh : Thiện đã có Trạm (may/ trong repo masfico-insight, chạy trên máy văn phòng, giữ phiên TikTok/Facebook/Zalo thật,
+            hub cho nhiều app) và muốn "dùng chung hạ tầng đó luôn, nâng cấp thêm cho phù hợp". Worker Cloudflare không
+            đăng được TikTok, không chạy ffmpeg, không đo nền tảng không API.
+Quyết định: (1) Content OS là app hub1: /api/hub/ping|lenh|lenh_xong|trang_thai|nap|upload xác thực X-Hub-Key; khoá do Admin
+            tạo (module_config.tram.khoa, không dán tay, không bao giờ trả ra bootstrap), mã ghép HUB1.<base64url>.
+            (2) Content OS chỉ sai Trạm bằng VIEC_HUB của Trạm (chay_agent content_os/…); hàng đợi tram_lenh, gộp trùng,
+            quá 30' không báo → HONG. (3) Agent "content_os" trên Trạm (3 script, không sửa tram.mjs): dang (TikTok/Facebook
+            bằng hồ sơ đã đăng nhập), do_luong (đọc số tích luỹ), dung_video (ffmpeg → /hub/upload). Kết quả về bằng lô
+            content_os.* → bai_dang DA_DANG/LOI, tài sản VIDEO_XUAT, tram_lo (số đo, ADR-005 dùng). (4) Lô doi_thu_tin của
+            agent đối thủ → ý tưởng nguồn DOI_THU qua gomYTuong. (5) bai_dang/kenh có cách đăng TRAM; DANG_BAI: Trạm im →
+            giao đăng tay. (6) Thư mục Trạm/repo đang do phiên Claude khác dùng → file ghép soạn ở v2/tram/, ghép sau; hook
+            khoá thư mục ~/.claude/hooks/khoa-thu-muc.mjs chống hai phiên sửa cùng thư mục.
+            Đợt "Kết quả · Báo cáo · Đề xuất (G4)" dời thành ADR-005.
+Người duyệt: Thiện · Trạng thái: ĐÃ DUYỆT (2026-09-23, "dùng chung hạ tầng đó luôn, và có thể nâng cấp thêm")
+```
+
 ## Changelog
+
+### 2026-09-23 · ADR-004 (Trạm)
+- **Worker**: bảng `tram_lenh, tram_trang_thai, tram_lo`; config `tram {khoa, bat, so_ngay_do, im_lang_phut}` (validator chặn dán khoá tay); `VIEC_TRAM`, `MON_HUB`, `xacThucHub, taoLenhTram, docTramTrangThai, napLoTram`; đường hub `/hub/ping, /hub/lenh, /hub/lenh_xong, /hub/trang_thai, /hub/nap, /hub/upload, /hub/viec/dang|do_luong|dung_video`; API `POST /tram/khoa` (Admin, mã ghép), `POST /tram/lenh` (staff); `DANG_BAI` xử lý cách TRAM; kênh/bài đăng nhận `cach_dang=TRAM`; bootstrap `tram {co_khoa, bat, trang_thai(song, im_phut, phien), lenh, lo}`.
+- **Giao diện**: Máy › **🖥 Trạm máy văn phòng** (trạng thái nhịp tim/phiên, 🔑 Tạo khoá & mã ghép hiện một lần, nút sai Trạm đăng/đo/dựng, lệnh & lô gần đây); Kênh và tab Đăng có lựa chọn "Qua Trạm máy văn phòng".
+- **v2/tram/** (ghép vào may/ của masfico-insight khi khoá thư mục mở): `content-os-lib.mjs`, `content-os-dang.mjs`, `content-os-do-luong.mjs`, `content-os-dung-video.mjs`, `agents-content_os.mjs`, `README-GHEP.md`.
+- **Máy Thiện**: hook `~/.claude/hooks/khoa-thu-muc.mjs` + sổ `~/.claude/khoa-thu-muc.json` — đã khoá thư mục Trạm và bản clone masfico-insight cho phiên khác (8 giờ).
+- Test `tests/adr004.test.mjs`: 6 nhóm.
 
 ### 2026-09-23 · ADR-003 (đợt 3)
 - **Worker**: bảng `noi_dung, noi_dung_phien_ban, duyet, tai_san, bai_dang`; config `noi_dung {soan_nhap_toi_da_ngay, hoc_toi_da_ngay, diem_tham_dinh}`; helpers `vanBan, banDang, quetClaim, chamNoiDungMay, promptNoiDung (KHUON 4 định dạng + ví dụ đã duyệt), duyetVanBanAI, aiVietNoiDung, giongVanBan, datGiaiDoan, taoNoiDung, guiDuyet, banNhapBong, dangFacebook, dangN8n, chayDangBai`; agent `SOAN_NHAP` (THUC_HIEN/B4), `HOC_SOAN_NHAP` (HOC/B4), `DANG_BAI` (HE_THONG/B9, nhịp 15'); dieuPhoi hỗ trợ `nhip:'15p'`; API `/noi-dung/ngu-canh|ai-viet|kho`, `POST/PATCH /noi-dung`, `/noi-dung/:id/gui-duyet`, `/noi-dung/:id/video`, `/duyet/:id/quyet`, `/tai-san/upload` (R2), `POST/DELETE /tai-san`, `/ai/usage` (công cụ), `POST/PATCH /bai-dang`, `/bai-dang/:id/dang-ngay`, `/bai-dang/:id/n8n-callback`, `/muc/:id/giai-doan`; bí danh đường cũ cho công cụ video. Bootstrap thêm `noi_dung, duyet, tai_san, bai_dang`. Mô phỏng nạp thêm 2 nội dung + 1 bài chờ duyệt.

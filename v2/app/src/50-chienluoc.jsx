@@ -211,7 +211,7 @@ function DanhMucForm({bang, init, onClose}){
     if(t==='pillar') return <Field label={l}><Select value={v} onChange={e=>set(e.target.value)}><option value="">— chọn —</option>{(db.pillars||[]).map(p=><option key={p.id} value={p.id}>{p.ten}</option>)}</Select></Field>;
     if(t==='muctieu') return <Field label={l} hint="Brand: đo tiếp cận, lượt xem, chia sẻ, tương tác. Bán hàng: đo đơn, doanh thu (3 mức tin cậy)."><Select value={v||'BRAND'} onChange={e=>set(e.target.value)}><option value="BRAND">Brand</option><option value="BAN_HANG">Bán hàng</option></Select></Field>;
     if(t==='mucdo') return <Field label={l} hint="CHẶN: không cho lưu nội dung có cụm này. Cảnh báo: chỉ nhắc."><Select value={v||'CANH_BAO'} onChange={e=>set(e.target.value)}><option value="CHAN">CHẶN</option><option value="CANH_BAO">Cảnh báo</option></Select></Field>;
-    if(t==='cachdang') return <Field label={l}><Select value={v||'TAY'} onChange={e=>set(e.target.value)}><option value="TAY">Đăng tay (máy giao việc)</option><option value="API">API nền tảng (cần TOKEN_)</option><option value="N8N">Qua n8n</option></Select></Field>;
+    if(t==='cachdang') return <Field label={l}><Select value={v||'TAY'} onChange={e=>set(e.target.value)}><option value="TAY">Đăng tay (máy giao việc)</option><option value="API">API nền tảng (cần TOKEN_)</option><option value="N8N">Qua n8n</option><option value="TRAM">Qua Trạm máy văn phòng (trình duyệt đã đăng nhập)</option></Select></Field>;
     return <Field label={l}><Input value={v} onChange={e=>set(e.target.value)}/></Field>; };
   return <Modal open onClose={onClose} title={(init.id?'Sửa ':'Thêm ')+meta.ten}>
     {meta.form.map(([k,l,t])=><O key={k} k={k} l={l} t={t}/>)}
