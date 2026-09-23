@@ -1178,85 +1178,97 @@ async function insertContentItem(env, me, body){
 // ---------- bootstrap: toàn bộ dữ liệu theo quyền ----------
 async function bootstrap(env, u){
   const staff = isStaff(u);
-  try { await ensurePostSlots(env); } catch(e){}
-  const pricingRow = await env.DB.prepare(`SELECT * FROM pricing WHERE id=1`).first();
-  const groups = (await env.DB.prepare(`SELECT * FROM groups`).all()).results.map(rowGroup);
-  const topics = (await env.DB.prepare(`SELECT * FROM content_topics`).all()).results.map(rowTopic);
-  const cmtsug = (await env.DB.prepare(`SELECT * FROM cmt_suggestions`).all()).results.map(rowCmtSug);
-  const users = staff ? (await env.DB.prepare(`SELECT * FROM users`).all()).results.map(rowUser) : [rowUser(u)];
-  const postSql = staff ? `SELECT * FROM post_seedings` : `SELECT * FROM post_seedings WHERE sales_id=?`;
-  const cmtSql  = staff ? `SELECT * FROM cmt_seedings`  : `SELECT * FROM cmt_seedings WHERE sales_id=?`;
-  const posts = (await (staff ? env.DB.prepare(postSql) : env.DB.prepare(postSql).bind(u.id)).all()).results;
-  const cmts  = (await (staff ? env.DB.prepare(cmtSql)  : env.DB.prepare(cmtSql).bind(u.id)).all()).results;
-  // proofs
-  const proofRows = (await env.DB.prepare(`SELECT * FROM cmt_proofs`).all()).results;
+  const canContent = staff || u.vai_tro===ROLES.KY_THUAT;
+  // Mọi câu SELECT độc lập → bắn cùng lúc rồi chờ một lượt (trước: ~40 câu chạy tuần tự, mỗi lần ghi
+  // là một lượt như vậy). ensurePostSlots đã chuyển sang cron hằng ngày + lúc đăng nhập/bật lịch.
+  const all = (sql, ...b) => (b.length ? env.DB.prepare(sql).bind(...b) : env.DB.prepare(sql)).all().then(r=>r.results);
+  const one = (sql) => env.DB.prepare(sql).first();
+  const none = Promise.resolve([]);
+  const slotSince = ymdPlus(vnDayInfo().ymd, -14).ymd;
+  const [
+    pricingRow, groupsR, topicsR, cmtsugR, usersR, posts, cmts, proofRows, audit,
+    ftpls, fphs, fshots, pfRows, fups, guidesR, ptpR, post_slots, mediaR, sanPhamR, claimR, pillarsR, stratR, fwR, kenhR, ciR,
+    scriptsR, approvals, cfg, sxR, airR, ket_qua, don_cho_gan, footR, shot_list, trendsR, bhR, agent_log,
+  ] = await Promise.all([
+    one(`SELECT * FROM pricing WHERE id=1`),
+    all(`SELECT * FROM groups`), all(`SELECT * FROM content_topics`), all(`SELECT * FROM cmt_suggestions`),
+    staff ? all(`SELECT * FROM users`) : Promise.resolve([u]),
+    staff ? all(`SELECT * FROM post_seedings`) : all(`SELECT * FROM post_seedings WHERE sales_id=?`, u.id),
+    staff ? all(`SELECT * FROM cmt_seedings`)  : all(`SELECT * FROM cmt_seedings WHERE sales_id=?`, u.id),
+    // Ảnh bằng chứng: chỉ lấy của các CMT người này thấy (Sales: của mình) — không kéo cả bảng
+    staff ? all(`SELECT * FROM cmt_proofs`) : all(`SELECT p.* FROM cmt_proofs p JOIN cmt_seedings c ON c.id=p.cmt_seeding_id WHERE c.sales_id=?`, u.id),
+    staff ? all(`SELECT * FROM audit ORDER BY at DESC LIMIT 200`) : none,
+    all(`SELECT * FROM filming_templates`), all(`SELECT * FROM filming_phases`), all(`SELECT * FROM filming_shots`),
+    staff ? all(`SELECT * FROM project_filmings`) : all(`SELECT * FROM project_filmings WHERE sales_id=?`, u.id),
+    staff ? all(`SELECT * FROM filming_uploads`) : all(`SELECT fu.* FROM filming_uploads fu JOIN project_filmings pf ON pf.id=fu.project_filming_id WHERE pf.sales_id=?`, u.id),
+    all(`SELECT * FROM guides`), all(`SELECT * FROM post_type_prefs`),
+    all(`SELECT * FROM post_slots WHERE ngay>=? ORDER BY ngay ASC`, slotSince),
+    all(`SELECT * FROM media_library ORDER BY uploaded_at DESC`),
+    all(`SELECT * FROM san_pham ORDER BY created_at DESC`), all(`SELECT * FROM claim_cam ORDER BY created_at DESC`),
+    all(`SELECT * FROM pillars ORDER BY thu_tu ASC, created_at ASC`), one(`SELECT * FROM content_strategy WHERE id=1`),
+    all(`SELECT * FROM frameworks ORDER BY thu_tu ASC, created_at ASC`), all(`SELECT * FROM kenh ORDER BY created_at ASC`),
+    all(`SELECT * FROM content_items ORDER BY created_at DESC`),
+    canContent ? all(`SELECT * FROM scripts ORDER BY updated_at DESC`) : none,
+    canContent ? all(`SELECT * FROM approvals ORDER BY created_at DESC`) : none,
+    docCauHinh(env),
+    canContent ? all(`SELECT * FROM san_xuat ORDER BY stt ASC, created_at ASC`) : none,
+    canContent ? all(`SELECT * FROM air_posts ORDER BY created_at DESC`) : none,
+    canContent ? all(`SELECT * FROM ket_qua ORDER BY created_at DESC`) : none,
+    canContent ? all(`SELECT * FROM don_cho_gan ORDER BY created_at DESC`) : none,
+    canContent ? all(`SELECT * FROM footage ORDER BY created_at DESC`) : none,
+    canContent ? all(`SELECT * FROM shot_list ORDER BY thu_tu ASC, created_at ASC`) : none,
+    canContent ? all(`SELECT * FROM trends ORDER BY created_at DESC`) : none,
+    canContent ? all(`SELECT * FROM bai_hoc ORDER BY created_at DESC`) : none,
+    canContent ? all(`SELECT * FROM agent_log ORDER BY at DESC LIMIT 10`) : none,
+  ]);
+  const groups = groupsR.map(rowGroup);
+  const topics = topicsR.map(rowTopic);
+  const cmtsug = cmtsugR.map(rowCmtSug);
+  const users = usersR.map(rowUser);
   const proofsByCmt = {};
   for(const p of proofRows){ (proofsByCmt[p.cmt_seeding_id] ||= []).push({ id:p.id, image_url:p.image_url, uploaded_at:p.uploaded_at }); }
   const cmtsFull = cmts.map(c=>({ ...c, proofs: proofsByCmt[c.id]||[] }));
-  const audit = staff ? (await env.DB.prepare(`SELECT * FROM audit ORDER BY at DESC LIMIT 200`).all()).results : [];
 
-  // ---- QUAY CÔNG TRÌNH ----
-  const ftpls  = (await env.DB.prepare(`SELECT * FROM filming_templates`).all()).results;
-  const fphs   = (await env.DB.prepare(`SELECT * FROM filming_phases`).all()).results;
-  const fshots = (await env.DB.prepare(`SELECT * FROM filming_shots`).all()).results;
+  // ---- QUAY CÔNG TRÌNH ---- (gom theo Map thay vì filter lồng nhau)
+  const phasesByTpl = {}; for(const p of fphs){ (phasesByTpl[p.template_id] ||= []).push(p); }
+  const shotsByPhase = {}; for(const sh of fshots){ (shotsByPhase[sh.phase_id] ||= []).push(sh); }
+  const byThuTu = (a,b)=>(a.thu_tu||0)-(b.thu_tu||0);
   const filming_templates = ftpls.map(t=>({
     id:t.id, ten:t.ten, he_san_pham:t.he_san_pham, active:uBool(t.active),
-    phases: fphs.filter(p=>p.template_id===t.id).sort((a,b)=>(a.thu_tu||0)-(b.thu_tu||0)).map(p=>({
+    phases: (phasesByTpl[t.id]||[]).sort(byThuTu).map(p=>({
       id:p.id, ten:p.ten, thu_tu:p.thu_tu,
-      shots: fshots.filter(s=>s.phase_id===p.id).sort((a,b)=>(a.thu_tu||0)-(b.thu_tu||0)).map(s=>({
+      shots: (shotsByPhase[p.id]||[]).sort(byThuTu).map(s=>({
         id:s.id, ten:s.ten, mo_ta:s.mo_ta, source_mau_url:s.source_mau_url, bat_buoc:uBool(s.bat_buoc), thu_tu:s.thu_tu, active:uBool(s.active), don_gia:s.don_gia==null?null:Number(s.don_gia),
       })),
     })),
   }));
-  const pfSql = staff ? `SELECT * FROM project_filmings` : `SELECT * FROM project_filmings WHERE sales_id=?`;
-  const pfRows = (await (staff ? env.DB.prepare(pfSql) : env.DB.prepare(pfSql).bind(u.id)).all()).results;
-  const fups = (await env.DB.prepare(`SELECT * FROM filming_uploads`).all()).results;
+  const upsByProj = {}; for(const x of fups){ (upsByProj[x.project_filming_id] ||= []).push(x); }
   const project_filmings = pfRows.map(p=>({
-    ...p, uploads: fups.filter(x=>x.project_filming_id===p.id).map(x=>({ id:x.id, shot_id:x.shot_id, media_type:x.media_type, media_url:x.media_url, uploaded_at:x.uploaded_at, dat_item:x.dat_item==null?null:uBool(x.dat_item), level:x.level==null?null:Number(x.level) })),
+    ...p, uploads: (upsByProj[p.id]||[]).map(x=>({ id:x.id, shot_id:x.shot_id, media_type:x.media_type, media_url:x.media_url, uploaded_at:x.uploaded_at, dat_item:x.dat_item==null?null:uBool(x.dat_item), level:x.level==null?null:Number(x.level) })),
   }));
   const guides = {};
-  (await env.DB.prepare(`SELECT * FROM guides`).all()).results.forEach(g=>{ guides[g.key]={ noi_dung:g.noi_dung, video_url:g.video_url }; });
+  guidesR.forEach(g=>{ guides[g.key]={ noi_dung:g.noi_dung, video_url:g.video_url }; });
   const post_type_prefs = {};
-  (await env.DB.prepare(`SELECT * FROM post_type_prefs`).all()).results.forEach(r=>{ post_type_prefs[r.loai]={ an:uBool(r.an), uu_tien:uBool(r.uu_tien), thu_tu:r.thu_tu==null?null:Number(r.thu_tu) }; });
-  const slotSince = ymdPlus(vnDayInfo().ymd, -14).ymd;
-  const post_slots = (await env.DB.prepare(`SELECT * FROM post_slots WHERE ngay>=? ORDER BY ngay ASC`).bind(slotSince).all()).results;
-  const media_library = (await env.DB.prepare(`SELECT * FROM media_library ORDER BY uploaded_at DESC`).all()).results
-    .map(r=>({ ...r, active:uBool(r.active), tags: JSON.parse(r.tags||'[]') }));
-  const san_pham = (await env.DB.prepare(`SELECT * FROM san_pham ORDER BY created_at DESC`).all()).results
-    .map(r=>({ ...r, active:uBool(r.active), thong_so: JSON.parse(r.thong_so||'[]') }));
-  const claim_cam = (await env.DB.prepare(`SELECT * FROM claim_cam ORDER BY created_at DESC`).all()).results
-    .map(r=>({ ...r, active:uBool(r.active) }));
-  const pillars = (await env.DB.prepare(`SELECT * FROM pillars ORDER BY thu_tu ASC, created_at ASC`).all()).results
-    .map(r=>({ ...r, active:uBool(r.active), ty_trong:r.ty_trong==null?0:Number(r.ty_trong) }));
-  const content_strategy = (await env.DB.prepare(`SELECT * FROM content_strategy WHERE id=1`).first()) || { okr:'', big_idea:'', purpose:'', audience:'', swot:'', brand_voice:'' };
-  const frameworks = (await env.DB.prepare(`SELECT * FROM frameworks ORDER BY thu_tu ASC, created_at ASC`).all()).results.map(r=>({ ...r, active:uBool(r.active) }));
-  const kenh = (await env.DB.prepare(`SELECT * FROM kenh ORDER BY created_at ASC`).all()).results.map(r=>({ ...r, active:uBool(r.active), tu_dong_dang:uBool(r.tu_dong_dang) }));
-  const content_items = (await env.DB.prepare(`SELECT * FROM content_items ORDER BY created_at DESC`).all()).results
-    .map(r=>({ ...r, pic: JSON.parse(r.pic||'{}'), chi_tiet: JSON.parse(r.chi_tiet||'{}'), links: JSON.parse(r.links||'{}') }));
+  ptpR.forEach(r=>{ post_type_prefs[r.loai]={ an:uBool(r.an), uu_tien:uBool(r.uu_tien), thu_tu:r.thu_tu==null?null:Number(r.thu_tu) }; });
+  const media_library = mediaR.map(r=>({ ...r, active:uBool(r.active), tags: JSON.parse(r.tags||'[]') }));
+  const san_pham = sanPhamR.map(r=>({ ...r, active:uBool(r.active), thong_so: JSON.parse(r.thong_so||'[]') }));
+  const claim_cam = claimR.map(r=>({ ...r, active:uBool(r.active) }));
+  const pillars = pillarsR.map(r=>({ ...r, active:uBool(r.active), ty_trong:r.ty_trong==null?0:Number(r.ty_trong) }));
+  const content_strategy = stratR || { okr:'', big_idea:'', purpose:'', audience:'', swot:'', brand_voice:'' };
+  const frameworks = fwR.map(r=>({ ...r, active:uBool(r.active) }));
+  const kenh = kenhR.map(r=>({ ...r, active:uBool(r.active), tu_dong_dang:uBool(r.tu_dong_dang) }));
+  const content_items = ciR.map(r=>({ ...r, pic: JSON.parse(r.pic||'{}'), chi_tiet: JSON.parse(r.chi_tiet||'{}'), links: JSON.parse(r.links||'{}') }));
   // P4 — kịch bản (chỉ staff xem; Sales không cần)
-  const canContent = staff || u.vai_tro===ROLES.KY_THUAT;
-  const scripts = canContent ? (await env.DB.prepare(`SELECT * FROM scripts ORDER BY updated_at DESC`).all()).results
-    .map(r=>({ ...r, sections: JSON.parse(r.sections||'[]'), claim_flags: JSON.parse(r.claim_flags||'[]') })) : [];
-  // P6 — hàng đợi duyệt 2 cổng (Kỹ thuật cần thấy để duyệt cổng CLAIM)
-  const approvals = canContent ? (await env.DB.prepare(`SELECT * FROM approvals ORDER BY created_at DESC`).all()).results : [];
-  const cfg = await docCauHinh(env);
-  const san_xuat = canContent ? (await env.DB.prepare(`SELECT * FROM san_xuat ORDER BY stt ASC, created_at ASC`).all()).results.map(rowSX) : [];
+  const scripts = scriptsR.map(r=>({ ...r, sections: JSON.parse(r.sections||'[]'), claim_flags: JSON.parse(r.claim_flags||'[]') }));
+  const san_xuat = sxR.map(rowSX);
   // P7 — bài đăng (checklist thủ công + mã theo dõi)
-  const air_posts = canContent ? (await env.DB.prepare(`SELECT * FROM air_posts ORDER BY created_at DESC`).all()).results
-    .map(r=>({ ...r, checklist: JSON.parse(r.checklist||'{}') })) : [];
-  // P8 — kết quả 3 mức tin cậy + hàng đợi gán tay
-  const ket_qua = canContent ? (await env.DB.prepare(`SELECT * FROM ket_qua ORDER BY created_at DESC`).all()).results : [];
-  const don_cho_gan = canContent ? (await env.DB.prepare(`SELECT * FROM don_cho_gan ORDER BY created_at DESC`).all()).results : [];
+  const air_posts = airR.map(r=>({ ...r, checklist: JSON.parse(r.checklist||'{}') }));
   // P5 — kho footage + shot list
-  const footage = canContent ? (await env.DB.prepare(`SELECT * FROM footage ORDER BY created_at DESC`).all()).results
-    .map(r=>({ ...r, active:uBool(r.active), tags: JSON.parse(r.tags||'[]') })) : [];
-  const shot_list = canContent ? (await env.DB.prepare(`SELECT * FROM shot_list ORDER BY thu_tu ASC, created_at ASC`).all()).results : [];
+  const footage = footR.map(r=>({ ...r, active:uBool(r.active), tags: JSON.parse(r.tags||'[]') }));
   // TREND — nghiên cứu & triển khai
-  const trends = canContent ? (await env.DB.prepare(`SELECT * FROM trends ORDER BY created_at DESC`).all()).results
-    .map(r=>({ ...r, danh_gia: JSON.parse(r.danh_gia||'{}') })) : [];
+  const trends = trendsR.map(r=>({ ...r, danh_gia: JSON.parse(r.danh_gia||'{}') }));
   // P10 — thư viện học
-  const bai_hoc = canContent ? (await env.DB.prepare(`SELECT * FROM bai_hoc ORDER BY created_at DESC`).all()).results
-    .map(r=>({ ...r, bang_chung: JSON.parse(r.bang_chung||'{}') })) : [];
+  const bai_hoc = bhR.map(r=>({ ...r, bang_chung: JSON.parse(r.bang_chung||'{}') }));
 
   return {
     me: rowUser(u),
@@ -1273,7 +1285,7 @@ async function bootstrap(env, u){
         : (!!layToken(env,k) && !!String(k.api_object_id||'').trim())])) : {},
     n8n_san_sang: staff ? (!!env.N8N_WEBHOOK_URL && !!env.N8N_TOKEN) : false,
     youtube_san_sang: staff ? !!env.YOUTUBE_API_KEY : false,
-    agent_log: canContent ? (await env.DB.prepare(`SELECT * FROM agent_log ORDER BY at DESC LIMIT 10`).all()).results : [],
+    agent_log,
     ai_san_sang: staff ? !!env.ANTHROPIC_API_KEY : false,
     module_config: cfg, can_cau_hinh: canCauHinh(u),
     san_xuat, sx_khau: SX_KHAU,
@@ -1285,6 +1297,70 @@ async function bootstrap(env, u){
   };
 }
 
+// ---- Duyệt 1 POST / 1 CMT (dùng chung cho endpoint lẻ và /reviews/bulk) ----
+async function reviewPostOne(env, me, id, body){
+  const p=await env.DB.prepare(`SELECT * FROM post_seedings WHERE id=?`).bind(id).first();
+  if(!p) return {error:'Không tìm thấy', status:404};
+  const pricing=await env.DB.prepare(`SELECT * FROM pricing WHERE id=1`).first();
+  if(body.result===ST.DAT){
+    // Chống trùng khi tính công: nếu đã có bài ĐẠT/ĐÃ CHI cùng nội dung–nhóm → bài này trùng, không tính tiền
+    const dupWinner = (p.topic_id && p.group_id) ? await env.DB.prepare(
+      `SELECT ps.id, u.ho_ten FROM post_seedings ps LEFT JOIN users u ON u.id=ps.sales_id
+       WHERE ps.topic_id=? AND ps.group_id=? AND ps.id<>? AND ps.trang_thai IN (?,?) LIMIT 1`
+    ).bind(p.topic_id, p.group_id, id, ST.DAT, ST.DA_CHI).first() : null;
+    if(dupWinner && !body.force){
+      const reason = 'Trùng nội dung–nhóm với bài đã duyệt'+(dupWinner.ho_ten?(' (của '+dupWinner.ho_ten+')'):'')+' — chỉ tính công 1 lần.';
+      await env.DB.prepare(`UPDATE post_seedings SET trang_thai=?, thanh_tien=0, reviewed_by=?, reviewed_at=?, ly_do_loai=? WHERE id=?`)
+        .bind(ST.KHONG_DAT, me.ho_ten, nowISO(), reason, id).run();
+      await logAudit(env,me,'nghiệm thu TRÙNG (không tính công)','post_seeding',id,reason);
+      return { deduped:true, reason };
+    }
+    await env.DB.prepare(`UPDATE post_seedings SET trang_thai=?, thanh_tien=?, reviewed_by=?, reviewed_at=?, ky_thanh_toan=?, ly_do_loai='' WHERE id=?`)
+      .bind(ST.DAT, pricing.don_gia_post, me.ho_ten, nowISO(), kyOf(), id).run();
+    await logAudit(env,me,'nghiệm thu ĐẠT','post_seeding',id);
+  } else {
+    if(!body.reason) return {error:'Cần lý do', status:400};
+    await env.DB.prepare(`UPDATE post_seedings SET trang_thai=?, thanh_tien=0, reviewed_by=?, reviewed_at=?, ly_do_loai=? WHERE id=?`)
+      .bind(ST.KHONG_DAT, me.ho_ten, nowISO(), body.reason, id).run();
+    await logAudit(env,me,'nghiệm thu KHÔNG ĐẠT','post_seeding',id,body.reason);
+  }
+  return {};
+}
+async function reviewCmtOne(env, me, id, body){
+  const c=await env.DB.prepare(`SELECT * FROM cmt_seedings WHERE id=?`).bind(id).first();
+  if(!c) return {error:'Không tìm thấy', status:404};
+  const pricing=await env.DB.prepare(`SELECT * FROM pricing WHERE id=1`).first();
+  if(body.result===ST.DAT){
+    const tien = (Number(c.so_cmt_seeding)||0)*pricing.don_gia_cmt;
+    await env.DB.prepare(`UPDATE cmt_seedings SET trang_thai=?, thanh_tien=?, reviewed_by=?, reviewed_at=?, ky_thanh_toan=?, ly_do_loai='' WHERE id=?`)
+      .bind(ST.DAT, tien, me.ho_ten, nowISO(), kyOf(), id).run();
+    await logAudit(env,me,'nghiệm thu ĐẠT','cmt_seeding',id);
+  } else {
+    if(!body.reason) return {error:'Cần lý do', status:400};
+    await env.DB.prepare(`UPDATE cmt_seedings SET trang_thai=?, thanh_tien=0, reviewed_by=?, reviewed_at=?, ly_do_loai=? WHERE id=?`)
+      .bind(ST.KHONG_DAT, me.ho_ten, nowISO(), body.reason, id).run();
+    await logAudit(env,me,'nghiệm thu KHÔNG ĐẠT','cmt_seeding',id,body.reason);
+  }
+  return {};
+}
+
+// ---- Chuyển ảnh bằng chứng CMT từ base64 (trong D1) sang R2 — chạy theo lô, gọi lặp tới khi remaining=0 ----
+async function migrateProofsBatch(env, limit=15){
+  if(!env.MEDIA) return { error:'Chưa cấu hình kho R2 (MEDIA)' };
+  const rows = (await env.DB.prepare(`SELECT id, image_url FROM cmt_proofs WHERE image_url LIKE 'data:%' LIMIT ?`).bind(limit).all()).results;
+  let done=0;
+  for(const r of rows){
+    const m = /^data:([^;]+);base64,(.*)$/s.exec(r.image_url||''); if(!m) continue;
+    const ct = m[1]; const bin = Uint8Array.from(atob(m[2]), ch=>ch.charCodeAt(0));
+    const ext = (ct.split('/')[1]||'jpg').replace(/[^a-z0-9]/gi,'') || 'jpg';
+    const key = 'proofs/'+r.id+'.'+ext;
+    await env.MEDIA.put(key, bin, { httpMetadata:{ contentType: ct } });
+    await env.DB.prepare(`UPDATE cmt_proofs SET image_url=? WHERE id=?`).bind('/media/'+key, r.id).run();
+    done++;
+  }
+  const left = await env.DB.prepare(`SELECT COUNT(*) AS n FROM cmt_proofs WHERE image_url LIKE 'data:%'`).first();
+  return { done, remaining: Number(left && left.n)||0 };
+}
 // ============================================================
 //  ROUTER
 // ============================================================
@@ -1381,6 +1457,14 @@ async function handleApi(request, env){
   if(path==='/bootstrap' && method==='GET'){ return json({ db: await bootstrap(env, me) }); }
 
   // --- hồ sơ cá nhân: bất kỳ ai cũng tự đổi TÊN HIỂN THỊ (và mật khẩu) của chính mình ---
+  if(path==='/admin/migrate-proofs' && method==='POST'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    const r = await migrateProofsBatch(env, Number(body.limit)||15);
+    if(r.error) return json({error:r.error}, 503);
+    if(r.done) await logAudit(env,me,'chuyển '+r.done+' ảnh bằng chứng sang R2','cmt_proofs','', 'còn '+r.remaining);
+    return json(r);
+  }
+
   if(path==='/me' && method==='PATCH'){
     const name = (body.ho_ten||'').trim();
     if(!name) return json({error:'Nhập tên hiển thị'},400);
@@ -2066,32 +2150,9 @@ async function handleApi(request, env){
   }
   if((m=path.match(/^\/posts\/(.+)\/review$/)) && method==='POST'){
     if(!isStaff(me)) return json({error:'Không có quyền'},403);
-    const id=m[1]; const p=await env.DB.prepare(`SELECT * FROM post_seedings WHERE id=?`).bind(id).first();
-    if(!p) return json({error:'Không tìm thấy'},404);
-    const pricing=await env.DB.prepare(`SELECT * FROM pricing WHERE id=1`).first();
-    if(body.result===ST.DAT){
-      // Chống trùng khi tính công: nếu đã có bài ĐẠT/ĐÃ CHI cùng nội dung–nhóm → bài này trùng, không tính tiền
-      const dupWinner = (p.topic_id && p.group_id) ? await env.DB.prepare(
-        `SELECT ps.id, u.ho_ten FROM post_seedings ps LEFT JOIN users u ON u.id=ps.sales_id
-         WHERE ps.topic_id=? AND ps.group_id=? AND ps.id<>? AND ps.trang_thai IN (?,?) LIMIT 1`
-      ).bind(p.topic_id, p.group_id, id, ST.DAT, ST.DA_CHI).first() : null;
-      if(dupWinner && !body.force){
-        const reason = 'Trùng nội dung–nhóm với bài đã duyệt'+(dupWinner.ho_ten?(' (của '+dupWinner.ho_ten+')'):'')+' — chỉ tính công 1 lần.';
-        await env.DB.prepare(`UPDATE post_seedings SET trang_thai=?, thanh_tien=0, reviewed_by=?, reviewed_at=?, ly_do_loai=? WHERE id=?`)
-          .bind(ST.KHONG_DAT, me.ho_ten, nowISO(), reason, id).run();
-        await logAudit(env,me,'nghiệm thu TRÙNG (không tính công)','post_seeding',id,reason);
-        return json({ db: await bootstrap(env, me), deduped:true, reason });
-      }
-      await env.DB.prepare(`UPDATE post_seedings SET trang_thai=?, thanh_tien=?, reviewed_by=?, reviewed_at=?, ky_thanh_toan=?, ly_do_loai='' WHERE id=?`)
-        .bind(ST.DAT, pricing.don_gia_post, me.ho_ten, nowISO(), kyOf(), id).run();
-      await logAudit(env,me,'nghiệm thu ĐẠT','post_seeding',id);
-    } else {
-      if(!body.reason) return json({error:'Cần lý do'},400);
-      await env.DB.prepare(`UPDATE post_seedings SET trang_thai=?, thanh_tien=0, reviewed_by=?, reviewed_at=?, ly_do_loai=? WHERE id=?`)
-        .bind(ST.KHONG_DAT, me.ho_ten, nowISO(), body.reason, id).run();
-      await logAudit(env,me,'nghiệm thu KHÔNG ĐẠT','post_seeding',id,body.reason);
-    }
-    return json({ db: await bootstrap(env, me) });
+    const r = await reviewPostOne(env, me, m[1], body);
+    if(r.error) return json({error:r.error}, r.status||400);
+    return json({ db: await bootstrap(env, me), ...r });
   }
 
   // ===== CMT SEEDING =====
@@ -2109,21 +2170,20 @@ async function handleApi(request, env){
   }
   if((m=path.match(/^\/cmtseed\/(.+)\/review$/)) && method==='POST'){
     if(!isStaff(me)) return json({error:'Không có quyền'},403);
-    const id=m[1]; const c=await env.DB.prepare(`SELECT * FROM cmt_seedings WHERE id=?`).bind(id).first();
-    if(!c) return json({error:'Không tìm thấy'},404);
-    const pricing=await env.DB.prepare(`SELECT * FROM pricing WHERE id=1`).first();
-    if(body.result===ST.DAT){
-      const tien = (Number(c.so_cmt_seeding)||0)*pricing.don_gia_cmt;
-      await env.DB.prepare(`UPDATE cmt_seedings SET trang_thai=?, thanh_tien=?, reviewed_by=?, reviewed_at=?, ky_thanh_toan=?, ly_do_loai='' WHERE id=?`)
-        .bind(ST.DAT, tien, me.ho_ten, nowISO(), kyOf(), id).run();
-      await logAudit(env,me,'nghiệm thu ĐẠT','cmt_seeding',id);
-    } else {
-      if(!body.reason) return json({error:'Cần lý do'},400);
-      await env.DB.prepare(`UPDATE cmt_seedings SET trang_thai=?, thanh_tien=0, reviewed_by=?, reviewed_at=?, ly_do_loai=? WHERE id=?`)
-        .bind(ST.KHONG_DAT, me.ho_ten, nowISO(), body.reason, id).run();
-      await logAudit(env,me,'nghiệm thu KHÔNG ĐẠT','cmt_seeding',id,body.reason);
-    }
+    const r = await reviewCmtOne(env, me, m[1], body);
+    if(r.error) return json({error:r.error}, r.status||400);
     return json({ db: await bootstrap(env, me) });
+  }
+  // Duyệt hàng loạt: N mục → 1 lần tải lại db (trước: N lần bootstrap đầy đủ)
+  if(path==='/reviews/bulk' && method==='POST'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    const items = Array.isArray(body.items) ? body.items.slice(0,200) : [];
+    let n=0, dup=0; const errors=[];
+    for(const it of items){
+      const r = it.kind==='post' ? await reviewPostOne(env, me, it.id, it) : await reviewCmtOne(env, me, it.id, it);
+      if(r.error) errors.push({id:it.id, error:r.error}); else { n++; if(r.deduped) dup++; }
+    }
+    return json({ db: await bootstrap(env, me), n, dup, errors });
   }
 
   // ===== ĐÁNH DẤU ĐÃ CHI (admin/marketing) =====
@@ -2793,6 +2853,7 @@ export default {
       // bên trong nó tự chốt mỗi ngày đúng 1 lần nên không chạy lặp.
       ctx.waitUntil(chayAgentTrend(env).catch(()=>{}));
     } else {
+      ctx.waitUntil(ensurePostSlots(env).catch(()=>{})); // sinh suất lịch đăng (trước chạy trong mọi bootstrap)
       ctx.waitUntil(cleanupOldMedia(env));        // dọn media quá hạn
       ctx.waitUntil(ghiNhatKyViecKet(env));       // chụp tình trạng việc kẹt
       ctx.waitUntil(tuDongHetHanTrend(env));      // trend quá hạn → tự bỏ qua
@@ -2830,6 +2891,12 @@ export default {
     }
     // web tĩnh
     const res = await env.ASSETS.fetch(request);
+    // Tệp build có hash trong tên (app.<hash>.js/css) và vendor: cache vĩnh viễn — đổi nội dung là đổi tên
+    if(/^\/(app\.[0-9a-f]+\.(js|css)|vendor\/.+)$/.test(url.pathname) && res.ok){
+      const h = new Headers(res.headers);
+      h.set('Cache-Control', 'public, max-age=31536000, immutable');
+      return new Response(res.body, { status:res.status, statusText:res.statusText, headers:h });
+    }
     // HTML luôn revalidate để người dùng nhận bản deploy mới ngay (tránh kẹt cache cũ)
     const ct = res.headers.get('content-type') || '';
     if(ct.includes('text/html')){
