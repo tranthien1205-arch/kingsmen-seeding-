@@ -178,7 +178,7 @@ async function goiGemini({key, model}, system, user){
     if(!res.ok){
       const m=(j.error&&j.error.message)||('HTTP '+res.status);
       if(res.status===429) return {ok:false, loi:'Gemini báo hết hạn mức: '+m+' — đổi sang model flash hoặc bật thanh toán ở Google AI Studio.'};
-      if(res.status===400 && /API key/i.test(m)) return {ok:false, loi:'Key Gemini không hợp lệ — kiểm lại ở công cụ Lọc & dựng video.'};
+      if(res.status===400 && /API key/i.test(m)) return {ok:false, loi:'Key Gemini không hợp lệ — kiểm lại ở Hệ thống › 🧠 Bộ não AI.'};
       return {ok:false, loi:'Gemini trả lỗi: '+m};
     }
     const c=(j.candidates||[])[0];
@@ -1460,6 +1460,7 @@ const NAV_GROUPS = {
     ]},
     {key:'g_sys', label:'Hệ thống', icon:'⚙️', items:[
       {key:'kenh', label:'Kênh & tự động đăng', short:'Kênh', icon:'📡'},
+      {key:'ai', label:'Bộ não AI', short:'AI', icon:'🧠'},
       {key:'users', label:'Tài khoản', icon:'👥'},
     ]},
   ],
@@ -1500,6 +1501,7 @@ const NAV_GROUPS = {
     ]},
     {key:'g_sys', label:'Hệ thống', icon:'⚙️', items:[
       {key:'kenh', label:'Kênh & tự động đăng', short:'Kênh', icon:'📡'},
+      {key:'ai', label:'Bộ não AI', short:'AI', icon:'🧠'},
       {key:'users', label:'Người dùng', icon:'👥'},
       {key:'audit', label:'Nhật ký', icon:'🕑'},
     ]},
@@ -1614,6 +1616,69 @@ NAV_GROUPS[ROLES.GIAM_DOC] = [
 // Đợt 4 (2026-09-23): Content OS ra mắt toàn bộ — BETA_KEYS rỗng. Giữ cơ chế để module mới sau này
 // có thể ẩn cho tài khoản is_dev trước khi mở rộng (thêm key vào Set là ẩn với user thường).
 const BETA_KEYS = new Set([]);
+// 🧠 BỘ NÃO AI — một chỗ xem/cắm/kiểm tra mọi kết nối AI. Hai lớp:
+//   · Anthropic: key là SECRET của Worker (server) — app chỉ báo có/không, không hiện, không sửa từ đây.
+//   · Gemini (và Ollama): key của CHÍNH người dùng, lưu trong trình duyệt này (localStorage 'locvideo_vision'),
+//     dùng chung với công cụ Lọc & dựng video; KHÔNG bao giờ gửi lên server/D1.
+const GEMINI_MODELS=['gemini-2.5-flash','gemini-2.5-flash-lite','gemini-2.5-pro'];
+function docVisionCfg(){ try{ return JSON.parse(localStorage.getItem(LS_VISION)||'{}')||{}; }catch(e){ return {}; } }
+function BoNaoAI(){
+  const { db, me, notify } = useApp();
+  const [cfg,setCfg]=useState(()=>docVisionCfg());
+  const [key,setKey]=useState(cfg.geminiKey||''); const [model,setModel]=useState(cfg.geminiModel||GEMINI_MODELS[0]);
+  const [kq,setKq]=useState(null); const [busy,setBusy]=useState(false);
+  const daCo=!!(cfg.geminiKey||'').trim();
+  const luu=()=>{ try{ const v={...docVisionCfg(), geminiKey:key.trim(), geminiModel:model, engine:key.trim()?'gemini':(docVisionCfg().engine||'')};
+      localStorage.setItem(LS_VISION, JSON.stringify(v)); setCfg(v); setKq(null); notify(key.trim()?'Đã lưu key Gemini trên máy này':'Đã gỡ key Gemini'); }catch(e){ notify('Trình duyệt không cho lưu (chế độ riêng tư?)','err'); } };
+  const kiem=async()=>{ const k=key.trim(); if(!k) return notify('Dán key trước','warn');
+    setBusy(true); setKq(null);
+    const r=await goiGemini({key:k, model}, 'Trả lời đúng một từ.', 'Nói "OK".');
+    setBusy(false); setKq(r.ok?{ok:true, t:'Kết nối được · model '+model+' trả lời: '+String(r.text||'').slice(0,40)}:{ok:false, t:r.loi||'Lỗi'}); };
+  const Row=({k,v})=><div className="flex gap-2 text-[12px]"><span className="w-40 shrink-0 text-ink-muted">{k}</span><span className="text-ink">{v}</span></div>;
+  return <div className="space-y-4">
+    <PageHeader title="🧠 Bộ não AI" sub="Mọi tính năng AI của app dùng một trong hai bộ não dưới đây. Cắm ở đây là mọi màn (Studio, Trend, Chatbot, công cụ Dựng video) dùng chung."/>
+    <Card>
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <SectionTitle>1 · Anthropic (Claude) — bộ não của app trên máy chủ</SectionTitle>
+        <StatusPill size="md" cls={db.ai_san_sang?TONE.ok:TONE.warn}>{db.ai_san_sang?'● Đang hoạt động':'○ Chưa cắm key'}</StatusPill>
+      </div>
+      <div className="text-[12px] text-ink-muted mt-1 leading-relaxed">Key nằm trong <b>secret của Cloudflare Worker</b> (<code>ANTHROPIC_API_KEY</code>) — không hiện, không sửa được từ app, dùng chung cho cả công ty. Dùng cho: AI viết kịch bản (mọi định dạng), chấm trend, agent gom trend, chatbot, sinh workflow n8n.</div>
+      {!db.ai_san_sang && <div className={CALLOUT.info+" mt-2"}>Người có quyền Cloudflare cắm bằng lệnh (chạy trong thư mục dự án, dán key khi được hỏi):<pre className="mt-1 text-[11px] bg-white rounded-lg p-2 border border-line overflow-auto">npx wrangler secret put ANTHROPIC_API_KEY</pre>Cắm xong không cần deploy lại — tải lại app là thấy “Đang hoạt động”.</div>}
+    </Card>
+    <Card>
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <SectionTitle>2 · Gemini (Google) — key của chính bạn, lưu trên máy này</SectionTitle>
+        <StatusPill size="md" cls={daCo?TONE.ok:TONE.muted}>{daCo?('● Đã cắm · '+(cfg.geminiModel||'')):'○ Chưa cắm'}</StatusPill>
+      </div>
+      <div className="text-[12px] text-ink-muted mt-1 leading-relaxed">Dùng khi app chưa có key Anthropic, hoặc cho công cụ Lọc & dựng video (chấm shot, viết kịch bản). Key <b>chỉ nằm trong trình duyệt này</b>, không gửi lên máy chủ; máy khác/tài khoản khác phải cắm riêng. Lấy key và nạp tín dụng tại <a className="text-brand-dark underline" href="https://aistudio.google.com/" target="_blank" rel="noreferrer">Google AI Studio</a>.</div>
+      <div className="grid sm:grid-cols-[1fr_200px] gap-2 mt-3">
+        <Field label="API key Gemini"><PasswordInput value={key} onChange={e=>setKey(e.target.value)} placeholder="AIza…" autoComplete="off"/></Field>
+        <Field label="Model"><Select value={model} onChange={e=>setModel(e.target.value)}>{[...new Set([...GEMINI_MODELS, model].filter(Boolean))].map(m=><option key={m} value={m}>{m}</option>)}</Select></Field>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <Btn variant="brand" onClick={luu}>💾 Lưu trên máy này</Btn>
+        <Btn variant="ghost" onClick={kiem} disabled={busy}>{busy?'Đang gọi…':'🔌 Kiểm tra kết nối'}</Btn>
+        {daCo && <Btn variant="ghost" onClick={()=>{ setKey(''); setTimeout(luu,0); }}>Gỡ key</Btn>}
+      </div>
+      {kq && <div className={(kq.ok?CALLOUT.ok:CALLOUT.danger)+" mt-2"}>{kq.t}{!kq.ok && /credit|hạn mức|quota|billing/i.test(kq.t) && <div className="mt-1">→ Tài khoản Google hết tín dụng/hạn mức: nạp thêm ở AI Studio › Billing, hoặc đổi model <b>gemini-2.5-flash-lite</b> (rẻ nhất) rồi kiểm tra lại.</div>}</div>}
+      <div className="text-[10px] text-slate-400 mt-2">Cùng ô cấu hình với công cụ Lọc & dựng video (⚙ Cài đặt AI) — sửa ở đâu cũng được.</div>
+    </Card>
+    <Card>
+      <SectionTitle>3 · AI chạy ngay trên máy (miễn phí)</SectionTitle>
+      <div className="text-[12px] text-ink-muted mt-1 leading-relaxed">Bóc lời thoại video (Whisper) và chấm shot/CLIP chạy trong trình duyệt, không tốn phí, không gửi video đi đâu. Ollama (máy cục bộ) bật trong công cụ Lọc & dựng video › ⚙ Cài đặt AI.</div>
+    </Card>
+    <Card>
+      <SectionTitle className="mb-2">Chỗ nào dùng bộ não nào</SectionTitle>
+      <div className="space-y-1">
+        <Row k="Studio · Nhờ AI viết" v="Anthropic → nếu chưa có thì Gemini (máy này) → không có thì khuôn rule-based"/>
+        <Row k="Trend · AI chấm / agent" v="Anthropic (server, chạy theo lịch)"/>
+        <Row k="Chatbot 🤖" v="Anthropic"/>
+        <Row k="Lọc & dựng video" v="Gemini hoặc Ollama (máy này) + Whisper/CLIP trên máy"/>
+        <Row k="n8n sinh workflow" v="Anthropic"/>
+      </div>
+    </Card>
+  </div>;
+}
 // Lưới an toàn: một màn vẽ lỗi thì chỉ màn đó báo lỗi (kèm nút tải lại), không trắng cả app
 class ManAnToan extends React.Component{
   constructor(p){ super(p); this.state={loi:null}; }
@@ -1692,6 +1757,7 @@ function Shell(){
       case 'air': return <AirPosts/>;
       case 'footage': return <FootageLib/>;
       case 'kenh': return <KenhManager/>;
+      case 'ai': return <BoNaoAI/>;
       case 'ketqua': return <KetQua/>;
       case 'cdash': return <ContentDashboard/>;
       case 'trend': return <TrendModule bookmarklet={bmData} tieuBookmarklet={()=>setBmData(null)}/>;
@@ -3098,7 +3164,7 @@ function ScriptEditor({init, onClose, onDung, onMo}){
         ((r.canh_bao&&r.canh_bao.length)?('có '+r.canh_bao.length+' cụm cần rà lại'):'hãy đọc và sửa cho đúng thực tế'));
       return; }
     setAiLoi(r&&r.thieu_key
-      ? 'Chưa cắm ANTHROPIC_API_KEY, mà máy này cũng chưa có key Gemini. Cách nhanh nhất: mở Creative Studio › Lọc & dựng video › 🧠 chọn Gemini và dán key — Creative Studio sẽ dùng chung key đó. Hoặc bấm “Sinh nháp theo khuôn” để làm tiếp không cần AI.'
+      ? 'Chưa có bộ não AI nào: app chưa cắm ANTHROPIC_API_KEY và máy này chưa có key Gemini. Vào Hệ thống › 🧠 Bộ não AI để cắm (hoặc bấm “Sinh nháp theo khuôn” để làm tiếp không cần AI).'
       : ((r&&r.loi)||'AI không viết được')); };
   const gen=()=>{ if(!framework) return notify('Chọn framework ở phần Bối cảnh trước','warn');
     const g=khuonTheoDinhDang(generateScript({framework, product, angle, audience}), dd);
