@@ -501,5 +501,11 @@ Tokens Tailwind (inline config trong `seeding-app.html`): `ink #0b3543` (soft #1
   - **Ảnh hưởng dữ liệu:** +2 cột footage, +1 cột san_xuat (không xoá bảng); content_items.pic/chi_tiet được bổ sung từ san_xuat một lần. Test `test_adr4.mjs` **26/26** + hồi quy 74/74 + 28/28.
   - ⚠️ Nợ: `san_xuat` vẫn được bootstrap trả (chỉ đọc lịch sử) — có thể bỏ sau khi xác nhận không màn nào dùng; Sales upload ảnh seeding vẫn ở Thư viện ảnh (đúng chủ ý).
 
+- ✅ **ĐỢT 4 "RA MẮT" — Content OS mở toàn bộ cho phòng MKT** (tầng tính năng, quyết định của Thiện 2026-09-23).
+  - `BETA_KEYS = new Set([])` — mọi vai trò thấy đúng menu của mình (`NAV_GROUPS`); giữ cơ chế cho module mới sau này (thêm key = ẩn với user thường, chỉ `is_dev` thấy).
+  - Thẻ **📖 Bắt đầu** (`BatDau`) ở trang đầu mỗi vai trò (trừ Sales): 6 bước Ý tưởng → Kịch bản → Duyệt → Sản xuất → Đăng → Đo & học, mỗi bước ghi ai làm + bấm là tới màn; dòng mô tả theo vai trò đang đăng nhập. Ẩn được ("Đã hiểu, ẩn đi", nhớ theo trình duyệt `localStorage.kingsmen_batdau_an`), có link xem lại.
+  - **Thứ tự trang đầu:** Bắt đầu → Việc của tôi hôm nay → nội dung trang. Giám đốc chỉ thấy Bắt đầu (không có việc giao).
+  - Ảnh hưởng dữ liệu: không. Bảng vai trò §3: `TRUONG_MKT` ✅ · `GIAM_DOC` ✅ (ADR-003); `MKT_STAFF` = `MARKETING` hiện tại, không tách.
+
 ### ⚙️ Quy trình deploy (CẬP NHẬT)
 `npm run build` (build.mjs: biên dịch JSX, build CSS Tailwind từ chính khối `tailwind.config` trong seeding-app.html, chép vendor React và `tools/`) → `node --check worker/index.js` → commit cả `dist/` → push. `node_modules/` đã trong .gitignore.

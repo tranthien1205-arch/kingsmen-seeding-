@@ -1581,7 +1581,9 @@ NAV_GROUPS[ROLES.GIAM_DOC] = [
   ]},
   {key:'g_seeding', label:'Seeding', icon:'💬', items:[ {key:'dash', label:'Dashboard', icon:'📊'} ]},
 ];
-const BETA_KEYS = new Set(['strategy','plan','products','studio','approve','air','ketqua','footage','cdash','hoc','trend','kenh','sanxuat']);
+// Đợt 4 (2026-09-23): Content OS ra mắt toàn bộ — BETA_KEYS rỗng. Giữ cơ chế để module mới sau này
+// có thể ẩn cho tài khoản is_dev trước khi mở rộng (thêm key vào Set là ẩn với user thường).
+const BETA_KEYS = new Set([]);
 function Shell(){
   const { me, logout, db } = useApp();
   // Lọc module đang nâng cấp → bỏ nhóm rỗng
@@ -1732,7 +1734,7 @@ function Shell(){
       </header>
 
       <main className="p-3 sm:p-2 w-full">{/* ADR-002: máy giao việc ngay trang đầu tiên mỗi vai trò nhìn thấy khi mở app (không phải Sales) */}
-        {me.vai_tro!==ROLES.SALES && me.vai_tro!==ROLES.GIAM_DOC && page===((allItems[0]||{}).key) && <div className="mb-4"><VietCuaToi go={setPage}/></div>}
+        {me.vai_tro!==ROLES.SALES && page===((allItems[0]||{}).key) && <div className="mb-4 space-y-4"><BatDau go={setPage}/>{me.vai_tro!==ROLES.GIAM_DOC && <VietCuaToi go={setPage}/>}</div>}
         {render()}</main>
     </div>
 
@@ -3316,6 +3318,41 @@ function ApprovalStatus({doi_tuong, doi_tuong_id, trang_thai, canSubmit}){
       </div>}
     {trang_thai==='NHAP' && gates.some(g=>g.trang_thai==='TRA_LAI') && <div className="text-[11px] text-rose-600 mt-2">Đã bị trả lại — sửa theo góp ý rồi bấm <b>Gửi duyệt</b> lại.</div>}
   </div>;
+}
+// Đợt 4 · "Bắt đầu" — hướng dẫn nhanh luồng phòng MKT ngay trang đầu. Ẩn được (nhớ theo trình duyệt), mở lại bằng link.
+const BAT_DAU_KEY='kingsmen_batdau_an';
+const BAT_DAU_BUOC=[
+  {icon:'💡', ten:'Ý tưởng',    ai:'Marketing · máy gom trend', lam:'Trend tự gom & AI chấm; ý tưởng thành mục Kế hoạch', page:'trend'},
+  {icon:'✍️', ten:'Kịch bản',   ai:'Marketing', lam:'Creative Studio: video · post · ảnh · carousel, AI viết theo spec thật, tự quét claim', page:'studio'},
+  {icon:'🛂', ten:'Duyệt',      ai:'Trưởng MKT (nội dung) · Kỹ thuật (claim)', lam:'2 cổng song song, người gửi không tự duyệt', page:'approve'},
+  {icon:'🎬', ten:'Sản xuất',   ai:'Quay · Lọc · Dựng', lam:'Lọc source sau buổi quay → Dựng video theo kịch bản → tự về Kho footage', page:'studio'},
+  {icon:'🚀', ten:'Đăng',       ai:'Marketing', lam:'Checklist, mã theo dõi, tự đăng qua kênh đã cấu hình', page:'air'},
+  {icon:'📈', ten:'Đo & học',   ai:'Marketing · máy', lam:'Kết quả 3 mức tin cậy → Dashboard → bài học chảy ngược về Studio', page:'ketqua'},
+];
+function BatDau({go}){
+  const { me } = useApp();
+  const [an,setAn]=useState(()=>{ try{ return localStorage.getItem(BAT_DAU_KEY)==='1'; }catch(e){ return false; } });
+  const doi=(v)=>{ setAn(v); try{ v?localStorage.setItem(BAT_DAU_KEY,'1'):localStorage.removeItem(BAT_DAU_KEY); }catch(e){} };
+  if(an) return <div className="text-[11px] text-ink-muted -mb-2">📖 <LinkBtn onClick={()=>doi(false)}>Xem lại hướng dẫn "Bắt đầu"</LinkBtn></div>;
+  const vaiTro = me.vai_tro===ROLES.TRUONG_MKT ? 'Anh/chị duyệt cổng Nội dung và sửa cấu hình; soạn được như Marketing.'
+    : me.vai_tro===ROLES.KY_THUAT ? 'Anh/chị giữ cổng Claim: chỉ Duyệt/Trả về, không sửa nội dung; quản Sản phẩm & Claim cấm.'
+    : me.vai_tro===ROLES.GIAM_DOC ? 'Anh/chị xem Dashboard, Kế hoạch, Kết quả và đặt Chiến lược/tỷ trọng pillar.'
+    : me.vai_tro===ROLES.ADMIN ? 'Admin thấy mọi màn, duyệt được cả 2 cổng (trừ bài mình gửi), gán vai trò ở Hệ thống › Tài khoản.'
+    : 'Marketing lập kế hoạch, soạn trong Studio, gửi duyệt, sản xuất và đăng; kế hoạch tự chuyển giai đoạn theo việc đã làm.';
+  return <Card pad="p-3">
+    <div className="flex items-center justify-between gap-2 flex-wrap">
+      <SectionTitle>📖 Bắt đầu — một nội dung đi qua 6 bước</SectionTitle>
+      <LinkBtn onClick={()=>doi(true)}>Đã hiểu, ẩn đi</LinkBtn>
+    </div>
+    <div className="text-[11px] text-ink-muted mt-1">{vaiTro} Mở app là thấy <b>Việc của tôi hôm nay</b> — máy giao việc, không phải đi tìm.</div>
+    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mt-3">
+      {BAT_DAU_BUOC.map((b,i)=><button key={b.ten} type="button" onClick={()=>go&&go(b.page)} className="text-left rounded-xl border border-line bg-white p-2.5 hover:border-brand transition">
+        <div className="flex items-center gap-1.5"><span className="w-5 h-5 rounded-full bg-brand/15 text-brand-dark text-[10px] font-bold flex items-center justify-center">{i+1}</span><span className="text-sm">{b.icon}</span><span className="text-[13px] font-semibold text-ink">{b.ten}</span></div>
+        <div className="text-[10px] text-brand-dark mt-1">{b.ai}</div>
+        <div className="text-[11px] text-ink-muted leading-snug mt-0.5">{b.lam}</div>
+      </button>)}
+    </div>
+  </Card>;
 }
 // ADR-002 · "Việc của tôi hôm nay" — máy GIAO VIỆC theo vai trò + người phụ trách + hạn, mở app là thấy.
 // Tính hoàn toàn từ bootstrap (một nguồn), không lưu, không thêm bảng.
