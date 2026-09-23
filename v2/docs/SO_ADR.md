@@ -64,7 +64,28 @@ Quyết định: (1) Content OS là app hub1: /api/hub/ping|lenh|lenh_xong|trang
 Người duyệt: Thiện · Trạng thái: ĐÃ DUYỆT (2026-09-23, "dùng chung hạ tầng đó luôn, và có thể nâng cấp thêm")
 ```
 
+```
+ADR-005 · 2026-09-23 · Kết quả (B10) · Báo cáo (B11) · Học & đề xuất cải tiến — cổng G4 (B12)
+Bối cảnh : Vòng lặp chưa khép: chưa có số đo, chưa có báo cáo, chưa có đường quay về chiến lược. Thiện: đo cả tiếp cận/xem/
+            chia sẻ cho brand; báo cáo gửi app + Zalo + mail; đề xuất phải có bằng chứng.
+Quyết định: (1) ket_qua: 3 mức tin cậy tách bạch (TRUC_TIEP/GIAN_TIEP/KHONG_QUY_DON — không cộng dồn; KHÔNG QUY ĐƠN không
+            mang doanh thu/đơn), KPI tiep_can/luot_xem/tuong_tac/chia_se/binh_luan/luu/click + so_don/doanh_thu, nguồn
+            API_KENH/TRAM/SAN/NHAP_TAY/NGOAI; số tích luỹ → ghi PHẦN TĂNG mỗi ngày (tích luỹ trong ghi_chu). (2) Agent DO_LUONG
+            hằng ngày: Graph (post/video), YouTube Data, số Trạm gửi (tram_lo); TikTok → Trạm; mục → DA_DO. (3) Đối soát sàn theo
+            mã theo dõi (bai_dang.ma_theo_doi) hoặc link; không khớp trả về. (4) bao_cao: số liệu luôn máy tổng hợp; nhận định AI
+            chỉ khi B11 ở mức AI & có key (không thì theo luật); Trưởng MKT/Admin gửi (app + n8n → Zalo/mail); người sửa nhận định
+            = mẫu học B11; AI_TU_LAM tự gửi. (5) de_xuat (G4): máy so 90 ngày theo pillar/định dạng/khung giờ, chỉ đề xuất khi mỗi
+            nhóm ≥ min_mau bài và lệch ≥ 25%; Trưởng MKT/Admin/GĐ duyệt → máy áp (đổi tỷ trọng pillar → chiến lược cần chốt lại
+            G1; định dạng/giờ → gợi ý hoc.goi_y); bỏ phải có lý do = mẫu học B12. (6) /ket-qua/ingest cho n8n/agent ngoài.
+Người duyệt: Thiện · Trạng thái: ĐÃ DUYỆT (2026-09-23, "tiếp tục")
+```
+
 ## Changelog
+
+### 2026-09-23 · ADR-005 (Kết quả · Báo cáo · G4)
+- **Worker**: bảng `ket_qua, bao_cao, de_xuat`, `bai_dang.ma_theo_doi`; config `do_luong {so_ngay_do}`, `bao_cao {gui_n8n, ngay_bao_cao_thang}`, `hoc {min_mau, lech_toi_thieu_pct, buoc_doi_ty_trong}`; helpers `layIdBaiTuLink, doFacebook, doYouTube, ghiKetQuaTichLuy, chayDoLuong, soLieuBaoCao, nhanDinhLuat, nhanDinhAI, taoBaoCao, guiBaoCao, chayDeXuat, apDungDeXuat`; agent `DO_LUONG` (B10), `BAO_CAO` (B11: thứ Hai tuần, ngày 1 tháng), `HOC_DE_XUAT` (B12: ngày 2, chỉ khi ở mức AI); API `POST /ket-qua`, `POST /ket-qua/doi-soat`, `DELETE /ket-qua/:id`, `POST /bai-dang/:id/ma-theo-doi`, `POST /bao-cao`, `PATCH /bao-cao/:id`, `POST /bao-cao/:id/gui`, `POST /de-xuat/:id/quyet`, `POST /ket-qua/ingest` (X-App-Token); bootstrap `ket_qua (120 ngày), bao_cao, de_xuat, muc_tin_cay, nguon_kq`.
+- **Giao diện**: Kết quả & Báo cáo 3 tab — **Kết quả** (3 mức, khối Brand/Bán hàng, bảng theo bài, 📡 Đo ngay, ＋ Nhập kết quả, ⬆ Import đối soát), **Báo cáo** (tạo tuần/tháng, sửa nhận định, 📤 Gửi), **Đề xuất (G4)** (bằng chứng, ✅ Duyệt & áp dụng / Bỏ kèm lý do). Việc của tôi: G4 thật.
+- Test `tests/adr005.test.mjs`: 7 nhóm.
 
 ### 2026-09-23 · ADR-004 (Trạm)
 - **Worker**: bảng `tram_lenh, tram_trang_thai, tram_lo`; config `tram {khoa, bat, so_ngay_do, im_lang_phut}` (validator chặn dán khoá tay); `VIEC_TRAM`, `MON_HUB`, `xacThucHub, taoLenhTram, docTramTrangThai, napLoTram`; đường hub `/hub/ping, /hub/lenh, /hub/lenh_xong, /hub/trang_thai, /hub/nap, /hub/upload, /hub/viec/dang|do_luong|dung_video`; API `POST /tram/khoa` (Admin, mã ghép), `POST /tram/lenh` (staff); `DANG_BAI` xử lý cách TRAM; kênh/bài đăng nhận `cach_dang=TRAM`; bootstrap `tram {co_khoa, bat, trang_thai(song, im_phut, phien), lenh, lo}`.

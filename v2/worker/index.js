@@ -85,6 +85,11 @@ const CONFIG_MAC_DINH = {
   // ADR-004: Trạm máy văn phòng (masfico-tram, hợp đồng hub1). khoa = khoá X-Hub-Key do Admin tạo trong màn Máy › Trạm;
   // so_ngay_do: bài đã đăng trong N ngày được đưa cho Trạm đo; im_lang_phut: quá N phút không nhịp tim → coi là mất Trạm
   tram:    { khoa:'', bat:true, so_ngay_do:30, im_lang_phut:6 },
+  // ADR-005: đo lường & báo cáo & học. so_ngay_do: bài đã đăng trong N ngày còn được đo; min_mau: số bài tối thiểu mỗi nhóm
+  // để máy được rút đề xuất (bằng chứng ≥ min_mau, không có số thì không đề xuất); gui_n8n: báo cáo bắn sang N8N_WEBHOOK_URL (Zalo/mail)
+  do_luong:{ so_ngay_do:30 },
+  bao_cao: { gui_n8n:true, ngay_bao_cao_thang:1 },
+  hoc:     { min_mau:5, lech_toi_thieu_pct:25, buoc_doi_ty_trong:10 },
   // Mô phỏng: dữ liệu giả (tiền tố id mp_) để duyệt thiết kế; bật/tắt bằng /mo-phong/nap|xoa
   mo_phong: { bat:false },
 };
@@ -153,7 +158,15 @@ async function ensureSchema(env){
     `CREATE TABLE IF NOT EXISTS tram_lenh (id TEXT PRIMARY KEY, viec TEXT, tham_so TEXT, trang_thai TEXT DEFAULT 'CHO', ket_qua TEXT, tao_boi TEXT, created_at TEXT, gui_at TEXT, xong_at TEXT)`,
     `CREATE TABLE IF NOT EXISTS tram_trang_thai (id TEXT PRIMARY KEY, than TEXT, nhan_luc TEXT)`,
     `CREATE TABLE IF NOT EXISTS tram_lo (id TEXT PRIMARY KEY, viec TEXT, bang TEXT, luot TEXT, phan TEXT, so_dong INTEGER, xu_ly TEXT, created_at TEXT)`,
+    // ADR-005 — kết quả (3 mức tin cậy, không cộng dồn), báo cáo, đề xuất cải tiến
+    // ket_qua: muc_tin_cay TRUC_TIEP|GIAN_TIEP|KHONG_QUY_DON · nguon API_KENH|TRAM|SAN|NHAP_TAY|NGOAI · ky = ngày (API) hoặc kỳ đối soát
+    // Số API/Trạm là TÍCH LUỸ → lưu PHẦN TĂNG so với lần đo trước (tổng các dòng = tích luỹ), tích luỹ giữ trong ghi_chu.
+    `CREATE TABLE IF NOT EXISTS ket_qua (id TEXT PRIMARY KEY, bai_dang_id TEXT, muc_id TEXT, muc_tin_cay TEXT, nguon TEXT, ky TEXT, tiep_can INTEGER DEFAULT 0, luot_xem INTEGER DEFAULT 0, tuong_tac INTEGER DEFAULT 0, chia_se INTEGER DEFAULT 0, binh_luan INTEGER DEFAULT 0, luu INTEGER DEFAULT 0, click INTEGER DEFAULT 0, so_don INTEGER DEFAULT 0, doanh_thu REAL DEFAULT 0, ma_theo_doi TEXT, ghi_chu TEXT, created_at TEXT, created_by_name TEXT)`,
+    `CREATE INDEX IF NOT EXISTS idx_ket_qua_bai ON ket_qua(bai_dang_id, nguon, ky)`,
+    `CREATE TABLE IF NOT EXISTS bao_cao (id TEXT PRIMARY KEY, loai TEXT, ky TEXT, tu TEXT, den TEXT, so_lieu TEXT, nhan_dinh TEXT, nhan_dinh_may TEXT, viec_can_lam TEXT, trang_thai TEXT DEFAULT 'NHAP', gui_qua TEXT, gui_at TEXT, gui_boi TEXT, tao_boi TEXT, created_at TEXT)`,
+    `CREATE TABLE IF NOT EXISTS de_xuat (id TEXT PRIMARY KEY, ky TEXT, loai TEXT, tieu_de TEXT, noi_dung TEXT, bang_chung TEXT, ly_do TEXT, trang_thai TEXT DEFAULT 'CHO', quyet_boi TEXT, quyet_at TEXT, ly_do_nguoi TEXT, ap_dung TEXT, created_at TEXT)`,
   );
+  try{ await env.DB.prepare(`ALTER TABLE bai_dang ADD COLUMN ma_theo_doi TEXT`).run(); }catch(e){}   // mã/voucher để đối soát sàn quy đơn
   for(const s of q) await env.DB.prepare(s).run();
   // pillar phục vụ mục tiêu nào → chỉ tiêu tháng & KPI đo theo đó
   try{ await env.DB.prepare(`ALTER TABLE pillars ADD COLUMN muc_tieu TEXT DEFAULT 'BRAND'`).run(); }catch(e){}
@@ -532,6 +545,123 @@ async function chayDangBai(env){
 }
 
 // ============================================================
+//  ADR-005 — ĐO LƯỜNG (B10) · BÁO CÁO (B11) · HỌC & ĐỀ XUẤT (B12, cổng G4)
+// ============================================================
+const MUC_TIN_CAY={ TRUC_TIEP:'Trực tiếp', GIAN_TIEP:'Gián tiếp', KHONG_QUY_DON:'Không quy đơn' };
+const NGUON_KQ=['API_KENH','TRAM','SAN','NHAP_TAY','NGOAI'];
+const KPI=['tiep_can','luot_xem','tuong_tac','chia_se','binh_luan','luu','click'];
+const soAn=v=>{ const n=Number(v); return Number.isFinite(n)&&n>0?Math.round(n):0; };
+// Nhận diện bài từ link đã đăng → {nen, id, loai}; không nhận diện được → null (không đoán)
+function layIdBaiTuLink(link){ const s=String(link||'').trim(); if(!s) return null; let u; try{ u=new URL(/^https?:\/\//i.test(s)?s:'https://'+s); }catch(e){ return null; }
+  const host=u.hostname.replace(/^www\.|^m\.|^web\./,'').toLowerCase(); const p=u.pathname; const q=u.searchParams;
+  if(/(^|\.)youtube\.com$/.test(host)||host==='youtu.be'){ const id=host==='youtu.be'?p.split('/')[1]:(q.get('v')||(p.match(/^\/(shorts|live|embed)\/([\w-]{6,})/)||[])[2]); return id?{nen:'YOUTUBE', id, loai:'video'}:null; }
+  if(/(^|\.)facebook\.com$/.test(host)||host==='fb.watch'||host==='fb.com'){ let m; if((m=p.match(/\/(videos|reel|reels)\/(\d+)/))) return {nen:'FACEBOOK', id:m[2], loai:'video'}; if((m=p.match(/\/posts\/(pfbid[\w]+|\d+)/))) return {nen:'FACEBOOK', id:m[1], loai:'post'}; if((m=p.match(/\/photos\/[^/]*\/(\d+)/))) return {nen:'FACEBOOK', id:m[1], loai:'post'}; if(q.get('story_fbid')) return {nen:'FACEBOOK', id:q.get('story_fbid'), loai:'post'}; if(q.get('v')) return {nen:'FACEBOOK', id:q.get('v'), loai:'video'}; if(q.get('fbid')) return {nen:'FACEBOOK', id:q.get('fbid'), loai:'post'}; if(host==='fb.watch'&&p.length>1) return {nen:'FACEBOOK', id:p.slice(1).replace(/\/$/,''), loai:'video'}; if(/^\/\d+_\d+/.test(p)) return {nen:'FACEBOOK', id:p.slice(1).split('/')[0], loai:'post'}; return null; }
+  if(/(^|\.)tiktok\.com$/.test(host)){ const m=p.match(/\/video\/(\d+)/); return m?{nen:'TIKTOK', id:m[1], loai:'video'}:null; }
+  return null; }
+async function doFacebook(env, kenh, bai){ const token=layToken(env,kenh); if(!token) return {ok:false, loi:'Chưa cắm secret TOKEN_'+(kenh.api_ma||'?')}; const pageId=chuoi(kenh.api_object_id,80);
+  const obj=(bai.loai==='post'&&/^\d+$/.test(bai.id)&&pageId&&!bai.id.includes('_'))?pageId+'_'+bai.id:bai.id;
+  const fields=bai.loai==='video'?'video_insights.metric(total_video_impressions,total_video_views){name,values},likes.summary(true).limit(0),comments.summary(true).limit(0)':'insights.metric(post_impressions,post_impressions_unique,post_engaged_users,post_clicks){name,values},likes.summary(true).limit(0),comments.summary(true).limit(0),shares';
+  let r,j; try{ r=await fetch('https://graph.facebook.com/'+GRAPH_VER+'/'+encodeURIComponent(obj)+'?fields='+encodeURIComponent(fields)+'&access_token='+encodeURIComponent(token)); j=await r.json().catch(()=>({})); }catch(e){ return {ok:false, loi:'Không gọi được Graph API: '+e.message}; }
+  if(!r.ok||j.error) return {ok:false, loi:'Graph API: '+((j.error&&j.error.message)||('HTTP '+r.status))};
+  const m={}; ((j.insights||j.video_insights||{}).data||[]).forEach(x=>{ const v=(x.values||[])[0]; m[x.name]=typeof (v&&v.value)==='object'?Object.values(v.value).reduce((s,n)=>s+(Number(n)||0),0):Number(v&&v.value)||0; });
+  const likes=soAn(j.likes&&j.likes.summary&&j.likes.summary.total_count), cmts=soAn(j.comments&&j.comments.summary&&j.comments.summary.total_count), shares=soAn(j.shares&&j.shares.count);
+  return {ok:true, tich_luy:{ tiep_can:soAn(m.post_impressions_unique!=null?m.post_impressions_unique:m.total_video_impressions), luot_xem:soAn(m.post_impressions!=null?m.post_impressions:m.total_video_views), tuong_tac:m.post_engaged_users!=null?soAn(m.post_engaged_users):(likes+cmts+shares), chia_se:shares, binh_luan:cmts, luu:0, click:soAn(m.post_clicks) }, raw:{...m, likes, comments:cmts, shares}}; }
+async function doYouTube(env, bai){ const key=env.YOUTUBE_API_KEY; if(!key) return {ok:false, loi:'Chưa cắm YOUTUBE_API_KEY'}; let r,j; try{ r=await fetch('https://www.googleapis.com/youtube/v3/videos?part=statistics&id='+encodeURIComponent(bai.id)+'&key='+encodeURIComponent(key)); j=await r.json().catch(()=>({})); }catch(e){ return {ok:false, loi:'YouTube: '+e.message}; }
+  if(!r.ok) return {ok:false, loi:'YouTube API: HTTP '+r.status}; const st=((j.items||[])[0]||{}).statistics; if(!st) return {ok:false, loi:'YouTube không thấy video'}; return {ok:true, tich_luy:{ tiep_can:0, luot_xem:soAn(st.viewCount), tuong_tac:soAn(st.likeCount)+soAn(st.commentCount), chia_se:0, binh_luan:soAn(st.commentCount), luu:0, click:0 }, raw:st}; }
+const GRAPH_VER='v21.0';
+// Ghi 1 dòng/ngày/nguồn cho bài từ số TÍCH LUỸ: lưu phần tăng so với dòng cùng nguồn gần nhất trước ngày đó; đo lại trong ngày = thay dòng. Xong → mục DA_DO.
+async function ghiKetQuaTichLuy(env, bd, nguon, tl, ky, meta){
+  const truoc=await env.DB.prepare(`SELECT ghi_chu FROM ket_qua WHERE bai_dang_id=? AND nguon=? AND ky<? ORDER BY ky DESC LIMIT 1`).bind(bd.id, nguon, ky).first();
+  const cu=(docJSON(truoc&&truoc.ghi_chu,{}).tich_luy)||{}; const tang={}; KPI.forEach(k=>tang[k]=Math.max(0, soAn(tl[k])-soAn(cu[k])));
+  await env.DB.prepare(`DELETE FROM ket_qua WHERE bai_dang_id=? AND nguon=? AND ky=?`).bind(bd.id, nguon, ky).run();
+  await env.DB.prepare(`INSERT INTO ket_qua (id,bai_dang_id,muc_id,muc_tin_cay,nguon,ky,tiep_can,luot_xem,tuong_tac,chia_se,binh_luan,luu,click,so_don,doanh_thu,ma_theo_doi,ghi_chu,created_at,created_by_name) VALUES (?,?,?,'KHONG_QUY_DON',?,?,?,?,?,?,?,?,?,0,0,?,?,?,?)`)
+    .bind(uid('kq'), bd.id, bd.muc_id, nguon, ky, tang.tiep_can, tang.luot_xem, tang.tuong_tac, tang.chia_se, tang.binh_luan, tang.luu, tang.click, bd.ma_theo_doi||'', JSON.stringify({...meta, tich_luy:Object.fromEntries(KPI.map(k=>[k,soAn(tl[k])]))}).slice(0,3000), nowISO(), (meta&&meta.boi)||'Máy').run();
+  await datGiaiDoan(env, bd.muc_id, 'DA_DO', 'có số đo', MAY((meta&&meta.boi)||'Máy (B10)')); return tang; }
+// Agent đo lường: Graph/YouTube cho bài có link & kênh có token/key; số Trạm gửi (tram_lo content_os.ket_qua) chưa xử lý → ghi cùng luật
+async function chayDoLuong(env){
+  const cfg=(await docCauHinh(env)).do_luong||{}; const tu=new Date(Date.now()-Math.max(1,so(cfg.so_ngay_do,30))*864e5).toISOString(); const hn=ngayVN();
+  const ds=(await env.DB.prepare(`SELECT * FROM bai_dang WHERE trang_thai='DA_DANG' AND COALESCE(link,'')<>'' AND COALESCE(posted_at,updated_at)>=? ORDER BY posted_at DESC LIMIT 200`).bind(tu).all()).results;
+  const kenhMap={}; (await env.DB.prepare(`SELECT * FROM kenh`).all()).results.forEach(k=>kenhMap[k.id]=k);
+  let doApi=0, boQua=0, loi=0, doTram=0; const ct=[];
+  for(const bd of ds){ const b=layIdBaiTuLink(bd.link); if(!b||b.nen==='TIKTOK'){ boQua++; continue; } const r=b.nen==='FACEBOOK'?await doFacebook(env, kenhMap[bd.kenh_id]||{}, b):await doYouTube(env, b);
+    if(!r.ok){ loi++; ct.push({bai:bd.id, loi:r.loi}); continue; } await ghiKetQuaTichLuy(env, bd, 'API_KENH', r.tich_luy, hn, {api:b.nen, raw:r.raw, boi:'Máy (B10)'}); doApi++; }
+  // lô Trạm
+  const lo=(await env.DB.prepare(`SELECT * FROM tram_lo WHERE bang='content_os.ket_qua' ORDER BY created_at LIMIT 50`).all()).results;
+  for(const l of lo){ const x=docJSON(l.xu_ly,{}); if(x.da_xu_ly) continue; let n=0; for(const d of (x.dong||[])){ const bd=d.bai_dang_id?await env.DB.prepare(`SELECT * FROM bai_dang WHERE id=?`).bind(String(d.bai_dang_id)).first():null; if(!bd||!d.tich_luy) continue; await ghiKetQuaTichLuy(env, bd, 'TRAM', d.tich_luy, laNgay(d.ngay)?d.ngay:hn, {api:chuoi(d.nen,20)||'TRAM', boi:'Trạm'}); n++; doTram++; }
+    await env.DB.prepare(`UPDATE tram_lo SET xu_ly=? WHERE id=?`).bind(JSON.stringify({...x, dong:undefined, da_xu_ly:true, ghi:n}), l.id).run(); }
+  if(!ds.length&&!doTram) return {bo_qua:'Không có bài đã đăng có link để đo'};
+  return { ok:true, doc:ds.length, ghi:doApi+doTram, tom_tat:'Đo '+doApi+' bài qua API · '+doTram+' số từ Trạm · bỏ qua '+boQua+' (không API) · lỗi '+loi, chi_tiet:{loi:ct.slice(0,10)} };
+}
+// ----- Báo cáo: số liệu thuần (không AI) + nhận định (AI khi có, không thì luật) -----
+const tuanISO=d=>{ const x=new Date(Date.UTC(d.getUTCFullYear(),d.getUTCMonth(),d.getUTCDate())); const day=x.getUTCDay()||7; x.setUTCDate(x.getUTCDate()+4-day); const y=new Date(Date.UTC(x.getUTCFullYear(),0,1)); return x.getUTCFullYear()+'-W'+String(Math.ceil(((x-y)/864e5+1)/7)).padStart(2,'0'); };
+async function soLieuBaoCao(env, tu, den){
+  const all=async(s,...a)=>(await env.DB.prepare(s).bind(...a).all()).results;
+  const kq=await all(`SELECT k.*, m.muc_tieu, m.pillar_id, m.dinh_dang, m.kenh_id FROM ket_qua k LEFT JOIN muc_noi_dung m ON m.id=k.muc_id WHERE k.ky>=? AND k.ky<=?`, tu.slice(0,10), den.slice(0,10));
+  const bai=await all(`SELECT b.*, m.muc_tieu, m.pillar_id, m.dinh_dang FROM bai_dang b LEFT JOIN muc_noi_dung m ON m.id=b.muc_id WHERE b.posted_at>=? AND b.posted_at<=?`, tu, den);
+  const muc=await all(`SELECT giai_doan, COUNT(*) n FROM muc_noi_dung GROUP BY giai_doan`); const pillars=await all(`SELECT id,ten,ty_trong,muc_tieu FROM pillars WHERE active=1`);
+  const sum=(arr,f)=>arr.reduce((s,x)=>s+(Number(x[f])||0),0); const muc3=m=>kq.filter(k=>k.muc_tin_cay===m);
+  const nhom=(key)=>{ const r={}; kq.filter(k=>k.muc_tin_cay==='KHONG_QUY_DON').forEach(k=>{ const g=k[key]||'—'; r[g]=r[g]||{bai:new Set(),tiep_can:0,luot_xem:0,tuong_tac:0,chia_se:0}; r[g].bai.add(k.bai_dang_id); KPI.slice(0,4).forEach(f=>r[g][f]+=Number(k[f])||0); }); return Object.fromEntries(Object.entries(r).map(([g,v])=>[g,{...v, bai:v.bai.size}])); };
+  const theoBai={}; kq.forEach(k=>{ theoBai[k.bai_dang_id]=theoBai[k.bai_dang_id]||{luot_xem:0,tuong_tac:0,so_don:0,doanh_thu:0}; ['luot_xem','tuong_tac','so_don','doanh_thu'].forEach(f=>theoBai[k.bai_dang_id][f]+=Number(k[f])||0); });
+  const top=Object.entries(theoBai).sort((a,b)=>b[1].luot_xem-a[1].luot_xem).slice(0,5).map(([id,v])=>{ const b=bai.find(x=>x.id===id); return {bai_dang_id:id, tieu_de:b?(b.noi_dung_dang||'').slice(0,60):id, ...v}; });
+  const ket=await all(`SELECT (SELECT COUNT(*) FROM duyet WHERE trang_thai='CHO' AND created_at<?) duyet_qua_24h, (SELECT COUNT(*) FROM bai_dang WHERE trang_thai='LOI') bai_loi, (SELECT COUNT(*) FROM cong_viec WHERE trang_thai='MO' AND han<?) viec_qua_han`, new Date(Date.now()-864e5).toISOString(), ngayVN());
+  const ai=await env.DB.prepare(`SELECT COALESCE(SUM(chi_phi_usd),0) usd FROM ai_usage WHERE at>=? AND at<=?`).bind(tu,den).first();
+  return { tu, den, bai_dang:bai.length, bai_theo_muc_tieu:{BRAND:bai.filter(b=>b.muc_tieu==='BRAND').length, BAN_HANG:bai.filter(b=>b.muc_tieu==='BAN_HANG').length},
+    ba_muc:{ TRUC_TIEP:{doanh_thu:sum(muc3('TRUC_TIEP'),'doanh_thu'), so_don:sum(muc3('TRUC_TIEP'),'so_don'), n:muc3('TRUC_TIEP').length}, GIAN_TIEP:{doanh_thu:sum(muc3('GIAN_TIEP'),'doanh_thu'), so_don:sum(muc3('GIAN_TIEP'),'so_don'), n:muc3('GIAN_TIEP').length}, KHONG_QUY_DON:Object.fromEntries(KPI.map(f=>[f,sum(muc3('KHONG_QUY_DON'),f)])) },
+    theo_pillar:nhom('pillar_id'), theo_dinh_dang:nhom('dinh_dang'), theo_kenh:nhom('kenh_id'), theo_muc_tieu:nhom('muc_tieu'), top, giai_doan:Object.fromEntries(muc.map(x=>[x.giai_doan,x.n])), ket:ket[0]||{}, ai_usd:so(ai&&ai.usd), pillars };
+}
+function nhanDinhLuat(sl){ const kq=sl.ba_muc.KHONG_QUY_DON; const c=[]; c.push('Kỳ '+sl.tu.slice(0,10)+' → '+sl.den.slice(0,10)+': đăng '+sl.bai_dang+' bài ('+sl.bai_theo_muc_tieu.BRAND+' brand · '+sl.bai_theo_muc_tieu.BAN_HANG+' bán hàng).');
+  c.push('Brand: '+kq.tiep_can.toLocaleString('vi-VN')+' tiếp cận · '+kq.luot_xem.toLocaleString('vi-VN')+' lượt xem · '+kq.chia_se.toLocaleString('vi-VN')+' chia sẻ · '+kq.tuong_tac.toLocaleString('vi-VN')+' tương tác (không quy đơn).');
+  c.push('Bán hàng: trực tiếp '+sl.ba_muc.TRUC_TIEP.so_don+' đơn / '+sl.ba_muc.TRUC_TIEP.doanh_thu.toLocaleString('vi-VN')+' đ · gián tiếp '+sl.ba_muc.GIAN_TIEP.so_don+' đơn / '+sl.ba_muc.GIAN_TIEP.doanh_thu.toLocaleString('vi-VN')+' đ — hai mức không cộng dồn.');
+  const p=Object.entries(sl.theo_pillar).filter(([g])=>g!=='—').map(([g,v])=>[(sl.pillars.find(x=>x.id===g)||{}).ten||g, v.bai?Math.round(v.luot_xem/v.bai):0]).sort((a,b)=>b[1]-a[1]); if(p.length) c.push('Xem/bài theo pillar: '+p.map(([t,n])=>t+' '+n).join(' · ')+'.');
+  if(sl.top.length) c.push('Bài xem nhiều nhất: "'+sl.top[0].tieu_de+'" ('+sl.top[0].luot_xem.toLocaleString('vi-VN')+' xem).');
+  const viec=[]; if(so(sl.ket.duyet_qua_24h)) viec.push('Duyệt '+sl.ket.duyet_qua_24h+' bài chờ quá 24h (G3)'); if(so(sl.ket.bai_loi)) viec.push('Xử lý '+sl.ket.bai_loi+' bài đăng lỗi'); if(so(sl.ket.viec_qua_han)) viec.push('Đóng '+sl.ket.viec_qua_han+' việc quá hạn'); if(!sl.bai_dang) viec.push('Chưa có bài đăng nào trong kỳ — xem lại kế hoạch tuần');
+  return { nhan_dinh:c.join(' '), viec_can_lam:viec.slice(0,3) }; }
+async function nhanDinhAI(env, sl){ const r=await goiAI(env,{ system:'Bạn là trưởng phòng marketing của Kingsmen (keo ron gạch). Viết nhận định báo cáo NGẮN (5–7 câu, tiếng Việt, số cụ thể, không tô hồng) từ số liệu JSON và đề nghị đúng 3 việc cần làm tuần tới. Ba mức tin cậy kết quả (trực tiếp / gián tiếp / không quy đơn) KHÔNG được cộng dồn; nội dung brand đánh giá bằng tiếp cận/xem/chia sẻ, nội dung bán hàng bằng đơn. CHỈ trả JSON {"nhan_dinh":"...","viec_can_lam":["...","...","..."]}.', messages:[{role:'user',content:JSON.stringify({...sl, pillars:undefined, top:sl.top.slice(0,3)}).slice(0,12000)}], max_tokens:700, tinh_nang:'bao_cao' });
+  if(!r.ok) return null; try{ const t=r.text.replace(/^```(?:json)?\s*/i,'').replace(/```\s*$/,''); const o=JSON.parse(t.slice(t.indexOf('{'), t.lastIndexOf('}')+1)); return { nhan_dinh:chuoi(o.nhan_dinh,3000), viec_can_lam:(Array.isArray(o.viec_can_lam)?o.viec_can_lam:[]).map(x=>chuoi(x,200)).filter(Boolean).slice(0,3) }; }catch(e){ return null; } }
+async function taoBaoCao(env, loai, {ep=false}={}){
+  const now=new Date(Date.now()+7*36e5); let ky, tu, den;
+  if(loai==='THANG'){ const th=thangSau(thangHienTai(),-1); ky=th; tu=th+'-01T00:00:00.000Z'; den=thangHienTai()+'-01T00:00:00.000Z'; }
+  else { const t2=new Date(now); t2.setUTCDate(t2.getUTCDate()-((t2.getUTCDay()||7)-1)); const tuD=new Date(t2); tuD.setUTCDate(tuD.getUTCDate()-7); ky=tuanISO(tuD); tu=tuD.toISOString().slice(0,10)+'T00:00:00.000Z'; den=t2.toISOString().slice(0,10)+'T00:00:00.000Z'; }
+  const cu=await env.DB.prepare(`SELECT id FROM bao_cao WHERE loai=? AND ky=?`).bind(loai,ky).first(); if(cu&&!ep) return {bo_qua:'Đã có báo cáo '+loai+' '+ky};
+  const sl=await soLieuBaoCao(env, tu, den); const b11=await mucBuoc(env,'B11'); const luat=nhanDinhLuat(sl); const ai=(b11.nguoi_thuc_hien!=='NGUOI'&&env.ANTHROPIC_API_KEY)?await nhanDinhAI(env, sl):null; const nd=ai||luat;
+  const id=cu?cu.id:uid('bc'); if(cu) await env.DB.prepare(`DELETE FROM bao_cao WHERE id=?`).bind(cu.id).run();
+  await env.DB.prepare(`INSERT INTO bao_cao (id,loai,ky,tu,den,so_lieu,nhan_dinh,nhan_dinh_may,viec_can_lam,trang_thai,tao_boi,created_at) VALUES (?,?,?,?,?,?,?,?,?,'NHAP',?,?)`).bind(id, loai, ky, tu, den, JSON.stringify(sl).slice(0,60000), nd.nhan_dinh, nd.nhan_dinh, JSON.stringify(nd.viec_can_lam), ai?'Máy (AI)':'Máy (luật)', nowISO()).run();
+  let gui=null; if(b11.nguoi_thuc_hien==='AI_TU_LAM'){ gui=await guiBaoCao(env, id, MAY('Máy (B11)')); }
+  return { ok:true, id, ky, ghi:1, tom_tat:'Báo cáo '+(loai==='THANG'?'tháng':'tuần')+' '+ky+': '+sl.bai_dang+' bài · '+(ai?'AI nhận định':'nhận định theo luật')+(gui?(' · '+gui.tom_tat):''), chi_tiet:{ky, tu, den, ai:!!ai} };
+}
+async function guiBaoCao(env, id, tacNhan){ const bc=await env.DB.prepare(`SELECT * FROM bao_cao WHERE id=?`).bind(id).first(); if(!bc) return {ok:false, loi:'Không thấy báo cáo'}; const cfg=(await docCauHinh(env)).bao_cao||{}; const qua=['app'];
+  if(cfg.gui_n8n!==false && env.N8N_WEBHOOK_URL){ try{ const r=await fetch(env.N8N_WEBHOOK_URL,{method:'POST', headers:{'content-type':'application/json', ...(env.N8N_TOKEN?{'X-App-Token':env.N8N_TOKEN}:{})}, body:JSON.stringify({loai:'BAO_CAO', bao_cao_id:bc.id, ky:bc.ky, kieu:bc.loai, tieu_de:'Báo cáo '+(bc.loai==='THANG'?'tháng':'tuần')+' '+bc.ky+' — Kingsmen Content OS', nhan_dinh:bc.nhan_dinh, viec_can_lam:docJSON(bc.viec_can_lam,[]), so_lieu:docJSON(bc.so_lieu,{}), kenh:['zalo','email']})}); qua.push(r.ok?'n8n':'n8n_loi_'+r.status); }catch(e){ qua.push('n8n_loi'); } }
+  // mẫu học B11: người gửi mà không sửa nhận định máy = 1; sửa = độ giống văn bản
+  if(!tacNhan.agent) await ghiMauHoc(env,'B11',{doi_tuong_id:bc.id, dau_vao:{ky:bc.ky}, dau_ra_may:{nhan_dinh:bc.nhan_dinh_may}, dau_ra_nguoi:{nhan_dinh:bc.nhan_dinh}, giong:giongVanBan(bc.nhan_dinh_may, bc.nhan_dinh), ghi_chu:'gửi báo cáo'});
+  await env.DB.prepare(`UPDATE bao_cao SET trang_thai='DA_GUI', gui_qua=?, gui_at=?, gui_boi=? WHERE id=?`).bind(JSON.stringify(qua), nowISO(), tacNhan.ho_ten, id).run(); await logAudit(env, tacNhan, 'gửi báo cáo', 'bao_cao', id, qua.join(','));
+  return {ok:true, tom_tat:'gửi qua '+qua.join(' + ')}; }
+// ----- Học & đề xuất (B12): so nhóm với trung bình, chỉ khi đủ mẫu; đề xuất kèm bằng chứng; người duyệt (G4) → máy áp -----
+async function chayDeXuat(env, {ep=false}={}){
+  const cfg=(await docCauHinh(env)).hoc||{}; const minMau=Math.max(2,so(cfg.min_mau,5)), lech=Math.max(5,so(cfg.lech_toi_thieu_pct,25))/100, buoc=Math.max(1,Math.min(30,so(cfg.buoc_doi_ty_trong,10)));
+  const den=new Date().toISOString(); const tu=new Date(Date.now()-90*864e5).toISOString(); const sl=await soLieuBaoCao(env, tu, den); const ky=thangSau(thangHienTai(),-1);
+  const cu=await env.DB.prepare(`SELECT COUNT(*) n FROM de_xuat WHERE ky=?`).bind(ky).first(); if(so(cu&&cu.n)&&!ep) return {bo_qua:'Tháng '+ky+' đã có đề xuất'};
+  const ds=[]; const tb=(nh)=>{ const v=Object.values(nh).filter(x=>x.bai>0); const b=v.reduce((s,x)=>s+x.bai,0); return b?v.reduce((s,x)=>s+x.luot_xem,0)/b:0; };
+  // pillar: xem/bài lệch ≥ lech% so trung bình & ≥ min_mau bài → dịch tỷ trọng buoc điểm
+  const tbP=tb(sl.theo_pillar); const pl=sl.pillars; const manh=[], yeu=[];
+  for(const p of pl){ const v=sl.theo_pillar[p.id]; if(!v||v.bai<minMau||!tbP) continue; const r=(v.luot_xem/v.bai)/tbP; if(r>=1+lech) manh.push({p, r, v}); else if(r<=1-lech) yeu.push({p, r, v}); }
+  if(manh.length&&yeu.length){ const m=manh.sort((a,b)=>b.r-a.r)[0], y=yeu.sort((a,b)=>a.r-b.r)[0]; const b=Math.min(buoc, so(y.p.ty_trong)); if(b>0) ds.push({ loai:'TY_TRONG_PILLAR', tieu_de:'Tăng pillar '+m.p.ten+' '+so(m.p.ty_trong)+'% → '+(so(m.p.ty_trong)+b)+'%, giảm '+y.p.ten+' '+so(y.p.ty_trong)+'% → '+(so(y.p.ty_trong)-b)+'%', noi_dung:{tang:m.p.id, giam:y.p.id, buoc:b}, bang_chung:{ky:'90 ngày', [m.p.ten]:{bai:m.v.bai, xem_moi_bai:Math.round(m.v.luot_xem/m.v.bai)}, [y.p.ten]:{bai:y.v.bai, xem_moi_bai:Math.round(y.v.luot_xem/y.v.bai)}, trung_binh:Math.round(tbP)}, ly_do:m.p.ten+' đạt '+m.r.toFixed(1)+'× xem/bài so trung bình, '+y.p.ten+' chỉ '+y.r.toFixed(1)+'× (mỗi nhóm ≥ '+minMau+' bài)' }); }
+  // định dạng: nhóm mạnh nhất/yếu nhất
+  const tbD=tb(sl.theo_dinh_dang); const dd=Object.entries(sl.theo_dinh_dang).filter(([g,v])=>g!=='—'&&v.bai>=minMau&&tbD).map(([g,v])=>({g, r:(v.luot_xem/v.bai)/tbD, v})).sort((a,b)=>b.r-a.r);
+  if(dd.length>=2&&dd[0].r>=1+lech) ds.push({ loai:'DINH_DANG', tieu_de:'Ưu tiên định dạng '+dd[0].g+' (xem/bài '+dd[0].r.toFixed(1)+'× trung bình), giảm '+dd[dd.length-1].g, noi_dung:{tang:dd[0].g, giam:dd[dd.length-1].g}, bang_chung:Object.fromEntries(dd.map(x=>[x.g,{bai:x.v.bai, xem_moi_bai:Math.round(x.v.luot_xem/x.v.bai)}])), ly_do:'Cơ cấu định dạng tháng sau nên nghiêng về '+dd[0].g });
+  // giờ đăng: xem/bài theo khung giờ (bài có posted_at)
+  const gio={}; const bai=(await env.DB.prepare(`SELECT b.id, b.posted_at FROM bai_dang b WHERE b.trang_thai='DA_DANG' AND b.posted_at>=?`).bind(tu).all()).results; const xemBai={}; sl.top.forEach(()=>{}); (await env.DB.prepare(`SELECT bai_dang_id, SUM(luot_xem) x FROM ket_qua WHERE ky>=? GROUP BY bai_dang_id`).bind(tu.slice(0,10)).all()).results.forEach(r=>xemBai[r.bai_dang_id]=so(r.x));
+  bai.forEach(b=>{ const h=Math.floor(((new Date(b.posted_at).getUTCHours()+7)%24)/3)*3; const k=String(h).padStart(2,'0')+'–'+String(h+3).padStart(2,'0')+'h'; gio[k]=gio[k]||{bai:0,xem:0}; gio[k].bai++; gio[k].xem+=xemBai[b.id]||0; });
+  const g=Object.entries(gio).filter(([,v])=>v.bai>=minMau).map(([k,v])=>({k, tb:v.xem/v.bai, v})).sort((a,b)=>b.tb-a.tb); const tbG=g.length?g.reduce((s,x)=>s+x.v.xem,0)/g.reduce((s,x)=>s+x.v.bai,0):0;
+  if(g.length>=2&&tbG&&g[0].tb/tbG>=1+lech) ds.push({ loai:'GIO_DANG', tieu_de:'Đăng vào khung '+g[0].k+' (xem/bài '+(g[0].tb/tbG).toFixed(1)+'× trung bình)', noi_dung:{khung:g[0].k}, bang_chung:Object.fromEntries(g.map(x=>[x.k,{bai:x.v.bai, xem_moi_bai:Math.round(x.tb)}])), ly_do:'Khung giờ '+g[0].k+' cho xem/bài cao nhất trên '+g[0].v.bai+' bài' });
+  for(const d of ds) await env.DB.prepare(`INSERT INTO de_xuat (id,ky,loai,tieu_de,noi_dung,bang_chung,ly_do,trang_thai,created_at) VALUES (?,?,?,?,?,?,?,'CHO',?)`).bind(uid('dx'), ky, d.loai, d.tieu_de, JSON.stringify(d.noi_dung), JSON.stringify(d.bang_chung), d.ly_do, nowISO()).run();
+  if(!ds.length) return {ok:true, ghi:0, tom_tat:'Chưa đủ bằng chứng (mỗi nhóm cần ≥ '+minMau+' bài và lệch ≥ '+Math.round(lech*100)+'%) — không đề xuất'};
+  return {ok:true, ghi:ds.length, tom_tat:'Đề xuất '+ds.length+' cải tiến cho G4: '+ds.map(d=>d.loai).join(', ')}; }
+async function apDungDeXuat(env, d, me){ const nd=docJSON(d.noi_dung,{}); const ap={};
+  if(d.loai==='TY_TRONG_PILLAR'){ const t=await env.DB.prepare(`SELECT ty_trong FROM pillars WHERE id=?`).bind(nd.tang).first(), g=await env.DB.prepare(`SELECT ty_trong FROM pillars WHERE id=?`).bind(nd.giam).first(); if(t&&g){ await env.DB.prepare(`UPDATE pillars SET ty_trong=? WHERE id=?`).bind(so(t.ty_trong)+so(nd.buoc), nd.tang).run(); await env.DB.prepare(`UPDATE pillars SET ty_trong=? WHERE id=?`).bind(Math.max(0,so(g.ty_trong)-so(nd.buoc)), nd.giam).run(); await env.DB.prepare(`UPDATE chien_luoc SET updated_at=? WHERE id=1`).bind(nowISO()).run(); ap.pillars=true; ap.ghi_chu='đã đổi tỷ trọng pillar — chiến lược cần chốt lại phiên bản (G1)'; } }
+  else { const cfg=(await docCauHinh(env)).hoc||{}; const goiY={...(cfg.goi_y||{})}; goiY[d.loai]=nd; await datCauHinh(env,'hoc',{goi_y:goiY}, me.ho_ten); ap.goi_y=true; ap.ghi_chu='ghi vào gợi ý (máy đề xuất kế hoạch/lịch đăng sẽ dùng)'; }
+  return ap; }
+
+// ============================================================
 //  AGENT ĐIỀU PHỐI — cron 15' gọi vào; mỗi agent chốt 1 lượt/ngày đúng giờ; "chạy thử" ghi thu=1
 //  Đăng ký agent: {ma, ten, loai:'HE_THONG'|'THUC_HIEN'|'HOC', buoc, chay(env,ctx)→{ok,tom_tat,doc,ghi,chi_tiet,bo_qua}}
 //  THUC_HIEN chỉ chạy khi bước ở AI_GOI_Y/AI_TU_LAM; HOC chỉ khi bước có hoc=BẬT. (Các agent tầng khác thêm ở ADR sau.)
@@ -581,6 +711,14 @@ const AGENTS = [
       return { ok:hoc>0, doc:ds.length, ghi:hoc, tom_tat:'Học '+hoc+' bài · giống trung bình '+(gs.length?(gs.reduce((s,x)=>s+x,0)/gs.length*100).toFixed(0):0)+'%'+(loi.length?(' · lỗi: '+loi[0]):''), chi_tiet:{giong:gs} }; } },
   // B9: đăng bài tới giờ (mỗi 15'); B9 NGƯỜI → giao việc đăng tay
   { ma:'DANG_BAI', ten:'Đăng bài tới giờ (API / n8n / giao đăng tay)', loai:'HE_THONG', buoc:'B9', nhip:'15p', chay: async (env)=>chayDangBai(env) },
+  // ADR-005 · B10 đo lường hằng ngày (API + số Trạm); B11 báo cáo tuần (thứ Hai) / tháng (ngày cấu hình); B12 đề xuất sau báo cáo tháng
+  { ma:'DO_LUONG', ten:'Đo lường bài đã đăng (Graph / YouTube / Trạm)', loai:'HE_THONG', buoc:'B10', chay: async (env)=>chayDoLuong(env) },
+  { ma:'BAO_CAO', ten:'Báo cáo tuần / tháng', loai:'HE_THONG', buoc:'B11',
+    chay: async (env, ctx)=>{ const cfg=(await docCauHinh(env)).bao_cao||{}; const d=new Date(Date.now()+7*36e5); const ra=[]; if(ctx&&ctx.thu){ ra.push(await taoBaoCao(env,'TUAN',{ep:true})); return {...ra[0], tom_tat:'(thử) '+ra[0].tom_tat}; }
+      if(d.getUTCDay()===1) ra.push(await taoBaoCao(env,'TUAN')); if(d.getUTCDate()===so(cfg.ngay_bao_cao_thang,1)) ra.push(await taoBaoCao(env,'THANG'));
+      const lam=ra.filter(r=>r.ok); if(!ra.length) return {bo_qua:'Không phải ngày báo cáo (thứ Hai / ngày '+so(cfg.ngay_bao_cao_thang,1)+')'}; if(!lam.length) return {bo_qua:ra.map(r=>r.bo_qua).join('; ')}; return {ok:true, ghi:lam.length, tom_tat:lam.map(r=>r.tom_tat).join(' | ')}; } },
+  { ma:'HOC_DE_XUAT', ten:'Học từ kết quả → đề xuất cải tiến (G4)', loai:'THUC_HIEN', buoc:'B12',
+    chay: async (env, ctx)=>{ const d=new Date(Date.now()+7*36e5); if(!(ctx&&ctx.thu) && d.getUTCDate()!==2) return {bo_qua:'Chạy ngày 2 hằng tháng (sau báo cáo tháng)'}; return chayDeXuat(env,{ep:!!(ctx&&ctx.thu)}); } },
 ];
 async function ghiAgentRun(env, o){
   await env.DB.prepare(`INSERT INTO agent_run (id,agent,buoc,ngay,at,ok,thu,bo_qua_ly_do,tom_tat,doc,ghi,tokens,usd,ms,chi_tiet) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
@@ -646,6 +784,13 @@ async function bootstrap(env, u){
   ]) : [[],[],[],[]];
   // ADR-003: nội dung 90 ngày, duyệt (chờ + 30 ngày đã quyết), tài sản 300 mới nhất, bài đăng 90 ngày
   const tu90=new Date(Date.now()-90*864e5).toISOString(), tu30=new Date(Date.now()-30*864e5).toISOString();
+  // ADR-005: kết quả 120 ngày, báo cáo 12 gần nhất, đề xuất chờ + 6 tháng
+  const tu120=new Date(Date.now()-120*864e5).toISOString().slice(0,10);
+  const [kqR, bcR, dxR] = xem ? await Promise.all([
+    env.DB.prepare(`SELECT * FROM ket_qua WHERE ky>=? ORDER BY ky DESC LIMIT 2000`).bind(tu120).all().then(r=>r.results),
+    all(`SELECT id,loai,ky,tu,den,nhan_dinh,nhan_dinh_may,viec_can_lam,trang_thai,gui_qua,gui_at,gui_boi,tao_boi,created_at,so_lieu FROM bao_cao ORDER BY created_at DESC LIMIT 12`),
+    all(`SELECT * FROM de_xuat ORDER BY CASE trang_thai WHEN 'CHO' THEN 0 ELSE 1 END, created_at DESC LIMIT 60`),
+  ]) : [[],[],[]];
   const [ndR, dyR, tsR, bdR] = xem ? await Promise.all([
     env.DB.prepare(`SELECT * FROM noi_dung WHERE updated_at>=? ORDER BY updated_at DESC LIMIT 400`).bind(tu90).all().then(r=>r.results),
     env.DB.prepare(`SELECT * FROM duyet WHERE trang_thai='CHO' OR created_at>=? ORDER BY created_at DESC LIMIT 300`).bind(tu30).all().then(r=>r.results),
@@ -655,6 +800,9 @@ async function bootstrap(env, u){
   return {
     me:{ id:u.id, ho_ten:u.ho_ten, email:u.email, vai_tro:u.vai_tro, doi_mat_khau:uBool(u.doi_mat_khau) },
     noi_dung: ndR.map(n=>({...n, sections:docSections(n.sections), chi_tiet:docJSON(n.chi_tiet,{})})),
+    ket_qua: kqR.map(k=>({...k, ghi_chu:docJSON(k.ghi_chu,{})})), muc_tin_cay:MUC_TIN_CAY, nguon_kq:NGUON_KQ,
+    bao_cao: bcR.map(b=>({...b, viec_can_lam:docJSON(b.viec_can_lam,[]), gui_qua:docJSON(b.gui_qua,[]), so_lieu:docJSON(b.so_lieu,{})})),
+    de_xuat: dxR.map(d=>({...d, noi_dung:docJSON(d.noi_dung,{}), bang_chung:docJSON(d.bang_chung,{}), ap_dung:docJSON(d.ap_dung,null)})),
     duyet: dyR.map(d=>({...d, cham_may:docJSON(d.cham_may,{})})), tai_san: tsR, bai_dang: bdR,
     chien_luoc_phien_ban: pb.map(x=>({...x, pillars:docJSON(x.pillars,[])})),
     ke_hoach_thang: khR.map(docKeHoach), muc_noi_dung: mucR, y_tuong: ytR,
@@ -743,6 +891,12 @@ async function handleApi(request, env){
     return json({ media_url:'/media/'+key, media_type: ct.startsWith('image/')?'IMAGE':'VIDEO' });
   }
   // n8n báo kết quả đăng (secret dùng chung, không phiên người)
+  // ADR-005: n8n / agent ngoài đẩy số đo (X-App-Token). Số tích luỹ → app tính phần tăng theo ngày; không quy đơn.
+  if(path==='/ket-qua/ingest' && method==='POST'){ if(!env.N8N_TOKEN) return json({error:'Chưa cấu hình N8N_TOKEN'},503); if((request.headers.get('X-App-Token')||'')!==env.N8N_TOKEN) return json({error:'Sai token'},401);
+    await ensureSchema(env); const b=await request.json().catch(()=>({})); const ds=Array.isArray(b.items)?b.items.slice(0,200):[]; if(!ds.length) return json({error:'Không có items'},400); let ghi=0; const loi=[];
+    for(const o of ds){ let bd=null; if(o.bai_dang_id) bd=await env.DB.prepare(`SELECT * FROM bai_dang WHERE id=?`).bind(String(o.bai_dang_id)).first(); else if(o.link) bd=await env.DB.prepare(`SELECT * FROM bai_dang WHERE link=? ORDER BY posted_at DESC LIMIT 1`).bind(String(o.link).trim()).first(); if(!bd){ loi.push({item:o.bai_dang_id||o.link||'?', ly_do:'không khớp bài'}); continue; }
+      await ghiKetQuaTichLuy(env, bd, 'NGOAI', o.tich_luy&&typeof o.tich_luy==='object'?o.tich_luy:o, laNgay(o.ky)?o.ky:ngayVN(), {api:chuoi(o.nen||'NGOAI',30), boi:chuoi(o.boi||'n8n',60)}); ghi++; }
+    return json({ok:true, ghi, loi}); }
   if((m=path.match(/^\/bai-dang\/(.+)\/n8n-callback$/)) && method==='POST'){
     if(!env.N8N_TOKEN) return json({error:'Chưa cấu hình N8N_TOKEN'},503); if((request.headers.get('X-App-Token')||'')!==env.N8N_TOKEN) return json({error:'Sai token'},401);
     await ensureSchema(env); const cb=await request.json().catch(()=>({})); const bd=await env.DB.prepare(`SELECT * FROM bai_dang WHERE id=?`).bind(m[1]).first(); if(!bd) return json({error:'Không tìm thấy bài'},404);
@@ -1073,6 +1227,35 @@ async function handleApi(request, env){
     if(!r.ok){ await env.DB.prepare(`UPDATE bai_dang SET trang_thai='LOI', loi=?, updated_at=? WHERE id=?`).bind(r.loi, nowISO(), bd.id).run(); return json({ ok:false, loi:r.loi, db: await bootstrap(env,me) }); }
     if(r.cho_callback){ await env.DB.prepare(`UPDATE bai_dang SET trang_thai='DANG_GUI', updated_at=? WHERE id=?`).bind(nowISO(), bd.id).run(); return json({ ok:true, cho_callback:true, db: await bootstrap(env,me) }); }
     await env.DB.prepare(`UPDATE bai_dang SET trang_thai='DA_DANG', link=?, posted_at=?, loi=NULL, updated_at=? WHERE id=?`).bind(r.link||'', nowISO(), nowISO(), bd.id).run(); await datGiaiDoan(env, bd.muc_id, 'DA_DANG', 'đăng qua API', me); await logAudit(env,me,'đăng ngay qua API','bai_dang',bd.id,r.link||''); return json({ ok:true, link:r.link, db: await bootstrap(env,me) }); }
+  // ===== ADR-005 =====
+  // Nhập kết quả tay / đối soát sàn — luật: KHÔNG QUY ĐƠN không được mang doanh thu/đơn
+  if(path==='/ket-qua' && method==='POST'){ if(!isStaff(me)) return json({error:'Không có quyền'},403); const bd=await env.DB.prepare(`SELECT * FROM bai_dang WHERE id=?`).bind(String(body.bai_dang_id||'')).first(); if(!bd) return json({error:'Chọn bài đăng'},400);
+    const muc=String(body.muc_tin_cay||'').toUpperCase(); if(!MUC_TIN_CAY[muc]) return json({error:'Mức tin cậy không hợp lệ'},400); const nguon=NGUON_KQ.includes(String(body.nguon||'').toUpperCase())?String(body.nguon).toUpperCase():'NHAP_TAY';
+    const dt=so(body.doanh_thu), sd=soAn(body.so_don); if(muc==='KHONG_QUY_DON'&&(dt>0||sd>0)) return json({error:'Mức "Không quy đơn" chỉ ghi chỉ số hiển thị/tương tác, không gắn doanh thu hay số đơn'},422); if(muc!=='KHONG_QUY_DON'&&nguon==='API_KENH') return json({error:'Số từ API kênh không quy đơn được'},422);
+    const id=uid('kq'); await env.DB.prepare(`INSERT INTO ket_qua (id,bai_dang_id,muc_id,muc_tin_cay,nguon,ky,tiep_can,luot_xem,tuong_tac,chia_se,binh_luan,luu,click,so_don,doanh_thu,ma_theo_doi,ghi_chu,created_at,created_by_name) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+      .bind(id, bd.id, bd.muc_id, muc, nguon, laNgay(body.ky)?body.ky:(chuoi(body.ky,20)||ngayVN()), soAn(body.tiep_can), soAn(body.luot_xem), soAn(body.tuong_tac), soAn(body.chia_se), soAn(body.binh_luan), soAn(body.luu), soAn(body.click), sd, dt, chuoi(body.ma_theo_doi,60)||bd.ma_theo_doi||'', JSON.stringify({ghi_chu:chuoi(body.ghi_chu,500)}), nowISO(), me.ho_ten).run();
+    await datGiaiDoan(env, bd.muc_id, 'DA_DO', 'nhập kết quả', me); await logAudit(env,me,'nhập kết quả','ket_qua',id,MUC_TIN_CAY[muc]+' · '+nguon); return json({ db: await bootstrap(env,me), id }); }
+  // Import đối soát sàn: dòng {ma_theo_doi|link, ky, doanh_thu, so_don, nguon} → khớp bài theo mã theo dõi hoặc link; không khớp trả về để người gán
+  if(path==='/ket-qua/doi-soat' && method==='POST'){ if(!isStaff(me)) return json({error:'Không có quyền'},403); const ds=Array.isArray(body.dong)?body.dong.slice(0,500):[]; if(!ds.length) return json({error:'Không có dòng nào'},400);
+    const muc=String(body.muc_tin_cay||'TRUC_TIEP').toUpperCase()==='GIAN_TIEP'?'GIAN_TIEP':'TRUC_TIEP'; const nguon=String(body.nguon||'SAN').toUpperCase()==='NHAP_TAY'?'NHAP_TAY':'SAN'; let khop=0; const khongKhop=[];
+    for(const d of ds){ let bd=null; const ma=chuoi(d.ma_theo_doi,60), link=chuoi(d.link,500); if(ma) bd=await env.DB.prepare(`SELECT * FROM bai_dang WHERE ma_theo_doi=? AND ma_theo_doi<>'' ORDER BY posted_at DESC LIMIT 1`).bind(ma).first(); if(!bd&&link) bd=await env.DB.prepare(`SELECT * FROM bai_dang WHERE link=? ORDER BY posted_at DESC LIMIT 1`).bind(link).first(); if(!bd&&d.bai_dang_id) bd=await env.DB.prepare(`SELECT * FROM bai_dang WHERE id=?`).bind(String(d.bai_dang_id)).first();
+      if(!bd){ khongKhop.push({ma_theo_doi:ma, link, doanh_thu:so(d.doanh_thu), so_don:soAn(d.so_don), ky:chuoi(d.ky,20)}); continue; }
+      await env.DB.prepare(`INSERT INTO ket_qua (id,bai_dang_id,muc_id,muc_tin_cay,nguon,ky,so_don,doanh_thu,ma_theo_doi,ghi_chu,created_at,created_by_name) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`).bind(uid('kq'), bd.id, bd.muc_id, muc, nguon, chuoi(d.ky,20)||ngayVN(), soAn(d.so_don), so(d.doanh_thu), ma, JSON.stringify({doi_soat:true, ghi_chu:chuoi(d.ghi_chu,200)}), nowISO(), me.ho_ten).run(); await datGiaiDoan(env, bd.muc_id, 'DA_DO', 'đối soát sàn', me); khop++; }
+    await logAudit(env,me,'import đối soát','ket_qua',nguon,'khớp '+khop+' · không khớp '+khongKhop.length); return json({ db: await bootstrap(env,me), khop, khong_khop:khongKhop }); }
+  if((m=path.match(/^\/ket-qua\/([^/]+)$/)) && method==='DELETE'){ if(!canGat(me)) return json({error:'Chỉ Trưởng MKT/Admin xoá kết quả'},403); const k=await env.DB.prepare(`SELECT * FROM ket_qua WHERE id=?`).bind(m[1]).first(); if(!k) return json({error:'Không tìm thấy'},404); await env.DB.prepare(`DELETE FROM ket_qua WHERE id=?`).bind(k.id).run(); await logAudit(env,me,'xoá kết quả','ket_qua',k.id,k.nguon); return json({ db: await bootstrap(env,me) }); }
+  if((m=path.match(/^\/bai-dang\/([^/]+)\/ma-theo-doi$/)) && method==='POST'){ if(!isStaff(me)) return json({error:'Không có quyền'},403); await env.DB.prepare(`UPDATE bai_dang SET ma_theo_doi=?, updated_at=? WHERE id=?`).bind(chuoi(body.ma_theo_doi,60), nowISO(), m[1]).run(); return json({ db: await bootstrap(env,me) }); }
+  // Báo cáo: tạo (staff), sửa nhận định, gửi (Trưởng MKT/Admin — mẫu học B11)
+  if(path==='/bao-cao' && method==='POST'){ if(!isStaff(me)) return json({error:'Không có quyền'},403); const r=await taoBaoCao(env, body.loai==='THANG'?'THANG':'TUAN', {ep:true}); await logAudit(env,me,'tạo báo cáo','bao_cao',r.id||'',r.tom_tat||r.bo_qua||''); return json({ ok:!!r.ok, ...r, db: await bootstrap(env,me) }); }
+  if((m=path.match(/^\/bao-cao\/([^/]+)$/)) && method==='PATCH'){ if(!isStaff(me)) return json({error:'Không có quyền'},403); const bc=await env.DB.prepare(`SELECT * FROM bao_cao WHERE id=?`).bind(m[1]).first(); if(!bc) return json({error:'Không tìm thấy'},404);
+    await env.DB.prepare(`UPDATE bao_cao SET nhan_dinh=?, viec_can_lam=? WHERE id=?`).bind(body.nhan_dinh!=null?chuoi(body.nhan_dinh,3000):bc.nhan_dinh, Array.isArray(body.viec_can_lam)?JSON.stringify(body.viec_can_lam.map(x=>chuoi(x,200)).filter(Boolean).slice(0,5)):bc.viec_can_lam, bc.id).run(); return json({ db: await bootstrap(env,me) }); }
+  if((m=path.match(/^\/bao-cao\/([^/]+)\/gui$/)) && method==='POST'){ if(!canGat(me)) return json({error:'Chỉ Trưởng MKT/Admin gửi báo cáo'},403); const r=await guiBaoCao(env, m[1], me); if(!r.ok) return json({error:r.loi},400); return json({ ok:true, tom_tat:r.tom_tat, db: await bootstrap(env,me) }); }
+  // Đề xuất cải tiến — cổng G4: Trưởng MKT / Admin / Giám đốc duyệt → máy áp dụng; bỏ phải có lý do (máy học)
+  if((m=path.match(/^\/de-xuat\/([^/]+)\/quyet$/)) && method==='POST'){ if(!(canGat(me)||me.vai_tro===ROLES.GIAM_DOC)) return json({error:'Cổng G4: Trưởng MKT, Admin hoặc Giám đốc'},403); const d=await env.DB.prepare(`SELECT * FROM de_xuat WHERE id=?`).bind(m[1]).first(); if(!d) return json({error:'Không tìm thấy'},404); if(d.trang_thai!=='CHO') return json({error:'Đã quyết rồi'},409);
+    const q=body.quyet==='DUYET'?'DUYET':body.quyet==='BO'?'BO':null; if(!q) return json({error:'quyet phải là DUYET hoặc BO'},400); if(q==='BO'&&!chuoi(body.ly_do)) return json({error:'Bỏ đề xuất phải ghi lý do (máy học từ đây)'},400);
+    let ap=null; if(q==='DUYET') ap=await apDungDeXuat(env, d, me);
+    await env.DB.prepare(`UPDATE de_xuat SET trang_thai=?, quyet_boi=?, quyet_at=?, ly_do_nguoi=?, ap_dung=? WHERE id=?`).bind(q, me.ho_ten, nowISO(), chuoi(body.ly_do,500), ap?JSON.stringify(ap):null, d.id).run();
+    await ghiMauHoc(env,'B12',{doi_tuong_id:d.id, dau_vao:{loai:d.loai}, dau_ra_may:{quyet:'DUYET', ly_do:d.ly_do}, dau_ra_nguoi:{quyet:q, ly_do:chuoi(body.ly_do,200)}, giong:q==='DUYET'?1:0});
+    await logAudit(env,me,q==='DUYET'?'duyệt đề xuất (G4) → máy áp dụng':'bỏ đề xuất','de_xuat',d.id,d.tieu_de); return json({ db: await bootstrap(env,me), ap_dung:ap }); }
   // ADR-004 — Trạm: tạo khoá & mã ghép (Admin), xếp lệnh (staff)
   if(path==='/tram/khoa' && method==='POST'){ if(me.vai_tro!==ROLES.ADMIN) return json({error:'Chỉ Admin tạo khoá Trạm'},403);
     const khoa='kcos_'+crypto.randomUUID().replace(/-/g,'')+crypto.randomUUID().replace(/-/g,'').slice(0,8); await datCauHinh(env,'tram',{khoa, bat:true}, me.ho_ten);
