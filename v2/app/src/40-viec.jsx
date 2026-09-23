@@ -11,7 +11,7 @@ function ViecCuaToi({go}){
   const cong=[
     { ma:'G1', ten:'Chốt định vị & chiến lược', tt: cl.phien_ban>0?('Phiên bản '+cl.phien_ban+(daSuaCL?' · đã sửa, chưa chốt lại':'')):(cl.dinh_vi?'Đã soạn, chưa chốt':'Chưa soạn'), page:'chienluoc', ok:cl.phien_ban>0&&!daSuaCL },
     { ma:'G2', ten:'Chốt kế hoạch tháng', tt: khNay?(khNay.trang_thai==='CHOT'?('Tháng '+thangNay+' đã chốt'):('Tháng '+thangNay+' — '+(khNay.nguon==='DE_XUAT'?'máy đề xuất':'đang soạn')+', CHỜ CHỐT')):('Tháng '+thangNay+' chưa lập'+(ytMoi?(' · '+ytMoi+' ý tưởng chờ chấm'):'')), page:'chienluoc', ok:khNay?khNay.trang_thai==='CHOT':false },
-    { ma:'G3', ten:'Duyệt nội dung trước đăng', tt:db.mo_phong?'2 bài chờ duyệt · 1 bài quá 24h':'Mở ở đợt 3', page:'dongchay', ok:db.mo_phong?false:null },
+    { ma:'G3', ten:'Duyệt nội dung trước đăng', tt:(()=>{ const cho=(db.duyet||[]).filter(d=>d.trang_thai==='CHO'); const qua=cho.filter(d=>Date.now()-Date.parse(d.created_at)>24*36e5).length; const toi=cho.filter(d=>laGat(me)&&d.nguoi_gui_id!==me.id).length; return cho.length?(cho.length+' bài chờ duyệt'+(toi?(' · '+toi+' tới lượt bạn'):'')+(qua?(' · '+qua+' quá 24h'):'')):'Không có bài chờ'; })(), page:'dongchay', ok:(db.duyet||[]).filter(d=>d.trang_thai==='CHO').length===0 },
     { ma:'G4', ten:'Duyệt đề xuất cải tiến', tt:db.mo_phong?'3 đề xuất từ báo cáo tháng 9':'Mở ở đợt 4', page:'ketqua', ok:db.mo_phong?false:null },
   ];
   const xong=async(id,kq)=>{ const r=await goi('/cong-viec/'+id+'/'+kq,{method:'POST'}); if(r.ok) notify(kq==='xong'?'Đã xong':'Đã bỏ'); else notify(r.msg,'err'); };

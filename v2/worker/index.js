@@ -79,6 +79,9 @@ const CONFIG_MAC_DINH = {
   trend:   { tu_khoa_nganh:[], chong_trung_ngay:30, nguong_tu_duyet:70 },
   // ADR-002: kế hoạch tháng. ngay_de_xuat: máy lập bản đề xuất tháng sau vào ngày này (khi B2 ở mức AI)
   ke_hoach:{ tong_bai_mac_dinh:20, ngay_de_xuat:25 },
+  // ADR-003: nội dung. soan_nhap_toi_da_ngay: máy soạn tối đa N bài/ngày (B4 ở mức AI); hoc_toi_da_ngay: bản nháp bóng/ngày;
+  // diem_tham_dinh: điểm máy chấm ≥ ngưỡng → "máy nghĩ nên duyệt" (chỉ để học & xếp thứ tự, máy KHÔNG BAO GIỜ tự duyệt G3)
+  noi_dung:{ soan_nhap_toi_da_ngay:5, hoc_toi_da_ngay:5, diem_tham_dinh:70 },
   // Mô phỏng: dữ liệu giả (tiền tố id mp_) để duyệt thiết kế; bật/tắt bằng /mo-phong/nap|xoa
   mo_phong: { bat:false },
 };
@@ -130,6 +133,19 @@ async function ensureSchema(env){
     // Ý tưởng: từ trend máy gom / AI / người. trang_thai: MOI | DUYET | BO. diem_may 0–100 (null = chưa chấm)
     `CREATE TABLE IF NOT EXISTS y_tuong (id TEXT PRIMARY KEY, nguon TEXT, ten TEXT, mo_ta TEXT, link TEXT, pillar_id TEXT, dinh_dang TEXT, muc_tieu TEXT, diem_may INTEGER, ly_do_may TEXT, rui_ro TEXT, trang_thai TEXT DEFAULT 'MOI', ngay TEXT, quyet_boi TEXT, quyet_at TEXT, ly_do_nguoi TEXT, muc_id TEXT, created_at TEXT)`,
     `CREATE INDEX IF NOT EXISTS idx_y_tuong_ngay ON y_tuong(created_at)`,
+    // ADR-003 — nội dung (4 định dạng), phiên bản, duyệt G3, tài sản media, bài đăng
+    // noi_dung.trang_thai: NHAP | CHO_DUYET | DUYET | TRA_LAI. dinh_dang bất biến sau khi tạo.
+    `CREATE TABLE IF NOT EXISTS noi_dung (id TEXT PRIMARY KEY, muc_id TEXT, dinh_dang TEXT, phien_ban INTEGER DEFAULT 1, tieu_de TEXT, hook TEXT, sections TEXT, cta TEXT, chi_tiet TEXT, framework_id TEXT, san_pham_id TEXT, kenh_id TEXT, trang_thai TEXT DEFAULT 'NHAP', tao_boi TEXT, ly_do_may TEXT, created_at TEXT, created_by TEXT, created_by_name TEXT, updated_at TEXT)`,
+    `CREATE INDEX IF NOT EXISTS idx_noi_dung_muc ON noi_dung(muc_id)`,
+    `CREATE TABLE IF NOT EXISTS noi_dung_phien_ban (id TEXT PRIMARY KEY, noi_dung_id TEXT, phien_ban INTEGER, snapshot TEXT, created_at TEXT, created_by_name TEXT)`,
+    // duyet: một dòng mỗi lần gửi duyệt. cham_may = {diem, ly_do[], loi_cung[]}. trang_thai: CHO | DUYET | TRA_LAI
+    `CREATE TABLE IF NOT EXISTS duyet (id TEXT PRIMARY KEY, doi_tuong TEXT, doi_tuong_id TEXT, cong TEXT, trang_thai TEXT DEFAULT 'CHO', nguoi_gui_id TEXT, nguoi_gui_ten TEXT, cham_may TEXT, quyet_boi TEXT, quyet_at TEXT, ly_do_nguoi TEXT, created_at TEXT)`,
+    `CREATE INDEX IF NOT EXISTS idx_duyet_tt ON duyet(trang_thai, created_at)`,
+    // tai_san.loai: FOOTAGE | ANH | VIDEO_XUAT | GOI_DUNG | KHAC
+    `CREATE TABLE IF NOT EXISTS tai_san (id TEXT PRIMARY KEY, loai TEXT, ten TEXT, mo_ta TEXT, media_url TEXT, media_type TEXT, muc_id TEXT, noi_dung_id TEXT, nguon TEXT, created_at TEXT, created_by_name TEXT)`,
+    // bai_dang.trang_thai: CHUAN_BI | DA_LEN_LICH | DA_DANG | LOI. cach: TAY | API | N8N
+    `CREATE TABLE IF NOT EXISTS bai_dang (id TEXT PRIMARY KEY, noi_dung_id TEXT, muc_id TEXT, kenh_id TEXT, gio_dang TEXT, cach TEXT, noi_dung_dang TEXT, media_url TEXT, link TEXT, trang_thai TEXT DEFAULT 'CHUAN_BI', loi TEXT, lan_thu INTEGER DEFAULT 0, posted_at TEXT, created_at TEXT, created_by_name TEXT, updated_at TEXT)`,
+    `CREATE INDEX IF NOT EXISTS idx_bai_dang_tt ON bai_dang(trang_thai, gio_dang)`,
   );
   for(const s of q) await env.DB.prepare(s).run();
   // pillar phục vụ mục tiêu nào → chỉ tiêu tháng & KPI đo theo đó
@@ -355,6 +371,131 @@ async function ghiMauHoc(env, buoc, o){
 function giongChiTieu(a,b){ const cap=[]; const duyet=(x,y)=>{ for(const k of new Set([...Object.keys(x||{}),...Object.keys(y||{})])){ if(k==='ket_qua') continue; const u=so(x&&x[k]), v=so(y&&y[k]); if(typeof (x&&x[k])==='object'||typeof (y&&y[k])==='object'){ duyet(x&&x[k], y&&y[k]); continue; } if(u===0&&v===0) continue; cap.push(Math.abs(u-v)/Math.max(u,v,1)); } }; duyet(a,b); return cap.length? 1-cap.reduce((s,x)=>s+x,0)/cap.length : 1; }
 
 // ============================================================
+//  ADR-003 — DÒNG CHẢY NỘI DUNG: soạn (B4) · thẩm định & duyệt G3 (B5) · tài sản · đăng (B9)
+// ============================================================
+function lamSachChiTiet(o){ const out={}; if(!o||typeof o!=='object'||Array.isArray(o)) return out; for(const k of Object.keys(o).slice(0,20)){ const v=o[k]; if(typeof v==='string'||typeof v==='number') out[String(k).slice(0,40)]=String(v).trim().slice(0,5000); } return out; }
+const docSections=v=>{ const a=Array.isArray(v)?v:docJSON(v,[]); return (Array.isArray(a)?a:[]).filter(x=>x&&(x.label||x.text)).map(x=>({label:chuoi(x.label,80), text:chuoi(x.text,3000), hinh:chuoi(x.hinh,500), buoc:x.buoc?chuoi(x.buoc,120):null})).slice(0,40); };
+// Toàn văn để quét claim & so giống — phủ cả ghi chú hình và mọi trường chữ trong chi_tiet
+function vanBan(nd){ const secs=docSections(nd.sections).map(x=>[x.text,x.hinh].filter(Boolean).join('\n')).join('\n'); const ct=docJSON(nd.chi_tiet,nd.chi_tiet&&typeof nd.chi_tiet==='object'?nd.chi_tiet:{}); const ctT=Object.keys(ct).filter(k=>!/url|ti_le|_luc|_id$/.test(k)).map(k=>ct[k]).filter(Boolean).join('\n'); return [nd.tieu_de,nd.hook,secs,nd.cta,ctT].filter(Boolean).join('\n'); }
+// Bản đăng cuối theo định dạng (post/carousel/ảnh: caption; video: lời bình)
+function banDang(nd){ const secs=docSections(nd.sections); const ct=docJSON(nd.chi_tiet,{}); const than=secs.map(x=>x.text); const dd=nd.dinh_dang||'VIDEO'; let p;
+  if(dd==='POST') p=[nd.hook,...than,nd.cta,ct.hashtag]; else if(dd==='ANH') p=[ct.caption||[nd.hook,ct.chu_phu].filter(Boolean).join('\n'),nd.cta,ct.hashtag]; else if(dd==='CAROUSEL') p=[ct.caption||[nd.hook,...than].filter(Boolean).join('\n'),nd.cta,ct.hashtag]; else p=[nd.hook,...than,nd.cta];
+  return p.filter(Boolean).join('\n\n'); }
+function quetClaim(text, claims){ const t=String(text||'').toLowerCase(); return (claims||[]).filter(c=>c.cum_tu&&t.includes(String(c.cum_tu).toLowerCase())).map(c=>({cum_tu:c.cum_tu, muc_do:c.muc_do, ly_do:c.ly_do||''})); }
+async function docClaims(env){ return (await env.DB.prepare(`SELECT cum_tu,muc_do,ly_do FROM claim_cam WHERE active=1`).all()).results; }
+// Máy thẩm định (B5) — luật cứng + luật mềm, KHÔNG dùng AI, giải thích được từng điểm trừ
+function chamNoiDungMay(nd, claims){
+  const ly_do=[], loi_cung=[]; let diem=100; const dd=nd.dinh_dang||'VIDEO'; const secs=docSections(nd.sections); const ct=docJSON(nd.chi_tiet,{}); const vb=vanBan(nd);
+  const chan=quetClaim(vb,claims).filter(c=>c.muc_do==='CHAN'), cb=quetClaim(vb,claims).filter(c=>c.muc_do!=='CHAN');
+  if(chan.length){ diem-=60; loi_cung.push('Có cụm bị CHẶN: '+chan.map(c=>c.cum_tu).join(', ')); }
+  if(cb.length){ diem-=10*cb.length; ly_do.push('Cụm cần cân nhắc: '+cb.map(c=>c.cum_tu).join(', ')); }
+  if(!chuoi(nd.hook)){ diem-=25; loi_cung.push('Thiếu hook / câu mở'); } else if(dd==='ANH' && nd.hook.split(/\s+/).length>8){ diem-=10; ly_do.push('Headline ảnh dài hơn 8 từ'); }
+  if(!chuoi(nd.cta)){ diem-=20; loi_cung.push('Thiếu CTA'); }
+  if(dd!=='ANH' && secs.length===0){ diem-=25; loi_cung.push('Chưa có thân bài / cảnh'); }
+  if(dd==='CAROUSEL' && (secs.length<3||secs.length>8)){ diem-=10; ly_do.push('Carousel nên 4–8 slide (đang '+secs.length+')'); }
+  if(dd==='VIDEO' && secs.some(x=>!x.hinh)){ diem-=5; ly_do.push('Có cảnh chưa ghi gợi ý hình'); }
+  if(/\[điền/i.test(vb)){ diem-=15; ly_do.push('Còn chỗ "[điền …]" chưa điền dữ kiện'); }
+  if(/\d{2,3}[.,]?\d{3}\s*(đ|vnd|k\b)/i.test(vb)){ diem-=15; ly_do.push('Có con số tiền — bảng giá đổi theo đợt, bài đăng sống mãi'); }
+  if(!nd.san_pham_id && /\b(G\d{4}|kingsmen)\b/i.test(vb)) ly_do.push('Nhắc sản phẩm nhưng chưa gắn sản phẩm để đối chiếu thông số');
+  return { diem:Math.max(0,Math.min(100,diem)), ly_do, loi_cung, nen_duyet: loi_cung.length===0 && diem>=70 };
+}
+// Prompt soạn theo định dạng — chép từ app cũ, thêm mục tiêu (brand/bán hàng) và ví dụ tốt đã duyệt (kho ví dụ)
+const AI_NGUYEN_TAC='NGUYÊN TẮC: 1. Chỉ dùng thông số/bảo hành/tiêu chuẩn có trong dữ kiện; không bịa số, không so sánh tên đối thủ. 2. Không dùng cụm từ cấm. 3. Tông giọng và đối tượng theo chiến lược. 4. Mỗi câu ngắn, cụ thể, nói cho thợ và chủ nhà hiểu ngay. 5. Không nói giá, khuyến mãi, con số tiền — cần thì viết "[điền giá]". 6. Thiếu dữ kiện thì viết "[điền …]" thay vì đoán.';
+async function promptNoiDung(env, b){
+  const fw=b.framework_id?await env.DB.prepare(`SELECT * FROM frameworks WHERE id=?`).bind(b.framework_id).first():null;
+  const sp=b.san_pham_id?await env.DB.prepare(`SELECT * FROM san_pham WHERE id=?`).bind(b.san_pham_id).first():null;
+  const kn=b.kenh_id?await env.DB.prepare(`SELECT * FROM kenh WHERE id=?`).bind(b.kenh_id).first():null;
+  const pl=b.pillar_id?await env.DB.prepare(`SELECT * FROM pillars WHERE id=?`).bind(b.pillar_id).first():null;
+  const cl=await env.DB.prepare(`SELECT * FROM chien_luoc WHERE id=1`).first()||{}; const claims=await docClaims(env);
+  const dd=dinhDang(b.dinh_dang)||'VIDEO'; const cacBuoc=(dd==='VIDEO'&&Array.isArray(b.cac_buoc))?b.cac_buoc.map(s=>chuoi(s,120)).filter(Boolean).slice(0,60):[];
+  // kho ví dụ: 2 bài cùng định dạng (ưu tiên cùng pillar) đã DUYỆT gần nhất — máy học "giọng đã được duyệt"
+  const viDu=(await env.DB.prepare(`SELECT n.tieu_de,n.hook,n.cta,n.sections,n.chi_tiet FROM noi_dung n LEFT JOIN muc_noi_dung m ON m.id=n.muc_id WHERE n.trang_thai='DUYET' AND n.dinh_dang=? ORDER BY CASE WHEN m.pillar_id=? THEN 0 ELSE 1 END, n.updated_at DESC LIMIT 2`).bind(dd, b.pillar_id||'').all()).results;
+  const KHUON={
+    VIDEO:{ vai:'Bạn viết kịch bản video ngắn 30–60 giây cho thương hiệu keo ron gạch Kingsmen.', json:'{"tieu_de":"...","hook":"<3 giây đầu>","sections":[{"label":"Cảnh 1","text":"<lời bình>","hinh":"<gợi ý hình>","buoc":'+(cacBuoc.length?'"<tên bước nguyên văn hoặc null>"':'null')+'}],"cta":"..."}' },
+    POST:{ vai:'Bạn viết BÀI ĐĂNG mạng xã hội (Facebook/Zalo) cho thương hiệu keo ron gạch Kingsmen. Câu mở phải khiến người đọc bấm "Xem thêm"; thân 3–5 đoạn ngắn ≤ 60 từ; chốt bằng CTA.', json:'{"tieu_de":"...","hook":"<câu mở>","sections":[{"label":"Đoạn 1","text":"..."}],"cta":"...","hashtag":"#kingsmen #..."}' },
+    ANH:{ vai:'Bạn viết CHỮ TRÊN ẢNH/BANNER cho thương hiệu keo ron gạch Kingsmen. Headline ≤ 8 từ; chữ phụ ≤ 20 từ; nút CTA ≤ 4 từ; caption 2–4 câu; brief cho designer.', json:'{"tieu_de":"...","hook":"<headline>","chu_phu":"...","cta":"<nút>","caption":"...","hashtag":"#...","brief":"..."}' },
+    CAROUSEL:{ vai:'Bạn viết CAROUSEL 5–7 slide cho thương hiệu keo ron gạch Kingsmen. Slide bìa ≤ 10 từ; mỗi slide ≤ 30 từ + gợi ý hình; slide chốt là CTA; caption 2–3 câu.', json:'{"tieu_de":"...","hook":"<slide bìa>","sections":[{"label":"Slide 2","text":"...","hinh":"<gợi ý hình>"}],"cta":"<slide chốt>","caption":"...","hashtag":"#..."}' } }[dd];
+  const sys=KHUON.vai+'\n'+AI_NGUYEN_TAC+(cacBuoc.length?'\n7. Nguồn quay THẬT chỉ có các bước trong "CÁC BƯỚC CÓ SẴN" — mỗi mục sections gắn "buoc" đúng nguyên văn một tên trong đó.':'')+'\nCHỈ trả về JSON thuần dạng '+KHUON.json+' — không giải thích.';
+  const usr='MỤC TIÊU BÀI: '+(b.muc_tieu==='BAN_HANG'?'BÁN HÀNG (dẫn tới hỏi mua/inbox, nói rõ sản phẩm & lợi ích thật)':'XÂY DỰNG BRAND (để được xem, chia sẻ, nhớ tên; không ép mua)')+'\nPILLAR: '+(pl?(pl.ten+(pl.mo_ta?(' — '+pl.mo_ta):'')):'(chưa)')+'\nFRAMEWORK: '+(fw?(fw.ten+(fw.mo_ta?(' — '+fw.mo_ta):'')):'(tự chọn cấu trúc)')+'\nSẢN PHẨM: '+(sp?sp.ten:'(chưa chọn)')+'\nTHÔNG SỐ THẬT (chỉ được dùng những cái này): '+(sp?JSON.stringify(docJSON(sp.thong_so,[])):'(chưa có)')+'\nTIÊU CHUẨN: '+((sp&&sp.tieu_chuan)||'(chưa có)')+'\nBẢO HÀNH (trích nguyên văn được): '+((sp&&sp.bao_hanh)||'(chưa có)')+'\nHƯỚNG DẪN DÙNG: '+((sp&&sp.huong_dan)||'(chưa có)')+'\nKÊNH: '+(kn?(kn.ten+' ('+kn.loai+')'):'(chưa chọn)')+'\nĐỊNH VỊ: '+(cl.dinh_vi||'(chưa đặt)')+'\nTÔNG GIỌNG: '+(cl.tong_giong||'(chưa đặt)')+'\nĐỐI TƯỢNG: '+(cl.doi_tuong||'(chưa đặt)')+'\nCỤM TỪ CẤM: '+JSON.stringify(claims.map(c=>c.cum_tu))+(viDu.length?('\nVÍ DỤ ĐÃ ĐƯỢC DUYỆT (học giọng, không chép):\n'+viDu.map(v=>'- '+v.tieu_de+' | hook: '+v.hook+' | cta: '+v.cta).join('\n')):'')+(cacBuoc.length?('\nCÁC BƯỚC CÓ SẴN TRONG NGUỒN QUAY:\n'+cacBuoc.map((x,i)=>(i+1)+'. '+x).join('\n')):'')+'\nĐỀ BÀI: '+(chuoi(b.tieu_de,200)||'(tự đặt)')+'\nGÓC NHÌN: '+(chuoi(b.angle,300)||'(tự chọn góc hợp framework)');
+  return { sys, usr, cacBuoc, claims, dd, so_vi_du:viDu.length };
+}
+// Thẩm định JSON AI trả về — cùng bộ kiểm cho mọi nhà cung cấp; cụm CHẶN → từ chối
+function duyetVanBanAI(text, cacBuoc, claims, dd){
+  let t=String(text||'').replace(/^```(?:json)?\s*/i,'').replace(/```\s*$/,'').trim(); const i=t.indexOf('{'), k=t.lastIndexOf('}'); if(i<0||k<0) return {ok:false, loi:'AI không trả về JSON'};
+  let kb; try{ kb=JSON.parse(t.slice(i,k+1)); }catch(e){ return {ok:false, loi:'JSON từ AI hỏng'}; } if(!kb||(!kb.hook&&!kb.tieu_de)) return {ok:false, loi:'AI trả nội dung rỗng'};
+  const ds=Array.isArray(cacBuoc)?cacBuoc:[]; let secs=docSections(kb.sections).map(x=>({...x, buoc:(ds.length&&x.buoc&&ds.includes(x.buoc))?x.buoc:null})); if(dd==='ANH') secs=[];
+  const KHOA={POST:['hashtag'],ANH:['chu_phu','caption','hashtag','brief'],CAROUSEL:['caption','hashtag'],VIDEO:[]}[dd]||[]; const ct={}; KHOA.forEach(x=>{ if(kb[x]!=null&&String(kb[x]).trim()) ct[x]=String(kb[x]).trim().slice(0,5000); });
+  const out={ tieu_de:chuoi(kb.tieu_de,200), hook:chuoi(kb.hook,1000), sections:secs, cta:chuoi(kb.cta,500), chi_tiet:ct, dinh_dang:dd };
+  const flags=quetClaim(vanBan(out), claims); const chan=flags.filter(f=>f.muc_do==='CHAN'); if(chan.length) return {ok:false, loi:'AI viết trúng cụm bị CHẶN ('+chan.map(c=>c.cum_tu).join(', ')+') — thử lại hoặc đổi góc', blocked:chan.map(c=>c.cum_tu)};
+  return {ok:true, noi_dung:out, canh_bao:flags.filter(f=>f.muc_do!=='CHAN')};
+}
+async function aiVietNoiDung(env, b, me, tinhNang='soan_noi_dung'){ const p=await promptNoiDung(env,b); const r=await goiAI(env,{system:p.sys, messages:[{role:'user',content:p.usr}], max_tokens:2000, tinh_nang:tinhNang, me}); if(!r.ok) return r; const d=duyetVanBanAI(r.text, p.cacBuoc, p.claims, p.dd); return {...d, so_vi_du:p.so_vi_du, model:r.model}; }
+// Độ giống hai văn bản (Jaccard theo từ) — dùng cho bản nháp bóng B4
+function giongVanBan(a,b){ const tach=s=>new Set(String(s||'').toLowerCase().replace(/[^\p{L}\p{N}\s]/gu,' ').split(/\s+/).filter(w=>w.length>1)); const A=tach(a),B=tach(b); if(!A.size&&!B.size) return 1; let g=0; A.forEach(w=>{ if(B.has(w)) g++; }); return g/(A.size+B.size-g); }
+async function datGiaiDoan(env, mucId, gd, lyDo, tacNhan){ if(!mucId||!GIAI_DOAN.includes(gd)) return; const m=await env.DB.prepare(`SELECT giai_doan,tieu_de FROM muc_noi_dung WHERE id=?`).bind(mucId).first(); if(!m||m.giai_doan===gd) return;
+  await env.DB.prepare(`UPDATE muc_noi_dung SET giai_doan=?, updated_at=? WHERE id=?`).bind(gd, nowISO(), mucId).run(); await logAudit(env, tacNhan, 'giai đoạn '+m.giai_doan+' → '+gd, 'muc_noi_dung', mucId, lyDo||''); }
+const MAY=(ten)=>({ id:'', ho_ten:ten||'Máy', vai_tro:ROLES.MARKETING, agent:true });
+async function luuPhienBan(env, nd, boi){ await env.DB.prepare(`INSERT INTO noi_dung_phien_ban (id,noi_dung_id,phien_ban,snapshot,created_at,created_by_name) VALUES (?,?,?,?,?,?)`).bind(uid('ndv'), nd.id, nd.phien_ban, JSON.stringify({tieu_de:nd.tieu_de,hook:nd.hook,sections:docSections(nd.sections),cta:nd.cta,chi_tiet:docJSON(nd.chi_tiet,{}),trang_thai:nd.trang_thai}), nowISO(), boi).run(); }
+async function taoNoiDung(env, b, tacNhan){
+  const dd=dinhDang(b.dinh_dang)||'VIDEO'; const claims=await docClaims(env); const nd={ tieu_de:chuoi(b.tieu_de,200), hook:chuoi(b.hook,1000), sections:docSections(b.sections), cta:chuoi(b.cta,500), chi_tiet:lamSachChiTiet(b.chi_tiet), dinh_dang:dd };
+  if(!nd.tieu_de&&!nd.hook) return {ok:false, loi:'Cần tiêu đề hoặc hook'}; const chan=quetClaim(vanBan(nd),claims).filter(c=>c.muc_do==='CHAN'); if(chan.length) return {ok:false, loi:'Có cụm bị CHẶN: '+chan.map(c=>c.cum_tu).join(', '), blocked:chan.map(c=>c.cum_tu)};
+  const id=uid('nd'); const muc=b.muc_id?await env.DB.prepare(`SELECT * FROM muc_noi_dung WHERE id=?`).bind(b.muc_id).first():null;
+  await env.DB.prepare(`INSERT INTO noi_dung (id,muc_id,dinh_dang,phien_ban,tieu_de,hook,sections,cta,chi_tiet,framework_id,san_pham_id,kenh_id,trang_thai,tao_boi,ly_do_may,created_at,created_by,created_by_name,updated_at) VALUES (?,?,?,1,?,?,?,?,?,?,?,?,'NHAP',?,?,?,?,?,?)`)
+    .bind(id, muc?muc.id:null, dd, nd.tieu_de, nd.hook, JSON.stringify(nd.sections), nd.cta, JSON.stringify(nd.chi_tiet), b.framework_id||(muc&&muc.framework_id)||null, b.san_pham_id||(muc&&muc.san_pham_id)||null, b.kenh_id||(muc&&muc.kenh_id)||null, tacNhan.agent?'AGENT':'NGUOI', chuoi(b.ly_do_may,500)||null, nowISO(), tacNhan.id||'', tacNhan.ho_ten, nowISO()).run();
+  await luuPhienBan(env, {...nd, id, phien_ban:1, trang_thai:'NHAP'}, tacNhan.ho_ten);
+  if(muc){ if(muc.dinh_dang!==dd) await env.DB.prepare(`UPDATE muc_noi_dung SET dinh_dang=? WHERE id=?`).bind(dd, muc.id).run(); await datGiaiDoan(env, muc.id, 'SOAN', 'có nội dung', tacNhan); }
+  await logAudit(env, tacNhan, 'tạo nội dung', 'noi_dung', id, nd.tieu_de||nd.hook); return {ok:true, id};
+}
+// Gửi duyệt (G3): tạo dòng duyệt, máy chấm sẵn (B5); B5 ở mức AI → tự TRẢ LẠI bài trượt luật cứng (không bao giờ tự duyệt)
+async function guiDuyet(env, nd, tacNhan){
+  const cho=await env.DB.prepare(`SELECT id FROM duyet WHERE doi_tuong='noi_dung' AND doi_tuong_id=? AND trang_thai='CHO'`).bind(nd.id).first(); if(cho) return {ok:false, loi:'Bài đang chờ duyệt rồi'};
+  const claims=await docClaims(env); const cham=chamNoiDungMay(nd, claims); const b5=await mucBuoc(env,'B5'); const id=uid('dy');
+  const tuTra = b5.nguoi_thuc_hien!=='NGUOI' && cham.loi_cung.length>0;
+  await env.DB.prepare(`INSERT INTO duyet (id,doi_tuong,doi_tuong_id,cong,trang_thai,nguoi_gui_id,nguoi_gui_ten,cham_may,quyet_boi,quyet_at,ly_do_nguoi,created_at) VALUES (?,'noi_dung',?,'G3',?,?,?,?,?,?,?,?)`)
+    .bind(id, nd.id, tuTra?'TRA_LAI':'CHO', tacNhan.id||'', tacNhan.ho_ten, JSON.stringify(cham), tuTra?'Máy (B5 · luật cứng)':null, tuTra?nowISO():null, tuTra?('Máy trả lại: '+cham.loi_cung.join('; ')):null, nowISO()).run();
+  await env.DB.prepare(`UPDATE noi_dung SET trang_thai=?, updated_at=? WHERE id=?`).bind(tuTra?'TRA_LAI':'CHO_DUYET', nowISO(), nd.id).run();
+  await datGiaiDoan(env, nd.muc_id, tuTra?'SOAN':'CHO_DUYET', tuTra?'máy trả lại':'gửi duyệt', tacNhan);
+  await logAudit(env, tacNhan, tuTra?'máy trả lại bài (B5)':'gửi duyệt (G3)', 'noi_dung', nd.id, 'máy chấm '+cham.diem+'/100'+(cham.loi_cung.length?(' · '+cham.loi_cung.join('; ')):''));
+  return {ok:true, id, cham, tu_tra_lai:tuTra};
+}
+// Bản nháp bóng (chế độ học B4): máy viết ngầm cùng đầu vào bài người gửi duyệt, so giống, ghi mẫu — không hiện cho người
+async function banNhapBong(env, nd){
+  const muc=nd.muc_id?await env.DB.prepare(`SELECT * FROM muc_noi_dung WHERE id=?`).bind(nd.muc_id).first():null;
+  const r=await aiVietNoiDung(env, { dinh_dang:nd.dinh_dang, tieu_de:nd.tieu_de, framework_id:nd.framework_id, san_pham_id:nd.san_pham_id, kenh_id:nd.kenh_id, pillar_id:muc&&muc.pillar_id, muc_tieu:muc&&muc.muc_tieu }, null, 'hoc_ban_bong');
+  if(!r.ok) return r; const g=giongVanBan(vanBan(nd), vanBan(r.noi_dung)); const claims=await docClaims(env); const chamMay=chamNoiDungMay(r.noi_dung,claims), chamNguoi=chamNoiDungMay(nd,claims);
+  // giống = 0.6 × giống văn bản + 0.4 × cùng đạt luật cứng (máy viết ra bài đủ chuẩn như người)
+  const giong=0.6*g+0.4*((chamMay.loi_cung.length===0)===(chamNguoi.loi_cung.length===0)?1:0);
+  await ghiMauHoc(env,'B4',{doi_tuong_id:nd.id, dau_vao:{dinh_dang:nd.dinh_dang,tieu_de:nd.tieu_de,muc_id:nd.muc_id}, dau_ra_nguoi:{hook:nd.hook,cta:nd.cta,so_doan:docSections(nd.sections).length,diem:chamNguoi.diem}, dau_ra_may:{hook:r.noi_dung.hook,cta:r.noi_dung.cta,so_doan:r.noi_dung.sections.length,diem:chamMay.diem}, giong, ghi_chu:'bản nháp bóng · giống chữ '+(g*100).toFixed(0)+'%'});
+  return {ok:true, giong};
+}
+// Đăng lên Facebook Page bằng Graph API (POST/CAROUSEL: feed; ANH: photos với url công khai). VIDEO → đăng tay/n8n.
+async function dangFacebook(env, kenh, bd, nd){
+  const token=layToken(env,kenh); if(!token) return {ok:false, loi:'Chưa cắm secret TOKEN_'+(kenh.api_ma||'?')}; const page=chuoi(kenh.api_object_id,80); if(!page) return {ok:false, loi:'Kênh chưa có Page ID'};
+  const dd=nd.dinh_dang||'POST'; if(dd==='VIDEO') return {ok:false, loi:'Video không đăng qua API ở đợt này — đăng tay hoặc n8n'};
+  const base='https://graph.facebook.com/v21.0/'+encodeURIComponent(page); const body=new URLSearchParams({access_token:token});
+  let url; if(dd==='ANH'){ if(!bd.media_url) return {ok:false, loi:'Bài ảnh chưa có ảnh'}; url=base+'/photos'; body.set('url', /^https?:/.test(bd.media_url)?bd.media_url:((env.APP_BASE_URL||'')+bd.media_url)); body.set('caption', bd.noi_dung_dang||''); } else { url=base+'/feed'; body.set('message', bd.noi_dung_dang||''); }
+  let r,j; try{ r=await fetch(url,{method:'POST', body}); j=await r.json().catch(()=>({})); }catch(e){ return {ok:false, loi:'Không gọi được Graph API: '+e.message}; }
+  if(!r.ok||j.error) return {ok:false, loi:'Graph API: '+((j.error&&j.error.message)||('HTTP '+r.status))};
+  const id=j.post_id||j.id||''; return {ok:true, id, link: id?('https://www.facebook.com/'+id):''};
+}
+async function dangN8n(env, bd, nd, kenh){ const url=env.N8N_WEBHOOK_URL; if(!url) return {ok:false, loi:'Chưa cắm N8N_WEBHOOK_URL'}; try{ const r=await fetch(url,{method:'POST', headers:{'content-type':'application/json', ...(env.N8N_TOKEN?{'X-App-Token':env.N8N_TOKEN}:{})}, body:JSON.stringify({loai:'DANG_BAI', bai_dang_id:bd.id, kenh:{ten:kenh.ten, loai:kenh.loai, api_ma:kenh.api_ma, api_object_id:kenh.api_object_id}, dinh_dang:nd.dinh_dang, noi_dung:bd.noi_dung_dang, media_url:bd.media_url, callback:(env.APP_BASE_URL||'')+'/api/bai-dang/'+bd.id+'/n8n-callback'})}); if(!r.ok) return {ok:false, loi:'n8n trả '+r.status}; return {ok:true, cho_callback:true}; }catch(e){ return {ok:false, loi:'Không gọi được n8n: '+e.message}; } }
+// Máy đăng bài tới giờ (B9). B9 NGƯỜI → giao việc đăng tay khi tới giờ. Chạy mỗi 15'.
+async function chayDangBai(env){
+  const due=(await env.DB.prepare(`SELECT * FROM bai_dang WHERE trang_thai='DA_LEN_LICH' AND gio_dang<=? ORDER BY gio_dang LIMIT 20`).bind(nowISO()).all()).results; if(!due.length) return {bo_qua:'Không có bài tới giờ'};
+  const b9=await mucBuoc(env,'B9'); let dang=0, giao=0, loi=0; const ct=[];
+  for(const bd of due){ const nd=await env.DB.prepare(`SELECT * FROM noi_dung WHERE id=?`).bind(bd.noi_dung_id).first(); const kenh=bd.kenh_id?await env.DB.prepare(`SELECT * FROM kenh WHERE id=?`).bind(bd.kenh_id).first():null; if(!nd||!kenh){ loi++; continue; }
+    const giaoTay=async(lyDo)=>{ await env.DB.prepare(`UPDATE bai_dang SET trang_thai='CHUAN_BI', loi=?, updated_at=? WHERE id=?`).bind(lyDo, nowISO(), bd.id).run();
+      await env.DB.prepare(`INSERT INTO cong_viec (id,loai,tieu_de,doi_tuong,doi_tuong_id,giao_cho_vai_tro,han,trang_thai,tao_boi,ly_do,created_at) VALUES (?,?,?,?,?,?,?,'MO',?,?,?)`).bind(uid('cv'),'DANG_TAY','Đăng tay: '+(nd.tieu_de||nd.hook).slice(0,80)+' → '+kenh.ten,'bai_dang',bd.id,'MARKETING',ngayVN(),'Máy',lyDo,nowISO()).run(); giao++; };
+    if(bd.cach==='TAY' || b9.nguoi_thuc_hien==='NGUOI'){ await giaoTay(bd.cach==='TAY'?'Kênh đăng tay — tới giờ đăng':'Bước B9 đang do người làm — tới giờ đăng'); continue; }
+    const r= bd.cach==='N8N' ? await dangN8n(env,bd,nd,kenh) : await dangFacebook(env,kenh,bd,nd);
+    if(r.ok&&r.cho_callback){ await env.DB.prepare(`UPDATE bai_dang SET trang_thai='DANG_GUI', updated_at=? WHERE id=?`).bind(nowISO(), bd.id).run(); ct.push(bd.id+': gửi n8n'); continue; }
+    if(r.ok){ await env.DB.prepare(`UPDATE bai_dang SET trang_thai='DA_DANG', link=?, posted_at=?, loi=NULL, updated_at=? WHERE id=?`).bind(r.link||'', nowISO(), nowISO(), bd.id).run(); await datGiaiDoan(env, bd.muc_id, 'DA_DANG', 'máy đăng qua API', MAY('Máy (B9)')); dang++; ct.push(bd.id+': đã đăng'); }
+    else { const lan=so(bd.lan_thu)+1; if(lan>=3){ await giaoTay('API lỗi 3 lần: '+r.loi); await env.DB.prepare(`UPDATE bai_dang SET lan_thu=? WHERE id=?`).bind(lan, bd.id).run(); } else await env.DB.prepare(`UPDATE bai_dang SET trang_thai='LOI', lan_thu=?, loi=?, updated_at=? WHERE id=?`).bind(lan, r.loi, nowISO(), bd.id).run(); loi++; ct.push(bd.id+': lỗi '+r.loi); }
+  }
+  return { ok:true, doc:due.length, ghi:dang+giao, tom_tat:'Tới giờ '+due.length+' bài: đăng '+dang+' · giao đăng tay '+giao+' · lỗi '+loi, chi_tiet:{ct} };
+}
+
+// ============================================================
 //  AGENT ĐIỀU PHỐI — cron 15' gọi vào; mỗi agent chốt 1 lượt/ngày đúng giờ; "chạy thử" ghi thu=1
 //  Đăng ký agent: {ma, ten, loai:'HE_THONG'|'THUC_HIEN'|'HOC', buoc, chay(env,ctx)→{ok,tom_tat,doc,ghi,chi_tiet,bo_qua}}
 //  THUC_HIEN chỉ chạy khi bước ở AI_GOI_Y/AI_TU_LAM; HOC chỉ khi bước có hoc=BẬT. (Các agent tầng khác thêm ở ADR sau.)
@@ -383,6 +524,27 @@ const AGENTS = [
   { ma:'CHIA_TUAN', ten:'Chia tuần & tạo mục còn thiếu', loai:'THUC_HIEN', buoc:'B3',
     chay: async (env)=>{ let tao=0; const ct=[]; for(const th of [thangHienTai(), thangSau(thangHienTai(),1)]){ const kh=await env.DB.prepare(`SELECT trang_thai FROM ke_hoach_thang WHERE thang=?`).bind(th).first(); if(!kh||kh.trang_thai!=='CHOT') continue; const r=await taoMucConThieu(env, th, 'Máy (B3)'); if(r.ok){ tao+=r.tao; ct.push(th+': +'+r.tao); } }
       if(!ct.length) return {bo_qua:'Chưa có kế hoạch tháng nào đã chốt'}; return { ok:true, ghi:tao, tom_tat:'Tạo '+tao+' mục còn thiếu ('+ct.join(', ')+')' }; } },
+  // ADR-003 · B4: máy soạn nháp cho mục Ý TƯỞNG tuần này + tuần sau chưa có nội dung. AI_GOI_Y: để NHÁP cho người xem; AI_TU_LAM: gửi duyệt luôn (vẫn qua G3)
+  { ma:'SOAN_NHAP', ten:'Soạn nháp nội dung cho mục kế hoạch', loai:'THUC_HIEN', buoc:'B4',
+    chay: async (env)=>{ if(!env.ANTHROPIC_API_KEY) return {bo_qua:'Chưa cắm ANTHROPIC_API_KEY'}; const cfg=(await docCauHinh(env)).noi_dung||{}; const toiDa=Math.max(1,so(cfg.soan_nhap_toi_da_ngay,5)); const b4=await mucBuoc(env,'B4');
+      const hn=ngayVN(); const tuanNay=tuanCuaNgay(hn); const thangNay=thangHienTai();
+      const muc=(await env.DB.prepare(`SELECT m.* FROM muc_noi_dung m WHERE m.giai_doan='Y_TUONG' AND m.dinh_dang IS NOT NULL AND NOT EXISTS (SELECT 1 FROM noi_dung n WHERE n.muc_id=m.id) AND ((m.thang=? AND COALESCE(m.tuan,99)<=?) OR m.thang=?) ORDER BY m.thang, m.tuan LIMIT ?`).bind(thangNay, tuanNay+1, thangSau(thangNay,1), toiDa).all()).results;
+      if(!muc.length) return {bo_qua:'Không có mục nào cần soạn (cần định dạng, chưa có nội dung, tuần này/tuần sau)'};
+      let soan=0, gui=0; const loi=[]; let usd=0;
+      for(const m of muc){ const r=await aiVietNoiDung(env,{dinh_dang:m.dinh_dang, tieu_de:m.tieu_de, framework_id:m.framework_id, san_pham_id:m.san_pham_id, kenh_id:m.kenh_id, pillar_id:m.pillar_id, muc_tieu:m.muc_tieu, angle:m.ghi_chu}, null, 'soan_nhap_agent');
+        if(!r.ok){ loi.push(m.tieu_de+': '+r.loi); if(r.vuot_ngan_sach) break; continue; }
+        const t=await taoNoiDung(env,{...r.noi_dung, muc_id:m.id, ly_do_may:'Soạn từ mục kế hoạch · '+(r.so_vi_du?(r.so_vi_du+' ví dụ đã duyệt'):'chưa có ví dụ')}, MAY('Máy (B4)')); if(!t.ok){ loi.push(m.tieu_de+': '+t.loi); continue; } soan++;
+        if(b4.nguoi_thuc_hien==='AI_TU_LAM'){ const nd=await env.DB.prepare(`SELECT * FROM noi_dung WHERE id=?`).bind(t.id).first(); const g=await guiDuyet(env, nd, MAY('Máy (B4)')); if(g.ok&&!g.tu_tra_lai) gui++; } }
+      return { ok:soan>0||!loi.length, doc:muc.length, ghi:soan, tom_tat:'Soạn '+soan+'/'+muc.length+' bài'+(gui?(' · gửi duyệt '+gui):'')+(loi.length?(' · lỗi '+loi.length):''), chi_tiet:{loi:loi.slice(0,10)} }; } },
+  // B4 học: bản nháp bóng cho bài người gửi duyệt 7 ngày gần đây chưa có mẫu (tối đa N/ngày, ngân sách học)
+  { ma:'HOC_SOAN_NHAP', ten:'Bản nháp bóng — máy học cách người soạn', loai:'HOC', buoc:'B4',
+    chay: async (env)=>{ if(!env.ANTHROPIC_API_KEY) return {bo_qua:'Chưa cắm ANTHROPIC_API_KEY'}; const cfg=(await docCauHinh(env)).noi_dung||{}; const toiDa=Math.max(1,so(cfg.hoc_toi_da_ngay,5)); const tu=new Date(Date.now()-7*864e5).toISOString();
+      const ds=(await env.DB.prepare(`SELECT n.* FROM noi_dung n WHERE n.tao_boi='NGUOI' AND n.trang_thai IN ('CHO_DUYET','DUYET','TRA_LAI') AND n.updated_at>=? AND NOT EXISTS (SELECT 1 FROM mau_hoc h WHERE h.buoc='B4' AND h.doi_tuong_id=n.id) ORDER BY n.updated_at DESC LIMIT ?`).bind(tu, toiDa).all()).results;
+      if(!ds.length) return {bo_qua:'Không có bài mới của người để học'}; let hoc=0; const gs=[]; const loi=[];
+      for(const nd of ds){ const r=await banNhapBong(env, nd); if(r.ok){ hoc++; gs.push(r.giong); } else { loi.push(r.loi); if(r.vuot_ngan_sach) break; } }
+      return { ok:hoc>0, doc:ds.length, ghi:hoc, tom_tat:'Học '+hoc+' bài · giống trung bình '+(gs.length?(gs.reduce((s,x)=>s+x,0)/gs.length*100).toFixed(0):0)+'%'+(loi.length?(' · lỗi: '+loi[0]):''), chi_tiet:{giong:gs} }; } },
+  // B9: đăng bài tới giờ (mỗi 15'); B9 NGƯỜI → giao việc đăng tay
+  { ma:'DANG_BAI', ten:'Đăng bài tới giờ (API / n8n / giao đăng tay)', loai:'HE_THONG', buoc:'B9', nhip:'15p', chay: async (env)=>chayDangBai(env) },
 ];
 async function ghiAgentRun(env, o){
   await env.DB.prepare(`INSERT INTO agent_run (id,agent,buoc,ngay,at,ok,thu,bo_qua_ly_do,tom_tat,doc,ghi,tokens,usd,ms,chi_tiet) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
@@ -405,6 +567,8 @@ async function dieuPhoi(env, {thu=false, chi=null}={}){
   const cfg=(await docCauHinh(env)).may||{}; const gio=so(cfg.gio_chay,6); const hn=ngayVN(); const kq=[];
   for(const ag of AGENTS){
     if(chi && ag.ma!==chi) continue;
+    // nhịp 15': chạy mỗi lần cron gọi, tự idempotent (chỉ ghi nhật ký khi có việc)
+    if(ag.nhip==='15p' && !thu){ const r=await ag.chay(env).catch(e=>({ok:false, tom_tat:'Lỗi: '+e.message})); if(r&&!r.bo_qua) await ghiAgentRun(env,{agent:ag.ma, buoc:ag.buoc, ok:r.ok, tom_tat:r.tom_tat, doc:r.doc, ghi:r.ghi, chi_tiet:r.chi_tiet}); kq.push({agent:ag.ma, ...r}); continue; }
     if(!thu){
       if(gioVN()!==gio){ kq.push({agent:ag.ma, bo_qua:'Chưa tới giờ ('+gio+'h)'}); continue; }
       const da=await env.DB.prepare(`SELECT id FROM agent_run WHERE agent=? AND ngay=? AND ok=1 AND thu=0`).bind(ag.ma,hn).first();
@@ -444,8 +608,18 @@ async function bootstrap(env, u){
     env.DB.prepare(`SELECT * FROM muc_noi_dung WHERE thang>=? ORDER BY thang, tuan, ngay_dang`).bind(tuThang).all().then(r=>r.results),
     env.DB.prepare(`SELECT * FROM y_tuong WHERE created_at>=? ORDER BY CASE trang_thai WHEN 'MOI' THEN 0 ELSE 1 END, created_at DESC LIMIT 200`).bind(tuNgay).all().then(r=>r.results),
   ]) : [[],[],[],[]];
+  // ADR-003: nội dung 90 ngày, duyệt (chờ + 30 ngày đã quyết), tài sản 300 mới nhất, bài đăng 90 ngày
+  const tu90=new Date(Date.now()-90*864e5).toISOString(), tu30=new Date(Date.now()-30*864e5).toISOString();
+  const [ndR, dyR, tsR, bdR] = xem ? await Promise.all([
+    env.DB.prepare(`SELECT * FROM noi_dung WHERE updated_at>=? ORDER BY updated_at DESC LIMIT 400`).bind(tu90).all().then(r=>r.results),
+    env.DB.prepare(`SELECT * FROM duyet WHERE trang_thai='CHO' OR created_at>=? ORDER BY created_at DESC LIMIT 300`).bind(tu30).all().then(r=>r.results),
+    all(`SELECT * FROM tai_san ORDER BY created_at DESC LIMIT 300`),
+    env.DB.prepare(`SELECT * FROM bai_dang WHERE created_at>=? ORDER BY gio_dang DESC LIMIT 300`).bind(tu90).all().then(r=>r.results),
+  ]) : [[],[],[],[]];
   return {
     me:{ id:u.id, ho_ten:u.ho_ten, email:u.email, vai_tro:u.vai_tro, doi_mat_khau:uBool(u.doi_mat_khau) },
+    noi_dung: ndR.map(n=>({...n, sections:docSections(n.sections), chi_tiet:docJSON(n.chi_tiet,{})})),
+    duyet: dyR.map(d=>({...d, cham_may:docJSON(d.cham_may,{})})), tai_san: tsR, bai_dang: bdR,
     chien_luoc_phien_ban: pb.map(x=>({...x, pillars:docJSON(x.pillars,[])})),
     ke_hoach_thang: khR.map(docKeHoach), muc_noi_dung: mucR, y_tuong: ytR,
     hang_so:{ muc_tieu:MUC_TIEU, dinh_dang:DINH_DANG, giai_doan:GIAI_DOAN, thang_nay:thangHienTai(), ngay_nay:ngayVN() },
@@ -514,9 +688,27 @@ function kiemConfig(key, cau_hinh){
 }
 
 async function handleApi(request, env){
-  const url=new URL(request.url); const path=url.pathname.replace(/^\/api/,''); const method=request.method;
+  const url=new URL(request.url); const path=url.pathname.replace(/^\/api/,''); const method=request.method; let m=null;
+  // Upload media lên R2 (nhị phân, không parse JSON). Đường cũ /filming/upload giữ cho công cụ Lọc/Dựng video.
+  if((path==='/tai-san/upload'||path==='/filming/upload') && method==='POST'){
+    await ensureSchema(env); const sess=await getSession(env, request); if(!sess) return json({error:'Chưa đăng nhập'},401); if(!isStaff(sess.user)) return json({error:'Không có quyền'},403);
+    if(!env.MEDIA) return json({error:'Chưa cấu hình kho lưu file (R2 MEDIA) — dán link thay thế'},503);
+    const ct=url.searchParams.get('type')||request.headers.get('content-type')||'application/octet-stream'; const len=Number(request.headers.get('content-length')||0);
+    if(!request.body||len<=0) return json({error:'File rỗng'},400); if(len>200*1024*1024) return json({error:'File quá lớn (>200MB) — dán link Drive'},413);
+    const ext=((ct.split('/')[1]||'bin').split(';')[0]).replace(/[^a-z0-9]/gi,'')||'bin'; const key='media/'+uid('m')+'.'+ext;
+    await env.MEDIA.put(key, request.body, { httpMetadata:{ contentType:ct } });
+    return json({ media_url:'/media/'+key, media_type: ct.startsWith('image/')?'IMAGE':'VIDEO' });
+  }
+  // n8n báo kết quả đăng (secret dùng chung, không phiên người)
+  if((m=path.match(/^\/bai-dang\/(.+)\/n8n-callback$/)) && method==='POST'){
+    if(!env.N8N_TOKEN) return json({error:'Chưa cấu hình N8N_TOKEN'},503); if((request.headers.get('X-App-Token')||'')!==env.N8N_TOKEN) return json({error:'Sai token'},401);
+    await ensureSchema(env); const cb=await request.json().catch(()=>({})); const bd=await env.DB.prepare(`SELECT * FROM bai_dang WHERE id=?`).bind(m[1]).first(); if(!bd) return json({error:'Không tìm thấy bài'},404);
+    if(cb.ok===true){ await env.DB.prepare(`UPDATE bai_dang SET trang_thai='DA_DANG', link=?, posted_at=?, loi=NULL, updated_at=? WHERE id=?`).bind(chuoi(cb.link,500)||bd.link||'', nowISO(), nowISO(), bd.id).run(); await datGiaiDoan(env, bd.muc_id, 'DA_DANG', 'n8n báo đã đăng', MAY('n8n')); return json({ok:true}); }
+    await env.DB.prepare(`UPDATE bai_dang SET trang_thai='LOI', loi=?, updated_at=? WHERE id=?`).bind(chuoi(cb.loi||'n8n báo thất bại',300), nowISO(), bd.id).run(); return json({ok:true, recorded:'that_bai'});
+  }
   const body=(method==='POST'||method==='PATCH'||method==='PUT') ? await request.json().catch(()=>({})) : {};
   await ensureSchema(env);
+  if(path==='/nhac' && method==='GET') return json([]);   // công cụ Lọc video hỏi nhạc nền — không có trên web
 
   if(path==='/login' && method==='POST'){
     const email=chuoi(body.email,200).toLowerCase();
@@ -531,7 +723,7 @@ async function handleApi(request, env){
   if(path==='/suc-khoe' && method==='GET') return json({ok:true, app:'kingsmen-content-os', dot:1});
 
   const sess=await getSession(env, request); if(!sess) return json({error:'Chưa đăng nhập'},401);
-  const me=sess.user; let m;
+  const me=sess.user;
   if(path==='/logout' && method==='POST'){ await env.DB.prepare(`DELETE FROM sessions WHERE token=?`).bind(sess.token).run(); return json({ok:true}); }
   if(path==='/bootstrap' && method==='GET') return json({ db: await bootstrap(env,me) });
 
@@ -744,6 +936,78 @@ async function handleApi(request, env){
     let mucId=null; if(q==='DUYET' && body.tao_muc!==false) mucId=await taoMucTuYTuong(env, y.id, me.ho_ten);
     await logAudit(env,me,q==='DUYET'?'duyệt ý tưởng':'bỏ ý tưởng','y_tuong',y.id,y.ten); return json({ db: await bootstrap(env,me), muc_id:mucId });
   }
+  // ===== ADR-003 =====
+  if((path==='/noi-dung/ngu-canh'||path==='/scripts/ngu-canh') && method==='GET'){ if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    return json({ frameworks:(await env.DB.prepare(`SELECT id,ten,mo_ta FROM frameworks WHERE active=1 ORDER BY ten`).all()).results, san_pham:(await env.DB.prepare(`SELECT id,ten FROM san_pham WHERE active=1 ORDER BY ten`).all()).results, kenh:(await env.DB.prepare(`SELECT id,ten,loai FROM kenh WHERE active=1 ORDER BY ten`).all()).results }); }
+  if((path==='/noi-dung/ai-viet'||path==='/scripts/ai-sinh') && method==='POST'){ if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    const muc=body.muc_id?await env.DB.prepare(`SELECT * FROM muc_noi_dung WHERE id=?`).bind(body.muc_id).first():null;
+    const r=await aiVietNoiDung(env,{ ...body, dinh_dang:body.dinh_dang||(muc&&muc.dinh_dang), tieu_de:body.tieu_de||(muc&&muc.tieu_de), pillar_id:body.pillar_id||(muc&&muc.pillar_id), muc_tieu:body.muc_tieu||(muc&&muc.muc_tieu), framework_id:body.framework_id||(muc&&muc.framework_id), san_pham_id:body.san_pham_id||(muc&&muc.san_pham_id), kenh_id:body.kenh_id||(muc&&muc.kenh_id) }, me);
+    if(!r.ok) return json({ok:false, thieu_key:!!r.thieu_key, vuot_ngan_sach:!!r.vuot_ngan_sach, loi:r.loi, blocked:r.blocked||[]},200);
+    return json({ ok:true, kich_ban:r.noi_dung, noi_dung:r.noi_dung, canh_bao:r.canh_bao, so_vi_du:r.so_vi_du }); }
+  if((path==='/noi-dung/kho'||path==='/scripts/kho') && method==='GET'){ if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    const rows=(await env.DB.prepare(`SELECT n.id,n.tieu_de,n.hook,n.sections,n.cta,n.chi_tiet,n.san_pham_id,n.kenh_id,n.muc_id content_item_id,n.updated_at,n.created_by_name, m.tieu_de ke_hoach, m.thang, k.ten kenh_ten FROM noi_dung n LEFT JOIN muc_noi_dung m ON m.id=n.muc_id LEFT JOIN kenh k ON k.id=n.kenh_id WHERE n.trang_thai='DUYET' AND n.dinh_dang='VIDEO' ORDER BY n.updated_at DESC LIMIT 100`).all()).results;
+    return json({ kich_ban: rows.map(r=>({...r, sections:docSections(r.sections), chi_tiet:docJSON(r.chi_tiet,{})})) }); }
+  if(path==='/noi-dung' && method==='POST'){ if(!isStaff(me)) return json({error:'Không có quyền'},403); const r=await taoNoiDung(env, body, me); if(!r.ok) return json({error:r.loi, blocked:r.blocked},422); return json({ db: await bootstrap(env,me), id:r.id }); }
+  if((m=path.match(/^\/noi-dung\/([^/]+)$/)) && method==='PATCH'){ if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    const nd=await env.DB.prepare(`SELECT * FROM noi_dung WHERE id=?`).bind(m[1]).first(); if(!nd) return json({error:'Không tìm thấy'},404);
+    if(nd.trang_thai==='CHO_DUYET') return json({error:'Bài đang chờ duyệt — rút về (trả lại) rồi mới sửa'},409);
+    const moi={ tieu_de:body.tieu_de!=null?chuoi(body.tieu_de,200):nd.tieu_de, hook:body.hook!=null?chuoi(body.hook,1000):nd.hook, sections:body.sections!=null?docSections(body.sections):docSections(nd.sections), cta:body.cta!=null?chuoi(body.cta,500):nd.cta, chi_tiet:body.chi_tiet!=null?lamSachChiTiet(body.chi_tiet):docJSON(nd.chi_tiet,{}), dinh_dang:nd.dinh_dang };
+    const chan=quetClaim(vanBan(moi), await docClaims(env)).filter(c=>c.muc_do==='CHAN'); if(chan.length) return json({error:'Có cụm bị CHẶN: '+chan.map(c=>c.cum_tu).join(', '), blocked:chan.map(c=>c.cum_tu)},422);
+    const pb=so(nd.phien_ban)+1; // sửa bài đã duyệt → về NHÁP, phải duyệt lại
+    await env.DB.prepare(`UPDATE noi_dung SET tieu_de=?, hook=?, sections=?, cta=?, chi_tiet=?, framework_id=?, san_pham_id=?, kenh_id=?, phien_ban=?, trang_thai='NHAP', updated_at=? WHERE id=?`).bind(moi.tieu_de, moi.hook, JSON.stringify(moi.sections), moi.cta, JSON.stringify(moi.chi_tiet), body.framework_id!==undefined?(body.framework_id||null):nd.framework_id, body.san_pham_id!==undefined?(body.san_pham_id||null):nd.san_pham_id, body.kenh_id!==undefined?(body.kenh_id||null):nd.kenh_id, pb, nowISO(), nd.id).run();
+    await luuPhienBan(env, {...moi, id:nd.id, phien_ban:pb, trang_thai:'NHAP'}, me.ho_ten); if(nd.trang_thai==='DUYET') await datGiaiDoan(env, nd.muc_id, 'SOAN', 'sửa bài đã duyệt', me);
+    await logAudit(env,me,'sửa nội dung','noi_dung',nd.id,'v'+pb); return json({ db: await bootstrap(env,me) }); }
+  if((m=path.match(/^\/noi-dung\/([^/]+)\/gui-duyet$/)) && method==='POST'){ if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    const nd=await env.DB.prepare(`SELECT * FROM noi_dung WHERE id=?`).bind(m[1]).first(); if(!nd) return json({error:'Không tìm thấy'},404); if(nd.trang_thai==='DUYET') return json({error:'Bài đã duyệt rồi'},409);
+    const r=await guiDuyet(env, nd, me); if(!r.ok) return json({error:r.loi},409); return json({ db: await bootstrap(env,me), cham:r.cham, tu_tra_lai:r.tu_tra_lai }); }
+  if((m=path.match(/^\/(?:noi-dung|scripts)\/([^/]+)\/video$/)) && method==='POST'){ if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    const nd=await env.DB.prepare(`SELECT * FROM noi_dung WHERE id=?`).bind(m[1]).first(); if(!nd) return json({error:'Không tìm thấy nội dung'},404); if(nd.dinh_dang!=='VIDEO') return json({error:'Chỉ gắn video cho nội dung định dạng Video'},400);
+    const media_url=chuoi(body.media_url,500); if(!media_url) return json({error:'Thiếu media_url'},400);
+    const tsId=uid('ts'); await env.DB.prepare(`INSERT INTO tai_san (id,loai,ten,mo_ta,media_url,media_type,muc_id,noi_dung_id,nguon,created_at,created_by_name) VALUES (?,'VIDEO_XUAT',?,?,?,'VIDEO',?,?,'DUNG_VIDEO',?,?)`).bind(tsId, 'Video dựng: '+(nd.tieu_de||nd.hook).slice(0,80), chuoi(body.mo_ta,500), media_url, nd.muc_id, nd.id, nowISO(), me.ho_ten).run();
+    const ct={...docJSON(nd.chi_tiet,{}), video_url:media_url, video_tai_san_id:tsId, video_luc:nowISO()}; await env.DB.prepare(`UPDATE noi_dung SET chi_tiet=?, updated_at=? WHERE id=?`).bind(JSON.stringify(lamSachChiTiet(ct)), nowISO(), nd.id).run();
+    await logAudit(env,me,'gắn video đã dựng','noi_dung',nd.id,media_url); return json({ db: await bootstrap(env,me), tai_san_id:tsId }); }
+  // Duyệt G3 — Trưởng MKT/Admin; người gửi không tự duyệt (duyet.chan_tu_duyet); máy không bao giờ duyệt
+  if((m=path.match(/^\/duyet\/([^/]+)\/quyet$/)) && method==='POST'){ if(!canGat(me)) return json({error:'Chỉ Trưởng MKT hoặc Admin duyệt nội dung (G3)'},403);
+    const d=await env.DB.prepare(`SELECT * FROM duyet WHERE id=?`).bind(m[1]).first(); if(!d) return json({error:'Không tìm thấy'},404); if(d.trang_thai!=='CHO') return json({error:'Đã quyết rồi'},409);
+    const cfgD=(await docCauHinh(env)).duyet||{}; if(cfgD.chan_tu_duyet!==false && d.nguoi_gui_id===me.id) return json({error:'Người gửi không tự duyệt bài mình (luật L5)'},403);
+    const q=body.quyet==='DUYET'?'DUYET':body.quyet==='TRA_LAI'?'TRA_LAI':null; if(!q) return json({error:'quyet phải là DUYET hoặc TRA_LAI'},400); if(q==='TRA_LAI'&&!chuoi(body.ly_do)) return json({error:'Trả lại phải ghi lý do (máy học từ đây)'},400);
+    const nd=await env.DB.prepare(`SELECT * FROM noi_dung WHERE id=?`).bind(d.doi_tuong_id).first();
+    await env.DB.prepare(`UPDATE duyet SET trang_thai=?, quyet_boi=?, quyet_at=?, ly_do_nguoi=? WHERE id=?`).bind(q, me.ho_ten, nowISO(), chuoi(body.ly_do,500), d.id).run();
+    if(nd){ await env.DB.prepare(`UPDATE noi_dung SET trang_thai=?, updated_at=? WHERE id=?`).bind(q, nowISO(), nd.id).run(); await datGiaiDoan(env, nd.muc_id, q==='DUYET'?'SAN_XUAT':'SOAN', q==='DUYET'?'duyệt G3':'trả lại: '+chuoi(body.ly_do,100), me);
+      // mẫu học B5: máy "nghĩ" nên duyệt hay không (điểm ≥ ngưỡng & không lỗi cứng) so với người
+      const cham=docJSON(d.cham_may,{}); const nguong=so(((await docCauHinh(env)).noi_dung||{}).diem_tham_dinh,70); const may=(so(cham.diem)>=nguong&&!(cham.loi_cung||[]).length)?'DUYET':'TRA_LAI';
+      await ghiMauHoc(env,'B5',{doi_tuong_id:nd.id, dau_vao:{dinh_dang:nd.dinh_dang}, dau_ra_may:{quyet:may, diem:cham.diem, ly_do:cham.ly_do}, dau_ra_nguoi:{quyet:q, ly_do:chuoi(body.ly_do,200)}, giong:may===q?1:0}); }
+    await logAudit(env,me,q==='DUYET'?'duyệt nội dung (G3)':'trả lại nội dung','noi_dung',d.doi_tuong_id,chuoi(body.ly_do,200)); return json({ db: await bootstrap(env,me) }); }
+  // Tài sản media
+  if((path==='/tai-san'||path==='/footage') && method==='POST'){ if(!isStaff(me)) return json({error:'Không có quyền'},403); const media_url=chuoi(body.media_url,500); if(!media_url) return json({error:'Cần file hoặc link media'},400);
+    const loai=['FOOTAGE','ANH','VIDEO_XUAT','GOI_DUNG','KHAC'].includes(String(body.loai||'').toUpperCase())?String(body.loai).toUpperCase():(String(body.media_type||'').toUpperCase()==='IMAGE'?'ANH':'FOOTAGE'); const id=uid('ts');
+    await env.DB.prepare(`INSERT INTO tai_san (id,loai,ten,mo_ta,media_url,media_type,muc_id,noi_dung_id,nguon,created_at,created_by_name) VALUES (?,?,?,?,?,?,?,?,?,?,?)`).bind(id, loai, chuoi(body.ten,200)||media_url.split('/').pop(), chuoi(body.mo_ta,500), media_url, String(body.media_type||(loai==='ANH'?'IMAGE':'VIDEO')).toUpperCase(), body.muc_id||null, body.noi_dung_id||null, chuoi(body.nguon,40)||'NGUOI', nowISO(), me.ho_ten).run();
+    await logAudit(env,me,'thêm tài sản','tai_san',id,chuoi(body.ten,100)); return json({ db: await bootstrap(env,me), id }); }
+  if((m=path.match(/^\/tai-san\/([^/]+)$/)) && method==='DELETE'){ if(!isStaff(me)) return json({error:'Không có quyền'},403); const t=await env.DB.prepare(`SELECT * FROM tai_san WHERE id=?`).bind(m[1]).first(); if(!t) return json({error:'Không tìm thấy'},404);
+    await env.DB.prepare(`DELETE FROM tai_san WHERE id=?`).bind(t.id).run(); if(env.MEDIA&&t.media_url&&t.media_url.startsWith('/media/')) try{ await env.MEDIA.delete(t.media_url.slice(7)); }catch(e){} await logAudit(env,me,'xoá tài sản','tai_san',t.id,t.ten); return json({ db: await bootstrap(env,me) }); }
+  if(path==='/ai/usage' && method==='POST'){ if(!isStaff(me)) return json({error:'Không có quyền'},403); const provider=String(body.provider||'').toLowerCase(); if(!['gemini','ollama','local'].includes(provider)) return json({error:'provider không hợp lệ'},400);
+    await ghiAIUsage(env,{provider, model:chuoi(body.model,80), tinh_nang:chuoi(body.tinh_nang||'cong_cu',40), me, tokens_vao:so(body.tokens_vao), tokens_ra:so(body.tokens_ra), ok:body.ok!==false, ms:so(body.ms), loi:chuoi(body.loi,300)}); return json({ok:true}); }
+  // Bài đăng
+  if(path==='/bai-dang' && method==='POST'){ if(!isStaff(me)) return json({error:'Không có quyền'},403); const nd=await env.DB.prepare(`SELECT * FROM noi_dung WHERE id=?`).bind(body.noi_dung_id||'').first(); if(!nd) return json({error:'Không tìm thấy nội dung'},404); if(nd.trang_thai!=='DUYET') return json({error:'Chỉ đưa vào đăng nội dung ĐÃ DUYỆT (G3)'},409);
+    const kenh=body.kenh_id?await env.DB.prepare(`SELECT * FROM kenh WHERE id=?`).bind(body.kenh_id).first():(nd.kenh_id?await env.DB.prepare(`SELECT * FROM kenh WHERE id=?`).bind(nd.kenh_id).first():null); if(!kenh) return json({error:'Chọn kênh đăng'},400);
+    const cach=['TAY','API','N8N'].includes(String(body.cach||'').toUpperCase())?String(body.cach).toUpperCase():(kenh.cach_dang||'TAY'); const gio=body.gio_dang&&!isNaN(Date.parse(body.gio_dang))?new Date(body.gio_dang).toISOString():nowISO();
+    const ct=docJSON(nd.chi_tiet,{}); const media=chuoi(body.media_url,500)||ct.video_url||ct.anh_url||''; const id=uid('bd');
+    await env.DB.prepare(`INSERT INTO bai_dang (id,noi_dung_id,muc_id,kenh_id,gio_dang,cach,noi_dung_dang,media_url,link,trang_thai,created_at,created_by_name,updated_at) VALUES (?,?,?,?,?,?,?,?,'',?,?,?,?)`).bind(id, nd.id, nd.muc_id, kenh.id, gio, cach, body.noi_dung_dang!=null?chuoi(body.noi_dung_dang,8000):banDang(nd), media, body.len_lich===false?'CHUAN_BI':'DA_LEN_LICH', nowISO(), me.ho_ten, nowISO()).run();
+    await logAudit(env,me,'đưa vào đăng','bai_dang',id,kenh.ten+' · '+cach+' · '+gio); return json({ db: await bootstrap(env,me), id }); }
+  if((m=path.match(/^\/bai-dang\/([^/]+)$/)) && method==='PATCH'){ if(!isStaff(me)) return json({error:'Không có quyền'},403); const bd=await env.DB.prepare(`SELECT * FROM bai_dang WHERE id=?`).bind(m[1]).first(); if(!bd) return json({error:'Không tìm thấy'},404);
+    if(body.da_dang===true){ await env.DB.prepare(`UPDATE bai_dang SET trang_thai='DA_DANG', link=?, posted_at=?, loi=NULL, updated_at=? WHERE id=?`).bind(chuoi(body.link,500)||bd.link||'', nowISO(), nowISO(), bd.id).run(); await datGiaiDoan(env, bd.muc_id, 'DA_DANG', 'đăng tay', me);
+      await env.DB.prepare(`UPDATE cong_viec SET trang_thai='XONG', xong_at=?, xong_boi=? WHERE doi_tuong='bai_dang' AND doi_tuong_id=? AND trang_thai='MO'`).bind(nowISO(), me.ho_ten, bd.id).run(); await logAudit(env,me,'đã đăng tay','bai_dang',bd.id,chuoi(body.link,200)); return json({ db: await bootstrap(env,me) }); }
+    const gio=body.gio_dang&&!isNaN(Date.parse(body.gio_dang))?new Date(body.gio_dang).toISOString():bd.gio_dang; const cach=['TAY','API','N8N'].includes(String(body.cach||'').toUpperCase())?String(body.cach).toUpperCase():bd.cach;
+    await env.DB.prepare(`UPDATE bai_dang SET gio_dang=?, cach=?, noi_dung_dang=?, media_url=?, link=?, trang_thai=?, loi=NULL, updated_at=? WHERE id=?`).bind(gio, cach, body.noi_dung_dang!=null?chuoi(body.noi_dung_dang,8000):bd.noi_dung_dang, body.media_url!=null?chuoi(body.media_url,500):bd.media_url, body.link!=null?chuoi(body.link,500):bd.link, bd.trang_thai==='DA_DANG'?'DA_DANG':(body.len_lich===false?'CHUAN_BI':'DA_LEN_LICH'), nowISO(), bd.id).run();
+    await logAudit(env,me,'sửa bài đăng','bai_dang',bd.id,cach+' · '+gio); return json({ db: await bootstrap(env,me) }); }
+  if((m=path.match(/^\/bai-dang\/([^/]+)\/dang-ngay$/)) && method==='POST'){ if(!isStaff(me)) return json({error:'Không có quyền'},403); const bd=await env.DB.prepare(`SELECT * FROM bai_dang WHERE id=?`).bind(m[1]).first(); if(!bd) return json({error:'Không tìm thấy'},404); if(bd.trang_thai==='DA_DANG') return json({error:'Đã đăng rồi'},409);
+    const nd=await env.DB.prepare(`SELECT * FROM noi_dung WHERE id=?`).bind(bd.noi_dung_id).first(); const kenh=await env.DB.prepare(`SELECT * FROM kenh WHERE id=?`).bind(bd.kenh_id).first(); if(!nd||!kenh) return json({error:'Thiếu nội dung/kênh'},400);
+    const r= bd.cach==='N8N' ? await dangN8n(env,bd,nd,kenh) : bd.cach==='API' ? await dangFacebook(env,kenh,bd,nd) : {ok:false, loi:'Kênh đăng tay — đánh dấu "Đã đăng" kèm link'};
+    if(!r.ok){ await env.DB.prepare(`UPDATE bai_dang SET trang_thai='LOI', loi=?, updated_at=? WHERE id=?`).bind(r.loi, nowISO(), bd.id).run(); return json({ ok:false, loi:r.loi, db: await bootstrap(env,me) }); }
+    if(r.cho_callback){ await env.DB.prepare(`UPDATE bai_dang SET trang_thai='DANG_GUI', updated_at=? WHERE id=?`).bind(nowISO(), bd.id).run(); return json({ ok:true, cho_callback:true, db: await bootstrap(env,me) }); }
+    await env.DB.prepare(`UPDATE bai_dang SET trang_thai='DA_DANG', link=?, posted_at=?, loi=NULL, updated_at=? WHERE id=?`).bind(r.link||'', nowISO(), nowISO(), bd.id).run(); await datGiaiDoan(env, bd.muc_id, 'DA_DANG', 'đăng qua API', me); await logAudit(env,me,'đăng ngay qua API','bai_dang',bd.id,r.link||''); return json({ ok:true, link:r.link, db: await bootstrap(env,me) }); }
+  // Đổi giai đoạn tay (lùi/tiến) — có audit
+  if((m=path.match(/^\/muc\/([^/]+)\/giai-doan$/)) && method==='POST'){ if(!isStaff(me)) return json({error:'Không có quyền'},403); if(!GIAI_DOAN.includes(body.giai_doan)) return json({error:'Giai đoạn không hợp lệ'},400); await datGiaiDoan(env, m[1], body.giai_doan, 'đổi tay: '+chuoi(body.ly_do,200), me); return json({ db: await bootstrap(env,me) }); }
   // --- mô phỏng (Admin): nạp / xoá dữ liệu giả có tiền tố mp_ ---
   if(path==='/mo-phong/nap' && method==='POST'){
     if(me.vai_tro!==ROLES.ADMIN) return json({error:'Chỉ Admin'},403);
@@ -776,6 +1040,12 @@ async function napMoPhong(env, me){
     ['mp_m1',thangNay,1,null,'G7000 giữ màu 30 năm — vì sao?','BRAND','mp_p2','mp_k1','POST','SOAN','NGUOI',t,'Ngọc (mô phỏng)',t],
     ['mp_m2',thangNay,2,null,'Ron gạch ố mốc sau mùa mưa — cách nhận biết','BAN_HANG','mp_p3','mp_k3','VIDEO','Y_TUONG','AGENT',t,'Máy (mô phỏng)',t],
     ['mp_m3',thangNay,2,null,'Review KOC: hồ bơi G9000 sau 2 năm','BRAND','mp_p1','mp_k2','VIDEO','CHO_DUYET','NGUOI',t,'Ngọc (mô phỏng)',t]]);
+  // ADR-003: nội dung mẫu + một bài chờ duyệt (máy chấm sẵn)
+  const secs=JSON.stringify([{label:'Đoạn 1',text:'G7000 dùng gốc polyurea cao cấp, tăng 50% hoạt chất chống UV so với dòng G6000.',hinh:''},{label:'Đoạn 2',text:'Thông số theo hồ sơ: giữ màu 30 năm, dùng được trong nhà và ngoài trời.',hinh:''}]);
+  await ins('noi_dung',['id','muc_id','dinh_dang','phien_ban','tieu_de','hook','sections','cta','chi_tiet','trang_thai','tao_boi','created_at','created_by','created_by_name','updated_at'],[
+    ['mp_n1','mp_m1','POST',1,'G7000 giữ màu 30 năm — vì sao?','Sau một mùa mưa, ron gạch ngoài ban công nhà bạn có đang ngả vàng?',secs,'Inbox để nhận bảng màu và tư vấn hạng keo đúng khu vực.','{"hashtag":"#kingsmen #keorongach"}','NHAP','NGUOI',t,'','Ngọc (mô phỏng)',t],
+    ['mp_n3','mp_m3','VIDEO',1,'Review KOC: hồ bơi G9000 sau 2 năm','2 năm ngâm nước hồ bơi — ron gạch G9000 giờ ra sao?',JSON.stringify([{label:'Cảnh 1',text:'Cận mép hồ, ron còn nguyên màu.',hinh:'cận cảnh'},{label:'Cảnh 2',text:'KOC kể lại lúc thi công.',hinh:'trung cảnh'}]),'Xem thêm công trình thật tại fanpage.','{}','CHO_DUYET','NGUOI',t,'','Ngọc (mô phỏng)',t]]);
+  await ins('duyet',['id','doi_tuong','doi_tuong_id','cong','trang_thai','nguoi_gui_id','nguoi_gui_ten','cham_may','created_at'],[['mp_d1','noi_dung','mp_n3','G3','CHO','','Ngọc (mô phỏng)',JSON.stringify({diem:86,ly_do:['Có cảnh chưa ghi gợi ý hình'],loi_cung:[],nen_duyet:true}),t]]);
   await ins('frameworks',['id','ten','mo_ta','pillar_id','active','created_at'],[['mp_f1','Vấn đề → nguyên nhân → giải pháp','Mở bằng vết ố/nứt thật, giải thích, chốt bằng sản phẩm đúng hạng','mp_p3',1,t],['mp_f2','So sánh 2 lựa chọn','Epoxy vs polyurea, trong nhà vs ngoài trời','mp_p2',1,t],['mp_f3','Review sau N năm','KOC/công trình thật sau thời gian dùng','mp_p1',1,t],['mp_f4','Hỏi nhanh đáp gọn','1 câu hỏi thợ hay hỏi, trả lời trong 20 giây','mp_p4',1,t]]);
   const ts=a=>JSON.stringify(a);
   await ins('san_pham',['id','ma','ten','dong','mo_ta','thong_so','tieu_chuan','bao_hanh','huong_dan','active','created_at'],[
@@ -800,7 +1070,7 @@ async function napMoPhong(env, me){
   if(me) await logAudit(env,me,'nạp mô phỏng','mo_phong','','');
 }
 async function xoaMoPhong(env, me){
-  for(const b of ['pillars','frameworks','san_pham','claim_cam','kenh','mau_hoc','agent_run','cong_viec','muc_noi_dung','y_tuong']) await env.DB.prepare(`DELETE FROM ${b} WHERE id LIKE 'mp_%'`).run();
+  for(const b of ['pillars','frameworks','san_pham','claim_cam','kenh','mau_hoc','agent_run','cong_viec','muc_noi_dung','y_tuong','noi_dung','noi_dung_phien_ban','duyet','tai_san','bai_dang']) await env.DB.prepare(`DELETE FROM ${b} WHERE id LIKE 'mp_%'`).run();
   await env.DB.prepare(`DELETE FROM ke_hoach_thang WHERE updated_by_name='(mô phỏng)'`).run();
   await env.DB.prepare(`UPDATE chien_luoc SET dinh_vi=CASE WHEN dinh_vi LIKE '(mô phỏng)%' THEN '' ELSE dinh_vi END, tong_giong=CASE WHEN tong_giong LIKE '(mô phỏng)%' THEN '' ELSE tong_giong END, doi_tuong=CASE WHEN doi_tuong LIKE '(mô phỏng)%' THEN '' ELSE doi_tuong END WHERE id=1`).run();
   for(const b of BUOC) await tinhSanSang(env,b.ma);

@@ -70,7 +70,7 @@ function ChiPhiAI(){
 function CauHinhMay(){
   const { db, me, goi, notify } = useApp(); const duoc=laGat(me); const mc=db.module_config||{};
   const [may,setMay]=useState({...mc.may}); const [ai,setAi]=useState({ngan_sach_thang_usd:mc.ai.ngan_sach_thang_usd, ngan_sach_hoc_pct:mc.ai.ngan_sach_hoc_pct, canh_bao_pct:mc.ai.canh_bao_pct, chan_khi_vuot:mc.ai.chan_khi_vuot, ty_gia_vnd:mc.ai.ty_gia_vnd});
-  const [trend,setTrend]=useState({tu_khoa:(mc.trend.tu_khoa_nganh||[]).join('\n'), chong_trung_ngay:mc.trend.chong_trung_ngay, nguong_tu_duyet:mc.trend.nguong_tu_duyet}); const [kh,setKh]=useState({...mc.ke_hoach});
+  const [trend,setTrend]=useState({tu_khoa:(mc.trend.tu_khoa_nganh||[]).join('\n'), chong_trung_ngay:mc.trend.chong_trung_ngay, nguong_tu_duyet:mc.trend.nguong_tu_duyet}); const [kh,setKh]=useState({...mc.ke_hoach}); const [nd,setNd]=useState({...mc.noi_dung});
   const luu=async(key,val)=>{ const body={cau_hinh:Object.fromEntries(Object.entries(val).map(([k,v])=>[k, typeof mc[key][k]==='number'?Number(v):typeof mc[key][k]==='boolean'?!!v:v]))}; const r=await goi('/cau-hinh/'+key,{method:'PUT',body}); if(r.ok) notify('Đã lưu — áp dụng ngay'); else notify(r.msg,'err'); };
   const luuTrend=async()=>{ const r=await goi('/cau-hinh/trend',{method:'PUT',body:{cau_hinh:{tu_khoa_nganh:trend.tu_khoa.split('\n').map(s=>s.trim()).filter(Boolean).slice(0,100), chong_trung_ngay:Number(trend.chong_trung_ngay)||30, nguong_tu_duyet:Number(trend.nguong_tu_duyet)||70}}}); if(r.ok) notify('Đã lưu'); else notify(r.msg,'err'); };
   const SoF=({o,set,k,l,h})=><Field label={l} hint={h}><Input type="number" value={o[k]??''} disabled={!duoc} onChange={e=>set({...o,[k]:e.target.value})}/></Field>;
@@ -80,6 +80,11 @@ function CauHinhMay(){
       <SoF o={trend} set={setTrend} k="nguong_tu_duyet" l="Điểm máy ≥ bao nhiêu thì tự duyệt (khi B1 ở AI tự làm)"/>
       <SoF o={trend} set={setTrend} k="chong_trung_ngay" l="Chống trùng trong bao nhiêu ngày"/>
       {duoc && <Btn variant="brand" onClick={luuTrend}>💾 Lưu</Btn>}</Card>
+    <Card><SectionTitle className="mb-2">Nội dung (B4 · B5)</SectionTitle>
+      <SoF o={nd} set={setNd} k="soan_nhap_toi_da_ngay" l="Máy soạn tối đa bao nhiêu bài/ngày (khi B4 ở mức AI)"/>
+      <SoF o={nd} set={setNd} k="hoc_toi_da_ngay" l="Bản nháp bóng tối đa/ngày (chế độ học B4)" h="Tốn AI theo ngân sách học"/>
+      <SoF o={nd} set={setNd} k="diem_tham_dinh" l="Điểm máy chấm ≥ bao nhiêu là 'máy nghĩ nên duyệt'" h="Chỉ để học & xếp thứ tự. Máy không bao giờ tự duyệt G3."/>
+      {duoc && <Btn variant="brand" onClick={()=>luu('noi_dung',nd)}>💾 Lưu</Btn>}</Card>
     <Card><SectionTitle className="mb-2">Kế hoạch tháng (B2)</SectionTitle>
       <SoF o={kh} set={setKh} k="tong_bai_mac_dinh" l="Tổng bài mặc định khi chưa có tháng trước"/>
       <SoF o={kh} set={setKh} k="ngay_de_xuat" l="Máy lập đề xuất tháng sau vào ngày (1–28)" h="Chỉ khi B2 ở mức AI gợi ý. Người vẫn chốt (G2)."/>

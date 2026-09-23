@@ -51,6 +51,9 @@ const nmOf = (p) => { for (const base of [ROOT, path.join(ROOT, '..')]) { const 
 fs.copyFileSync(nmOf('react/umd/react.production.min.js'), path.join(OUT, 'vendor', 'react.production.min.js'));
 fs.copyFileSync(nmOf('react-dom/umd/react-dom.production.min.js'), path.join(OUT, 'vendor', 'react-dom.production.min.js'));
 
+// 3b) công cụ Lọc/Dựng video (chép nguyên từ app cũ, đã đổi khoá token)
+const TOOLS=path.join(ROOT,'tools'); if(fs.existsSync(TOOLS)){ fs.rmSync(path.join(OUT,'tools'),{recursive:true,force:true}); fs.cpSync(TOOLS, path.join(OUT,'tools'), {recursive:true}); }
+
 // 4) index.html từ mẫu
 const html = fs.readFileSync(path.join(ROOT, 'app', 'index.html'), 'utf8')
   .replace('{{CSS}}', '/' + cssName).replace('{{JS}}', '/' + jsName);
