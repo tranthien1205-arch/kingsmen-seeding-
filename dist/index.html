@@ -2131,6 +2131,7 @@ function BreakdownCard({title, data}){
 ============================================================ */
 function ContentPlan(){
   const { db, upsertContentItem, deleteContentItem, notify } = useApp();
+  const lechNguong=lechPillarCfg(db);
   const items = db.content_items||[];
   const pillars = (db.pillars||[]).filter(p=>p.active!==false);
   const frameworks = (db.frameworks||[]).filter(f=>f.active!==false);
@@ -2145,7 +2146,7 @@ function ContentPlan(){
   // cảnh báo lệch tỷ lệ pillar (chỉ khi ≥5 mục để có ý nghĩa)
   const dist={}; filtered.forEach(it=>{ if(it.pillar_id) dist[it.pillar_id]=(dist[it.pillar_id]||0)+1; });
   const withP=filtered.filter(it=>it.pillar_id).length;
-  const lech = pillars.map(p=>{ const actual= withP? (dist[p.id]||0)/withP*100 : 0; return {p, actual, diff:actual-(Number(p.ty_trong)||0)}; }).filter(x=>Math.abs(x.diff)>15);
+  const lech = pillars.map(p=>{ const actual= withP? (dist[p.id]||0)/withP*100 : 0; return {p, actual, diff:actual-(Number(p.ty_trong)||0)}; }).filter(x=>Math.abs(x.diff)>lechNguong);
   const showLech = withP>=5 && lech.length>0;
   const move=(it,st)=> upsertContentItem({id:it.id, trang_thai:st});
   const Card=({it})=>{ const pil=pillars.find(p=>p.id===it.pillar_id); const kn=kenhs.find(k=>k.id===it.kenh_id); const pic=db.users.find(u=>u.id===(it.pic&&it.pic.chinh));
@@ -2202,7 +2203,7 @@ function ContentPlan(){
   return <div className="space-y-4">
     <div className="flex items-center justify-between flex-wrap gap-2">
       <h2 className="font-display text-lg font-bold text-ink">🗓️ Kế hoạch nội dung</h2>
-      <div className="flex gap-2">
+      <div className="flex gap-2 flex-wrap">
         <div className="flex rounded-lg overflow-hidden border border-line">
           <button onClick={()=>setView('kanban')} className={"px-3 py-1.5 text-xs font-semibold "+(view==='kanban'?'bg-brand text-white':'bg-white text-slate-500')}>Kanban</button>
           <button onClick={()=>setView('list')} className={"px-3 py-1.5 text-xs font-semibold "+(view==='list'?'bg-brand text-white':'bg-white text-slate-500')}>Danh sách</button>
@@ -2220,7 +2221,7 @@ function ContentPlan(){
       <span className="text-xs text-slate-400 ml-auto">{filtered.length} mục</span>
     </div>
     {showLech && <div className="bg-amber-50 border border-amber-300 rounded-2xl p-3 text-xs text-amber-800">
-      ⚠️ <b>Lệch tỷ lệ pillar &gt;15%:</b> {lech.map((x,i)=><span key={x.p.id}>{i>0?' · ':''}{x.p.ten} thực tế {Math.round(x.actual)}% (mục tiêu {x.p.ty_trong}%)</span>)}. Cân nhắc phân bổ lại nội dung theo trụ cột.
+      ⚠️ <b>Lệch tỷ lệ pillar &gt;{lechNguong}%:</b> {lech.map((x,i)=><span key={x.p.id}>{i>0?' · ':''}{x.p.ten} thực tế {Math.round(x.actual)}% (mục tiêu {x.p.ty_trong}%)</span>)}. Cân nhắc phân bổ lại nội dung theo trụ cột.
     </div>}
     {view==='calendar' ? <ContentCalendar/> :
      filtered.length===0 ? <Empty>Chưa có nội dung. Bấm "Thêm nội dung" hoặc "Import" 2 file kế hoạch.</Empty> :
@@ -2663,7 +2664,7 @@ function CreativeStudio(){
   const nameById=(arr,id)=>{ const x=(arr||[]).find(o=>o.id===id); return x?x.ten:''; };
   const filtered = scripts.filter(s=>!q || (s.tieu_de||'').toLowerCase().includes(q.toLowerCase()) || (s.hook||'').toLowerCase().includes(q.toLowerCase()));
   if(edit) return <ScriptEditor init={edit} onClose={()=>setEdit(null)}/>;
-  const TabBar = <div className="flex gap-1 bg-slate-100 rounded-xl p-1 w-fit">
+  const TabBar = <div className="flex gap-1 bg-slate-100 rounded-xl p-1 w-fit max-w-full overflow-x-auto no-scrollbar">
     {[['kich_ban','✍️ Kịch bản'],['loc_video','🎬 Lọc & dựng video']].map(([k,l])=>
       <button key={k} onClick={()=>setTab(k)} className={"px-3 py-1 rounded-lg text-xs font-semibold whitespace-nowrap "+(tab===k?'bg-white text-ink shadow-sm':'text-slate-500')}>{l}</button>)}
   </div>;
@@ -2996,7 +2997,7 @@ function AirPosts(){
       App <b>không tự đăng</b> (nền tảng không cho phép) — bạn đăng tay theo checklist, rồi dán link + <b>mã theo dõi</b>.
       Mỗi <b>mã chỉ thuộc 1 bài</b>, nhờ vậy bước đo lường sau này quy đơn được chính xác thay vì chia đều theo phỏng đoán.
     </div>
-    <div className="flex gap-1 bg-slate-100 rounded-xl p-1 w-fit">
+    <div className="flex gap-1 bg-slate-100 rounded-xl p-1 w-fit max-w-full overflow-x-auto no-scrollbar">
       {[['CHUAN_BI','Đang chuẩn bị'],['DA_LEN_LICH','Đã lên lịch'],['DEN_GIO','Cần xử lý'],['DA_DANG','Đã đăng']].map(([k,l])=>
         <button key={k} onClick={()=>setTab(k)} className={"px-3 py-1 rounded-lg text-xs font-semibold "+(tab===k?'bg-white text-ink shadow-sm':'text-slate-500')}>
           {l} ({posts.filter(p=>k==='DEN_GIO'?(p.trang_thai==='DEN_GIO'||p.trang_thai==='LOI'):k==='DA_LEN_LICH'?(p.trang_thai==='DA_LEN_LICH'||p.trang_thai==='DANG_GUI'):p.trang_thai===k).length})</button>)}
@@ -3153,7 +3154,7 @@ function TrendModule({bookmarklet, tieuBookmarklet}){
     {sapHet.length>0 && <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3 text-[11px] text-amber-800">
       ⚡ <b>{sapHet.length} trend sắp hết hạn</b> (còn ≤7 ngày) — quyết sớm kẻo lỡ nhịp.
     </div>}
-    <div className="flex gap-1 bg-slate-100 rounded-xl p-1 w-fit">
+    <div className="flex gap-1 bg-slate-100 rounded-xl p-1 w-fit max-w-full overflow-x-auto no-scrollbar">
       <button onClick={()=>setTab('dang_lam')} className={"px-3 py-1 rounded-lg text-xs font-semibold "+(tab==='dang_lam'?'bg-white text-ink shadow-sm':'text-slate-500')}>Đang xử lý ({dangLam.length})</button>
       <button onClick={()=>setTab('xong')} className={"px-3 py-1 rounded-lg text-xs font-semibold "+(tab==='xong'?'bg-white text-ink shadow-sm':'text-slate-500')}>Đã xong ({xong.length})</button>
     </div>
@@ -3585,6 +3586,9 @@ function SanXuat(){
     {imp && <SanXuatImport onClose={()=>setImp(false)}/>}
   </ModuleShell>;
 }
+// Ô nhập của form Sản xuất — khai báo ngoài render để không bị tạo lại (mất focus) mỗi lần gõ
+function SXField({label,k,type,f,set}){ return <Field label={label}><Input type={type} value={f[k]||''} onChange={e=>set(k,e.target.value)}/></Field>; }
+function SXFieldC({label,k,f,setC}){ return <Field label={label}><Input value={(f.chi_tiet||{})[k]||''} onChange={e=>setC(k,e.target.value)}/></Field>; }
 function SanXuatModal({init,onClose}){
   const { db, upsertSanXuat, notify } = useApp();
   const KHAU=db.sx_khau||SX_KHAU_FE;
@@ -3597,13 +3601,11 @@ function SanXuatModal({init,onClose}){
   const luu=async()=>{ if(!(f.tieu_de||'').trim()) return notify('Nhập tên nội dung','warn');
     setBusy(true); const r=await upsertSanXuat(init.id||null,f); setBusy(false);
     if(r&&r.ok){ notify(init.id?'Đã lưu':'Đã thêm dòng'); onClose(); } else notify((r&&r.msg)||'Lỗi','err'); };
-  const F=({label,k,type})=><Field label={label}><Input type={type} value={f[k]||''} onChange={e=>set(k,e.target.value)}/></Field>;
-  const FC=({label,k})=><Field label={label}><Input value={(f.chi_tiet||{})[k]||''} onChange={e=>setC(k,e.target.value)}/></Field>;
   return <Modal open={true} onClose={onClose} title={init.id?'Dòng sản xuất':'Thêm dòng sản xuất'} wide>
     <div className="grid sm:grid-cols-3 gap-2">
       <Field label="STT"><Input type="number" className="no-spin" value={f.stt||''} onChange={e=>set('stt',Number(e.target.value)||null)}/></Field>
       <Field label="Tháng"><Input value={f.thang||''} onChange={e=>set('thang',e.target.value)} placeholder="2026-07"/></Field>
-      <F label="Loại video" k="loai_video"/>
+      <SXField f={f} set={set} label="Loại video" k="loai_video"/>
     </div>
     <Field label="Tên nội dung / Kịch bản" required><Input value={f.tieu_de||''} onChange={e=>set('tieu_de',e.target.value)}/></Field>
     <Field label="Thuộc mục kế hoạch nào" hint="Nối để tiến độ sản xuất hiện ở Kế hoạch nội dung và Dashboard">
@@ -3616,31 +3618,31 @@ function SanXuatModal({init,onClose}){
       {KHAU.map(k=><button key={k.k} onClick={()=>setKhau(k.k)} className={"px-3 py-1 rounded-lg text-xs font-semibold whitespace-nowrap "+(khau===k.k?'bg-white text-ink shadow-sm':'text-slate-500')}>{k.ten}</button>)}
     </div>
     <div className="rounded-xl border border-line p-3">
-      {khau==='KE_HOACH' && <div className="grid sm:grid-cols-2 gap-2"><F label="Ngày giao task" k="ngay_giao" type="date"/><F label="PIC kế hoạch" k="pic_ke_hoach"/></div>}
-      {khau==='BRIEF' && <><div className="grid sm:grid-cols-3 gap-2"><F label="PIC brief" k="pic_brief"/><F label="Deadline brief" k="deadline_brief" type="date"/><F label="Trạng thái brief" k="tt_brief"/></div>
-        <FC label="Concept" k="concept"/><F label="Link kịch bản" k="link_kich_ban"/></>}
-      {khau==='QUAY' && <><div className="grid sm:grid-cols-3 gap-2"><F label="PIC quay" k="pic_quay"/><F label="Ngày quay dự kiến" k="ngay_quay_dk" type="date"/><F label="Ngày quay thực tế" k="ngay_quay_tt" type="date"/></div>
-        <div className="grid sm:grid-cols-3 gap-2"><FC label="Địa điểm" k="dia_diem"/><FC label="Loại bối cảnh" k="boi_canh"/><FC label="MC" k="mc"/></div>
-        <div className="grid sm:grid-cols-2 gap-2"><FC label="Số lượng" k="so_luong"/><F label="Trạng thái quay" k="tt_quay"/></div>
-        <F label="Link source đã lọc" k="link_source"/><FC label="Ghi chú sự cố quay" k="su_co_quay"/></>}
-      {khau==='SAN_XUAT' && <><div className="grid sm:grid-cols-3 gap-2"><F label="PIC sản xuất" k="pic_san_xuat"/><F label="Editor" k="editor"/><F label="Deadline sản xuất" k="deadline_sx" type="date"/></div>
-        <div className="grid sm:grid-cols-2 gap-2"><F label="Trạng thái sản xuất" k="tt_san_xuat"/><FC label="ECOM double check" k="double_check"/></div>
-        <F label="Link Final" k="link_final"/></>}
-      {khau==='AIR' && <><div className="grid sm:grid-cols-3 gap-2"><F label="PIC đăng" k="pic_dang"/><F label="Ngày đăng" k="ngay_dang" type="date"/><F label="Giờ đăng" k="gio_dang"/></div>
-        <div className="grid sm:grid-cols-2 gap-2"><F label="Trạng thái air" k="tt_air"/><FC label="Tên/ID sản phẩm" k="ma_san_pham"/></div>
-        <F label="Link video đã air" k="link_air"/>
-        <div className="grid sm:grid-cols-2 gap-2"><FC label="Reup Shopee" k="reup"/><FC label="Trạng thái Reup" k="tt_reup"/></div>
-        <FC label="Note lịch air" k="note_air"/></>}
-      {khau==='TRACKING' && <><F label="PIC tracking" k="pic_tracking"/>
+      {khau==='KE_HOACH' && <div className="grid sm:grid-cols-2 gap-2"><SXField f={f} set={set} label="Ngày giao task" k="ngay_giao" type="date"/><SXField f={f} set={set} label="PIC kế hoạch" k="pic_ke_hoach"/></div>}
+      {khau==='BRIEF' && <><div className="grid sm:grid-cols-3 gap-2"><SXField f={f} set={set} label="PIC brief" k="pic_brief"/><SXField f={f} set={set} label="Deadline brief" k="deadline_brief" type="date"/><SXField f={f} set={set} label="Trạng thái brief" k="tt_brief"/></div>
+        <SXFieldC f={f} setC={setC} label="Concept" k="concept"/><SXField f={f} set={set} label="Link kịch bản" k="link_kich_ban"/></>}
+      {khau==='QUAY' && <><div className="grid sm:grid-cols-3 gap-2"><SXField f={f} set={set} label="PIC quay" k="pic_quay"/><SXField f={f} set={set} label="Ngày quay dự kiến" k="ngay_quay_dk" type="date"/><SXField f={f} set={set} label="Ngày quay thực tế" k="ngay_quay_tt" type="date"/></div>
+        <div className="grid sm:grid-cols-3 gap-2"><SXFieldC f={f} setC={setC} label="Địa điểm" k="dia_diem"/><SXFieldC f={f} setC={setC} label="Loại bối cảnh" k="boi_canh"/><SXFieldC f={f} setC={setC} label="MC" k="mc"/></div>
+        <div className="grid sm:grid-cols-2 gap-2"><SXFieldC f={f} setC={setC} label="Số lượng" k="so_luong"/><SXField f={f} set={set} label="Trạng thái quay" k="tt_quay"/></div>
+        <SXField f={f} set={set} label="Link source đã lọc" k="link_source"/><SXFieldC f={f} setC={setC} label="Ghi chú sự cố quay" k="su_co_quay"/></>}
+      {khau==='SAN_XUAT' && <><div className="grid sm:grid-cols-3 gap-2"><SXField f={f} set={set} label="PIC sản xuất" k="pic_san_xuat"/><SXField f={f} set={set} label="Editor" k="editor"/><SXField f={f} set={set} label="Deadline sản xuất" k="deadline_sx" type="date"/></div>
+        <div className="grid sm:grid-cols-2 gap-2"><SXField f={f} set={set} label="Trạng thái sản xuất" k="tt_san_xuat"/><SXFieldC f={f} setC={setC} label="ECOM double check" k="double_check"/></div>
+        <SXField f={f} set={set} label="Link Final" k="link_final"/></>}
+      {khau==='AIR' && <><div className="grid sm:grid-cols-3 gap-2"><SXField f={f} set={set} label="PIC đăng" k="pic_dang"/><SXField f={f} set={set} label="Ngày đăng" k="ngay_dang" type="date"/><SXField f={f} set={set} label="Giờ đăng" k="gio_dang"/></div>
+        <div className="grid sm:grid-cols-2 gap-2"><SXField f={f} set={set} label="Trạng thái air" k="tt_air"/><SXFieldC f={f} setC={setC} label="Tên/ID sản phẩm" k="ma_san_pham"/></div>
+        <SXField f={f} set={set} label="Link video đã air" k="link_air"/>
+        <div className="grid sm:grid-cols-2 gap-2"><SXFieldC f={f} setC={setC} label="Reup Shopee" k="reup"/><SXFieldC f={f} setC={setC} label="Trạng thái Reup" k="tt_reup"/></div>
+        <SXFieldC f={f} setC={setC} label="Note lịch air" k="note_air"/></>}
+      {khau==='TRACKING' && <><SXField f={f} set={set} label="PIC tracking" k="pic_tracking"/>
         <div className="grid sm:grid-cols-4 gap-2">
           {[['gmv','GMV'],['don_hang','Đơn hàng'],['views','Lượt xem'],['likes','Lượt thích'],['comments','Bình luận'],['shares','Chia sẻ'],['clicks','Nhấp sản phẩm']].map(([k,l])=>
             <Field key={k} label={l}><Input type="number" className="no-spin" value={(f.so_lieu||{})[k]||''} onChange={e=>setS(k,Number(e.target.value)||0)}/></Field>)}
         </div>
-        <FC label="Ghi chú đánh giá" k="danh_gia"/></>}
+        <SXFieldC f={f} setC={setC} label="Ghi chú đánh giá" k="danh_gia"/></>}
     </div>
     <div className="grid sm:grid-cols-2 gap-2 mt-2">
-      <F label="Trạng thái tổng" k="tt_tong"/>
-      <FC label="Ghi chú" k="ghi_chu"/>
+      <SXField f={f} set={set} label="Trạng thái tổng" k="tt_tong"/>
+      <SXFieldC f={f} setC={setC} label="Ghi chú" k="ghi_chu"/>
     </div>
     <div className="flex gap-2 mt-3"><Btn variant="ghost" onClick={onClose} disabled={busy}>Đóng</Btn><Btn variant="brand" className="flex-1" onClick={luu} disabled={busy}>{busy?'…':'Lưu'}</Btn></div>
   </Modal>;
@@ -3767,6 +3769,8 @@ const CONFIG_SCHEMA = {
     {k:'timeout_phut', loai:'so', label:'Gửi n8n bao lâu không hồi đáp thì chuyển đăng tay (phút)'},
     {k:'max_lan_thu', loai:'so', label:'Thử lại tối đa mấy lần'} ]},
 };
+// Ngưỡng lệch trụ cột (%) — đọc từ ⚙️ Cấu hình Dashboard, mặc định 15
+const lechPillarCfg=db=>Number(((db.module_config||{}).dash||{}).lech_pillar)||15;
 function ModuleShell({moduleKey, title, right, children}){
   const { db } = useApp();
   const [tab,setTab]=useState('main');
@@ -3778,7 +3782,7 @@ function ModuleShell({moduleKey, title, right, children}){
       <h2 className="font-display text-lg font-bold text-ink">{title}</h2>
       {tab==='main' && right}
     </div>
-    {coTab && <div className="flex gap-1 bg-slate-100 rounded-xl p-1 w-fit">
+    {coTab && <div className="flex gap-1 bg-slate-100 rounded-xl p-1 w-fit max-w-full overflow-x-auto no-scrollbar">
       <button onClick={()=>setTab('main')} className={"px-3 py-1 rounded-lg text-xs font-semibold "+(tab==='main'?'bg-white text-ink shadow-sm':'text-slate-500')}>Nội dung</button>
       <button onClick={()=>setTab('cfg')} className={"px-3 py-1 rounded-lg text-xs font-semibold "+(tab==='cfg'?'bg-white text-ink shadow-sm':'text-slate-500')}>⚙️ Cấu hình</button>
     </div>}
@@ -3887,7 +3891,7 @@ function ThuVienHoc(){
       </div>
     </div>
 
-    <div className="flex gap-1 bg-slate-100 rounded-xl p-1 w-fit">
+    <div className="flex gap-1 bg-slate-100 rounded-xl p-1 w-fit max-w-full overflow-x-auto no-scrollbar">
       {Object.keys(BH_ST).map(k=>
         <button key={k} onClick={()=>setTab(k)} className={"px-3 py-1 rounded-lg text-xs font-semibold "+(tab===k?'bg-white text-ink shadow-sm':'text-slate-500')}>
           {BH_ST[k]} ({BH.filter(b=>b.trang_thai===k).length})</button>)}
@@ -3983,6 +3987,7 @@ function ViecKet(){
 // Kế hoạch vs Thực hiện — đối chiếu cái ĐỊNH LÀM với cái ĐÃ LÀM, và chỉ ra nghẽn ở khâu nào
 function KeHoachVsThucHien(){
   const { db } = useApp();
+  const lechNguong=lechPillarCfg(db);
   const CI=db.content_items||[], AIR=db.air_posts||[], PIL=db.pillars||[], KENH=db.kenh||[];
   const thangList=[...new Set(CI.map(c=>c.thang).filter(Boolean))].sort().reverse();
   const [thang,setThang]=useState('');
@@ -4174,7 +4179,7 @@ function ContentDashboard(){
       {view==='kpi' && <Select value={ky} onChange={e=>setKy(e.target.value)} className="w-auto"><option value="">Tất cả kỳ</option>{kyList.map(k=><option key={k} value={k}>{k}</option>)}</Select>}
     </div>
 
-    <div className="flex gap-1 bg-slate-100 rounded-xl p-1 w-fit">
+    <div className="flex gap-1 bg-slate-100 rounded-xl p-1 w-fit max-w-full overflow-x-auto no-scrollbar">
       {[['kpi','KPI & hiệu suất'],['kh','Kế hoạch vs Thực hiện'],['cfg','⚙️ Cấu hình']].map(([k,l])=>
         <button key={k} onClick={()=>setView(k)} className={"px-3 py-1 rounded-lg text-xs font-semibold whitespace-nowrap "+(view===k?'bg-white text-ink shadow-sm':'text-slate-500')}>{l}</button>)}
     </div>
@@ -4313,7 +4318,7 @@ function FootageLib(){
         <input ref={fileRef} type="file" accept="video/*,image/*" className="hidden" onChange={onFile}/>
       </div>
     </div>
-    <div className="flex gap-1 bg-slate-100 rounded-xl p-1 w-fit">
+    <div className="flex gap-1 bg-slate-100 rounded-xl p-1 w-fit max-w-full overflow-x-auto no-scrollbar">
       <button onClick={()=>setTab('kho')} className={"px-3 py-1 rounded-lg text-xs font-semibold "+(tab==='kho'?'bg-white text-ink shadow-sm':'text-slate-500')}>Kho ({FT.filter(f=>f.active!==false).length})</button>
       <button onClick={()=>setTab('shot')} className="px-3 py-1 rounded-lg text-xs font-semibold text-slate-500">Shot list theo kịch bản</button>
     </div>
@@ -4861,7 +4866,7 @@ function KetQua(){
       <MucCard m="KHONG_QUY_DON" note="Chỉ số hiển thị/tương tác. KHÔNG suy ra doanh thu."/>
     </div>
 
-    <div className="flex gap-1 bg-slate-100 rounded-xl p-1 w-fit">
+    <div className="flex gap-1 bg-slate-100 rounded-xl p-1 w-fit max-w-full overflow-x-auto no-scrollbar">
       {[['tong_hop','Bản ghi ('+KQ.filter(inKy).length+')'],['hang_doi','Hàng đợi gán tay ('+cho.length+')']].map(([k,l])=>
         <button key={k} onClick={()=>setTab(k)} className={"px-3 py-1 rounded-lg text-xs font-semibold "+(tab===k?'bg-white text-ink shadow-sm':'text-slate-500')}>{l}</button>)}
     </div>
@@ -4996,6 +5001,8 @@ function KetQuaImport({onClose}){
 /* ============================================================
    CONTENT OS · P2 — CHIẾN LƯỢC & PILLAR (trụ cột nội dung)
 ============================================================ */
+// Ô chiến lược — khai báo ngoài render để Textarea không mất focus khi gõ
+function StratField({label,k,rows,st,setSt,edit}){ return <div className="mb-2"><div className="text-[11px] font-semibold text-ink-muted uppercase tracking-wide mb-1">{label}</div>{edit ? <Textarea rows={rows||2} value={st[k]||''} onChange={e=>setSt({...st,[k]:e.target.value})}/> : <div className="text-sm text-ink whitespace-pre-wrap">{st[k]||<span className="text-slate-300 italic">—</span>}</div>}</div>; }
 function StrategyPillar(){
   const { db, setStrategy, upsertPillar, deletePillar, notify } = useApp();
   const pillars = (db.pillars||[]).slice().sort((a,b)=>(a.thu_tu||0)-(b.thu_tu||0));
@@ -5007,7 +5014,6 @@ function StrategyPillar(){
   const blank={ten:'',objective:'',point_of_difference:'',request:'',ty_trong:0,active:true};
   const barColors=['#0a92b4','#0a7f9c','#0a6a80','#0b5567','#135465','#1c6b7e'];
   const saveStrat=async()=>{ setBusy(true); const ok=await setStrategy({okr:st.okr||'',big_idea:st.big_idea||'',purpose:st.purpose||'',audience:st.audience||'',swot:st.swot||'',brand_voice:st.brand_voice||''}); setBusy(false); if(ok){ notify('Đã lưu chiến lược'); setEditStrat(false); } };
-  const SField=({label,k,rows})=> <div className="mb-2"><div className="text-[11px] font-semibold text-ink-muted uppercase tracking-wide mb-1">{label}</div>{editStrat ? <Textarea rows={rows||2} value={st[k]||''} onChange={e=>setSt({...st,[k]:e.target.value})}/> : <div className="text-sm text-ink whitespace-pre-wrap">{st[k]||<span className="text-slate-300 italic">—</span>}</div>}</div>;
   return <div className="space-y-4">
     <div className="flex items-center justify-between flex-wrap gap-2">
       <h2 className="font-display text-lg font-bold text-ink">🎯 Chiến lược &amp; Trụ cột nội dung</h2>
@@ -5021,12 +5027,12 @@ function StrategyPillar(){
           : <Btn variant="ghost" onClick={()=>setEditStrat(true)}>Sửa</Btn>}
       </div>
       <div className="grid sm:grid-cols-2 gap-x-4">
-        <SField label="OKR / Mục tiêu" k="okr"/>
-        <SField label="Big Idea" k="big_idea"/>
-        <SField label="Purpose (mục đích page)" k="purpose"/>
-        <SField label="Đối tượng (Audience)" k="audience"/>
-        <div className="sm:col-span-2"><SField label="Brand voice (tông giọng — dùng cho Creative Studio)" k="brand_voice"/></div>
-        <div className="sm:col-span-2"><SField label="SWOT / phân tích nền" k="swot" rows={3}/></div>
+        <StratField st={st} setSt={setSt} edit={editStrat} label="OKR / Mục tiêu" k="okr"/>
+        <StratField st={st} setSt={setSt} edit={editStrat} label="Big Idea" k="big_idea"/>
+        <StratField st={st} setSt={setSt} edit={editStrat} label="Purpose (mục đích page)" k="purpose"/>
+        <StratField st={st} setSt={setSt} edit={editStrat} label="Đối tượng (Audience)" k="audience"/>
+        <div className="sm:col-span-2"><StratField st={st} setSt={setSt} edit={editStrat} label="Brand voice (tông giọng — dùng cho Creative Studio)" k="brand_voice"/></div>
+        <div className="sm:col-span-2"><StratField st={st} setSt={setSt} edit={editStrat} label="SWOT / phân tích nền" k="swot" rows={3}/></div>
       </div>
     </div>
 
@@ -5061,7 +5067,7 @@ function StrategyPillar(){
             </div>
           </div>)}
         </div>}
-      <p className="text-[11px] text-slate-400 mt-3">Tỷ lệ này là <b>mục tiêu phân bổ nội dung</b>. Khi có Kế hoạch (P3), hệ thống sẽ cảnh báo nếu kế hoạch lệch khỏi tỷ lệ này &gt;15%.</p>
+      <p className="text-[11px] text-slate-400 mt-3">Tỷ lệ này là <b>mục tiêu phân bổ nội dung</b>. Khi có Kế hoạch (P3), hệ thống sẽ cảnh báo nếu kế hoạch lệch khỏi tỷ lệ này &gt;{lechPillarCfg(db)}%.</p>
     </div>
 
     {edit && <Modal open={!!edit} onClose={()=>setEdit(null)} title={(edit.id?'Sửa ':'Thêm ')+'pillar'}>
@@ -5361,7 +5367,9 @@ function ImageLibModalBtn(){
   </>;
 }
 function Library(){
-  const { db, upsertGroup, upsertTopic, upsertCmt, deleteGroup, deleteTopic, deleteCmt, setPostTypePref, notify, audit } = useApp();
+  const { db, me, upsertGroup, upsertTopic, upsertCmt, deleteGroup, deleteTopic, deleteCmt, setPostTypePref, notify, audit } = useApp();
+  // Kỹ thuật chỉ xem (menu ghi "Thư viện (xem)") — ẩn mọi nút sửa/xoá/thêm
+  const readOnly = me.vai_tro===ROLES.KY_THUAT;
   const [tab, setTab] = useState('groups');
   const [edit, setEdit] = useState(null); // {type, item}
   const [selMode, setSelMode] = useState(false);
@@ -5415,8 +5423,8 @@ function Library(){
   return <div className="space-y-4">
     <div className="flex items-center justify-between flex-wrap gap-2">
       <h2 className="font-display text-lg font-bold text-ink">📚 Thư viện chung</h2>
-      {plainTab && <div className="flex gap-2">
-        <Btn variant={selMode?'ghost':'ghost'} onClick={()=>{ setSelMode(m=>!m); setSel(new Set()); }}>{selMode?'✕ Xong':'☑ Chọn'}</Btn>
+      {plainTab && !readOnly && <div className="flex gap-2">
+        <Btn variant="ghost" onClick={()=>{ setSelMode(m=>!m); setSel(new Set()); }}>{selMode?'✕ Xong':'☑ Chọn'}</Btn>
         <ImportBtn tab={tab}/>
         <Btn variant="brand" onClick={()=>openNew(tab)}>＋ Thêm</Btn>
       </div>}
@@ -5441,7 +5449,7 @@ function Library(){
         <span className="font-medium text-sm text-ink">{g.ten_group}</span>
       </div>
       <div className="text-xs text-slate-500">{g.loai} · {(g.so_member||0).toLocaleString('vi-VN')} tv · <a href={g.link} target="_blank" className="text-blue-500 underline">link</a></div>
-    </>)} onEdit={g=>setEdit({type:'groups',item:g})} onToggle={g=>toggle('groups',g)} onDel={g=>remove('groups',g)} onPri={g=>togglePri('groups',g)} selMode={selMode} sel={sel} onSel={toggleSel}/>}
+    </>)} onEdit={g=>setEdit({type:'groups',item:g})} onToggle={g=>toggle('groups',g)} onDel={g=>remove('groups',g)} onPri={g=>togglePri('groups',g)} selMode={selMode} sel={sel} onSel={toggleSel} readOnly={readOnly}/>}
 
     {tab==='topics' && <LibTopicsGrouped items={db.content_topics} prefs={db.post_type_prefs||{}} setPref={setPostTypePref}
       render={t=>(<>
@@ -5450,24 +5458,24 @@ function Library(){
           <span className="font-medium text-sm text-ink">{t.chu_de}</span>
           {t.muc_tieu && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-brand/10 text-brand-dark">{t.muc_tieu}</span>}</div>
         <div className="text-xs text-slate-500 line-clamp-2 mt-0.5">{t.noi_dung}</div>
-      </>)} onEdit={t=>setEdit({type:'topics',item:t})} onToggle={t=>toggle('topics',t)} onDel={t=>remove('topics',t)} onPri={t=>togglePri('topics',t)} selMode={selMode} sel={sel} onSel={toggleSel}/>}
+      </>)} onEdit={t=>setEdit({type:'topics',item:t})} onToggle={t=>toggle('topics',t)} onDel={t=>remove('topics',t)} onPri={t=>togglePri('topics',t)} selMode={selMode} sel={sel} onSel={toggleSel} readOnly={readOnly}/>}
 
     {tab==='cmts' && <LibList items={db.cmt_suggestions} render={c=>(<>
       <div className="text-sm text-ink">{c.noi_dung_goi_y}</div>
       <div className="text-xs text-slate-500">{c.tuyen}{c.loai_bai?' · '+c.loai_bai:''}</div>
-    </>)} onEdit={c=>setEdit({type:'cmts',item:c})} onToggle={c=>toggle('cmts',c)} onDel={c=>remove('cmts',c)} selMode={selMode} sel={sel} onSel={toggleSel}/>}
+    </>)} onEdit={c=>setEdit({type:'cmts',item:c})} onToggle={c=>toggle('cmts',c)} onDel={c=>remove('cmts',c)} selMode={selMode} sel={sel} onSel={toggleSel} readOnly={readOnly}/>}
 
     <LibEditModal edit={edit} onClose={()=>setEdit(null)}/>
   </div>;
 }
-function LibRow({it, render, onEdit, onToggle, onDel, onPri, selMode, sel, onSel}){
+function LibRow({it, render, onEdit, onToggle, onDel, onPri, selMode, sel, onSel, readOnly}){
   const checked = selMode && sel && sel.has(it.id);
   return <div onClick={selMode?()=>onSel(it.id):undefined}
     className={"p-3 flex items-start gap-2 "+(it.active?'':'opacity-50')+(selMode?' cursor-pointer':'')+(checked?' bg-brand/5':'')}>
     {selMode && <input type="checkbox" checked={checked} onChange={()=>onSel(it.id)} onClick={e=>e.stopPropagation()}
       className="w-4 h-4 accent-brand mt-0.5 shrink-0"/>}
     <div className="flex-1 min-w-0">{render(it)}</div>
-    {!selMode && <div className="flex flex-col items-end gap-1 shrink-0">
+    {!selMode && !readOnly && <div className="flex flex-col items-end gap-1 shrink-0">
       <div className="flex gap-1">
         {onPri && <button onClick={()=>onPri(it)} title={it.uu_tien?'Bỏ ưu tiên':'Đặt ưu tiên'}
           className={"px-2 py-1 rounded-lg text-xs font-medium "+(it.uu_tien?'bg-brand/15 text-brand-dark':'bg-slate-100 text-slate-400 hover:text-brand-dark')}>{it.uu_tien?'⭐':'☆'}</button>}
@@ -5480,14 +5488,14 @@ function LibRow({it, render, onEdit, onToggle, onDel, onPri, selMode, sel, onSel
     </div>}
   </div>;
 }
-function LibList({items, render, onEdit, onToggle, onDel, onPri, selMode, sel, onSel}){
+function LibList({items, render, onEdit, onToggle, onDel, onPri, selMode, sel, onSel, readOnly}){
   if(!items.length) return <Empty>Chưa có mục nào. Bấm "Thêm" hoặc "Import file".</Empty>;
   return <div className="bg-white rounded-2xl border border-line shadow-card divide-y">
-    {items.map(it=><LibRow key={it.id} it={it} render={render} onEdit={onEdit} onToggle={onToggle} onDel={onDel} onPri={onPri} selMode={selMode} sel={sel} onSel={onSel}/>)}
+    {items.map(it=><LibRow key={it.id} it={it} render={render} onEdit={onEdit} onToggle={onToggle} onDel={onDel} onPri={onPri} selMode={selMode} sel={sel} onSel={onSel} readOnly={readOnly}/>)}
   </div>;
 }
 // Nhóm Chủ đề/Nội dung POST theo LOẠI BÀI · mỗi loại có nút ⭐ ưu tiên và Hiện/Ẩn (ẩn = không cho Sales chọn)
-function LibTopicsGrouped({items, prefs, setPref, render, onEdit, onToggle, onDel, onPri, selMode, sel, onSel}){
+function LibTopicsGrouped({items, prefs, setPref, render, onEdit, onToggle, onDel, onPri, selMode, sel, onSel, readOnly}){
   const [collapsed, setCollapsed] = useState(()=>new Set());
   const toggleCollapse = (loai)=> setCollapsed(prev=>{ const s=new Set(prev); s.has(loai)?s.delete(loai):s.add(loai); return s; });
   const prefOf = (loai)=> (prefs&&prefs[loai]) || {an:false, uu_tien:false};
@@ -5514,7 +5522,7 @@ function LibTopicsGrouped({items, prefs, setPref, render, onEdit, onToggle, onDe
           </div>}
         </div>
         {open && <div className="divide-y">
-          {arr.map(it=><LibRow key={it.id} it={it} render={render} onEdit={onEdit} onToggle={onToggle} onDel={onDel} onPri={onPri} selMode={selMode} sel={sel} onSel={onSel}/>)}
+          {arr.map(it=><LibRow key={it.id} it={it} render={render} onEdit={onEdit} onToggle={onToggle} onDel={onDel} onPri={onPri} selMode={selMode} sel={sel} onSel={onSel} readOnly={readOnly}/>)}
         </div>}
       </div>;
     })}
@@ -6014,7 +6022,7 @@ function UserManagement(){
     <div className="bg-white rounded-2xl border border-line shadow-card divide-y">
       {db.users.map(u=>{ const isSelf=u.id===me.id; const checked=selMode && sel.has(u.id);
         return <div key={u.id} onClick={selMode&&!isSelf?()=>toggleSel(u.id):undefined}
-          className={"p-3 flex items-center gap-3 "+(u.active?'':'opacity-50')+(selMode&&!isSelf?' cursor-pointer':'')+(checked?' bg-brand/5':'')}>
+          className={"p-3 flex items-center gap-3 flex-wrap "+(u.active?'':'opacity-50')+(selMode&&!isSelf?' cursor-pointer':'')+(checked?' bg-brand/5':'')}>
         {selMode && <input type="checkbox" checked={checked} disabled={isSelf} onChange={()=>toggleSel(u.id)} onClick={e=>e.stopPropagation()}
           title={isSelf?'Không thể xoá chính mình':''} className="w-4 h-4 accent-brand shrink-0 disabled:opacity-30"/>}
         <div className="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center font-bold text-slate-600">{u.ho_ten[0]}</div>
@@ -6373,7 +6381,7 @@ function GuideEditor(){
   const save = async ()=>{ if(await upsertGuide(sel, {noi_dung:txt, video_url:vid})) notify('Đã lưu hướng dẫn'); };
   const onVid = async (e)=>{ const f=e.target.files&&e.target.files[0]; e.target.value=''; if(!f) return; if(f.size>100*1024*1024) return notify('File >100MB — dùng link YouTube/Drive','warn'); setBusy(true); try{ const r=await uploadMedia(f); setVid(r.media_url); notify('Đã tải video hướng dẫn'); }catch(err){ notify(err.message||'Lỗi','err'); } setBusy(false); };
   return <div className="space-y-3">
-    <div className="flex gap-1 bg-slate-100 p-1 rounded-xl w-fit">
+    <div className="flex gap-1 bg-slate-100 p-1 rounded-xl w-fit max-w-full overflow-x-auto no-scrollbar">
       {KEYS.map(([k,l])=><button key={k} onClick={()=>setSel(k)} className={"px-3 py-1.5 rounded-lg text-sm font-semibold "+(sel===k?'bg-white shadow-card text-ink':'text-ink-muted')}>{l}</button>)}
     </div>
     <div className="bg-white rounded-2xl border border-line shadow-card p-4">
@@ -6789,7 +6797,11 @@ function FilmLibrary(){
   const saveTpl = (tpl) => { upsertFilmTemplate(tpl); setEditTpl(null); };
   const delTpl = () => { if(templates.length<=1) return notify('Phải còn ít nhất 1 quy trình','warn'); if(confirm('Xoá cả quy trình "'+template.ten+'"?')) deleteFilmTemplate(template.id); };
 
-  if(!template) return <Empty>Chưa có quy trình. Bấm "Quy trình mới".</Empty>;
+  if(!template) return <div className="space-y-3">
+    <Empty>Chưa có quy trình. Bấm "Quy trình mới".</Empty>
+    <div className="text-center"><Btn variant="brand" onClick={()=>setEditTpl({ten:'',he_san_pham:''})}>＋ Quy trình mới</Btn></div>
+    <Modal open={!!editTpl} onClose={()=>setEditTpl(null)} title="Thêm quy trình quay">{editTpl && <TemplateForm tpl={editTpl} onCancel={()=>setEditTpl(null)} onSave={saveTpl}/>}</Modal>
+  </div>;
   return <div className="space-y-3">
     <div className="bg-white rounded-2xl border border-line shadow-card p-4 space-y-3">
       <div className="flex items-end gap-2 flex-wrap">
@@ -6957,7 +6969,7 @@ function FilmReview({project, template, onBack}){
           </div>; })}
       </div>
     </div>)}
-    <div className="sticky bottom-0 bg-slate-100 pt-2 pb-1 space-y-2">
+    <div className="sticky bottom-16 sm:bottom-0 bg-slate-100 pt-2 pb-1 space-y-2">
       {rejecting && <Textarea rows="2" value={reason} onChange={e=>setReason(e.target.value)} placeholder="Lý do trả về — nêu rõ cảnh nào cần quay lại…"/>}
       <div className="flex gap-2 items-center">
         {!rejecting
