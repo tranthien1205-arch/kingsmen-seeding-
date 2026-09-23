@@ -379,5 +379,7 @@ Tokens Tailwind (inline config trong `seeding-app.html`): `ink #0b3543` (soft #1
 - 📌 **Tổng test đang xanh: 731** (toàn bộ `scratchpad/test_*.mjs`), trong đó AI đánh giá trend 40.
 - ✅ **ĐÃ XONG TOÀN BỘ P1→P10.** Còn lại là các mảnh nhỏ: vai trò `TRUONG_MKT`/`GIAM_DOC` riêng, `can()` tập trung (P0), và nâng P4 lên gợi ý AI khi có `ANTHROPIC_API_KEY`.
 
+- ✅ **Build chạy được trên Windows + tự chép `vendor/`** (`build.mjs`) — `ROOT` lấy bằng `fileURLToPath` (trước dùng `URL.pathname` → Windows ra `/D:/OS%20MKT/...`, build ENOENT). `vendor/xlsx.full.min.js` giờ do build chép vào `dist/vendor/` (trước chép tay → xoá `dist/` rồi build là mất import Excel không báo); thiếu file thì build dừng báo lỗi. **Ảnh hưởng dữ liệu: không** — `dist/` build lại giống hệt (cùng hash `app.45b68b75f8.js`/`app.d587eb0cb9.css`). ⚠️ Máy Windows để `core.autocrlf=true` nên `git status` có thể báo `dist/` đổi sau build — chỉ là CRLF, `git add` xong sẽ tự hết.
+
 ### ⚙️ Quy trình deploy (CẬP NHẬT)
 `npm run build` (build.mjs: biên dịch JSX, build CSS Tailwind từ chính khối `tailwind.config` trong seeding-app.html, chép vendor React và `tools/`) → `node --check worker/index.js` → commit cả `dist/` → push. `node_modules/` đã trong .gitignore.
