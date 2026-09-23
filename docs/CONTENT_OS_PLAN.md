@@ -185,6 +185,27 @@ Thay cho : (không) — bổ sung §3 bảng vai trò
             Tài khoản, demo.
 Người duyệt: Thiện · Trạng thái: ĐÃ DUYỆT (2026-09-23)
 ```
+```
+ADR-004 · 2026-09-23 · Một kho media (footage) · Quản lý sản xuất = góc nhìn của Kế hoạch
+Bối cảnh : 3 kho media rời (filming_uploads · media_library · footage) — video công trình thật không tới
+            Studio/Dựng; san_xuat (6 khâu, thay Excel) chạy song song content_items → 2 bảng trạng thái cho 1 việc.
+Quyết định: A. footage là KHO CHUNG. footage += nguon (FILMING|SEEDING|null) + nguon_id.
+               Nghiệm thu Quay công trình ĐẠT → mỗi source đạt tự thành 1 footage (cùng object R2, không nhân đôi;
+               xoá footage nguồn FILMING không xoá object; xoá upload/dọn công trình xoá dòng footage tương ứng).
+               media_library KHÔNG gộp bảng (giữ luồng Sales); Kho footage + mọi bộ chọn ảnh đọc kho chung
+               = footage ∪ media_library (FE `khoMediaFE`).
+            B. san_xuat NGỪNG là bảng làm việc. PIC/hạn từng khâu lưu trong content_items.pic.{ke_hoach,brief,quay,
+               dung,dang,tracking} + chi_tiet.{deadline_brief,ngay_quay_dk,ngay_quay_tt,deadline_sx,ngay_dang,gio_dang,
+               link_*,loai_video,editor,so_lieu_excel}. TRẠNG THÁI khâu do máy suy (`tienDoKhauFE`): Brief=có kịch
+               bản · Quay=shot list quay đủ/đã dựng · Dựng=video_url · Đăng=air DA_DANG · Đo=có ket_qua.
+               Migration một lần (san_xuat.da_chuyen=1): dòng có content_item_id → gộp vào; không có → tạo mục ECOM.
+               Import Excel ghi thẳng content_items. Endpoint /sanxuat POST/PATCH/DELETE → 410.
+               Khâu trễ (PIC = tôi) tự vào "Việc của tôi hôm nay".
+Thay cho : (không) — cập nhật §4 registry (san_xuat: chỉ đọc lịch sử)
+Ảnh hưởng: schema footage +2 cột, san_xuat +1 cột; review/xoá filming; FootageLib; pickers Studio/Đăng bài;
+            màn Quản lý sản xuất viết lại; ContentItemModal thêm khối Sản xuất; VietCuaToi; demo.
+Người duyệt: Thiện · Trạng thái: ĐÃ DUYỆT (2026-09-23)
+```
 **Ánh xạ trường theo định dạng** (một nguồn: `DINH_DANG` worker ⟷ `DINH_DANG_FE` frontend):
 | Định dạng | `hook` | `sections[]` | `cta` | `chi_tiet` |
 |---|---|---|---|---|
@@ -473,6 +494,12 @@ Tokens Tailwind (inline config trong `seeding-app.html`): `ink #0b3543` (soft #1
   - **Tài khoản:** vai trò lạ → 400; luật "≥1 Marketing hoạt động" tính cả Trưởng MKT (BE + FE). Không seed tài khoản mới — Admin gán ở Hệ thống › Tài khoản. Demo seed thêm `truongmkt@kingsmen.vn` và `gd@kingsmen.vn` (123456) + nút vào nhanh.
   - **Ảnh hưởng dữ liệu:** không đổi bảng; tài khoản cũ giữ nguyên vai trò. Test: `test_quyen.mjs` **28/28** + hồi quy `test_dinh_dang.mjs` **74/74** (đã sửa test cho người khác duyệt).
   - ▶️ **Việc anh Thiện cần làm sau deploy:** vào Tài khoản gán `Trưởng MKT` cho đúng người (trước đó Marketing vẫn tạm duyệt được, có cảnh báo).
+
+- ✅ **ĐỢT 3 "MỘT KHO" — Kho media chung + Quản lý sản xuất = góc nhìn của Kế hoạch** (ADR-004, §4b).
+  - **A. Kho media:** `footage` += `nguon`/`nguon_id`. Nghiệm thu Quay công trình **ĐẠT** → `dongBoFootageTuCongTrinh`: mỗi source mức >0 thành 1 footage (tên = công trình — cảnh, cùng URL R2, tag `công trình`/`mức n`/khu vực, ngày quay, người quay = Sales). Idempotent theo `nguon_id`: chấm lại hạ mức → ẩn, lên mức → mở; KHÔNG ĐẠT → ẩn hết. Xoá footage nguồn FILMING **không xoá object R2** (file thuộc Quay công trình); xoá upload / dọn công trình → xoá dòng footage tương ứng + gỡ shot list. `media_library` **không gộp bảng**: FE `khoMediaFE(db)` = footage ∪ ảnh seeding (id `ml_*`, nguồn `SEEDING`, chỉ xem) — Kho footage, bộ chọn ảnh Studio và Đăng bài đều đọc kho chung, có nhãn nguồn 🏗/💬.
+  - **B. Sản xuất:** `mapSanXuatSangKeHoach` (BE) ⟷ `mapSanXuatFE` (demo): pic_* → `content_items.pic.{ke_hoach,brief,quay,dung,dang,tracking}`; deadline/link/loại video/editor/số liệu Excel → `chi_tiet` (`so_lieu_excel`, `tt_*_excel` giữ để tra cứu). Migration `chuyenSanXuatVaoKeHoach` chạy trong `ensureSchema` (idempotent qua `san_xuat.da_chuyen`): dòng đã nối → ghép (giữ giá trị đang có); chưa nối → tạo mục ECOM với giai đoạn suy từ Excel (`giaiDoanTuSanXuat`). `/sanxuat/import` ghi thẳng content_items (Excel đè); `/sanxuat` POST/PATCH/DELETE → **410**. Màn Quản lý sản xuất viết lại: bảng/kanban theo `tienDoKhauFE` (Brief = có kịch bản · Quay = shot list quay đủ hoặc đã dựng · Dựng = video_url/có bài đăng · Đăng = air DA_DANG · Đo = có ket_qua), 6 chấm ✓/·/!, lọc tháng/loại/PIC, "Mở" → form Kế hoạch. Form Kế hoạch thêm khối **🏭 Sản xuất — hạn từng khâu**; PIC dạng tên từ Excel vẫn hiện được. Khâu trễ (PIC = tôi) vào **Việc của tôi** (🏭). `SanXuatCell` ở Kế hoạch suy từ dữ liệu.
+  - **Ảnh hưởng dữ liệu:** +2 cột footage, +1 cột san_xuat (không xoá bảng); content_items.pic/chi_tiet được bổ sung từ san_xuat một lần. Test `test_adr4.mjs` **26/26** + hồi quy 74/74 + 28/28.
+  - ⚠️ Nợ: `san_xuat` vẫn được bootstrap trả (chỉ đọc lịch sử) — có thể bỏ sau khi xác nhận không màn nào dùng; Sales upload ảnh seeding vẫn ở Thư viện ảnh (đúng chủ ý).
 
 ### ⚙️ Quy trình deploy (CẬP NHẬT)
 `npm run build` (build.mjs: biên dịch JSX, build CSS Tailwind từ chính khối `tailwind.config` trong seeding-app.html, chép vendor React và `tools/`) → `node --check worker/index.js` → commit cả `dist/` → push. `node_modules/` đã trong .gitignore.

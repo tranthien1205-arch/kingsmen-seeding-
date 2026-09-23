@@ -242,6 +242,12 @@ async function ensureSchema(env){
   // ADR-001 — Creative Studio đa định dạng: kịch bản cũ tự thành VIDEO (DEFAULT điền cho dòng đã có)
   try { await env.DB.prepare(`ALTER TABLE scripts ADD COLUMN dinh_dang TEXT DEFAULT 'VIDEO'`).run(); } catch(e){}
   try { await env.DB.prepare(`ALTER TABLE scripts ADD COLUMN chi_tiet TEXT`).run(); } catch(e){}
+  // ADR-004: một kho media — footage ghi nhớ nguồn gốc (FILMING = từ Quay công trình, cùng object R2)
+  try { await env.DB.prepare(`ALTER TABLE footage ADD COLUMN nguon TEXT`).run(); } catch(e){}
+  try { await env.DB.prepare(`ALTER TABLE footage ADD COLUMN nguon_id TEXT`).run(); } catch(e){}
+  // ADR-004: san_xuat ngừng là bảng làm việc — mỗi dòng chuyển vào content_items đúng 1 lần
+  try { await env.DB.prepare(`ALTER TABLE san_xuat ADD COLUMN da_chuyen INTEGER DEFAULT 0`).run(); } catch(e){}
+  try { await chuyenSanXuatVaoKeHoach(env); } catch(e){ console.error('chuyenSanXuatVaoKeHoach', e && e.message); }
   // ADR-002: gộp giai đoạn cũ về 6 giai đoạn mới (chạy lại vô hại)
   try { await env.DB.prepare(`UPDATE content_items SET trang_thai='SAN_XUAT' WHERE trang_thai IN ('QUAY','DUNG','DUYET')`).run(); } catch(e){}
   try { await env.DB.prepare(`UPDATE content_items SET trang_thai='SCRIPT' WHERE trang_thai='NHAP'`).run(); } catch(e){}
@@ -540,6 +546,75 @@ const SX_COT = ['content_item_id','stt','thang','tieu_de','loai_video','san_pham
   'deadline_brief','deadline_sx','ngay_quay_dk','ngay_quay_tt','ngay_dang','gio_dang',
   'tt_brief','tt_quay','tt_san_xuat','tt_air','tt_tong',
   'link_kich_ban','link_source','link_final','link_air'];
+// ADR-004 — dòng sản xuất (Excel/san_xuat) → pic + chi_tiet của content_items. Một nguồn cho migration lẫn import.
+function mapSanXuatSangKeHoach(x){
+  const sach=o=>{ const r={}; Object.keys(o||{}).forEach(k=>{ const v=o[k]; if(v==null) return; const t=typeof v==='string'?v.trim():v; if(t===''||(typeof t==='object'&&!Object.keys(t).length)) return; r[k]=t; }); return r; };
+  const ct=docChiTiet(x.chi_tiet), sl=docChiTiet(x.so_lieu);
+  const pic=sach({ ke_hoach:x.pic_ke_hoach, brief:x.pic_brief, quay:x.pic_quay, dung:x.pic_san_xuat, dang:x.pic_dang, tracking:x.pic_tracking });
+  const chi_tiet=sach({ ...ct, deadline_brief:x.deadline_brief, ngay_quay_dk:x.ngay_quay_dk, ngay_quay_tt:x.ngay_quay_tt, deadline_sx:x.deadline_sx,
+    ngay_dang:x.ngay_dang, gio_dang:x.gio_dang, loai_video:x.loai_video, editor:x.editor, ngay_giao:x.ngay_giao, stt:x.stt,
+    link_kich_ban:x.link_kich_ban, link_source:x.link_source, link_final:x.link_final, link_air:x.link_air,
+    tt_brief_excel:x.tt_brief, tt_quay_excel:x.tt_quay, tt_san_xuat_excel:x.tt_san_xuat, tt_air_excel:x.tt_air, tt_tong_excel:x.tt_tong,
+    so_lieu_excel: Object.keys(sl).length?sl:null });
+  return { pic, chi_tiet };
+}
+// Ghép pic/chi_tiet vào mục kế hoạch. deRow=true: giá trị dòng (Excel) đè giá trị đang có; false: chỉ điền chỗ trống.
+async function ghepVaoKeHoach(env, ciId, map, deRow){
+  const ci=await env.DB.prepare(`SELECT id,pic,chi_tiet FROM content_items WHERE id=?`).bind(ciId).first(); if(!ci) return false;
+  const pic0=docChiTiet(ci.pic), ct0=docChiTiet(ci.chi_tiet);
+  const pic = deRow ? {...pic0, ...map.pic} : {...map.pic, ...pic0};
+  const chi_tiet = deRow ? {...ct0, ...map.chi_tiet} : {...map.chi_tiet, ...ct0};
+  await env.DB.prepare(`UPDATE content_items SET pic=?, chi_tiet=?, updated_at=? WHERE id=?`).bind(JSON.stringify(pic), JSON.stringify(chi_tiet), nowISO(), ciId).run();
+  return true;
+}
+// Giai đoạn kế hoạch suy từ trạng thái Excel khi phải tạo mục mới
+function giaiDoanTuSanXuat(x){
+  const xong=v=>{ const t=String(v||'').toLowerCase(); return !!t && !/chưa|đang|nháp|mới/.test(t); };
+  if(xong(x.tt_air) || (x.link_air||'').trim()) return 'DA_DANG';
+  if(xong(x.tt_brief) || xong(x.tt_quay) || xong(x.tt_san_xuat)) return 'SAN_XUAT';
+  return 'Y_TUONG';
+}
+// Migration một lần (idempotent qua san_xuat.da_chuyen): dòng đã nối → ghép (giữ giá trị đang có); chưa nối → tạo mục ECOM.
+async function chuyenSanXuatVaoKeHoach(env){
+  const rows=(await env.DB.prepare(`SELECT * FROM san_xuat WHERE COALESCE(da_chuyen,0)=0`).all()).results;
+  if(!rows.length) return 0;
+  let ghep=0, tao=0;
+  for(const x of rows){
+    const map=mapSanXuatSangKeHoach(x);
+    let ciId=x.content_item_id||null;
+    if(ciId && !(await ghepVaoKeHoach(env, ciId, map, false))) ciId=null;
+    else if(ciId) ghep++;
+    if(!ciId){
+      ciId=await insertContentItem(env, HE_THONG, { loai:'ECOM', tieu_de:x.tieu_de||'(không tên)', loai_muc_tieu:'BAN_HANG', san_pham_id:x.san_pham_id||null, kenh_id:x.kenh_id||null,
+        framework_id:x.framework_id||null, thang:x.thang||'', trang_thai:giaiDoanTuSanXuat(x), pic:map.pic, chi_tiet:{...map.chi_tiet, tu_san_xuat:true} });
+      tao++;
+    }
+    await env.DB.prepare(`UPDATE san_xuat SET da_chuyen=1, content_item_id=? WHERE id=?`).bind(ciId, x.id).run();
+  }
+  await logAudit(env, HE_THONG, 'chuyển dòng sản xuất vào Kế hoạch (ADR-004)', 'content_items', '-', 'ghép '+ghep+' · tạo mới '+tao);
+  return rows.length;
+}
+// ADR-004 — MỘT KHO MEDIA: mỗi source công trình ĐẠT thành 1 footage (trỏ cùng object R2, không nhân đôi).
+// Idempotent theo (nguon='FILMING', nguon_id=upload id); chấm lại xuống 0 thì ẩn, lên lại thì mở.
+async function dongBoFootageTuCongTrinh(env, me, p, ups){
+  const shots=new Map((await env.DB.prepare(`SELECT id,ten FROM filming_shots`).all()).results.map(x=>[x.id,x.ten]));
+  const sales=p.sales_id ? await env.DB.prepare(`SELECT ho_ten FROM users WHERE id=?`).bind(p.sales_id).first() : null;
+  let them=0;
+  for(const u of ups){
+    const lv = u.level!=null ? Number(u.level) : (uBool(u.dat_item)?2:0);
+    const co=await env.DB.prepare(`SELECT id,active FROM footage WHERE nguon='FILMING' AND nguon_id=?`).bind(u.id).first();
+    if(lv>0){
+      if(!co){
+        const tags=['công trình', 'mức '+lv].concat(p.khu_vuc?[String(p.khu_vuc).trim()]:[]);
+        await env.DB.prepare(`INSERT INTO footage (id,ten,mo_ta,media_url,media_type,tags,san_pham_id,kenh_id,dia_diem,ngay_quay,nguoi_quay,active,created_at,created_by,created_by_name,nguon,nguon_id) VALUES (?,?,?,?,?,?,NULL,NULL,?,?,?,1,?,?,?,'FILMING',?)`)
+          .bind(uid('ft'), (p.ten_cong_trinh||'Công trình')+' — '+(shots.get(u.shot_id)||'cảnh'), 'Quay công trình · '+(p.khu_vuc||'')+' · mức '+lv,
+            u.media_url, (u.media_type||'VIDEO'), JSON.stringify(tags), p.khu_vuc||'', p.ngay_quay||'', (sales&&sales.ho_ten)||'', nowISO(), me.id, me.ho_ten, u.id).run();
+        them++;
+      } else if(!uBool(co.active)) await env.DB.prepare(`UPDATE footage SET active=1 WHERE id=?`).bind(co.id).run();
+    } else if(co && uBool(co.active)) await env.DB.prepare(`UPDATE footage SET active=0 WHERE id=?`).bind(co.id).run();
+  }
+  if(them) await logAudit(env,me,'công trình đạt → Kho footage','footage',p.id,them+' source');
+}
 // Gom tiến độ sản xuất về từng nội dung: đang ở khâu nào, có trễ không
 function gomSanXuatTheoNoiDung(list){
   const xong=v=>{ const t=String(v||'').toLowerCase(); return !!t && !/chưa|đang|nháp|mới/.test(t); };
@@ -2461,7 +2536,10 @@ async function handleApi(request, env){
       await env.DB.prepare(`UPDATE project_filmings SET trang_thai=?, thanh_tien=?, reviewed_by=?, reviewed_at=?, ky_thanh_toan=?, ly_do_loai='' WHERE id=?`)
         .bind(ST.DAT, tien, me.ho_ten, nowISO(), kyOf(), id).run();
       await logAudit(env,me,'hoàn tất nghiệm thu ĐẠT','project_filming',id, okCount+' source · '+tien);
+      await dongBoFootageTuCongTrinh(env, me, p, ups);
     } else {
+      // không đạt → footage đã tạo từ công trình này (nếu có) tạm ẩn, không xoá file
+      for(const u of ups) await env.DB.prepare(`UPDATE footage SET active=0 WHERE nguon='FILMING' AND nguon_id=?`).bind(u.id).run();
       if(!body.reason) return json({error:'Cần lý do'},400);
       await env.DB.prepare(`UPDATE project_filmings SET trang_thai=?, thanh_tien=0, reviewed_by=?, reviewed_at=?, ly_do_loai=? WHERE id=?`)
         .bind(ST.KHONG_DAT, me.ho_ten, nowISO(), body.reason, id).run();
@@ -2476,6 +2554,8 @@ async function handleApi(request, env){
     if(up){
       await deleteMediaObject(env, up.media_url);
       await env.DB.prepare(`DELETE FROM filming_uploads WHERE id=?`).bind(m[1]).run();
+      const ftCu=(await env.DB.prepare(`SELECT id FROM footage WHERE nguon='FILMING' AND nguon_id=?`).bind(m[1]).all()).results;
+      for(const ft of ftCu){ await env.DB.prepare(`UPDATE shot_list SET footage_id=NULL, trang_thai='CHUA_QUAY' WHERE footage_id=?`).bind(ft.id).run(); await env.DB.prepare(`DELETE FROM footage WHERE id=?`).bind(ft.id).run(); }
       await logAudit(env,me,'xoá media','filming_upload',m[1]);
     }
     return json({ db: await bootstrap(env, me) });
@@ -2526,18 +2606,13 @@ async function handleApi(request, env){
     return json({ db: await bootstrap(env, me) });
   }
   // ===== QUẢN LÝ SẢN XUẤT =====
-  if(path==='/sanxuat' && method==='POST'){
-    if(!isStaff(me)) return json({error:'Không có quyền'},403);
-    if(!(body.tieu_de||'').trim()) return json({error:'Nhập tên nội dung / kịch bản'},400);
-    const id=await luuSanXuat(env, me, body, null);
-    await logAudit(env,me,'thêm dòng sản xuất','san_xuat',id,(body.tieu_de||'').trim());
-    return json({ db: await bootstrap(env, me), id });
-  }
+  // ADR-004: Quản lý sản xuất là góc nhìn của Kế hoạch — không còn dòng riêng để thêm/sửa/xoá
+  if(path==='/sanxuat' && method==='POST') return json({error:'Quản lý sản xuất đã gộp vào Kế hoạch nội dung (ADR-004) — thêm/sửa ở màn Kế hoạch'},410);
   if(path==='/sanxuat/import' && method==='POST'){
     if(!isStaff(me)) return json({error:'Không có quyền'},403);
     const rows=Array.isArray(body.rows)?body.rows:[];
     const taoKH = bool(body.tao_ke_hoach);
-    // Nối về Kế hoạch nội dung: khớp theo tên + tháng. Không khớp thì tạo mới nếu user chọn.
+    // ADR-004: import Excel ghi THẲNG vào content_items (khớp tên + tháng; không khớp → tạo mới nếu chọn). Giá trị Excel đè giá trị đang có.
     const cis=(await env.DB.prepare(`SELECT id,tieu_de,thang FROM content_items`).all()).results;
     const khoa=(t,th)=>String(t||'').trim().toLowerCase()+'|'+String(th||'').trim();
     const banDo={}; cis.forEach(c=>{ banDo[khoa(c.tieu_de,c.thang)]=c.id; });
@@ -2546,31 +2621,22 @@ async function handleApi(request, env){
       const ten=(r.tieu_de||'').trim();
       if(!ten){ bo++; continue; }
       const th=r.thang||body.thang||'';
+      const map=mapSanXuatSangKeHoach({...r, thang:th});
       let ciId=banDo[khoa(ten,th)] || null;
-      if(!ciId && taoKH){
+      if(ciId){ await ghepVaoKeHoach(env, ciId, map, true); noi++; }
+      else if(taoKH){
         ciId=await insertContentItem(env, me, { loai:'ECOM', tieu_de:ten, loai_muc_tieu:'BAN_HANG',
           san_pham_id:r.san_pham_id||null, kenh_id:r.kenh_id||null, framework_id:r.framework_id||null,
-          thang:th, trang_thai:'SAN_XUAT', chi_tiet:{ tu_san_xuat:true } });
+          thang:th, trang_thai:giaiDoanTuSanXuat(r), pic:map.pic, chi_tiet:{ ...map.chi_tiet, tu_san_xuat:true } });
         banDo[khoa(ten,th)]=ciId; moi++;
-      }
-      if(ciId) noi++;
-      await luuSanXuat(env, me, {...r, thang:th, content_item_id:ciId}, null); n++;
+      } else { bo++; continue; }
+      n++;
     }
-    await logAudit(env,me,'import sản xuất','san_xuat',String(n),'nhận '+n+' · nối kế hoạch '+noi+' · tạo mới '+moi+' · bỏ '+bo);
+    await logAudit(env,me,'import sản xuất vào Kế hoạch','content_items',String(n),'nhận '+n+' · ghép '+noi+' · tạo mới '+moi+' · bỏ '+bo);
     return json({ db: await bootstrap(env, me), imported:n, bo_qua:bo, noi_ke_hoach:noi, tao_moi:moi });
   }
-  if((m=path.match(/^\/sanxuat\/(.+)$/)) && method==='PATCH'){
-    if(!isStaff(me)) return json({error:'Không có quyền'},403);
-    const id=await luuSanXuat(env, me, body, m[1]);
-    if(!id) return json({error:'Không tìm thấy'},404);
-    return json({ db: await bootstrap(env, me) });
-  }
-  if((m=path.match(/^\/sanxuat\/(.+)$/)) && method==='DELETE'){
-    if(!isStaff(me)) return json({error:'Không có quyền'},403);
-    await env.DB.prepare(`DELETE FROM san_xuat WHERE id=?`).bind(m[1]).run();
-    await logAudit(env,me,'xoá dòng sản xuất','san_xuat',m[1]);
-    return json({ db: await bootstrap(env, me) });
-  }
+  if((m=path.match(/^\/sanxuat\/(.+)$/)) && (method==='PATCH'||method==='DELETE'))
+    return json({error:'Quản lý sản xuất đã gộp vào Kế hoạch nội dung (ADR-004) — sửa/xoá ở màn Kế hoạch'},410);
 
   // ===== AI viết kịch bản (P4) =====
   // Danh mục rút gọn để nơi khác (vd công cụ Lọc video) chọn framework/sản phẩm/kênh
@@ -2845,7 +2911,7 @@ async function handleApi(request, env){
   if((m=path.match(/^\/footage\/(.+)$/)) && method==='DELETE'){
     if(!isStaff(me)) return json({error:'Không có quyền'},403);
     const id=m[1]; const r=await env.DB.prepare(`SELECT * FROM footage WHERE id=?`).bind(id).first();
-    if(r) await deleteMediaObject(env, r.media_url);
+    if(r && r.nguon!=='FILMING') await deleteMediaObject(env, r.media_url);   // ADR-004: file công trình do Quay công trình sở hữu
     // gỡ liên kết ở shot list để không trỏ vào footage đã xoá
     await env.DB.prepare(`UPDATE shot_list SET footage_id=NULL, trang_thai='CHUA_QUAY' WHERE footage_id=?`).bind(id).run();
     await env.DB.prepare(`DELETE FROM footage WHERE id=?`).bind(id).run();
@@ -2961,7 +3027,7 @@ async function cleanupOldMedia(env){
   let removed = 0;
   for(const p of stale){
     const ups = (await env.DB.prepare(`SELECT * FROM filming_uploads WHERE project_filming_id=?`).bind(p.id).all()).results;
-    for(const up of ups){ await deleteMediaObject(env, up.media_url); removed++; }
+    for(const up of ups){ await deleteMediaObject(env, up.media_url); removed++; await env.DB.prepare(`DELETE FROM footage WHERE nguon='FILMING' AND nguon_id=?`).bind(up.id).run(); }
     await env.DB.prepare(`DELETE FROM filming_uploads WHERE project_filming_id=?`).bind(p.id).run();
   }
   if(stale.length) await logAudit(env, null, 'dọn media hết hạn 30 ngày', 'filming', '-', stale.length+' công trình · '+removed+' media');

@@ -97,6 +97,51 @@ function nhanConKeHoach(db, it){
   if(air) out.push({t:'🚀 '+(air.trang_thai==='DA_DANG'?'đã đăng':(air.trang_thai==='DA_LEN_LICH'||air.trang_thai==='DANG_GUI')?'đã lên lịch':'chuẩn bị đăng'), cls:air.trang_thai==='DA_DANG'?TONE.ok:TONE.muted});
   return out;
 }
+// ADR-004 — KHO CHUNG: footage ∪ Thư viện ảnh seeding (không gộp bảng, chỉ gộp cách nhìn). Mọi bộ chọn media đọc từ đây.
+function khoMediaFE(db){
+  const ft=(db.footage||[]).filter(x=>x.active!==false);
+  const ml=(db.media_library||[]).filter(x=>x.active!==false && x.media_url).map(x=>({ id:'ml_'+x.id, _ml:true, ten:x.caption||'Ảnh seeding', mo_ta:x.caption||'',
+    media_url:x.media_url, media_type:'IMAGE', tags:['seeding'].concat(Array.isArray(x.tags)?x.tags:[]), nguon:'SEEDING', created_at:x.uploaded_at, created_by_name:x.uploaded_by_name }));
+  return ft.concat(ml);
+}
+const NGUON_MEDIA = { FILMING:{t:'🏗 Công trình', cls:'bg-amber-100 text-amber-700'}, SEEDING:{t:'💬 Seeding', cls:'bg-violet-100 text-violet-700'} };
+// ADR-004 — Quản lý sản xuất = 6 khâu suy từ dữ liệu thật của mục kế hoạch (không nhập tay trạng thái)
+const SX_KHAU_KH = [
+  {k:'ke_hoach', ten:'Kế hoạch', deadline:null},
+  {k:'brief',    ten:'Brief',    deadline:'deadline_brief'},
+  {k:'quay',     ten:'Quay',     deadline:'ngay_quay_dk'},
+  {k:'dung',     ten:'Dựng',     deadline:'deadline_sx'},
+  {k:'dang',     ten:'Đăng',     deadline:'ngay_dang'},
+  {k:'tracking', ten:'Đo lường', deadline:null},
+];
+function tienDoKhauFE(db, it){
+  const scs=(db.scripts||[]).filter(x=>x.content_item_id===it.id);
+  const sc=scs.slice().sort((a,b)=>String(b.updated_at||'').localeCompare(String(a.updated_at||'')))[0];
+  const shots=sc?(db.shot_list||[]).filter(x=>x.script_id===sc.id):[];
+  const air=(db.air_posts||[]).find(a=>(sc&&a.script_id===sc.id)||a.content_item_id===it.id);
+  const idx=pipeIdx(PIPELINE_CU[it.trang_thai]||it.trang_thai);
+  const c={};
+  c.coKichBan = !!sc || idx>=pipeIdx('CHO_DUYET');
+  c.daDung    = !!(sc&&sc.chi_tiet&&sc.chi_tiet.video_url) || !!air || idx>=pipeIdx('DA_DANG');
+  c.daQuay    = (shots.length>0 && shots.every(x=>x.trang_thai!=='CHUA_QUAY')) || c.daDung;
+  c.daDang    = !!(air&&air.trang_thai==='DA_DANG') || idx>=pipeIdx('DA_DANG');
+  c.coKetQua  = !!(air&&(db.ket_qua||[]).some(k=>k.air_post_id===air.id)) || it.trang_thai==='DA_DO';
+  const xongMap={ke_hoach:true, brief:c.coKichBan, quay:c.daQuay, dung:c.daDung, dang:c.daDang, tracking:c.coKetQua};
+  const hn=todayYMD(); const ct=it.chi_tiet||{}; const pic=it.pic||{};
+  const khau=SX_KHAU_KH.map(k=>{ const xong=!!xongMap[k.k]; const han=k.deadline?String(ct[k.deadline]||''):''; return {...k, xong, han, tre: !!han && han<hn && !xong, pic:pic[k.k]||''}; });
+  const hienTai=khau.find(k=>!k.xong)||khau[khau.length-1];
+  return { khau, hienTai, tre: khau.some(k=>k.tre), xongHet: khau.every(k=>k.xong) };
+}
+function tenNguoiFE(db, v){ if(!v) return ''; const u=(db.users||[]).find(x=>x.id===v); return u?u.ho_ten:String(v); }
+// Dòng Excel sản xuất → pic + chi_tiet của mục kế hoạch (khớp mapSanXuatSangKeHoach ở worker; demo dùng)
+function mapSanXuatFE(x){
+  const sach=o=>{ const r={}; Object.keys(o||{}).forEach(k=>{ const v=o[k]; if(v==null) return; const t=typeof v==='string'?v.trim():v; if(t===''||(typeof t==='object'&&!Object.keys(t).length)) return; r[k]=t; }); return r; };
+  const ct=x.chi_tiet||{}, sl=x.so_lieu||{};
+  return { pic:sach({ ke_hoach:x.pic_ke_hoach, brief:x.pic_brief, quay:x.pic_quay, dung:x.pic_san_xuat, dang:x.pic_dang, tracking:x.pic_tracking }),
+    chi_tiet:sach({ ...ct, deadline_brief:x.deadline_brief, ngay_quay_dk:x.ngay_quay_dk, ngay_quay_tt:x.ngay_quay_tt, deadline_sx:x.deadline_sx, ngay_dang:x.ngay_dang, gio_dang:x.gio_dang,
+      loai_video:x.loai_video, editor:x.editor, ngay_giao:x.ngay_giao, stt:x.stt, link_kich_ban:x.link_kich_ban, link_source:x.link_source, link_final:x.link_final, link_air:x.link_air,
+      tt_brief_excel:x.tt_brief, tt_quay_excel:x.tt_quay, tt_san_xuat_excel:x.tt_san_xuat, tt_air_excel:x.tt_air, tt_tong_excel:x.tt_tong, so_lieu_excel:Object.keys(sl).length?sl:null }) };
+}
 // Demo (in-memory) — bản sao của dayGiaiDoan / luiVeKichBan / ciCuaAir / ghiNgayDangVeKeHoach ở worker
 function dayGiaiDoanFE(S, ciId, toi){ if(!ciId) return; const ci=(S.content_items||[]).find(c=>c.id===ciId); if(!ci) return;
   const a=pipeIdx(PIPELINE_CU[ci.trang_thai]||ci.trang_thai), b=pipeIdx(toi); if(b<0||a>=b) return; ci.trang_thai=toi; ci.updated_at=new Date().toISOString(); }
@@ -847,9 +892,14 @@ function AppProvider({children}){
         if(!(o.tieu_de||'').trim()) return {ok:false,msg:'Nhập tên nội dung'};
         const nid=uid('sx'); S.san_xuat.push({id:nid,chi_tiet:{},so_lieu:{},created_at:now(),updated_at:now(),...o}); commit(); return {ok:true,id:nid}; },
       deleteSanXuat: async id=>{ S.san_xuat=(S.san_xuat||[]).filter(x=>x.id!==id); commit(); return true; },
-      importSanXuat: async o=>{ S.san_xuat ||= []; let n=0,bo=0;
-        (o.rows||[]).forEach(r=>{ if(!(r.tieu_de||'').trim()){bo++;return;} S.san_xuat.push({id:uid('sx'),chi_tiet:{},so_lieu:{},created_at:now(),updated_at:now(),...r,thang:r.thang||o.thang||''}); n++; });
-        commit(); return {ok:true,imported:n,bo_qua:bo}; },
+      importSanXuat: async o=>{ S.content_items ||= []; let n=0,bo=0,noi=0,moi=0;
+        const khoa=(t,th)=>String(t||'').trim().toLowerCase()+'|'+String(th||'').trim();
+        (o.rows||[]).forEach(r=>{ const ten=(r.tieu_de||'').trim(); if(!ten){ bo++; return; } const th=r.thang||o.thang||''; const map=mapSanXuatFE({...r, thang:th});
+          let ci=S.content_items.find(c=>khoa(c.tieu_de,c.thang)===khoa(ten,th));
+          if(ci){ ci.pic={...(ci.pic||{}),...map.pic}; ci.chi_tiet={...(ci.chi_tiet||{}),...map.chi_tiet}; ci.updated_at=now(); noi++; }
+          else if(o.tao_ke_hoach!==false){ S.content_items.unshift({ id:uid('ci'), loai:'ECOM', tieu_de:ten, loai_muc_tieu:'BAN_HANG', pillar_id:null, framework_id:r.framework_id||null, san_pham_id:r.san_pham_id||null, kenh_id:r.kenh_id||null, thang:th, trang_thai:'Y_TUONG', pic:map.pic, chi_tiet:{...map.chi_tiet, tu_san_xuat:true}, links:{}, created_at:now(), created_by:meRef.current.id, created_by_name:meRef.current.ho_ten, updated_at:now() }); moi++; }
+          else { bo++; return; } n++; });
+        commit(); return {ok:true, imported:n, bo_qua:bo, noi_ke_hoach:noi, tao_moi:moi}; },
       setModuleConfig: async (key,cau_hinh)=>{ S.module_config ||= {}; S.module_config[key]={...(S.module_config[key]||{}),...cau_hinh};
         if(key==='air'&&cau_hinh.checklist) S.air_checklist=cau_hinh.checklist;
         if(key==='trend'&&cau_hinh.checklist) S.trend_check=cau_hinh.checklist;
@@ -918,7 +968,11 @@ function AppProvider({children}){
       deleteFilmShot: async (templateId, phaseId, shotId) => patchTpl(templateId, t=>({...t, phases:t.phases.map(ph=>ph.id!==phaseId?ph:{...ph, shots:ph.shots.filter(s=>s.id!==shotId)})})),
       createFilming: async proj => { const submit=proj.submit!==false; S.project_filmings.unshift({ id:uid('pf'), sales_id:meRef.current.id, template_id:proj.template_id, ten_cong_trinh:proj.ten_cong_trinh, khu_vuc:proj.khu_vuc||'', ngay_quay:proj.ngay_quay||now(), trang_thai:submit?ST.CHO_DUYET:ST.NHAP, reviewed_by:null, reviewed_at:null, ly_do_loai:'', thanh_tien:0, ky_thanh_toan:null, created_at:now(), uploads:(proj.uploads||[]).map(u=>({id:uid('up'), shot_id:u.shot_id, media_type:u.media_type, media_url:u.media_url})) }); commit(); return true; },
       editFilming: async (id, proj) => { const f=S.project_filmings.find(x=>x.id===id); if(!f) return false; const submit=proj.submit===true; f.ten_cong_trinh=proj.ten_cong_trinh??f.ten_cong_trinh; f.khu_vuc=proj.khu_vuc??f.khu_vuc; f.ngay_quay=proj.ngay_quay??f.ngay_quay; f.uploads=(proj.uploads||[]).map(u=>({id:u.id&&String(u.id).startsWith('up_')?u.id:uid('up'), shot_id:u.shot_id, media_type:u.media_type, media_url:u.media_url, dat_item:u.dat_item, level:u.level})); if(submit){ f.trang_thai=ST.CHO_DUYET; f.ly_do_loai=''; } else f.trang_thai=ST.NHAP; commit(); return true; },
-      reviewFilming: async (id, result, reason, ratings) => { const f=S.project_filmings.find(x=>x.id===id); if(!f) return false; if(ratings){ (f.uploads||[]).forEach(u=>{ if(u.id in ratings){ const lv=Number(ratings[u.id])||0; u.level = lv>0?lv:null; u.dat_item = lv>0; } }); } const tpl=S.filming_templates.find(t=>t.id===f.template_id); const tien=filmProjectTien(f,tpl,S.pricing); if(result===ST.DAT){ f.trang_thai=ST.DAT; f.thanh_tien=tien; f.reviewed_by=meRef.current.ho_ten; f.reviewed_at=now(); f.ky_thanh_toan=kyOf(); f.ly_do_loai=''; } else { f.trang_thai=ST.KHONG_DAT; f.thanh_tien=0; f.reviewed_by=meRef.current.ho_ten; f.reviewed_at=now(); f.ly_do_loai=reason||''; } commit(); return true; },
+      reviewFilming: async (id, result, reason, ratings) => { const f=S.project_filmings.find(x=>x.id===id); if(!f) return false;
+        // ADR-004 (demo): chấm xong → source đạt vào Kho footage (idempotent theo nguon_id); chạy sau khi hàm gốc đã ghi mức
+        queueMicrotask(()=>{ S.footage ||= []; (f.uploads||[]).forEach(u=>{ const lv=Number(u.level)||0; const co=S.footage.find(x=>x.nguon==='FILMING'&&x.nguon_id===u.id);
+          if(lv>0 && f.trang_thai==='DAT'){ if(!co) S.footage.unshift({ id:uid('ft'), ten:(f.ten_cong_trinh||'Công trình')+' — cảnh', mo_ta:'Quay công trình · '+(f.khu_vuc||'')+' · mức '+lv, media_url:u.media_url, media_type:u.media_type||'VIDEO', tags:['công trình','mức '+lv], dia_diem:f.khu_vuc||'', ngay_quay:f.ngay_quay||'', nguoi_quay:'', active:true, created_at:now(), nguon:'FILMING', nguon_id:u.id }); else co.active=true; }
+          else if(co) co.active=false; }); commit(); }); if(ratings){ (f.uploads||[]).forEach(u=>{ if(u.id in ratings){ const lv=Number(ratings[u.id])||0; u.level = lv>0?lv:null; u.dat_item = lv>0; } }); } const tpl=S.filming_templates.find(t=>t.id===f.template_id); const tien=filmProjectTien(f,tpl,S.pricing); if(result===ST.DAT){ f.trang_thai=ST.DAT; f.thanh_tien=tien; f.reviewed_by=meRef.current.ho_ten; f.reviewed_at=now(); f.ky_thanh_toan=kyOf(); f.ly_do_loai=''; } else { f.trang_thai=ST.KHONG_DAT; f.thanh_tien=0; f.reviewed_by=meRef.current.ho_ten; f.reviewed_at=now(); f.ly_do_loai=reason||''; } commit(); return true; },
       uploadMedia: (file, onProgress) => new Promise((resolve,reject)=>{ if(onProgress){ onProgress(40,4,10); setTimeout(()=>onProgress(100,10,10),150); } const r=new FileReader(); r.onload=e=>resolve({ media_url:e.target.result, media_type: (file.type||'').startsWith('image/')?MEDIA_TYPE.IMAGE:MEDIA_TYPE.VIDEO }); r.onerror=()=>reject(new Error('Đọc file lỗi')); r.readAsDataURL(file); }),
       deleteUpload: async (id) => { S.project_filmings.forEach(p=>{ p.uploads=(p.uploads||[]).filter(u=>u.id!==id); }); commit(); return true; },
       cleanupMedia: async () => { const cut=new Date(Date.now()-30*864e5).toISOString(); let n=0; S.project_filmings.forEach(p=>{ if(!['DAT','DA_CHI'].includes(p.trang_thai) && (p.created_at||'')<cut){ n+=(p.uploads||[]).length; p.uploads=[]; } }); commit(); notify('Đã dọn media của '+n+' nguồn hết hạn'); return true; },
@@ -2383,11 +2437,10 @@ function ContentPlan(){
 // Ô "Sản xuất" trong bảng kế hoạch — cho biết nội dung này đang ở khâu nào
 function SanXuatCell({it}){
   const { db } = useApp();
-  const st=(db.san_xuat_theo_noi_dung||{})[it.id];
-  if(!st) return <span className="text-[10px] text-slate-300">chưa có</span>;
+  const td=tienDoKhauFE(db,it);   // ADR-004: suy từ dữ liệu thật
   return <div className="text-[11px]">
-    <span className={"px-1.5 py-0.5 rounded-full font-semibold "+(st.tre>0?'bg-rose-100 text-rose-700':'bg-brand/10 text-brand-dark')}>{st.khau}</span>
-    <div className="text-slate-400 mt-0.5">{st.so_dong} dòng{st.tre>0?(' · '+st.tre+' trễ'):''}</div>
+    <span className={"px-1.5 py-0.5 rounded-full font-semibold "+(td.tre?'bg-rose-100 text-rose-700':'bg-brand/10 text-brand-dark')}>{td.xongHet?'Xong':td.hienTai.ten}</span>
+    {td.tre && <div className="text-rose-600 mt-0.5">trễ hạn</div>}
   </div>;
 }
 // Ô "Seeding" trong bảng kế hoạch: đã đẩy thì hiện kết quả chảy về, chưa thì hiện nút đẩy
@@ -2463,8 +2516,19 @@ function ContentItemModal({edit, onClose}){
       <summary className="text-[13px] font-semibold text-ink cursor-pointer select-none">👥 Người phụ trách theo giai đoạn <span className="text-[11px] font-normal text-ink-muted">— để đo hiệu suất từng khâu (tuỳ chọn)</span></summary>
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mt-2">
         {[['ke_hoach','Kế hoạch'],['brief','Brief'],['quay','Quay'],['dung','Dựng'],['dang','Đăng'],['tracking','Tracking']].map(([k,lb])=>
-          <Field key={k} label={lb}><Select value={f.pic[k]||''} onChange={e=>setSub('pic',k,e.target.value)}><option value="">—</option>{users.map(u=><option key={u.id} value={u.id}>{u.ho_ten}</option>)}</Select></Field>)}
+          <Field key={k} label={lb}><Select value={f.pic[k]||''} onChange={e=>setSub('pic',k,e.target.value)}><option value="">—</option>{f.pic[k] && !users.some(u=>u.id===f.pic[k]) && <option value={f.pic[k]}>{f.pic[k]} (tên từ Excel)</option>}{users.map(u=><option key={u.id} value={u.id}>{u.ho_ten}</option>)}</Select></Field>)}
       </div>
+    </details>
+    {/* ADR-004: hạn từng khâu — Quản lý sản xuất đọc từ đây; trạng thái khâu máy tự suy, không nhập */}
+    <details className="mb-3 rounded-xl border border-line bg-slate-50 p-2.5">
+      <summary className="text-[13px] font-semibold text-ink cursor-pointer select-none">🏭 Sản xuất — hạn từng khâu <span className="text-[11px] font-normal text-ink-muted">— trễ hạn tự báo vào Việc của tôi</span></summary>
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mt-2">
+        {[['deadline_brief','Hạn brief'],['ngay_quay_dk','Ngày quay dự kiến'],['ngay_quay_tt','Ngày quay thực tế'],['deadline_sx','Hạn dựng']].map(([k,lb])=>
+          <Field key={k} label={lb}><Input type="date" value={f.chi_tiet[k]||''} onChange={e=>setSub('chi_tiet',k,e.target.value)}/></Field>)}
+        <Field label="Giờ đăng"><Input value={f.chi_tiet.gio_dang||''} onChange={e=>setSub('chi_tiet','gio_dang',e.target.value)} placeholder="19:30"/></Field>
+        <Field label="Editor"><Input value={f.chi_tiet.editor||''} onChange={e=>setSub('chi_tiet','editor',e.target.value)}/></Field>
+      </div>
+      <Field label="Link source đã lọc"><Input value={f.chi_tiet.link_source||''} onChange={e=>setSub('chi_tiet','link_source',e.target.value)}/></Field>
     </details>
     <Field label="Nội dung / brief / concept"><Textarea rows="2" value={f.chi_tiet.noi_dung||''} onChange={e=>setSub('chi_tiet','noi_dung',e.target.value)}/></Field>
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -2967,7 +3031,7 @@ function ScriptEditor({init, onClose, onDung}){
   const blocked = flags.filter(x=>x.muc_do==='CHAN');
   const warns = flags.filter(x=>x.muc_do!=='CHAN');
   const specArr = product && Array.isArray(product.thong_so) ? product.thong_so.filter(Boolean) : [];
-  const anhKho = (db.footage||[]).filter(x=>x.media_type==='IMAGE' && x.media_url);
+  const anhKho = khoMediaFE(db).filter(x=>x.media_type==='IMAGE' && x.media_url);
 
   const geminiSanSang=useMemo(()=>keyGemini(),[]);
   // Bộ sinh hiện ra khung hook → các phần → CTA: khớp video / post / carousel. Ảnh đơn chưa có khuôn riêng (lát 2).
@@ -3272,6 +3336,12 @@ function vietCuaToiFE(db, me){
     const viec = (c.trang_thai==='Y_TUONG'||c.trang_thai==='SCRIPT') ? 'Viết kịch bản' : c.trang_thai==='CHO_DUYET' ? 'Đang chờ duyệt' : 'Sản xuất (quay · dựng · đăng)';
     v.push({uu: con!=null&&con<0?UU.KHAN:(con!=null&&con<=1)?UU.HOM_NAY:UU.SAP, icon:'🗓️', ten:viec+': '+(c.tieu_de||'(không tên)'),
       meta: nd?(con<0?'quá ngày đăng dự kiến '+(-con)+' ngày':con===0?'đăng hôm nay':'đăng sau '+con+' ngày'):'chưa đặt ngày đăng dự kiến', page:'plan'}); });
+  // 3b. khâu sản xuất tôi phụ trách (PIC theo khâu) chưa xong mà đã tới/quá hạn (ADR-004)
+  (db.content_items||[]).filter(c=>c.pic && Object.values(c.pic).some(p=>p===me.id||p===me.ho_ten)).forEach(c=>{
+    const td=tienDoKhauFE(db,c);
+    td.khau.filter(k=>!k.xong && k.han && (k.pic===me.id||k.pic===me.ho_ten)).forEach(k=>{
+      const con=Math.round((new Date(k.han+'T00:00:00')-new Date(homNay+'T00:00:00'))/864e5); if(con>3) return;
+      v.push({uu: con<0?UU.KHAN:con<=1?UU.HOM_NAY:UU.SAP, icon:'🏭', ten:'Khâu '+k.ten+': '+(c.tieu_de||'(không tên)'), meta: con<0?('trễ '+(-con)+' ngày'):con===0?'hạn hôm nay':('còn '+con+' ngày'), page:'sanxuat'}); }); });
   // 4. bài đăng gặp sự cố / tới ngày
   (db.air_posts||[]).filter(a=>(a.trang_thai==='DEN_GIO'||a.trang_thai==='LOI') && (!a.nguoi_dang||a.nguoi_dang===me.id)).forEach(a=>
     v.push({uu:UU.KHAN, icon:'🚀', ten:'Đăng tay: '+(a.tieu_de||'(không tên)'), meta:a.loi||'tới giờ mà chưa tự đăng được', page:'air'}));
@@ -3492,9 +3562,9 @@ function AirEditor({post, onClose}){
     </div>}
     {posted && <div className="text-[11px] text-slate-400">Đã đăng lúc {fmtDate(post.posted_at)} — khoá chỉnh sửa để giữ nguyên dữ liệu quy đơn.</div>}
     {pickFt && <Modal open={true} onClose={()=>setPickFt(false)} title="Chọn media từ Kho footage" wide>
-      {(db.footage||[]).filter(x=>x.active!==false).length===0 ? <Empty>Kho footage đang trống.</Empty> :
+      {khoMediaFE(db).length===0 ? <Empty>Kho footage đang trống.</Empty> :
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-96 overflow-y-auto">
-          {(db.footage||[]).filter(x=>x.active!==false).map(ft=>
+          {khoMediaFE(db).map(ft=>
             <button key={ft.id} onClick={()=>{ setF(v=>({...v,media_url:ft.media_url})); setPickFt(false); }}
               className="rounded-xl border border-line overflow-hidden hover:border-brand transition text-left">
               <div className="bg-slate-900 aspect-video">
@@ -3887,142 +3957,79 @@ function TrendTrienKhai({trend,onClose,onDone}){
 /* ============================================================
    QUẢN LÝ SẢN XUẤT — 6 khâu, bám đúng file ECOM thật
 ============================================================ */
+// ADR-004 — Quản lý sản xuất = GÓC NHÌN 6 khâu của Kế hoạch nội dung. Không còn bảng riêng:
+// PIC/hạn từng khâu lưu ở content_items.pic/chi_tiet (sửa trong form Kế hoạch); trạng thái khâu do máy suy (tienDoKhauFE).
 function SanXuat(){
-  const { db, deleteSanXuat, notify } = useApp();
-  const SX=db.san_xuat||[]; const KHAU=db.sx_khau||SX_KHAU_FE;
+  const { db, me } = useApp();
+  const chiXem = me.vai_tro===ROLES.GIAM_DOC;
+  const items=db.content_items||[];
   const [view,setView]=useState('bang'); const [edit,setEdit]=useState(null); const [imp,setImp]=useState(false);
-  const [fThang,setFThang]=useState(''); const [fPic,setFPic]=useState(''); const [q,setQ]=useState('');
-  const thangs=[...new Set(SX.map(x=>x.thang).filter(Boolean))].sort().reverse();
-  const pics=[...new Set(SX.flatMap(x=>KHAU.map(k=>x[k.pic])).filter(Boolean))].sort();
-  const list=SX.filter(x=>(!fThang||x.thang===fThang))
-    .filter(x=>!fPic||KHAU.some(k=>x[k.pic]===fPic))
-    .filter(x=>!q||(x.tieu_de||'').toLowerCase().includes(q.toLowerCase()));
-  // Khâu hiện tại = khâu đầu tiên chưa xong (trạng thái rỗng hoặc chưa/đang)
-  const xong=(v)=>{ const t=String(v||'').toLowerCase(); return !!t && !/chưa|đang|nháp|mới/.test(t); };
-  const khauHienTai=(x)=>{ for(const k of KHAU){ if(k.tt && !xong(x[k.tt])) return k; } return KHAU[KHAU.length-1]; };
-  const treHan=(x)=>{ const hn=new Date().toISOString().slice(0,10);
-    return KHAU.some(k=>k.deadline && k.tt && x[k.deadline] && x[k.deadline]<hn && !xong(x[k.tt])); };
-  const soTre=list.filter(treHan).length;
-  return <ModuleShell moduleKey="sanxuat" title="🏭 Quản lý sản xuất" right={<div className="flex gap-2">
-      <Btn variant="ghost" onClick={()=>setImp(true)}>⬆ Import file ECOM</Btn>
-      <Btn variant="brand" onClick={()=>setEdit({})}>＋ Thêm dòng</Btn></div>}>
+  const [fThang,setFThang]=useState(''); const [fLoai,setFLoai]=useState(''); const [fPic,setFPic]=useState(''); const [q,setQ]=useState(''); const [chiChuaXong,setChiChuaXong]=useState(true);
+  const thangs=[...new Set(items.map(x=>x.thang).filter(Boolean))].sort().reverse();
+  const picIds=[...new Set(items.flatMap(x=>Object.values(x.pic||{})).filter(Boolean))];
+  const rows=items.map(it=>({it, td:tienDoKhauFE(db,it)}))
+    .filter(({it})=>(!fThang||it.thang===fThang)&&(!fLoai||it.loai===fLoai))
+    .filter(({it})=>!fPic||Object.values(it.pic||{}).includes(fPic))
+    .filter(({it})=>!q||(it.tieu_de||'').toLowerCase().includes(q.toLowerCase()))
+    .filter(({td})=>!chiChuaXong||!td.xongHet);
+  const soTre=rows.filter(r=>r.td.tre).length;
+  const Cham=({k})=><span title={k.ten+(k.han?' · hạn '+k.han:'')+(k.pic?' · '+tenNguoiFE(db,k.pic):'')}
+    className={"inline-flex items-center justify-center w-5 h-5 rounded-full text-[9px] font-bold "+(k.xong?'bg-emerald-100 text-emerald-700':k.tre?'bg-rose-100 text-rose-700':'bg-slate-100 text-slate-400')}>{k.xong?'✓':k.tre?'!':'·'}</span>;
+  return <ModuleShell moduleKey="sanxuat" title="🏭 Quản lý sản xuất" right={!chiXem && <Btn variant="ghost" onClick={()=>setImp(true)}>⬆ Import file ECOM</Btn>}>
     <div className="space-y-4">
       <div className={CALLOUT.note}>
-        Theo dõi <b>6 khâu</b>: {KHAU.map(k=>k.ten).join(' → ')}. Mỗi khâu có <b>người phụ trách, hạn, trạng thái</b> riêng —
-        thay cho file Excel sản xuất đang dùng.
+        Góc nhìn <b>6 khâu</b> ({SX_KHAU_KH.map(k=>k.ten).join(' → ')}) của <b>Kế hoạch nội dung</b>. Trạng thái khâu do <b>máy suy từ dữ liệu thật</b>
+        (có kịch bản · shot list quay đủ · đã dựng · đã đăng · có kết quả) — không nhập tay. Người phụ trách và hạn từng khâu sửa trong form mục kế hoạch.
       </div>
-      {list.filter(x=>!x.content_item_id).length>0 && <div className={CALLOUT.warn}>
-        ⚠ <b>{list.filter(x=>!x.content_item_id).length} dòng chưa nối về Kế hoạch nội dung</b> — tiến độ của chúng không hiện ở Kế hoạch và Dashboard. Mở từng dòng chọn “Thuộc mục kế hoạch nào”.
-      </div>}
-      {soTre>0 && <div className={CALLOUT.danger}>
-        ⏰ <b>{soTre} dòng đang trễ hạn</b> ở ít nhất một khâu — lọc cột “Khâu hiện tại” để xử lý trước.
-      </div>}
+      {soTre>0 && <div className={CALLOUT.danger}>⏰ <b>{soTre} mục đang trễ hạn</b> ở ít nhất một khâu — chấm đỏ là khâu trễ.</div>}
       <div className="bg-white rounded-2xl border border-line shadow-card p-3 flex flex-wrap gap-2 items-center">
-        <Select value={fThang} onChange={e=>setFThang(e.target.value)} className="max-w-[140px]"><option value="">Mọi tháng</option>{thangs.map(t=><option key={t} value={t}>{t}</option>)}</Select>
-        <Select value={fPic} onChange={e=>setFPic(e.target.value)} className="max-w-[160px]"><option value="">Mọi người phụ trách</option>{pics.map(p=><option key={p} value={p}>{p}</option>)}</Select>
+        <Select value={fThang} onChange={e=>setFThang(e.target.value)} className="max-w-[130px]"><option value="">Mọi tháng</option>{thangs.map(t=><option key={t} value={t}>{t}</option>)}</Select>
+        <Select value={fLoai} onChange={e=>setFLoai(e.target.value)} className="max-w-[120px]"><option value="">Mọi loại</option><option value="ECOM">Ecom</option><option value="SOCIAL">Social</option></Select>
+        <Select value={fPic} onChange={e=>setFPic(e.target.value)} className="max-w-[170px]"><option value="">Mọi người phụ trách</option>{picIds.map(p=><option key={p} value={p}>{tenNguoiFE(db,p)}</option>)}</Select>
         <Input value={q} onChange={e=>setQ(e.target.value)} placeholder="Tìm tên nội dung…" className="flex-1 min-w-[160px]"/>
+        <label className="text-xs text-ink-muted flex items-center gap-1"><input type="checkbox" checked={chiChuaXong} onChange={e=>setChiChuaXong(e.target.checked)}/> chỉ chưa xong</label>
         <div className="flex rounded-lg overflow-hidden border border-line">
           <button onClick={()=>setView('bang')} className={"px-3 py-1.5 text-xs font-semibold "+(view==='bang'?'bg-brand text-white':'bg-white text-ink-muted')}>Bảng</button>
           <button onClick={()=>setView('khau')} className={"px-3 py-1.5 text-xs font-semibold "+(view==='khau'?'bg-brand text-white':'bg-white text-ink-muted')}>Theo khâu</button>
         </div>
-        <span className="text-xs text-slate-400">{list.length} dòng</span>
+        <span className="text-xs text-slate-400">{rows.length} mục</span>
       </div>
-      {list.length===0 ? <Empty>Chưa có dòng sản xuất nào. Bấm "Import file ECOM" để nạp từ file Excel đang dùng.</Empty>
+      {rows.length===0 ? <Empty>Không có mục nào. Thêm ở <b>Kế hoạch nội dung</b> hoặc bấm "Import file ECOM".</Empty>
       : view==='khau' ?
-        <div className="flex gap-2 overflow-x-auto pb-2">{KHAU.map(k=>{ const col=list.filter(x=>khauHienTai(x).k===k.k);
+        <div className="flex gap-2 overflow-x-auto pb-2">{SX_KHAU_KH.map(k=>{ const col=rows.filter(r=>r.td.hienTai.k===k.k);
           return <div key={k.k} className="bg-slate-50 rounded-xl p-2 w-[76vw] max-w-[230px] sm:w-auto sm:flex-1 sm:min-w-0 shrink-0">
             <div className="text-[11px] font-bold text-ink-muted mb-2 flex justify-between"><span>{k.ten}</span><span className="text-slate-400">{col.length}</span></div>
-            <div className="space-y-2">{col.map(x=>
-              <button key={x.id} onClick={()=>setEdit(x)} className={"w-full text-left bg-white rounded-xl border p-2 hover:border-brand transition "+(treHan(x)?'border-rose-300':'border-line')}>
-                <div className="text-xs font-semibold text-ink line-clamp-2">{x.tieu_de}</div>
-                <div className="text-[10px] text-slate-400 mt-0.5">{x[k.pic]||'chưa giao'}{k.deadline&&x[k.deadline]?(' · hạn '+x[k.deadline]):''}</div>
-                {treHan(x)&&<div className="text-[10px] text-rose-600 font-semibold mt-0.5">trễ hạn</div>}
-              </button>)}
+            <div className="space-y-2">{col.map(({it,td})=>{ const kh=td.hienTai;
+              return <button key={it.id} onClick={()=>!chiXem&&setEdit(it)} className={"w-full text-left bg-white rounded-xl border p-2 hover:border-brand transition "+(td.tre?'border-rose-300':'border-line')}>
+                <div className="text-xs font-semibold text-ink line-clamp-2">{it.tieu_de}</div>
+                <div className="text-[10px] text-slate-400 mt-0.5">{tenNguoiFE(db,kh.pic)||'chưa giao'}{kh.han?(' · hạn '+kh.han):''}</div>
+                {td.tre&&<div className="text-[10px] text-rose-600 font-semibold mt-0.5">trễ hạn</div>}
+              </button>; })}
             </div>
           </div>; })}
         </div>
       : <div className="bg-white rounded-2xl border border-line shadow-card overflow-auto">
           <table className="w-full text-sm min-w-[900px]">
             <thead className="bg-slate-50/70 text-[11px] uppercase text-ink-muted text-left"><tr>
-              <Th>STT</Th><Th>Tên nội dung</Th><Th>Khâu hiện tại</Th><Th>Phụ trách</Th><Th>Hạn</Th><Th>Trạng thái tổng</Th><Th>Tháng</Th><Th></Th></tr></thead>
-            <tbody className="divide-y">{list.map(x=>{ const k=khauHienTai(x); const tre=treHan(x);
-              return <tr key={x.id} className={"hover:bg-slate-50 "+(tre?'bg-rose-50/40':'')}>
-                <Td>{x.stt||''}</Td>
-                <Td><span className="font-medium text-ink">{x.tieu_de}</span>{x.loai_video&&<span className="block text-[10px] text-slate-400">{x.loai_video}</span>}</Td>
-                <Td><span className="text-[10px] px-1.5 py-0.5 rounded-full bg-brand/10 text-brand-dark font-semibold">{k.ten}</span></Td>
-                <Td>{x[k.pic]||<span className="text-slate-300">—</span>}</Td>
-                <Td>{k.deadline&&x[k.deadline] ? <span className={tre?'text-rose-600 font-semibold':''}>{x[k.deadline]}</span> : <span className="text-slate-300">—</span>}</Td>
-                <Td className="text-xs">{x.tt_tong||<span className="text-slate-300">—</span>}</Td>
-                <Td className="text-xs">{x.thang||''}</Td>
-                <Td><button onClick={()=>setEdit(x)} className={LINK.edit}>Mở</button>{' '}
-                  <button onClick={()=>{ if(confirm('Xoá dòng này?')) deleteSanXuat(x.id).then(ok=>ok&&notify('Đã xoá')); }} className={LINK.danger}>Xoá</button></Td>
+              <Th>Tên nội dung</Th><Th>Khâu hiện tại</Th><Th>Phụ trách</Th><Th>Hạn</Th><Th>6 khâu</Th><Th>Giai đoạn</Th><Th>Tháng</Th><Th></Th></tr></thead>
+            <tbody className="divide-y">{rows.map(({it,td})=>{ const kh=td.hienTai;
+              return <tr key={it.id} className={"hover:bg-slate-50 "+(td.tre?'bg-rose-50/40':'')}>
+                <Td><span className="font-medium text-ink">{it.tieu_de}</span>{(it.chi_tiet||{}).loai_video&&<span className="block text-[10px] text-slate-400">{it.chi_tiet.loai_video}</span>}</Td>
+                <Td><span className="text-[10px] px-1.5 py-0.5 rounded-full bg-brand/10 text-brand-dark font-semibold">{td.xongHet?'Xong':kh.ten}</span></Td>
+                <Td>{tenNguoiFE(db,kh.pic)||<span className="text-slate-300">—</span>}</Td>
+                <Td>{kh.han ? <span className={kh.tre?'text-rose-600 font-semibold':''}>{kh.han}</span> : <span className="text-slate-300">—</span>}</Td>
+                <Td><div className="flex gap-1">{td.khau.map(k=><Cham key={k.k} k={k}/>)}</div></Td>
+                <Td className="text-xs">{pipeLabel(it.trang_thai)}</Td>
+                <Td className="text-xs">{it.thang||''}</Td>
+                <Td>{!chiXem && <button onClick={()=>setEdit(it)} className={LINK.edit}>Mở</button>}</Td>
               </tr>; })}
             </tbody>
           </table>
         </div>}
     </div>
-    {edit && <SanXuatModal init={edit} onClose={()=>setEdit(null)}/>}
+    {edit && <ContentItemModal edit={edit} onClose={()=>setEdit(null)}/>}
     {imp && <SanXuatImport onClose={()=>setImp(false)}/>}
   </ModuleShell>;
-}
-// Ô nhập của form Sản xuất — khai báo ngoài render để không bị tạo lại (mất focus) mỗi lần gõ
-function SXField({label,k,type,f,set}){ return <Field label={label}><Input type={type} value={f[k]||''} onChange={e=>set(k,e.target.value)}/></Field>; }
-function SXFieldC({label,k,f,setC}){ return <Field label={label}><Input value={(f.chi_tiet||{})[k]||''} onChange={e=>setC(k,e.target.value)}/></Field>; }
-function SanXuatModal({init,onClose}){
-  const { db, upsertSanXuat, notify } = useApp();
-  const KHAU=db.sx_khau||SX_KHAU_FE;
-  const [f,setF]=useState(()=>({...init, chi_tiet:{...(init.chi_tiet||{})}, so_lieu:{...(init.so_lieu||{})}}));
-  const [khau,setKhau]=useState(KHAU[0].k);
-  const [busy,setBusy]=useState(false);
-  const set=(k,v)=>setF(o=>({...o,[k]:v}));
-  const setC=(k,v)=>setF(o=>({...o,chi_tiet:{...o.chi_tiet,[k]:v}}));
-  const setS=(k,v)=>setF(o=>({...o,so_lieu:{...o.so_lieu,[k]:v}}));
-  const luu=async()=>{ if(!(f.tieu_de||'').trim()) return notify('Nhập tên nội dung','warn');
-    setBusy(true); const r=await upsertSanXuat(init.id||null,f); setBusy(false);
-    if(r&&r.ok){ notify(init.id?'Đã lưu':'Đã thêm dòng'); onClose(); } else notify((r&&r.msg)||'Lỗi','err'); };
-  return <Modal open={true} onClose={onClose} title={init.id?'Dòng sản xuất':'Thêm dòng sản xuất'} wide>
-    <div className="grid sm:grid-cols-3 gap-2">
-      <Field label="STT"><Input type="number" className="no-spin" value={f.stt||''} onChange={e=>set('stt',Number(e.target.value)||null)}/></Field>
-      <Field label="Tháng"><Input value={f.thang||''} onChange={e=>set('thang',e.target.value)} placeholder="2026-07"/></Field>
-      <SXField f={f} set={set} label="Loại video" k="loai_video"/>
-    </div>
-    <Field label="Tên nội dung / Kịch bản" required><Input value={f.tieu_de||''} onChange={e=>set('tieu_de',e.target.value)}/></Field>
-    <Field label="Thuộc mục kế hoạch nào" hint="Nối để tiến độ sản xuất hiện ở Kế hoạch nội dung và Dashboard">
-      <Select value={f.content_item_id||''} onChange={e=>set('content_item_id',e.target.value||null)}>
-        <option value="">— Chưa nối —</option>
-        {(db.content_items||[]).map(c=><option key={c.id} value={c.id}>{(c.tieu_de||'(không tên)')+(c.thang?(' · '+c.thang):'')}</option>)}
-      </Select></Field>
-    {!f.content_item_id && <div className="text-[11px] text-amber-600 -mt-1">⚠ Chưa nối → dòng này không hiện tiến độ ở Kế hoạch nội dung.</div>}
-    <Tabs size="sm" className="my-2" active={khau} onChange={setKhau} tabs={KHAU.map(k=>({key:k.k,label:k.ten}))}/>
-    <div className="rounded-xl border border-line p-3">
-      {khau==='KE_HOACH' && <div className="grid sm:grid-cols-2 gap-2"><SXField f={f} set={set} label="Ngày giao task" k="ngay_giao" type="date"/><SXField f={f} set={set} label="PIC kế hoạch" k="pic_ke_hoach"/></div>}
-      {khau==='BRIEF' && <><div className="grid sm:grid-cols-3 gap-2"><SXField f={f} set={set} label="PIC brief" k="pic_brief"/><SXField f={f} set={set} label="Deadline brief" k="deadline_brief" type="date"/><SXField f={f} set={set} label="Trạng thái brief" k="tt_brief"/></div>
-        <SXFieldC f={f} setC={setC} label="Concept" k="concept"/><SXField f={f} set={set} label="Link kịch bản" k="link_kich_ban"/></>}
-      {khau==='QUAY' && <><div className="grid sm:grid-cols-3 gap-2"><SXField f={f} set={set} label="PIC quay" k="pic_quay"/><SXField f={f} set={set} label="Ngày quay dự kiến" k="ngay_quay_dk" type="date"/><SXField f={f} set={set} label="Ngày quay thực tế" k="ngay_quay_tt" type="date"/></div>
-        <div className="grid sm:grid-cols-3 gap-2"><SXFieldC f={f} setC={setC} label="Địa điểm" k="dia_diem"/><SXFieldC f={f} setC={setC} label="Loại bối cảnh" k="boi_canh"/><SXFieldC f={f} setC={setC} label="MC" k="mc"/></div>
-        <div className="grid sm:grid-cols-2 gap-2"><SXFieldC f={f} setC={setC} label="Số lượng" k="so_luong"/><SXField f={f} set={set} label="Trạng thái quay" k="tt_quay"/></div>
-        <SXField f={f} set={set} label="Link source đã lọc" k="link_source"/><SXFieldC f={f} setC={setC} label="Ghi chú sự cố quay" k="su_co_quay"/></>}
-      {khau==='SAN_XUAT' && <><div className="grid sm:grid-cols-3 gap-2"><SXField f={f} set={set} label="PIC sản xuất" k="pic_san_xuat"/><SXField f={f} set={set} label="Editor" k="editor"/><SXField f={f} set={set} label="Deadline sản xuất" k="deadline_sx" type="date"/></div>
-        <div className="grid sm:grid-cols-2 gap-2"><SXField f={f} set={set} label="Trạng thái sản xuất" k="tt_san_xuat"/><SXFieldC f={f} setC={setC} label="ECOM double check" k="double_check"/></div>
-        <SXField f={f} set={set} label="Link Final" k="link_final"/></>}
-      {khau==='AIR' && <><div className="grid sm:grid-cols-3 gap-2"><SXField f={f} set={set} label="PIC đăng" k="pic_dang"/><SXField f={f} set={set} label="Ngày đăng" k="ngay_dang" type="date"/><SXField f={f} set={set} label="Giờ đăng" k="gio_dang"/></div>
-        <div className="grid sm:grid-cols-2 gap-2"><SXField f={f} set={set} label="Trạng thái air" k="tt_air"/><SXFieldC f={f} setC={setC} label="Tên/ID sản phẩm" k="ma_san_pham"/></div>
-        <SXField f={f} set={set} label="Link video đã air" k="link_air"/>
-        <div className="grid sm:grid-cols-2 gap-2"><SXFieldC f={f} setC={setC} label="Reup Shopee" k="reup"/><SXFieldC f={f} setC={setC} label="Trạng thái Reup" k="tt_reup"/></div>
-        <SXFieldC f={f} setC={setC} label="Note lịch air" k="note_air"/></>}
-      {khau==='TRACKING' && <><SXField f={f} set={set} label="PIC tracking" k="pic_tracking"/>
-        <div className="grid sm:grid-cols-4 gap-2">
-          {[['gmv','GMV'],['don_hang','Đơn hàng'],['views','Lượt xem'],['likes','Lượt thích'],['comments','Bình luận'],['shares','Chia sẻ'],['clicks','Nhấp sản phẩm']].map(([k,l])=>
-            <Field key={k} label={l}><Input type="number" className="no-spin" value={(f.so_lieu||{})[k]||''} onChange={e=>setS(k,Number(e.target.value)||0)}/></Field>)}
-        </div>
-        <SXFieldC f={f} setC={setC} label="Ghi chú đánh giá" k="danh_gia"/></>}
-    </div>
-    <div className="grid sm:grid-cols-2 gap-2 mt-2">
-      <SXField f={f} set={set} label="Trạng thái tổng" k="tt_tong"/>
-      <SXFieldC f={f} setC={setC} label="Ghi chú" k="ghi_chu"/>
-    </div>
-    <div className="flex gap-2 mt-3"><Btn variant="ghost" onClick={onClose} disabled={busy}>Đóng</Btn><Btn variant="brand" className="flex-1" onClick={luu} disabled={busy}>{busy?'…':'Lưu'}</Btn></div>
-  </Modal>;
 }
 
 function SanXuatImport({onClose}){
@@ -4659,7 +4666,7 @@ const SHOT_ST = { CHUA_QUAY:'Chưa quay', DA_QUAY:'Đã quay', DAT:'Đạt' };
 const SHOT_ST_STYLE = { CHUA_QUAY:TONE.muted, DA_QUAY:TONE.warn, DAT:TONE.ok };
 function FootageLib(){
   const { db, createFootage, patchFootage, deleteFootage, uploadMedia, notify } = useApp();
-  const FT=db.footage||[];
+  const FT=khoMediaFE(db);   // ADR-004: kho chung
   const [tab,setTab]=useState('kho');
   const [q,setQ]=useState(''); const [tag,setTag]=useState('');
   const [edit,setEdit]=useState(null); const [up,setUp]=useState(0); const fileRef=useRef();
@@ -4678,7 +4685,7 @@ function FootageLib(){
     <PageHeader title={<>🎞 Kho footage</>} right={<><Btn variant="ghost" onClick={()=>setEdit({media_url:'',media_type:'VIDEO',tags:[]})}>🔗 Dán link</Btn> <Btn variant="brand" onClick={()=>fileRef.current&&fileRef.current.click()} disabled={up>0}>{up>0?('Đang tải '+up+'%'):'⬆ Tải lên'}</Btn> <input ref={fileRef} type="file" accept="video/*,image/*" className="hidden" onChange={onFile}/></>}/>
     <Tabs size="sm" active={tab} onChange={setTab} tabs={[{key:'kho',label:'Kho',count:FT.filter(f=>f.active!==false).length},{key:'shot',label:'Shot list theo kịch bản'}]}/>
     <div className={CALLOUT.note}>
-      Footage tải lên đây <b>dùng lại được cho nhiều kịch bản</b> — gắn thẻ (tag) để tìm nhanh thay vì quay lại từ đầu.
+      <b>Kho chung</b>: footage tải lên · video/ảnh <b>Quay công trình</b> đã nghiệm thu đạt (tự vào) · <b>ảnh seeding</b>. Gắn thẻ để tìm nhanh thay vì quay lại từ đầu.
     </div>
     <div className="flex flex-wrap gap-2">
       <Input value={q} onChange={e=>setQ(e.target.value)} placeholder="Tìm theo tên, mô tả, thẻ…" className="flex-1 min-w-[200px]"/>
@@ -4697,11 +4704,13 @@ function FootageLib(){
           </div>
           <div className="p-2">
             <div className="text-xs font-semibold text-ink truncate">{f.ten||'(chưa đặt tên)'}</div>
+            {NGUON_MEDIA[f.nguon] && <span className={"inline-block text-[9px] px-1.5 py-0.5 rounded-full mt-0.5 "+NGUON_MEDIA[f.nguon].cls}>{NGUON_MEDIA[f.nguon].t}</span>}
             {f.dia_diem && <div className="text-[10px] text-slate-400 truncate">📍 {f.dia_diem}</div>}
             <div className="flex flex-wrap gap-1 mt-1">{(f.tags||[]).slice(0,3).map((t,i)=><span key={i} className="text-[9px] px-1.5 py-0.5 rounded-full bg-brand/10 text-brand-dark">{t}</span>)}</div>
             <div className="flex justify-between mt-2 pt-1.5 border-t border-line/60">
+              {f._ml ? <span className="text-[10px] text-slate-400">quản lý ở Thư viện ảnh</span> : <>
               <button onClick={()=>setEdit(f)} className={LINK.edit}>Sửa</button>
-              <button onClick={()=>{ if(confirm('Xoá footage này? Các cảnh đang dùng sẽ được gỡ liên kết.')) deleteFootage(f.id).then(ok=>ok&&notify('Đã xoá')); }} className={LINK.danger}>Xoá</button>
+              <button onClick={()=>{ if(confirm('Xoá footage này? Các cảnh đang dùng sẽ được gỡ liên kết.')) deleteFootage(f.id).then(ok=>ok&&notify('Đã xoá')); }} className={LINK.danger}>Xoá</button></>}
             </div>
           </div>
         </div>)}
