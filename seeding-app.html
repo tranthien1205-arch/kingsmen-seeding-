@@ -124,10 +124,35 @@ function scanClaims(text, claims){
   const t=(text||'').toLowerCase();
   return (claims||[]).filter(c=>c.active!==false && c.cum_tu && t.includes(c.cum_tu.toLowerCase()));
 }
-// P4 — gộp toàn văn kịch bản (để quét claim) — khớp scriptText ở worker
+// ADR-001 — định dạng nội dung trong Creative Studio (khớp DINH_DANG ở worker).
+// Mỗi định dạng dùng chung hook/sections/cta nhưng gọi tên khác nhau; phần riêng nằm trong chi_tiet.
+const DINH_DANG_FE = {
+  VIDEO:   { label:'Video ngắn', icon:'🎬', mo_ta:'Hook · từng cảnh · CTA', hook:'Hook (câu mở)', hookPh:'Câu đầu giữ chân người xem trong 3 giây',
+             sec:'Cảnh', secs:'Các cảnh', secPh:'Lời thoại / thuyết minh của cảnh', hinh:'Hình ảnh / cảnh quay', cta:'CTA (kêu gọi hành động)', tiLe:['9:16','1:1','16:9'] },
+  POST:    { label:'Bài post', icon:'📝', mo_ta:'Mở bài · thân bài · hashtag', hook:'Câu mở bài', hookPh:'Dòng đầu hiện trên bảng tin — quyết định có người bấm “Xem thêm”',
+             sec:'Đoạn', secs:'Thân bài', secPh:'Nội dung đoạn', cta:'Kêu gọi hành động', tiLe:[] },
+  ANH:     { label:'Ảnh / banner', icon:'🖼️', mo_ta:'Chữ trên ảnh · brief thiết kế', hook:'Headline trên ảnh', hookPh:'Dòng chữ lớn nhất, đọc được trong 1 giây',
+             cta:'Nút / CTA trên ảnh', tiLe:['1:1','4:5','9:16','16:9'] },
+  CAROUSEL:{ label:'Carousel', icon:'🎠', mo_ta:'Bìa · từng slide · slide chốt', hook:'Slide bìa (tiêu đề)', hookPh:'Tiêu đề slide đầu — lý do để vuốt tiếp',
+             sec:'Slide', secs:'Các slide nội dung', secPh:'Nội dung chữ của slide', hinh:'Hình minh hoạ', cta:'Slide chốt (CTA)', tiLe:['1:1','4:5'] },
+};
+const ddOf = s => DINH_DANG_FE[(s&&s.dinh_dang)||'VIDEO'] ? ((s&&s.dinh_dang)||'VIDEO') : 'VIDEO';
+// P4 — gộp toàn văn kịch bản (để quét claim) — khớp scriptText ở worker: phủ cả ghi chú hình + chữ trong chi_tiet
 function scriptTextFE(s){
-  const secs=Array.isArray(s.sections)?s.sections.map(x=>(x&&x.text)||'').join('\n'):'';
-  return [s.tieu_de,s.hook,secs,s.cta].filter(Boolean).join('\n');
+  const secs=Array.isArray(s.sections)?s.sections.map(x=>[(x&&x.text)||'',(x&&x.hinh)||''].filter(Boolean).join('\n')).join('\n'):'';
+  const ct=(s.chi_tiet&&typeof s.chi_tiet==='object')?s.chi_tiet:{};
+  const ctText=Object.keys(ct).filter(k=>k!=='media_url'&&k!=='ti_le').map(k=>ct[k]).filter(Boolean).join('\n');
+  return [s.tieu_de,s.hook,secs,s.cta,ctText].filter(Boolean).join('\n');
+}
+// Nội dung đăng/copy ghép theo định dạng — khớp noiDungDang ở worker
+function noiDungDangFE(sc){
+  const ct=sc.chi_tiet||{}; const dd=ddOf(sc); const than=(sc.sections||[]).map(x=>(x&&x.text)||'');
+  let parts;
+  if(dd==='POST') parts=[sc.hook, ...than, sc.cta, ct.hashtag];
+  else if(dd==='ANH') parts=[ct.caption || [sc.hook, ct.chu_phu].filter(Boolean).join('\n'), sc.cta, ct.hashtag];
+  else if(dd==='CAROUSEL') parts=[ct.caption || [sc.hook, ...than].filter(Boolean).join('\n'), sc.cta, ct.hashtag];
+  else parts=[sc.hook, ...than, sc.cta];
+  return parts.filter(Boolean).join('\n\n');
 }
 // P4 — bộ khung kịch bản theo 12 framework THẬT (rule-based, KHÔNG bịa số liệu).
 // Placeholder chỉ chèn dữ liệu THẬT: {SP} tên sản phẩm · {DONG} dòng · {ANGLE} góc nhìn · {AUD} đối tượng.
@@ -649,8 +674,8 @@ function AppProvider({children}){
       upsertFramework: async o=>{ S.frameworks ||= []; if(o.id){ const i=S.frameworks.findIndex(x=>x.id===o.id); if(i>=0) S.frameworks[i]={...S.frameworks[i],...o}; } else S.frameworks.push({id:uid('fw'),ten:'',mo_ta:'',thu_tu:(S.frameworks.length+1),active:true,created_at:now(),...o}); commit(); return true; },
       deleteFramework: async id=>{ S.frameworks=(S.frameworks||[]).filter(x=>x.id!==id); commit(); return true; },
       upsertScript: async o=>{ S.scripts ||= []; const flags=scanClaims(scriptTextFE(o), S.claim_cam); if(flags.some(f=>f.muc_do==='CHAN')){ return {ok:false, blocked:flags.filter(f=>f.muc_do==='CHAN').map(f=>f.cum_tu)}; }
-        if(o.id){ const i=S.scripts.findIndex(x=>x.id===o.id); if(i>=0) S.scripts[i]={...S.scripts[i],...o, claim_flags:flags, version:(S.scripts[i].version||1)+1, updated_at:now()}; }
-        else S.scripts.unshift({ id:uid('scr'), tieu_de:'', hook:'', sections:[], cta:'', framework_id:null, san_pham_id:null, kenh_id:null, brand_voice:'', trang_thai:'NHAP', version:1, claim_flags:flags, created_at:now(), created_by:meRef.current.id, created_by_name:meRef.current.ho_ten, updated_at:now(), ...o }); commit(); return {ok:true}; },
+        if(o.id){ const i=S.scripts.findIndex(x=>x.id===o.id); if(i>=0){ if(o.dinh_dang && o.dinh_dang!==ddOf(S.scripts[i])) return {ok:false,msg:'Không đổi được định dạng sau khi tạo'}; S.scripts[i]={...S.scripts[i],...o, dinh_dang:ddOf(S.scripts[i]), claim_flags:flags, version:(S.scripts[i].version||1)+1, updated_at:now()}; } }
+        else { const nid=uid('scr'); S.scripts.unshift({ id:nid, tieu_de:'', hook:'', sections:[], cta:'', framework_id:null, san_pham_id:null, kenh_id:null, brand_voice:'', trang_thai:'NHAP', version:1, dinh_dang:'VIDEO', chi_tiet:{}, claim_flags:flags, created_at:now(), created_by:meRef.current.id, created_by_name:meRef.current.ho_ten, updated_at:now(), ...o, id:nid }); commit(); return {ok:true, id:nid}; } commit(); return {ok:true}; },
       deleteScript: async id=>{ S.scripts=(S.scripts||[]).filter(x=>x.id!==id); commit(); return true; },
       fetchScriptVersions: async id=>({ versions: [] }),
       submitApproval: async (doi_tuong,doi_tuong_id)=>{ S.approvals ||= []; const arr = doi_tuong==='SCRIPT'?S.scripts:S.content_items; const o=(arr||[]).find(x=>x.id===doi_tuong_id); if(!o) return {ok:false,msg:'Không tìm thấy'};
@@ -725,6 +750,7 @@ function AppProvider({children}){
       deleteFootage: async id=>{ S.footage=(S.footage||[]).filter(x=>x.id!==id);
         (S.shot_list||[]).forEach(sl=>{ if(sl.footage_id===id){ sl.footage_id=null; sl.trang_thai='CHUA_QUAY'; } }); commit(); return true; },
       genShotList: async sid=>{ S.shot_list ||= []; const sc=(S.scripts||[]).find(x=>x.id===sid); if(!sc) return {ok:false,msg:'Không tìm thấy kịch bản'};
+        if(ddOf(sc)!=='VIDEO') return {ok:false,msg:'Shot list chỉ áp dụng cho định dạng Video'};
         if((S.shot_list||[]).some(x=>x.script_id===sid)) return {ok:false,msg:'Kịch bản này đã có shot list'};
         const rows=[]; if((sc.hook||'').trim()) rows.push(['Hook — '+String(sc.hook).slice(0,60),sc.hook]);
         (sc.sections||[]).forEach((x,i)=>{ if(x&&(x.label||x.text)) rows.push([x.label||('Cảnh '+(i+1)),x.text||'']); });
@@ -808,7 +834,7 @@ function AppProvider({children}){
         if(ci.trang_thai!=='DUYET') return {ok:false,msg:'Chỉ đẩy nội dung ĐÃ DUYỆT sang seeding'};
         if((S.content_topics||[]).some(x=>x.content_item_id===id)) return {ok:false,msg:'Nội dung này đã có trong thư viện seeding'};
         const sc=(S.scripts||[]).filter(x=>x.content_item_id===id && x.trang_thai==='DUYET')[0];
-        let noi_dung=''; if(sc) noi_dung=[sc.hook,...((sc.sections||[]).map(x=>(x&&x.text)||'')),sc.cta].filter(Boolean).join('\n\n');
+        let noi_dung=''; if(sc) noi_dung=noiDungDangFE(sc);
         if(!noi_dung) noi_dung=(ci.chi_tiet||{}).noi_dung||'';
         const tid=uid('t');
         S.content_topics.unshift({ id:tid, chu_de:ci.tieu_de||'', noi_dung, loai_bai:(o&&o.loai_bai)||'', muc_tieu:(o&&o.muc_tieu)||'',
@@ -1288,7 +1314,7 @@ const NAV_GROUPS = {
     {key:'g_content', label:'Content', icon:'✍️', items:[
       {key:'strategy', label:'Chiến lược', icon:'🎯'},
       {key:'plan', label:'Kế hoạch nội dung', short:'Kế hoạch', icon:'🗓️'},
-      {key:'studio', label:'Creative Studio', short:'Kịch bản', icon:'✍️'},
+      {key:'studio', label:'Creative Studio', short:'Studio', icon:'✍️'},
       {key:'sanxuat', label:'Quản lý sản xuất', short:'Sản xuất', icon:'🏭'},
       {key:'approve', label:'Hàng đợi duyệt', short:'Duyệt', icon:'🛂'},
       {key:'air', label:'Đăng bài', short:'Đăng', icon:'🚀'},
@@ -1329,7 +1355,7 @@ const NAV_GROUPS = {
     {key:'g_content', label:'Content', icon:'✍️', items:[
       {key:'strategy', label:'Chiến lược', icon:'🎯'},
       {key:'plan', label:'Kế hoạch nội dung', short:'Kế hoạch', icon:'🗓️'},
-      {key:'studio', label:'Creative Studio', short:'Kịch bản', icon:'✍️'},
+      {key:'studio', label:'Creative Studio', short:'Studio', icon:'✍️'},
       {key:'sanxuat', label:'Quản lý sản xuất', short:'Sản xuất', icon:'🏭'},
       {key:'approve', label:'Hàng đợi duyệt', short:'Duyệt', icon:'🛂'},
       {key:'air', label:'Đăng bài', short:'Đăng', icon:'🚀'},
@@ -2707,64 +2733,150 @@ function CauNoiFootage(){
     </>}
   </div>;
 }
-function CreativeStudio(){
-  const { db, notify } = useApp();
-  const scripts = (db.scripts||[]);
-  const [edit,setEdit]=useState(null);           // script đang soạn (null = danh sách)
-  const [q,setQ]=useState('');
-  const [tab,setTab]=useState('kich_ban');
-  const nameById=(arr,id)=>{ const x=(arr||[]).find(o=>o.id===id); return x?x.ten:''; };
-  const filtered = scripts.filter(s=>!q || (s.tieu_de||'').toLowerCase().includes(q.toLowerCase()) || (s.hook||'').toLowerCase().includes(q.toLowerCase()));
-  if(edit) return <ScriptEditor init={edit} onClose={()=>setEdit(null)}/>;
-  const TabBar = <Tabs size="sm" active={tab} onChange={setTab} tabs={[{key:'kich_ban',label:'✍️ Kịch bản'},{key:'loc_video',label:'🎬 Lọc & dựng video'}]}/>;
-  if(tab==='loc_video') return <LocVideoTool tabBar={TabBar}/>;
-  return <div className="space-y-4">
-    <PageHeader title={<>✍️ Creative Studio — Kịch bản</>} right={<Btn variant="brand" onClick={()=>setEdit({})}>＋ Kịch bản mới</Btn>}/>
-    {TabBar}
-    <div className="bg-white rounded-2xl border border-line shadow-card p-3">
-      <div className="text-[11px] text-ink-muted leading-relaxed">
-        Sinh nháp theo <b>framework thật</b> + <b>thông số sản phẩm thật</b> — công cụ <b>chỉ chèn dữ liệu bạn đã nhập</b>, không tự bịa số liệu.
-        Guardrail quét <b>cụm từ claim cấm</b>: mức <span className="text-rose-600 font-semibold">CHẶN</span> không cho lưu, mức <span className="text-amber-600 font-semibold">Cảnh báo</span> vẫn lưu nhưng đánh dấu để rà lại.
+/* ============================================================
+   CONTENT OS · P4 — CREATIVE STUDIO ĐA ĐỊNH DẠNG (ADR-001)
+   Video ngắn · Bài post · Ảnh/banner · Carousel — cùng bảng scripts, khác khuôn soạn + khung xem trước
+============================================================ */
+const TI_LE_CLS = { '9:16':'aspect-[9/16]', '1:1':'aspect-square', '4:5':'aspect-[4/5]', '16:9':'aspect-video' };
+// Khung xem trước — dùng chung cho trình soạn VÀ Hàng đợi duyệt: người duyệt thấy đúng thứ sẽ lên kênh
+function ScriptPreview({s, kenhTen}){
+  const dd=ddOf(s); const ct=s.chi_tiet||{}; const ten=kenhTen||'Kingsmen';
+  const secs=(s.sections||[]).filter(x=>x&&(x.text||x.label||x.hinh));
+  const tl=ct.ti_le||(DINH_DANG_FE[dd].tiLe[0]||'1:1');
+  const hep = tl==='9:16' ? ' max-w-[220px] mx-auto' : ' w-full';
+  const Caption = () => (ct.caption||ct.hashtag) ? <div className="text-xs text-ink whitespace-pre-line leading-relaxed">{[ct.caption,ct.hashtag].filter(Boolean).join('\n')}</div> : null;
+  if(dd==='VIDEO') return <div className="space-y-2">
+    <div className={"relative bg-ink rounded-2xl overflow-hidden text-white "+(TI_LE_CLS[tl]||TI_LE_CLS['9:16'])+hep}>
+      <div className="absolute top-2 left-3 text-[10px] opacity-70">{ten}</div>
+      <div className="absolute inset-x-0 top-[36%] px-3 text-center font-display font-extrabold text-base leading-snug">{s.hook||<span className="opacity-40">Hook hiện ở đây</span>}</div>
+      {s.cta && <div className="absolute inset-x-3 bottom-3 rounded-lg bg-brand px-2 py-1.5 text-center text-[11px] font-semibold">{s.cta}</div>}
+    </div>
+    {secs.length>0 && <ol className="space-y-1.5">{secs.map((x,i)=><li key={i} className="text-[11px] leading-snug">
+      <span className="font-semibold text-brand-dark">{x.label||('Cảnh '+(i+1))}:</span> <span className="text-ink-soft">{x.text}</span>
+      {x.hinh && <span className="block text-ink-muted">🎥 {x.hinh}</span>}</li>)}</ol>}
+  </div>;
+  if(dd==='POST') return <div className="rounded-xl border border-line bg-white p-3">
+    <div className="flex items-center gap-2 mb-2">
+      <div className="w-8 h-8 rounded-full bg-brand flex items-center justify-center text-white font-display font-bold text-xs">{ten.slice(0,1)}</div>
+      <div><div className="text-xs font-semibold text-ink leading-tight">{ten}</div><div className="text-[10px] text-slate-400">Vừa xong · 🌐</div></div>
+    </div>
+    <div className="text-[13px] text-ink whitespace-pre-line leading-relaxed">{noiDungDangFE(s)||<span className="text-slate-300 italic">Nội dung bài hiện ở đây</span>}</div>
+    {ct.media_url && <img src={ct.media_url} alt="" className="mt-2 rounded-lg w-full object-cover max-h-72"/>}
+    <div className="flex justify-around text-[11px] text-slate-400 border-t border-line mt-2 pt-1.5"><span>👍 Thích</span><span>💬 Bình luận</span><span>↗ Chia sẻ</span></div>
+  </div>;
+  if(dd==='ANH') return <div className="space-y-2">
+    <div className={"relative rounded-xl overflow-hidden bg-brand-bg border border-line "+(TI_LE_CLS[tl]||'aspect-square')+hep}>
+      {ct.media_url && <img src={ct.media_url} alt="" className="absolute inset-0 w-full h-full object-cover"/>}
+      <div className={"absolute inset-0 flex flex-col justify-end p-3 "+(ct.media_url?'bg-gradient-to-t from-ink/85 via-ink/25 to-transparent text-white':'text-ink')}>
+        <div className="font-display font-extrabold text-lg leading-tight">{s.hook||<span className="opacity-40">Headline</span>}</div>
+        {ct.chu_phu && <div className="text-xs mt-1 opacity-90">{ct.chu_phu}</div>}
+        {s.cta && <div className="mt-2 self-start rounded-full bg-brand text-white text-[11px] font-semibold px-3 py-1">{s.cta}</div>}
       </div>
     </div>
-    <div className="flex gap-2"><Input value={q} onChange={e=>setQ(e.target.value)} placeholder="Tìm kịch bản…"/></div>
-    {filtered.length===0 ? <Empty>Chưa có kịch bản. Bấm "Kịch bản mới" để bắt đầu.</Empty> :
-      <div className="grid sm:grid-cols-2 gap-3">{filtered.map(s=>{
-        const warn=(s.claim_flags||[]).filter(f=>f.muc_do==='CANH_BAO').length;
-        return <div key={s.id} className="bg-white rounded-2xl border border-line shadow-card p-3 flex flex-col">
-          <div className="flex items-start justify-between gap-2">
-            <div className="font-display font-bold text-ink text-sm flex-1 min-w-0">{s.tieu_de||s.hook||'(chưa đặt tên)'}</div>
-            <span className={"text-[10px] px-1.5 py-0.5 rounded-full font-semibold shrink-0 "+(SCRIPT_ST_STYLE[s.trang_thai]||SCRIPT_ST_STYLE.NHAP)}>{SCRIPT_ST[s.trang_thai]||'Nháp'}</span>
+    <Caption/>
+    {ct.brief && <div className="text-[11px] text-ink-muted leading-snug"><b>Brief thiết kế:</b> {ct.brief}</div>}
+  </div>;
+  // CAROUSEL: bìa → các slide → slide chốt, vuốt ngang như trên kênh
+  const slides=[{bia:true,text:s.hook}, ...secs, ...(s.cta?[{chot:true,text:s.cta}]:[])];
+  return <div className="space-y-2">
+    <div className="flex gap-2 overflow-x-auto snap-x snap-mandatory no-scrollbar pb-1">
+      {slides.map((x,i)=><div key={i} className={"snap-start shrink-0 w-[72%] rounded-xl border border-line p-3 flex flex-col "+(TI_LE_CLS[tl]||'aspect-square')+(x.bia?' bg-ink text-white':x.chot?' bg-brand text-white':' bg-brand-bg text-ink')}>
+        <div className="text-[10px] opacity-60">{i+1}/{slides.length}</div>
+        <div className="mt-auto">
+          {x.bia ? <div className="font-display font-extrabold text-base leading-snug">{x.text||<span className="opacity-40">Slide bìa</span>}</div>
+            : <>{x.label && !x.chot && <div className="text-xs font-semibold mb-0.5">{x.label}</div>}<div className="text-xs leading-snug">{x.text}</div></>}
+          {x.hinh && <div className="text-[10px] opacity-70 mt-1">🖼 {x.hinh}</div>}
+        </div>
+      </div>)}
+    </div>
+    <Caption/>
+  </div>;
+}
+
+function CreativeStudio(){
+  const { db } = useApp();
+  const scripts = (db.scripts||[]);
+  const [edit,setEdit]=useState(null);           // nội dung đang soạn (null = thư viện)
+  const [q,setQ]=useState(''); const [loc,setLoc]=useState('ALL'); const [st,setSt]=useState('');
+  const [tab,setTab]=useState('sang_tao');
+  const nameById=(arr,id)=>{ const x=(arr||[]).find(o=>o.id===id); return x?x.ten:''; };
+  if(edit) return <ScriptEditor init={edit} onClose={()=>setEdit(null)}/>;
+  const TabBar = <Tabs size="sm" active={tab} onChange={setTab} tabs={[{key:'sang_tao',label:'✍️ Sáng tạo nội dung'},{key:'loc_video',label:'🎬 Lọc & dựng video'}]}/>;
+  if(tab==='loc_video') return <LocVideoTool tabBar={TabBar}/>;
+  const kw=q.trim().toLowerCase();
+  const filtered = scripts.filter(s=>(loc==='ALL'||ddOf(s)===loc) && (!st||(s.trang_thai||'NHAP')===st)
+    && (!kw || (s.tieu_de||'').toLowerCase().includes(kw) || (s.hook||'').toLowerCase().includes(kw)));
+  return <div className="space-y-4">
+    <PageHeader title={<>✍️ Creative Studio</>} sub="Soạn video, bài post, ảnh và carousel — chỉ chèn dữ kiện sản phẩm thật, tự quét cụm từ claim cấm."/>
+    {TabBar}
+    <div>
+      <Eyebrow className="mb-2">Tạo mới</Eyebrow>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+        {Object.keys(DINH_DANG_FE).map(k=>{ const d=DINH_DANG_FE[k];
+          return <button key={k} onClick={()=>setEdit({dinh_dang:k})}
+            className="text-left bg-white rounded-2xl border border-line shadow-card p-3 hover:border-brand transition active:scale-[.98]">
+            <div className="flex items-center justify-between"><span className="text-2xl leading-none">{d.icon}</span><span className="text-brand-dark font-bold">＋</span></div>
+            <div className="font-display font-bold text-ink text-sm mt-2">{d.label}</div>
+            <div className="text-[11px] text-ink-muted">{d.mo_ta}</div>
+          </button>; })}
+      </div>
+    </div>
+    <div className="space-y-2">
+      <Eyebrow>Thư viện</Eyebrow>
+      <Tabs size="sm" active={loc} onChange={setLoc} tabs={[{key:'ALL',label:'Tất cả',count:scripts.length},
+        ...Object.keys(DINH_DANG_FE).map(k=>({key:k,label:DINH_DANG_FE[k].icon+' '+DINH_DANG_FE[k].label,count:scripts.filter(s=>ddOf(s)===k).length}))]}/>
+      <div className="flex gap-2">
+        <Input className="flex-1 min-w-0" value={q} onChange={e=>setQ(e.target.value)} placeholder="Tìm theo tiêu đề, câu mở…"/>
+        <Select className="!w-auto shrink-0" value={st} onChange={e=>setSt(e.target.value)}>
+          <option value="">Mọi trạng thái</option>{Object.keys(SCRIPT_ST).map(k=><option key={k} value={k}>{SCRIPT_ST[k]}</option>)}
+        </Select>
+      </div>
+    </div>
+    {scripts.length===0 ? <Empty>Chưa có nội dung nào. Chọn một định dạng ở trên để bắt đầu.</Empty> :
+     filtered.length===0 ? <Empty>Không có nội dung khớp bộ lọc.</Empty> :
+      <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-3">{filtered.map(s=>{
+        const warn=(s.claim_flags||[]).filter(f=>f.muc_do==='CANH_BAO').length; const d=DINH_DANG_FE[ddOf(s)];
+        return <button key={s.id} onClick={()=>setEdit(s)} className="text-left bg-white rounded-2xl border border-line shadow-card p-3 flex flex-col hover:border-brand transition">
+          <div className="flex items-center justify-between gap-2">
+            <StatusPill cls={TONE.brand}>{d.icon} {d.label}</StatusPill>
+            <StatusPill cls={SCRIPT_ST_STYLE[s.trang_thai]||SCRIPT_ST_STYLE.NHAP}>{SCRIPT_ST[s.trang_thai]||'Nháp'}</StatusPill>
           </div>
-          {s.hook && <div className="text-xs text-ink-muted mt-1 line-clamp-2">{s.hook}</div>}
+          <div className="font-display font-bold text-ink text-sm mt-2">{s.tieu_de||s.hook||'(chưa đặt tên)'}</div>
+          {s.hook && s.tieu_de && <div className="text-xs text-ink-muted mt-0.5 line-clamp-2">{s.hook}</div>}
           <div className="flex flex-wrap gap-1 mt-2">
-            {nameById(db.frameworks,s.framework_id) && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-brand/10 text-brand-dark">{nameById(db.frameworks,s.framework_id)}</span>}
+            {nameById(db.frameworks,s.framework_id) && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-600">{nameById(db.frameworks,s.framework_id)}</span>}
             {nameById(db.san_pham,s.san_pham_id) && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-600">{nameById(db.san_pham,s.san_pham_id)}</span>}
             {nameById(db.kenh,s.kenh_id) && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-600">{nameById(db.kenh,s.kenh_id)}</span>}
             {warn>0 && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700">⚠ {warn} cảnh báo</span>}
           </div>
-          <div className="flex items-center justify-between mt-3 pt-2 border-t border-line/60">
-            <span className="text-[10px] text-slate-400">v{s.version||1} · {s.created_by_name||''}</span>
-            <button onClick={()=>setEdit(s)} className="text-xs text-brand-dark font-semibold hover:underline">Mở soạn →</button>
-          </div>
-        </div>;
+          <div className="mt-auto pt-2 text-[10px] text-slate-400">v{s.version||1} · {s.created_by_name||''}{s.updated_at?' · '+fmtDate(s.updated_at):''}</div>
+        </button>;
       })}</div>}
   </div>;
 }
+
 function ScriptEditor({init, onClose}){
   const { db, upsertScript, deleteScript, fetchScriptVersions, aiSinhKichBan, aiSinhKichBanGemini, notify } = useApp();
   const brandVoice0 = (db.content_strategy||{}).brand_voice||'';
   const [f,setF]=useState(()=>({
-    id:init.id, framework_id:init.framework_id||'', san_pham_id:init.san_pham_id||'', kenh_id:init.kenh_id||'', content_item_id:init.content_item_id||'',
+    id:init.id, dinh_dang:ddOf(init), framework_id:init.framework_id||'', san_pham_id:init.san_pham_id||'', kenh_id:init.kenh_id||'', content_item_id:init.content_item_id||'',
     tieu_de:init.tieu_de||'', hook:init.hook||'', sections:Array.isArray(init.sections)&&init.sections.length?init.sections:[], cta:init.cta||'',
+    chi_tiet:(init.chi_tiet&&typeof init.chi_tiet==='object')?init.chi_tiet:{},
     brand_voice:init.brand_voice||brandVoice0, trang_thai:init.trang_thai||'NHAP',
   }));
+  const [goc,setGoc]=useState(()=>JSON.stringify(f));   // bản đã lưu gần nhất — để biết còn thay đổi chưa lưu
+  const [pane,setPane]=useState('soan');                // mobile: soan · xem · boi_canh
+  const [moBoiCanh,setMoBoiCanh]=useState(!init.id);   // desktop vừa: bối cảnh gấp gọn khi sửa bản đã có
   const [angle,setAngle]=useState(''); const [busy,setBusy]=useState(false); const [vers,setVers]=useState(null);
   const [aiBusy,setAiBusy]=useState(false); const [aiLoi,setAiLoi]=useState('');
-  // trạng thái lấy từ db (đổi theo kết quả duyệt), không lấy từ form
-  const curTrangThai = ((db.scripts||[]).find(s=>s.id===f.id)||{}).trang_thai || f.trang_thai;
+  const dd=f.dinh_dang; const D=DINH_DANG_FE[dd];
+  const dirty = JSON.stringify(f)!==goc;
+  // trạng thái + version lấy từ db (đổi theo kết quả duyệt), không lấy từ form
+  const cur = (db.scripts||[]).find(s=>s.id===f.id)||{};
+  const curTrangThai = cur.trang_thai || f.trang_thai;
   const product = (db.san_pham||[]).find(p=>p.id===f.san_pham_id);
   const framework = (db.frameworks||[]).find(x=>x.id===f.framework_id);
+  const kenh = (db.kenh||[]).find(x=>x.id===f.kenh_id);
   const audience = (db.content_strategy||{}).audience||'';
   // P10 — chỉ lấy bài học ĐÃ DUYỆT; framework nào thì hiện bài học của framework đó + bài học chung
   const baiHocLienQuan = (db.bai_hoc||[]).filter(b=>b.trang_thai==='DA_DUYET')
@@ -2774,9 +2886,12 @@ function ScriptEditor({init, onClose}){
   const blocked = flags.filter(x=>x.muc_do==='CHAN');
   const warns = flags.filter(x=>x.muc_do!=='CHAN');
   const specArr = product && Array.isArray(product.thong_so) ? product.thong_so.filter(Boolean) : [];
+  const anhKho = (db.footage||[]).filter(x=>x.media_type==='IMAGE' && x.media_url);
 
   const geminiSanSang=useMemo(()=>keyGemini(),[]);
-  const aiViet=async()=>{ if(!f.framework_id) return notify('Chọn framework trước','warn');
+  // Bộ sinh hiện ra khung hook → các phần → CTA: khớp video / post / carousel. Ảnh đơn chưa có khuôn riêng (lát 2).
+  const coBoSinh = dd!=='ANH';
+  const aiViet=async()=>{ if(!f.framework_id) return notify('Chọn framework ở phần Bối cảnh trước','warn');
     setAiBusy(true); setAiLoi('');
     const o={framework_id:f.framework_id, san_pham_id:f.san_pham_id||null, kenh_id:f.kenh_id||null, angle};
     let r=await aiSinhKichBan(o), quaGemini=false;
@@ -2792,105 +2907,198 @@ function ScriptEditor({init, onClose}){
     setAiLoi(r&&r.thieu_key
       ? 'Chưa cắm ANTHROPIC_API_KEY, mà máy này cũng chưa có key Gemini. Cách nhanh nhất: mở Creative Studio › Lọc & dựng video › 🧠 chọn Gemini và dán key — Creative Studio sẽ dùng chung key đó. Hoặc bấm “Sinh nháp theo khuôn” để làm tiếp không cần AI.'
       : ((r&&r.loi)||'AI không viết được')); };
-  const gen=()=>{ if(!framework) return notify('Chọn framework trước','warn');
+  const gen=()=>{ if(!framework) return notify('Chọn framework ở phần Bối cảnh trước','warn');
     const g=generateScript({framework, product, angle, audience});
     setF(v=>({...v, hook:g.hook, sections:g.sections, cta:g.cta, tieu_de:v.tieu_de||((product&&product.ten||'')+' — '+(angle||framework.ten)) }));
     notify('Đã sinh nháp — hãy đọc & sửa cho đúng thực tế'); };
+  const setCt=(k,val)=>setF(v=>({...v, chi_tiet:{...v.chi_tiet,[k]:val}}));
   const setSec=(i,k,val)=>setF(v=>{ const s=v.sections.slice(); s[i]={...s[i],[k]:val}; return {...v,sections:s}; });
-  const addSec=()=>setF(v=>({...v,sections:[...v.sections,{label:'Phần mới',text:''}]}));
+  const addSec=()=>setF(v=>({...v,sections:[...v.sections,{label:D.sec+' '+(v.sections.length+1),text:''}]}));
   const delSec=(i)=>setF(v=>({...v,sections:v.sections.filter((_,j)=>j!==i)}));
-  const save=async()=>{ if(!(f.tieu_de||'').trim() && !(f.hook||'').trim()) return notify('Nhập tiêu đề hoặc hook','warn');
-    if(blocked.length) return notify('Còn cụm bị CHẶN: '+blocked.map(b=>b.cum_tu).join(', '),'err');
-    setBusy(true); const r=await upsertScript({ ...f, framework_id:f.framework_id||null, san_pham_id:f.san_pham_id||null, kenh_id:f.kenh_id||null, content_item_id:f.content_item_id||null }); setBusy(false);
-    if(r&&r.ok){ notify('Đã lưu kịch bản'); onClose(); }
+  const moveSec=(i,d)=>setF(v=>{ const j=i+d; if(j<0||j>=v.sections.length) return v; const s=v.sections.slice(); [s[i],s[j]]=[s[j],s[i]]; return {...v,sections:s}; });
+  const save=async()=>{ if(busy) return;
+    if(!(f.tieu_de||'').trim() && !(f.hook||'').trim()) return notify('Nhập tiêu đề hoặc '+D.hook.toLowerCase(),'warn');
+    if(blocked.length){ setPane('xem'); return notify('Còn cụm bị CHẶN: '+blocked.map(b=>b.cum_tu).join(', '),'err'); }
+    // KHÔNG gửi trang_thai: trạng thái chỉ do luồng duyệt 2 cổng đổi. Gửi kèm giá trị lúc mở màn sẽ
+    // đè CHO_DUYET về NHAP khi lưu lại sau khi đã gửi duyệt (hàng đợi vẫn chờ mà nội dung đã thành nháp).
+    const { trang_thai: _bo, ...payload } = f;
+    setBusy(true); const r=await upsertScript({ ...payload, framework_id:f.framework_id||null, san_pham_id:f.san_pham_id||null, kenh_id:f.kenh_id||null, content_item_id:f.content_item_id||null }); setBusy(false);
+    // Lưu xong vẫn ở lại trình soạn (làm tiếp / gửi duyệt ngay) — không bị đá về danh sách
+    if(r&&r.ok){ const nf={...f, id:f.id||r.id}; setF(nf); setGoc(JSON.stringify(nf)); notify('Đã lưu'); }
     else if(r&&r.blocked){ notify('Bị chặn: '+r.blocked.join(', '),'err'); }
     else if(r&&r.msg){ notify(r.msg,'err'); }
   };
-  const remove=async()=>{ if(!f.id) return onClose(); if(!confirm('Xoá kịch bản này?')) return; const ok=await deleteScript(f.id); if(ok){ notify('Đã xoá'); onClose(); } };
+  const saveRef=useRef(save); saveRef.current=save;
+  // Ctrl/Cmd+S để lưu nhanh trên máy tính
+  useEffect(()=>{ const h=e=>{ if((e.ctrlKey||e.metaKey)&&String(e.key).toLowerCase()==='s'){ e.preventDefault(); saveRef.current(); } };
+    window.addEventListener('keydown',h); return ()=>window.removeEventListener('keydown',h); },[]);
+  const dong=()=>{ if(dirty && !confirm('Có thay đổi chưa lưu. Bỏ thay đổi và quay lại?')) return; onClose(); };
+  const remove=async()=>{ if(!f.id) return onClose(); if(!confirm('Xoá nội dung này?')) return; const ok=await deleteScript(f.id); if(ok){ notify('Đã xoá'); onClose(); } };
   const loadVers=async()=>{ if(!f.id) return; const r=await fetchScriptVersions(f.id); setVers(r.versions||[]); };
 
   const Chip=({c})=><span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">{c}</span>;
-  return <div className="space-y-4">
-    <PageHeader back="Danh sách" onBack={onClose} title={f.id?'Sửa kịch bản':'Kịch bản mới'} right={f.id && <span className="text-[11px] text-slate-400">v{init.version||1}</span>}/>
-
-    {/* Thiết lập + sinh nháp */}
-    <div className="bg-white rounded-2xl border border-line shadow-card p-4 space-y-3">
-      {/* Nối kịch bản về mục kế hoạch — thiếu liên kết này thì Kế hoạch vs Thực hiện và Dashboard đếm sai */}
-      <Field label="Thuộc mục kế hoạch nào" hint="Nối để đối chiếu Kế hoạch vs Thực hiện và xếp đúng hệ KPI">
-        <Select value={f.content_item_id} onChange={e=>{ const id=e.target.value; const ci=(db.content_items||[]).find(c=>c.id===id);
-          setF(v=>({...v, content_item_id:id, ...(ci?{ framework_id:v.framework_id||ci.framework_id||'', san_pham_id:v.san_pham_id||ci.san_pham_id||'', kenh_id:v.kenh_id||ci.kenh_id||'' }:{}) })); }}>
-          <option value="">— Chưa nối (nên chọn) —</option>
-          {(db.content_items||[]).map(c=><option key={c.id} value={c.id}>{(c.tieu_de||'(không tên)')+(c.thang?(' · '+c.thang):'')}</option>)}
-        </Select></Field>
-      {!f.content_item_id && <div className="text-[11px] text-amber-600 -mt-1">⚠ Chưa nối vào kế hoạch → bài này sẽ không được tính vào tỷ lệ hoàn thành và không vào hệ KPI nào.</div>}
-      <div className="grid sm:grid-cols-3 gap-2">
-        <Field label="Framework (nhóm kịch bản)"><Select value={f.framework_id} onChange={e=>setF({...f,framework_id:e.target.value})}><option value="">— Chọn —</option>{(db.frameworks||[]).filter(x=>x.active!==false).map(x=><option key={x.id} value={x.id}>{x.ten}</option>)}</Select></Field>
-        <Field label="Sản phẩm (spec thật)"><Select value={f.san_pham_id} onChange={e=>setF({...f,san_pham_id:e.target.value})}><option value="">— Không gắn —</option>{(db.san_pham||[]).filter(x=>x.active!==false).map(x=><option key={x.id} value={x.id}>{x.ten}</option>)}</Select></Field>
-        <Field label="Kênh"><Select value={f.kenh_id} onChange={e=>setF({...f,kenh_id:e.target.value})}><option value="">— Không —</option>{(db.kenh||[]).filter(x=>x.active!==false).map(x=><option key={x.id} value={x.id}>{x.ten}</option>)}</Select></Field>
-      </div>
-      <Field label="Góc nhìn / thông điệp (angle)" hint="VD: chống ố vàng cho nền nhà tắm"><Input value={angle} onChange={e=>setAngle(e.target.value)} placeholder="Nhập angle để sinh sát hơn…"/></Field>
-      {/* P10 — vòng lặp học: bài học ĐÃ DUYỆT chảy ngược về đây khi soạn */}
-      {baiHocLienQuan.length>0 && <div className="rounded-xl bg-brand-bg border border-brand/30 p-2">
-        <div className="text-[11px] font-semibold text-brand-dark mb-1">🎓 Bài học đã duyệt từ dữ liệu thật:</div>
-        <ul className="space-y-1">{baiHocLienQuan.map(b=>
-          <li key={b.id} className="text-[11px] text-ink-soft leading-snug">• <b>{b.tieu_de}</b>{b.noi_dung?' — '+b.noi_dung:''}</li>)}
-        </ul>
-        <div className="text-[10px] text-ink-muted mt-1">Đây là số đã quan sát được, không phải dự đoán bài này sẽ chạy tốt.</div>
-      </div>}
-      {product && <div className="rounded-xl bg-emerald-50/60 border border-emerald-100 p-2">
-        <div className="text-[11px] font-semibold text-emerald-800 mb-1">✓ Chỉ dùng dữ kiện thật của “{product.ten}”:</div>
-        <div className="flex flex-wrap gap-1">
-          {specArr.map((s,i)=><Chip key={i} c={s}/>)}
-          {product.tieu_chuan && <Chip c={'TC: '+product.tieu_chuan}/>}
-          {specArr.length===0 && !product.tieu_chuan && <span className="text-[11px] text-amber-600">Sản phẩm chưa có thông số — nên bổ sung ở mục Sản phẩm & Claim.</span>}
-        </div>
-      </div>}
-      <div className="flex flex-wrap gap-2 items-center">
-        <Btn variant="brand" onClick={aiViet} disabled={aiBusy}>{aiBusy?'AI đang viết…':'🤖 Nhờ AI viết'}</Btn>
-        <Btn variant="ghost" onClick={gen}>✨ Sinh nháp theo khuôn</Btn>
-        {geminiSanSang && <span className="text-[10px] text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-2 py-0.5">
-          dùng chung key Gemini của bạn ({geminiSanSang.model}) nếu app chưa cắm key riêng</span>}
-      </div>
-      {aiLoi && <div className={CALLOUT.danger}>{aiLoi}</div>}
-      <p className="text-[10px] text-slate-400">AI chỉ được dùng thông số thật của sản phẩm; nếu viết trúng cụm bị chặn thì hệ thống từ chối, không đưa ra cho bạn.</p>
+  const pc=k=>(pane===k?'block':'hidden')+' lg:block';
+  const tomTatBoiCanh=[framework&&framework.ten, product&&product.ten, kenh&&kenh.ten].filter(Boolean).join(' · ')||'Chưa chọn framework / sản phẩm / kênh';
+  const TiLe = D.tiLe.length>0 && <Field label="Tỉ lệ khung"><div className="flex gap-1 flex-wrap">{D.tiLe.map(t=>
+    <button key={t} type="button" onClick={()=>setCt('ti_le',t)} className={"px-3 py-1.5 rounded-lg text-xs font-semibold border transition "+(((f.chi_tiet.ti_le||D.tiLe[0])===t)?'bg-brand text-white border-brand':'bg-white text-ink-muted border-line hover:border-brand')}>{t}</button>)}</div></Field>;
+  const ChonAnh = ({label='Ảnh'}) => <Field label={label} hint="Chọn ảnh trong Kho footage hoặc dán link ảnh">
+    <div className="flex gap-2">
+      <Select className="flex-1 min-w-0" value={anhKho.some(a=>a.media_url===f.chi_tiet.media_url)?f.chi_tiet.media_url:''} onChange={e=>setCt('media_url',e.target.value)}>
+        <option value="">{anhKho.length?'— Chọn từ Kho footage —':'Kho footage chưa có ảnh'}</option>
+        {anhKho.map(a=><option key={a.id} value={a.media_url}>{a.ten||a.mo_ta||a.id}</option>)}
+      </Select>
+      {f.chi_tiet.media_url && <Btn variant="ghost" onClick={()=>setCt('media_url','')}>Gỡ</Btn>}
     </div>
+    <Input className="mt-2" value={f.chi_tiet.media_url||''} onChange={e=>setCt('media_url',e.target.value)} placeholder="https://… (link ảnh)"/>
+  </Field>;
 
-    {/* Guardrail */}
-    {flags.length>0 && <div className={"rounded-2xl border p-3 "+(blocked.length?'bg-rose-50 border-rose-200':'bg-amber-50 border-amber-200')}>
-      <div className={"text-sm font-semibold "+(blocked.length?'text-rose-700':'text-amber-700')}>{blocked.length?'⛔ Có cụm từ bị CHẶN — phải gỡ mới lưu được':'⚠ Cụm từ cần rà lại (cảnh báo)'}</div>
-      <ul className="mt-1 space-y-0.5">{flags.map((x,i)=><li key={i} className={"text-xs "+(x.muc_do==='CHAN'?'text-rose-600':'text-amber-700')}>• “{x.cum_tu}”{x.ly_do?' — '+x.ly_do:''} <span className="opacity-60">({x.muc_do==='CHAN'?'CHẶN':'cảnh báo'})</span></li>)}</ul>
-    </div>}
+  return <div className="space-y-3">
+    <PageHeader back="Thư viện" onBack={dong}
+      title={<span>{D.icon} {f.id?(f.tieu_de||D.label):(D.label+' mới')}</span>}
+      right={<>
+        <StatusPill size="md" cls={SCRIPT_ST_STYLE[curTrangThai]||SCRIPT_ST_STYLE.NHAP}>{SCRIPT_ST[curTrangThai]||'Nháp'}</StatusPill>
+        {f.id && <span className="text-[11px] text-slate-400">v{cur.version||init.version||1}</span>}
+        {dirty && <span className="text-[11px] text-amber-600 font-semibold">● Chưa lưu</span>}
+      </>}/>
+    <Tabs className="lg:hidden" active={pane} onChange={setPane} tabs={[
+      {key:'soan',label:'✏️ Soạn'},
+      {key:'xem',label:'👁 Xem trước'+(blocked.length?' ⛔':warns.length?' ⚠':'')},
+      {key:'boi_canh',label:'🧭 Bối cảnh'},
+    ]}/>
 
-    {/* Soạn kịch bản */}
-    <div className="bg-white rounded-2xl border border-line shadow-card p-4 space-y-3">
-      <Field label="Tiêu đề"><Input value={f.tieu_de} onChange={e=>setF({...f,tieu_de:e.target.value})} placeholder="Tên kịch bản"/></Field>
-      <Field label="Hook (câu mở)"><Textarea rows="2" value={f.hook} onChange={e=>setF({...f,hook:e.target.value})} placeholder="Câu đầu giữ chân người xem"/></Field>
-      <div className="space-y-2">
-        <div className="text-[11px] font-semibold text-ink-muted uppercase tracking-wide">Thân kịch bản</div>
-        {f.sections.map((s,i)=><div key={i} className="rounded-xl border border-line p-2">
-          <div className="flex items-center gap-2 mb-1">
-            <input value={s.label||''} onChange={e=>setSec(i,'label',e.target.value)} className="text-xs font-semibold text-brand-dark bg-transparent border-b border-dashed border-line focus:outline-none flex-1"/>
-            <button onClick={()=>delSec(i)} className={LINK.danger+" shrink-0"}>Xoá</button>
+    <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_340px] 2xl:grid-cols-[260px_minmax(0,1fr)_360px] gap-4 items-start">
+      {/* ── BỐI CẢNH: kế hoạch · framework · sản phẩm · kênh · angle — dữ kiện thật để sinh nội dung */}
+      <div className={pc('boi_canh')+" lg:col-start-1 lg:row-start-1 space-y-3 mb-3 lg:mb-0"}>
+        <Card className="space-y-3">
+          <div className="flex items-center justify-between gap-2">
+            <SectionTitle>🧭 Bối cảnh</SectionTitle>
+            <button type="button" onClick={()=>setMoBoiCanh(v=>!v)} className={LINK.edit+" hidden lg:inline 2xl:hidden"}>{moBoiCanh?'Thu gọn':'Sửa'}</button>
           </div>
-          <Textarea rows="2" value={s.text||''} onChange={e=>setSec(i,'text',e.target.value)}/>
-        </div>)}
-        <button onClick={addSec} className="text-xs text-brand-dark font-semibold hover:underline">＋ Thêm phần</button>
+          {!moBoiCanh && <div className="hidden lg:block 2xl:hidden text-xs text-ink-muted -mt-1">{tomTatBoiCanh}</div>}
+          <div className={(moBoiCanh?'':'lg:hidden 2xl:block ')+"space-y-3"}>
+            {/* Nối về mục kế hoạch — thiếu liên kết này thì Kế hoạch vs Thực hiện và Dashboard đếm sai */}
+            <Field label="Thuộc mục kế hoạch nào" hint="Nối để đối chiếu Kế hoạch vs Thực hiện và xếp đúng hệ KPI">
+              <Select value={f.content_item_id} onChange={e=>{ const id=e.target.value; const ci=(db.content_items||[]).find(c=>c.id===id);
+                setF(v=>({...v, content_item_id:id, ...(ci?{ framework_id:v.framework_id||ci.framework_id||'', san_pham_id:v.san_pham_id||ci.san_pham_id||'', kenh_id:v.kenh_id||ci.kenh_id||'' }:{}) })); }}>
+                <option value="">— Chưa nối (nên chọn) —</option>
+                {(db.content_items||[]).map(c=><option key={c.id} value={c.id}>{(c.tieu_de||'(không tên)')+(c.thang?(' · '+c.thang):'')}</option>)}
+              </Select></Field>
+            {!f.content_item_id && <div className="text-[11px] text-amber-600 -mt-2">⚠ Chưa nối vào kế hoạch → không được tính vào tỷ lệ hoàn thành và không vào hệ KPI nào.</div>}
+            <div className="grid sm:grid-cols-3 lg:grid-cols-3 2xl:grid-cols-1 gap-x-2">
+              <Field label="Framework"><Select value={f.framework_id} onChange={e=>setF({...f,framework_id:e.target.value})}><option value="">— Chọn —</option>{(db.frameworks||[]).filter(x=>x.active!==false).map(x=><option key={x.id} value={x.id}>{x.ten}</option>)}</Select></Field>
+              <Field label="Sản phẩm (spec thật)"><Select value={f.san_pham_id} onChange={e=>setF({...f,san_pham_id:e.target.value})}><option value="">— Không gắn —</option>{(db.san_pham||[]).filter(x=>x.active!==false).map(x=><option key={x.id} value={x.id}>{x.ten}</option>)}</Select></Field>
+              <Field label="Kênh"><Select value={f.kenh_id} onChange={e=>setF({...f,kenh_id:e.target.value})}><option value="">— Không —</option>{(db.kenh||[]).filter(x=>x.active!==false).map(x=><option key={x.id} value={x.id}>{x.ten}</option>)}</Select></Field>
+            </div>
+            <Field label="Góc nhìn / thông điệp (angle)" hint="VD: chống ố vàng cho nền nhà tắm"><Input value={angle} onChange={e=>setAngle(e.target.value)} placeholder="Nhập angle để sinh sát hơn…"/></Field>
+            <Field label="Brand voice (tông giọng)"><Input value={f.brand_voice} onChange={e=>setF({...f,brand_voice:e.target.value})} placeholder="VD: chuyên nghiệp, gần gũi"/></Field>
+            {product && <div className="rounded-xl bg-emerald-50/60 border border-emerald-100 p-2">
+              <div className="text-[11px] font-semibold text-emerald-800 mb-1">✓ Chỉ dùng dữ kiện thật của “{product.ten}”:</div>
+              <div className="flex flex-wrap gap-1">
+                {specArr.map((s,i)=><Chip key={i} c={s}/>)}
+                {product.tieu_chuan && <Chip c={'TC: '+product.tieu_chuan}/>}
+                {specArr.length===0 && !product.tieu_chuan && <span className="text-[11px] text-amber-600">Sản phẩm chưa có thông số — nên bổ sung ở mục Sản phẩm & Claim.</span>}
+              </div>
+            </div>}
+            {/* P10 — vòng lặp học: bài học ĐÃ DUYỆT chảy ngược về đây khi soạn */}
+            {baiHocLienQuan.length>0 && <div className="rounded-xl bg-brand-bg border border-brand/30 p-2">
+              <div className="text-[11px] font-semibold text-brand-dark mb-1">🎓 Bài học đã duyệt từ dữ liệu thật:</div>
+              <ul className="space-y-1">{baiHocLienQuan.map(b=>
+                <li key={b.id} className="text-[11px] text-ink-soft leading-snug">• <b>{b.tieu_de}</b>{b.noi_dung?' — '+b.noi_dung:''}</li>)}
+              </ul>
+              <div className="text-[10px] text-ink-muted mt-1">Đây là số đã quan sát được, không phải dự đoán bài này sẽ chạy tốt.</div>
+            </div>}
+          </div>
+        </Card>
       </div>
-      <Field label="CTA (kêu gọi hành động)"><Textarea rows="2" value={f.cta} onChange={e=>setF({...f,cta:e.target.value})}/></Field>
-      <div className="grid sm:grid-cols-2 gap-2">
-        <Field label="Brand voice (tông giọng)"><Input value={f.brand_voice} onChange={e=>setF({...f,brand_voice:e.target.value})} placeholder="VD: chuyên nghiệp, gần gũi"/></Field>
-        <Field label="Trạng thái"><Select value={f.trang_thai} onChange={e=>setF({...f,trang_thai:e.target.value})}>{Object.keys(SCRIPT_ST).map(k=><option key={k} value={k}>{SCRIPT_ST[k]}</option>)}</Select></Field>
+
+      {/* ── SOẠN: khuôn đổi theo định dạng */}
+      <div className={pc('soan')+" lg:col-start-1 lg:row-start-2 2xl:col-start-2 2xl:row-start-1 space-y-3"}>
+        <Card className="space-y-2">
+          {coBoSinh ? <>
+            <div className="flex flex-wrap gap-2 items-center">
+              <Btn variant="brand" onClick={aiViet} disabled={aiBusy}>{aiBusy?'AI đang viết…':'🤖 Nhờ AI viết'}</Btn>
+              <Btn variant="ghost" onClick={gen}>✨ Sinh nháp theo khuôn</Btn>
+              {!f.framework_id && <span className="text-[11px] text-amber-600">Chọn framework ở Bối cảnh để dùng</span>}
+              {geminiSanSang && <span className="text-[10px] text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-2 py-0.5">dùng chung key Gemini ({geminiSanSang.model}) nếu app chưa cắm key riêng</span>}
+            </div>
+            {aiLoi && <div className={CALLOUT.danger}>{aiLoi}</div>}
+            <p className="text-[10px] text-slate-400">AI chỉ được dùng thông số thật của sản phẩm; nếu viết trúng cụm bị chặn thì hệ thống từ chối, không đưa ra cho bạn.</p>
+          </> : <p className="text-[11px] text-ink-muted">AI và khuôn sinh cho <b>ảnh đơn</b> sẽ có ở bản sau — hiện soạn tay, khung xem trước cập nhật ngay khi gõ.</p>}
+        </Card>
+
+        <Card>
+          <Field label="Tiêu đề (tên nội bộ)"><Input value={f.tieu_de} onChange={e=>setF({...f,tieu_de:e.target.value})} placeholder={'Tên '+D.label.toLowerCase()+' để tìm lại'}/></Field>
+          <Field label={D.hook}><Textarea rows="2" value={f.hook} onChange={e=>setF({...f,hook:e.target.value})} placeholder={D.hookPh}/></Field>
+          {dd==='ANH' && <Field label="Chữ phụ trên ảnh"><Textarea rows="2" value={f.chi_tiet.chu_phu||''} onChange={e=>setCt('chu_phu',e.target.value)} placeholder="Dòng giải thích ngắn dưới headline"/></Field>}
+
+          {D.sec && <div className="space-y-2 mb-3">
+            <div className="flex items-center justify-between">
+              <Eyebrow>{D.secs} ({f.sections.length})</Eyebrow>
+              <button type="button" onClick={addSec} className={LINK.edit}>＋ Thêm {D.sec.toLowerCase()}</button>
+            </div>
+            {f.sections.length===0 && <div className="text-[11px] text-ink-muted rounded-xl border border-dashed border-line p-3 text-center">Chưa có {D.sec.toLowerCase()} nào — bấm “Thêm {D.sec.toLowerCase()}” hoặc sinh nháp ở trên.</div>}
+            {f.sections.map((s,i)=><div key={i} className="rounded-xl border border-line p-2">
+              <div className="flex items-center gap-2 mb-1">
+                <span className="w-5 h-5 shrink-0 rounded-full bg-brand/15 text-brand-dark text-[10px] font-bold flex items-center justify-center">{i+1}</span>
+                <input value={s.label||''} onChange={e=>setSec(i,'label',e.target.value)} className="text-xs font-semibold text-brand-dark bg-transparent border-b border-dashed border-line focus:outline-none flex-1 min-w-0"/>
+                <button type="button" title="Lên" onClick={()=>moveSec(i,-1)} disabled={i===0} className="px-1.5 text-ink-muted hover:text-ink disabled:opacity-30">↑</button>
+                <button type="button" title="Xuống" onClick={()=>moveSec(i,1)} disabled={i===f.sections.length-1} className="px-1.5 text-ink-muted hover:text-ink disabled:opacity-30">↓</button>
+                <button type="button" onClick={()=>delSec(i)} className={LINK.danger+" shrink-0"}>Xoá</button>
+              </div>
+              <Textarea rows="2" value={s.text||''} onChange={e=>setSec(i,'text',e.target.value)} placeholder={D.secPh}/>
+              {D.hinh && <Input className="mt-1.5 !py-2 text-xs" value={s.hinh||''} onChange={e=>setSec(i,'hinh',e.target.value)} placeholder={D.hinh+' (tuỳ chọn)'}/>}
+            </div>)}
+          </div>}
+
+          <Field label={D.cta}><Textarea rows="2" value={f.cta} onChange={e=>setF({...f,cta:e.target.value})}/></Field>
+        </Card>
+
+        <Card>
+          <SectionTitle className="mb-2">{dd==='VIDEO'?'🎬 Thông số video':dd==='POST'?'📝 Đăng kèm':dd==='ANH'?'🖼️ Thiết kế & đăng kèm':'🎠 Thiết kế & đăng kèm'}</SectionTitle>
+          {TiLe}
+          {dd==='VIDEO' && <Field label="Thời lượng mục tiêu"><Select value={f.chi_tiet.thoi_luong||''} onChange={e=>setCt('thoi_luong',e.target.value)}>
+            <option value="">— Chưa đặt —</option>{['15s','30s','60s','1–3 phút','> 3 phút'].map(x=><option key={x} value={x}>{x}</option>)}</Select></Field>}
+          {dd==='ANH' && <Field label="Brief thiết kế" hint="Bố cục, màu, ảnh nền, logo — gửi thẳng cho designer"><Textarea rows="3" value={f.chi_tiet.brief||''} onChange={e=>setCt('brief',e.target.value)}/></Field>}
+          {(dd==='ANH'||dd==='POST') && <ChonAnh label={dd==='POST'?'Ảnh đăng kèm':'Ảnh nền / ảnh chính'}/>}
+          {(dd==='ANH'||dd==='CAROUSEL') && <Field label="Caption đăng kèm"><Textarea rows="3" value={f.chi_tiet.caption||''} onChange={e=>setCt('caption',e.target.value)} placeholder="Nội dung đi kèm ảnh khi đăng"/></Field>}
+          {dd!=='VIDEO' && <Field label="Hashtag"><Input value={f.chi_tiet.hashtag||''} onChange={e=>setCt('hashtag',e.target.value)} placeholder="#kingsmen #keochitmach"/></Field>}
+        </Card>
+      </div>
+
+      {/* ── XEM TRƯỚC + KIỂM TRA: dính cột phải trên máy tính */}
+      <div className={pc('xem')+" lg:col-start-2 lg:row-start-1 lg:row-span-2 2xl:col-start-3 2xl:row-span-1 lg:sticky lg:top-4 space-y-3 mt-3 lg:mt-0"}>
+        <Card>
+          <div className="flex items-center justify-between gap-2 mb-2">
+            <SectionTitle>👁 Xem trước</SectionTitle>
+            <span className="text-[10px] text-slate-400 truncate">{kenh?kenh.ten:D.label}</span>
+          </div>
+          <ScriptPreview s={f} kenhTen={kenh&&kenh.ten}/>
+          <div className="text-[10px] text-slate-400 mt-2">Mô phỏng gần đúng để hình dung — không phải giao diện thật của nền tảng.</div>
+          {dd!=='VIDEO' && noiDungDangFE(f) && <CopyBtn text={noiDungDangFE(f)} className="w-full mt-2" label="📋 Copy nội dung đăng"/>}
+        </Card>
+        {/* Guardrail claim */}
+        {flags.length>0 ? <div className={"rounded-2xl border p-3 "+(blocked.length?'bg-rose-50 border-rose-200':'bg-amber-50 border-amber-200')}>
+          <div className={"text-sm font-semibold "+(blocked.length?'text-rose-700':'text-amber-700')}>{blocked.length?'⛔ Có cụm từ bị CHẶN — phải gỡ mới lưu được':'⚠ Cụm từ cần rà lại (cảnh báo)'}</div>
+          <ul className="mt-1 space-y-0.5">{flags.map((x,i)=><li key={i} className={"text-xs "+(x.muc_do==='CHAN'?'text-rose-600':'text-amber-700')}>• “{x.cum_tu}”{x.ly_do?' — '+x.ly_do:''} <span className="opacity-60">({x.muc_do==='CHAN'?'CHẶN':'cảnh báo'})</span></li>)}</ul>
+        </div> : <div className={CALLOUT.ok}>✓ Không chạm cụm từ claim cấm nào.</div>}
+        {/* P6 — trạng thái 2 cổng duyệt */}
+        {f.id ? <ApprovalStatus doi_tuong="SCRIPT" doi_tuong_id={f.id} trang_thai={curTrangThai} canSubmit={!blocked.length && !dirty}/>
+          : <div className={CALLOUT.note}>Lưu lần đầu để gửi duyệt 2 cổng (Nội dung · Claim).</div>}
+        {f.id && dirty && <div className="text-[11px] text-amber-600 -mt-2">Lưu thay đổi trước khi gửi duyệt — người duyệt chỉ thấy bản đã lưu.</div>}
       </div>
     </div>
 
-    {/* P6 — trạng thái 2 cổng duyệt của kịch bản này */}
-    {f.id && <ApprovalStatus doi_tuong="SCRIPT" doi_tuong_id={f.id} trang_thai={curTrangThai} canSubmit={!blocked.length}/>}
-
-    <div className="flex flex-wrap gap-2">
-      <Btn variant="brand" className="flex-1 min-w-[140px]" onClick={save} disabled={busy||blocked.length>0}>{busy?'Đang lưu…':(blocked.length?'Gỡ cụm bị chặn để lưu':'💾 Lưu kịch bản')}</Btn>
-      {f.id && <Btn variant="ghost" onClick={loadVers}>🕑 Phiên bản</Btn>}
-      {f.id && <Btn variant="ghost" onClick={remove}>🗑 Xoá</Btn>}
-      <Btn variant="ghost" onClick={onClose}>Đóng</Btn>
+    {/* Thanh hành động dính đáy — luôn trong tầm tay khi cuộn form dài. mr-14: chừa chỗ nút chatbot nổi góc phải */}
+    <div className="sticky bottom-[calc(3.75rem+env(safe-area-inset-bottom))] sm:bottom-3 z-10 mr-14">
+      <div className="bg-white/95 backdrop-blur border border-line shadow-lift rounded-2xl p-2 flex items-center gap-2">
+        <button type="button" onClick={()=>setPane('xem')} className={"flex-1 min-w-0 truncate text-left text-[11px] font-semibold px-1 "+(blocked.length?'text-rose-600':warns.length?'text-amber-600':'text-emerald-600')}>
+          {blocked.length?('⛔ '+blocked.length+' cụm bị chặn'):warns.length?('⚠ '+warns.length+' cụm cần rà'):'✓ Sạch claim'}
+          <span className="hidden sm:inline text-slate-400 font-normal"> · Ctrl+S để lưu</span>
+        </button>
+        {f.id && <Btn variant="ghost" className="hidden sm:inline-block" onClick={loadVers}>🕑 Phiên bản</Btn>}
+        {f.id && <Btn variant="ghost" onClick={remove} className="!px-3" >🗑</Btn>}
+        <Btn variant="brand" onClick={save} disabled={busy||blocked.length>0}>{busy?'Đang lưu…':(blocked.length?'Gỡ cụm bị chặn':(dirty||!f.id?'💾 Lưu':'✓ Đã lưu'))}</Btn>
+      </div>
     </div>
 
     {vers && <Modal open={true} onClose={()=>setVers(null)} title="Lịch sử phiên bản" wide>
@@ -2976,15 +3184,17 @@ function ApprovalQueue(){
         return <div key={a.id} className="bg-white rounded-2xl border border-line shadow-card p-3">
           <div className="flex items-start gap-2 flex-wrap">
             <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-brand/10 text-brand-dark font-semibold">{GATE_ICON[a.cong]} {GATE_LABEL[a.cong]}</span>
-            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-600">{a.doi_tuong==='SCRIPT'?'Kịch bản':'Nội dung'}</span>
+            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-600">{a.doi_tuong==='SCRIPT'?(DINH_DANG_FE[ddOf(o)].icon+' '+DINH_DANG_FE[ddOf(o)].label):'Nội dung'}</span>
             <span className="text-[10px] text-slate-400 ml-auto">{a.nguoi_gui_ten} gửi · {fmtDate(a.created_at)}</span>
           </div>
           <div className="font-display font-bold text-ink text-sm mt-2">{o.tieu_de||o.hook||'(không tên)'}</div>
+          {/* Kịch bản/nội dung Studio: duyệt trên đúng khung xem trước như người soạn thấy */}
+          {a.doi_tuong==='SCRIPT' ? <div className="mt-2 max-w-md"><ScriptPreview s={o} kenhTen={((db.kenh||[]).find(k=>k.id===o.kenh_id)||{}).ten}/></div> : <>
           {o.hook && o.tieu_de && <div className="text-xs text-ink-muted mt-0.5">{o.hook}</div>}
           {Array.isArray(o.sections) && o.sections.length>0 && <div className="mt-2 space-y-1">
             {o.sections.map((s,i)=><div key={i} className="text-xs"><span className="font-semibold text-brand-dark">{s.label}: </span><span className="text-slate-600">{s.text}</span></div>)}
           </div>}
-          {o.cta && <div className="text-xs text-slate-600 mt-1"><b>CTA:</b> {o.cta}</div>}
+          {o.cta && <div className="text-xs text-slate-600 mt-1"><b>CTA:</b> {o.cta}</div>}</>}
           {a.cong==='CLAIM' && <div className="mt-2 rounded-xl bg-slate-50 border border-line p-2">
             <div className="text-[11px] font-semibold text-ink-muted mb-1">Rà claim:</div>
             {flags.length===0 ? <div className="text-[11px] text-emerald-600">✓ Không chạm cụm từ cấm nào trong danh sách.</div>
@@ -3066,7 +3276,7 @@ function AirPosts(){
         <div className="space-y-2">{ready.map(o=>
           <button key={o.id} onClick={()=>add(o)} className="w-full text-left rounded-xl border border-line p-2 hover:border-brand transition">
             <div className="flex items-center gap-2">
-              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-600">{o._loai==='SCRIPT'?'Kịch bản':'Nội dung'}</span>
+              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-600">{o._loai==='SCRIPT'?(DINH_DANG_FE[ddOf(o)].icon+' '+DINH_DANG_FE[ddOf(o)].label):'Nội dung'}</span>
               <span className="text-sm font-semibold text-ink flex-1 truncate">{o.tieu_de||o.hook||'(không tên)'}</span>
             </div>
           </button>)}
@@ -4383,7 +4593,8 @@ function FootageForm({init,onClose}){
 function ShotListTab({onBack}){
   const { db, genShotList, addShot, patchShot, deleteShot, notify } = useApp();
   const [sid,setSid]=useState(''); const [pick,setPick]=useState(null); const [busy,setBusy]=useState(false);
-  const scripts=db.scripts||[];
+  // shot list = cảnh QUAY → chỉ kịch bản định dạng Video (ADR-001)
+  const scripts=(db.scripts||[]).filter(x=>ddOf(x)==='VIDEO');
   const shots=(db.shot_list||[]).filter(s=>s.script_id===sid).sort((a,b)=>(a.thu_tu||0)-(b.thu_tu||0));
   const ftById=id=>(db.footage||[]).find(f=>f.id===id);
   const gen=async()=>{ if(!sid) return notify('Chọn kịch bản','warn');

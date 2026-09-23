@@ -136,6 +136,27 @@ App hiện tại KHÔNG phải Next.js/Supabase như brief gốc. Ta **thích �
 
 ---
 
+## 4b. SỔ ADR (quyết định đụng NỀN — không có ADR thì không đổi nền)
+```
+ADR-001 · 2026-09-23 · Creative Studio đa định dạng trên cùng bảng scripts
+Bối cảnh : scripts chỉ có khuôn video; cần soạn cả bài post, ảnh/banner, carousel
+Quyết định: thêm scripts.dinh_dang (VIDEO|POST|ANH|CAROUSEL, bản cũ = VIDEO)
+            + scripts.chi_tiet (JSON: hashtag, chữ trên ảnh, brief thiết kế, slide…);
+            giữ nguyên hook/sections/cta làm phần chung → duyệt/đăng/seeding không phải viết lại.
+            dinh_dang BẤT BIẾN sau khi tạo (đổi định dạng = tạo bản chuyển đổi mới, lát 3).
+Thay cho : (chưa có ADR trước)
+Ảnh hưởng: quét claim phủ cả chi_tiet + sections[].hinh; Duyệt/Đăng hiển thị theo định dạng;
+            Shot list chỉ áp cho VIDEO; nội dung đẩy seeding ghép theo định dạng; AI/khuôn theo định dạng (lát 2)
+Người duyệt: Thiện · Trạng thái: ĐÃ DUYỆT (2026-09-23)
+```
+**Ánh xạ trường theo định dạng** (một nguồn: `DINH_DANG` worker ⟷ `DINH_DANG_FE` frontend):
+| Định dạng | `hook` | `sections[]` | `cta` | `chi_tiet` |
+|---|---|---|---|---|
+| VIDEO | câu mở | cảnh `{label,text,hinh}` | CTA | `ti_le`, `thoi_luong` |
+| POST | câu mở bài | đoạn thân bài | CTA | `hashtag`, `media_url` |
+| ANH | headline trên ảnh | (không dùng) | nút/CTA trên ảnh | `chu_phu`, `brief`, `ti_le`, `caption`, `hashtag`, `media_url` |
+| CAROUSEL | slide bìa | slide `{label,text,hinh}` | slide chốt | `ti_le`, `caption`, `hashtag` |
+
 ## 5. LỘ TRÌNH MODULE (P0–P10) — trạng thái & spec
 
 **Trạng thái:** ✅ xong · 🔨 đang làm · ⏳ chưa · ◐ một phần
@@ -186,7 +207,7 @@ Thiết kế `content_items` bao cả 2 loại:
 - **Lát cắt:** (1) schema + import + list/Kanban → (2) calendar + cảnh báo lệch → (3) đẩy "Chờ duyệt" sang P6.
 - Thêm bảng phụ: `frameworks` (seed 12 nhóm kịch bản §7), `kenh` (seed kênh §7).
 
-### ◐ P4 — Creative Studio — **thay chatbot rời**
+### ◐ P4 — Creative Studio — **thay chatbot rời** · **đa định dạng từ ADR-001** (Video · Post · Ảnh · Carousel — xem §4b + Changelog)
 **Lát cắt (1) ✅ ĐÃ LÀM & DEPLOY (rule-based, chưa cần API key):** bảng `scripts` (content_item_id, framework_id, san_pham_id, kenh_id, tieu_de, hook, sections[JSON], cta, brand_voice, claim_flags[JSON], trang_thai, version) + `script_versions` (snapshot mỗi lần lưu) + cột `content_strategy.brand_voice`. Endpoints `POST/PATCH/DELETE /scripts` + `GET /scripts/:id/versions` (staff-only; Sales không thấy `scripts` trong bootstrap). **Guardrail claim ở BACKEND** (`scanScriptClaims` quét toàn văn qua `scriptText`): mức `CHAN` → **422, không lưu**; `CANH_BAO` → lưu nhưng ghi `claim_flags`. UI `CreativeStudio` (nav `studio`, MKT/ADMIN, dev preview): danh sách thẻ + trình soạn (hook / các phần / CTA sửa tay), **`generateScript` rule-based cho cả 12 framework thật** — chỉ chèn `thong_so`/`tieu_chuan`/`huong_dan` THẬT của sản phẩm, thiếu dữ liệu thì để `[điền …]`, **không tự sinh số liệu**; cảnh báo claim hiện ngay khi gõ + khoá nút Lưu khi còn cụm CHẶN; xem lịch sử phiên bản. Test: 16/16 integration + 6/6 kiểm tra bộ sinh.
 **Lát cắt (2) ⏳ (chờ `ANTHROPIC_API_KEY`):** thay/bổ sung bộ sinh bằng gọi Anthropic từ Worker; Hook Optimizer 5 variant + lý do (**KHÔNG dự đoán %view**). Giữ nguyên guardrail claim + nguyên tắc không bịa số liệu. Fallback về rule-based khi thiếu key.
 
@@ -380,6 +401,15 @@ Tokens Tailwind (inline config trong `seeding-app.html`): `ink #0b3543` (soft #1
 - ✅ **ĐÃ XONG TOÀN BỘ P1→P10.** Còn lại là các mảnh nhỏ: vai trò `TRUONG_MKT`/`GIAM_DOC` riêng, `can()` tập trung (P0), và nâng P4 lên gợi ý AI khi có `ANTHROPIC_API_KEY`.
 
 - ✅ **Build chạy được trên Windows + tự chép `vendor/`** (`build.mjs`) — `ROOT` lấy bằng `fileURLToPath` (trước dùng `URL.pathname` → Windows ra `/D:/OS%20MKT/...`, build ENOENT). `vendor/xlsx.full.min.js` giờ do build chép vào `dist/vendor/` (trước chép tay → xoá `dist/` rồi build là mất import Excel không báo); thiếu file thì build dừng báo lỗi. **Ảnh hưởng dữ liệu: không** — `dist/` build lại giống hệt (cùng hash `app.45b68b75f8.js`/`app.d587eb0cb9.css`). ⚠️ Máy Windows để `core.autocrlf=true` nên `git status` có thể báo `dist/` đổi sau build — chỉ là CRLF, `git add` xong sẽ tự hết.
+
+- ✅ **CREATIVE STUDIO ĐA ĐỊNH DẠNG — lát 1/3** (ADR-001, §4b) — Studio soạn được **Video ngắn · Bài post · Ảnh/banner · Carousel** trên cùng bảng `scripts`.
+  - **Dữ liệu:** cột `dinh_dang` (DEFAULT `'VIDEO'` → kịch bản cũ tự thành Video, không mất gì) + `chi_tiet` JSON (`lamSachChiTiet`: chỉ giữ chữ/số, ≤20 khoá, ≤5000 ký tự/giá trị). Định dạng lạ → 400; **đổi định dạng sau khi tạo → 409**. Thiếu `dinh_dang` = VIDEO nên client cũ (công cụ Lọc video) vẫn chạy.
+  - **Guardrail claim phủ trường mới:** `scriptText` quét cả `sections[].hinh` (chữ in trên cảnh/slide) + mọi chữ trong `chi_tiet` (caption, hashtag, chữ phụ, brief) — trừ `media_url`/`ti_le`. Áp cho lưu, sửa **và gửi duyệt**.
+  - **Liên đới đã xử lý:** Shot list chỉ nhận VIDEO (BE 400 + FE lọc) · đẩy seeding ghép nội dung theo định dạng (`noiDungDang`: post thêm hashtag, ảnh/carousel dùng caption; **VIDEO giữ y như cũ**) · Hàng đợi duyệt hiện **đúng khung xem trước** người soạn thấy · Đăng bài hiện nhãn định dạng. `DINH_DANG`/`scriptText`/`noiDungDang` khớp FE↔BE (có test so khớp).
+  - **UI làm việc mới:** thư viện có 4 thẻ **Tạo mới theo định dạng** + lọc định dạng/trạng thái. Trình soạn chia **Bối cảnh · Soạn · Xem trước**: ≥2xl 3 cột; lg–xl 2 cột (bối cảnh gấp gọn 1 dòng khi sửa bản cũ); mobile 3 tab. Xem trước sống theo từng phím gõ (khung 9:16 video · bài Facebook · ảnh theo tỉ lệ · carousel vuốt ngang). Phần/slide **đổi thứ tự ↑↓**. Thanh hành động dính đáy (trạng thái claim · Phiên bản · Xoá · Lưu), **Ctrl/Cmd+S**, **lưu xong ở lại màn soạn**, cảnh báo **● Chưa lưu** + hỏi trước khi rời. Ảnh chọn từ Kho footage hoặc dán link. Nút **Copy nội dung đăng**.
+  - **Vá kèm:** trình soạn **không còn gửi `trang_thai`** — trước đây ô "Trạng thái" cho tự đặt tay (kể cả "Đã duyệt", lách 2 cổng) và lưu lại sau khi gửi duyệt sẽ kéo `CHO_DUYET` về `NHAP`. Nay trạng thái chỉ do luồng duyệt đổi. Demo: tạo mới bị `...o` ghi đè `id` thành `undefined` → lưu lần 2 không cập nhật được (đã sửa).
+  - **Ảnh hưởng dữ liệu:** thêm 2 cột (không xoá/đổi cột nào); kịch bản cũ = VIDEO; không đổi số liệu kỳ cũ. Test **47/47** (`scratchpad/test_dinh_dang.mjs`) + chạy tay trên bản DEMO (desktop 1280 & mobile 375, không tràn ngang).
+  - ⏳ **Lát 2:** AI + khuôn sinh riêng từng định dạng (ảnh đơn hiện soạn tay; post/carousel đang dùng khuôn hook→phần→CTA). **Lát 3:** chuyển định dạng (video → post/carousel) + gắn ảnh cho từng slide từ Kho footage.
 
 ### ⚙️ Quy trình deploy (CẬP NHẬT)
 `npm run build` (build.mjs: biên dịch JSX, build CSS Tailwind từ chính khối `tailwind.config` trong seeding-app.html, chép vendor React và `tools/`) → `node --check worker/index.js` → commit cả `dist/` → push. `node_modules/` đã trong .gitignore.

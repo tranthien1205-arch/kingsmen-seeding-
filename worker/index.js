@@ -238,6 +238,9 @@ async function ensureSchema(env){
   // P6 — đếm số lần bị trả lại (chỉ số Process cho P9)
   try { await env.DB.prepare(`ALTER TABLE scripts ADD COLUMN so_lan_tra INTEGER DEFAULT 0`).run(); } catch(e){}
   try { await env.DB.prepare(`ALTER TABLE content_items ADD COLUMN so_lan_tra INTEGER DEFAULT 0`).run(); } catch(e){}
+  // ADR-001 — Creative Studio đa định dạng: kịch bản cũ tự thành VIDEO (DEFAULT điền cho dòng đã có)
+  try { await env.DB.prepare(`ALTER TABLE scripts ADD COLUMN dinh_dang TEXT DEFAULT 'VIDEO'`).run(); } catch(e){}
+  try { await env.DB.prepare(`ALTER TABLE scripts ADD COLUMN chi_tiet TEXT`).run(); } catch(e){}
   // cờ DEV PREVIEW: chỉ tài khoản is_dev=1 thấy các module đang nâng cấp
   try { await env.DB.prepare(`ALTER TABLE users ADD COLUMN is_dev INTEGER DEFAULT 0`).run(); } catch(e){}
   // BẢNG GIÁ NIÊM YẾT — giá/đơn vị/bảo hành. Giá để REAL không DEFAULT: hàng cũ và hàng
@@ -1099,10 +1102,35 @@ function canDecideGate(u, cong){
 }
 // Bảng + cột trạng thái của từng loại đối tượng đưa vào hàng đợi duyệt
 const APPROVAL_TARGETS = { SCRIPT:'scripts', CONTENT:'content_items' };
-// P4 — gộp toàn văn kịch bản để quét claim cấm
+// ADR-001 — định dạng nội dung trong Creative Studio (khớp DINH_DANG_FE ở frontend)
+const DINH_DANG = ['VIDEO','POST','ANH','CAROUSEL'];
+// chi_tiet chỉ giữ giá trị chữ/số, cắt dài — không để client nhét object lồng hay chuỗi khổng lồ vào D1
+function lamSachChiTiet(o){
+  const out={}; if(!o || typeof o!=='object' || Array.isArray(o)) return out;
+  for(const k of Object.keys(o).slice(0,20)){
+    const v=o[k]; if(typeof v==='string'||typeof v==='number') out[String(k).slice(0,40)]=String(v).trim().slice(0,5000);
+  }
+  return out;
+}
+function docChiTiet(v){ if(v && typeof v==='object') return v; try{ const o=JSON.parse(v||'{}'); return (o&&typeof o==='object')?o:{}; }catch(e){ return {}; } }
+// P4 — gộp toàn văn kịch bản để quét claim cấm. Phủ cả ghi chú hình (chữ in trên cảnh/slide)
+// và mọi trường chữ trong chi_tiet (caption, hashtag, chữ trên ảnh…) — thiếu là claim lọt qua.
 function scriptText(s){
-  const secs=Array.isArray(s.sections)?s.sections.map(x=>(x&&x.text)||'').join('\n'):'';
-  return [s.tieu_de,s.hook,secs,s.cta].filter(Boolean).join('\n');
+  const secs=Array.isArray(s.sections)?s.sections.map(x=>[(x&&x.text)||'',(x&&x.hinh)||''].filter(Boolean).join('\n')).join('\n'):'';
+  const ct=docChiTiet(s.chi_tiet); const ctText=Object.keys(ct).filter(k=>k!=='media_url'&&k!=='ti_le').map(k=>ct[k]).filter(Boolean).join('\n');
+  return [s.tieu_de,s.hook,secs,s.cta,ctText].filter(Boolean).join('\n');
+}
+// Nội dung đăng/copy được ghép theo định dạng (dùng khi đẩy sang seeding). VIDEO giữ y như trước.
+function noiDungDang(sc){
+  const secs=Array.isArray(sc.sections)?sc.sections:JSON.parse(sc.sections||'[]');
+  const ct=docChiTiet(sc.chi_tiet); const dd=sc.dinh_dang||'VIDEO';
+  const than=secs.map(x=>(x&&x.text)||'');
+  let parts;
+  if(dd==='POST') parts=[sc.hook, ...than, sc.cta, ct.hashtag];
+  else if(dd==='ANH') parts=[ct.caption || [sc.hook, ct.chu_phu].filter(Boolean).join('\n'), sc.cta, ct.hashtag];
+  else if(dd==='CAROUSEL') parts=[ct.caption || [sc.hook, ...than].filter(Boolean).join('\n'), sc.cta, ct.hashtag];
+  else parts=[sc.hook, ...than, sc.cta];
+  return parts.filter(Boolean).join('\n\n');
 }
 // P4 — quét văn bản với danh sách claim cấm → [{cum_tu,ly_do,muc_do}]
 function scanScriptClaims(text, claims){
@@ -1259,7 +1287,7 @@ async function bootstrap(env, u){
   const kenh = kenhR.map(r=>({ ...r, active:uBool(r.active), tu_dong_dang:uBool(r.tu_dong_dang) }));
   const content_items = ciR.map(r=>({ ...r, pic: JSON.parse(r.pic||'{}'), chi_tiet: JSON.parse(r.chi_tiet||'{}'), links: JSON.parse(r.links||'{}') }));
   // P4 — kịch bản (chỉ staff xem; Sales không cần)
-  const scripts = scriptsR.map(r=>({ ...r, sections: JSON.parse(r.sections||'[]'), claim_flags: JSON.parse(r.claim_flags||'[]') }));
+  const scripts = scriptsR.map(r=>({ ...r, dinh_dang: r.dinh_dang||'VIDEO', chi_tiet: docChiTiet(r.chi_tiet), sections: JSON.parse(r.sections||'[]'), claim_flags: JSON.parse(r.claim_flags||'[]') }));
   const san_xuat = sxR.map(rowSX);
   // P7 — bài đăng (checklist thủ công + mã theo dõi)
   const air_posts = airR.map(r=>({ ...r, checklist: JSON.parse(r.checklist||'{}') }));
@@ -1864,16 +1892,20 @@ async function handleApi(request, env){
   if(path==='/scripts' && method==='POST'){
     if(!isStaff(me)) return json({error:'Không có quyền'},403);
     if(!(body.tieu_de||'').trim() && !(body.hook||'').trim()) return json({error:'Cần tiêu đề hoặc hook'},400);
+    // ADR-001: thiếu định dạng = VIDEO (client cũ vẫn chạy); định dạng lạ → 400, không đoán
+    const dinh_dang=body.dinh_dang==null||body.dinh_dang===''?'VIDEO':String(body.dinh_dang).toUpperCase();
+    if(!DINH_DANG.includes(dinh_dang)) return json({error:'Định dạng không hợp lệ'},400);
+    const chi_tiet=lamSachChiTiet(body.chi_tiet);
     // Guardrail: quét claim cấm trên toàn văn; mức CHẶN → không cho lưu
     const claims=(await env.DB.prepare(`SELECT * FROM claim_cam WHERE active=1`).all()).results;
-    const flags=scanScriptClaims(scriptText(body), claims);
+    const flags=scanScriptClaims(scriptText({...body, chi_tiet}), claims);
     const blocked=flags.filter(f=>f.muc_do==='CHAN');
     if(blocked.length) return json({error:'Có cụm từ bị CHẶN, gỡ trước khi lưu', blocked:blocked.map(b=>b.cum_tu)},422);
     const id=uid('scr');
-    await env.DB.prepare(`INSERT INTO scripts (id,content_item_id,framework_id,san_pham_id,kenh_id,tieu_de,hook,sections,cta,brand_voice,claim_flags,trang_thai,version,created_at,created_by,created_by_name,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
-      .bind(id, body.content_item_id||null, body.framework_id||null, body.san_pham_id||null, body.kenh_id||null, (body.tieu_de||'').trim(), (body.hook||'').trim(), JSON.stringify(body.sections||[]), (body.cta||'').trim(), (body.brand_voice||'').trim(), JSON.stringify(flags), body.trang_thai||'NHAP', 1, nowISO(), me.id, me.ho_ten, nowISO()).run();
+    await env.DB.prepare(`INSERT INTO scripts (id,content_item_id,framework_id,san_pham_id,kenh_id,tieu_de,hook,sections,cta,brand_voice,claim_flags,trang_thai,version,created_at,created_by,created_by_name,updated_at,dinh_dang,chi_tiet) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+      .bind(id, body.content_item_id||null, body.framework_id||null, body.san_pham_id||null, body.kenh_id||null, (body.tieu_de||'').trim(), (body.hook||'').trim(), JSON.stringify(body.sections||[]), (body.cta||'').trim(), (body.brand_voice||'').trim(), JSON.stringify(flags), body.trang_thai||'NHAP', 1, nowISO(), me.id, me.ho_ten, nowISO(), dinh_dang, JSON.stringify(chi_tiet)).run();
     await env.DB.prepare(`INSERT INTO script_versions (id,script_id,version,snapshot,created_at,created_by_name) VALUES (?,?,?,?,?,?)`)
-      .bind(uid('sv'), id, 1, JSON.stringify({tieu_de:body.tieu_de,hook:body.hook,sections:body.sections||[],cta:body.cta}), nowISO(), me.ho_ten).run();
+      .bind(uid('sv'), id, 1, JSON.stringify({tieu_de:body.tieu_de,hook:body.hook,sections:body.sections||[],cta:body.cta,dinh_dang,chi_tiet}), nowISO(), me.ho_ten).run();
     await logAudit(env,me,'tạo kịch bản','scripts',id,(body.tieu_de||'').trim());
     return json({ db: await bootstrap(env, me), id });
   }
@@ -1881,16 +1913,20 @@ async function handleApi(request, env){
     if(!isStaff(me)) return json({error:'Không có quyền'},403);
     const id=m[1]; const r=await env.DB.prepare(`SELECT * FROM scripts WHERE id=?`).bind(id).first();
     if(!r) return json({error:'Không tìm thấy'},404);
+    // ADR-001: định dạng bất biến sau khi tạo — đổi định dạng là tạo bản chuyển đổi mới, không sửa đè
+    const ddCu=r.dinh_dang||'VIDEO';
+    if(body.dinh_dang!=null && body.dinh_dang!=='' && String(body.dinh_dang).toUpperCase()!==ddCu) return json({error:'Không đổi được định dạng sau khi tạo'},409);
     const merged={ tieu_de: body.tieu_de!=null?body.tieu_de:r.tieu_de, hook: body.hook!=null?body.hook:r.hook,
-      sections: body.sections!=null?body.sections:JSON.parse(r.sections||'[]'), cta: body.cta!=null?body.cta:r.cta };
+      sections: body.sections!=null?body.sections:JSON.parse(r.sections||'[]'), cta: body.cta!=null?body.cta:r.cta,
+      dinh_dang: ddCu, chi_tiet: body.chi_tiet!=null?lamSachChiTiet(body.chi_tiet):docChiTiet(r.chi_tiet) };
     const claims=(await env.DB.prepare(`SELECT * FROM claim_cam WHERE active=1`).all()).results;
     const flags=scanScriptClaims(scriptText(merged), claims);
     const blocked=flags.filter(f=>f.muc_do==='CHAN');
     if(blocked.length) return json({error:'Có cụm từ bị CHẶN, gỡ trước khi lưu', blocked:blocked.map(b=>b.cum_tu)},422);
     const ver=Number(r.version||1)+1;
     const g=(k,d)=> body[k]!=null?String(body[k]).trim():d;
-    await env.DB.prepare(`UPDATE scripts SET content_item_id=?, framework_id=?, san_pham_id=?, kenh_id=?, tieu_de=?, hook=?, sections=?, cta=?, brand_voice=?, claim_flags=?, trang_thai=?, version=?, updated_at=? WHERE id=?`)
-      .bind(body.content_item_id!==undefined?(body.content_item_id||null):r.content_item_id, body.framework_id!==undefined?(body.framework_id||null):r.framework_id, body.san_pham_id!==undefined?(body.san_pham_id||null):r.san_pham_id, body.kenh_id!==undefined?(body.kenh_id||null):r.kenh_id, String(merged.tieu_de||'').trim(), String(merged.hook||'').trim(), JSON.stringify(merged.sections||[]), String(merged.cta||'').trim(), g('brand_voice',r.brand_voice), JSON.stringify(flags), g('trang_thai',r.trang_thai), ver, nowISO(), id).run();
+    await env.DB.prepare(`UPDATE scripts SET content_item_id=?, framework_id=?, san_pham_id=?, kenh_id=?, tieu_de=?, hook=?, sections=?, cta=?, brand_voice=?, claim_flags=?, trang_thai=?, version=?, updated_at=?, chi_tiet=? WHERE id=?`)
+      .bind(body.content_item_id!==undefined?(body.content_item_id||null):r.content_item_id, body.framework_id!==undefined?(body.framework_id||null):r.framework_id, body.san_pham_id!==undefined?(body.san_pham_id||null):r.san_pham_id, body.kenh_id!==undefined?(body.kenh_id||null):r.kenh_id, String(merged.tieu_de||'').trim(), String(merged.hook||'').trim(), JSON.stringify(merged.sections||[]), String(merged.cta||'').trim(), g('brand_voice',r.brand_voice), JSON.stringify(flags), g('trang_thai',r.trang_thai), ver, nowISO(), JSON.stringify(merged.chi_tiet), id).run();
     await env.DB.prepare(`INSERT INTO script_versions (id,script_id,version,snapshot,created_at,created_by_name) VALUES (?,?,?,?,?,?)`)
       .bind(uid('sv'), id, ver, JSON.stringify(merged), nowISO(), me.ho_ten).run();
     await logAudit(env,me,'sửa kịch bản','scripts',id);
@@ -1922,7 +1958,7 @@ async function handleApi(request, env){
     // Guardrail: kịch bản còn cụm CHẶN thì không được gửi duyệt
     if(loai==='SCRIPT'){
       const claims=(await env.DB.prepare(`SELECT * FROM claim_cam WHERE active=1`).all()).results;
-      const flags=scanScriptClaims(scriptText({...obj, sections:JSON.parse(obj.sections||'[]')}), claims);
+      const flags=scanScriptClaims(scriptText({...obj, sections:JSON.parse(obj.sections||'[]'), chi_tiet:docChiTiet(obj.chi_tiet)}), claims);
       const blocked=flags.filter(f=>f.muc_do==='CHAN');
       if(blocked.length) return json({error:'Còn cụm từ bị CHẶN, không thể gửi duyệt', blocked:blocked.map(b=>b.cum_tu)},422);
     }
@@ -2517,11 +2553,8 @@ async function handleApi(request, env){
     if(daCo) return json({error:'Nội dung này đã có trong thư viện seeding'},409);
     // Lấy nội dung đầy đủ từ kịch bản đã duyệt (nếu có) để Sales copy dùng ngay
     const sc=await env.DB.prepare(`SELECT * FROM scripts WHERE content_item_id=? AND trang_thai='DUYET' ORDER BY updated_at DESC LIMIT 1`).bind(id).first();
-    let noi_dung='';
-    if(sc){
-      const secs=JSON.parse(sc.sections||'[]');
-      noi_dung=[sc.hook, ...secs.map(x=>(x&&x.text)||''), sc.cta].filter(Boolean).join('\n\n');
-    }
+    // ghép theo định dạng (post có hashtag, ảnh/carousel dùng caption) — VIDEO giữ y như trước
+    let noi_dung = sc ? noiDungDang(sc) : '';
     if(!noi_dung){ const ct=JSON.parse(ci.chi_tiet||'{}'); noi_dung=ct.noi_dung||ct.brief||''; }
     const tid=uid('t');
     await env.DB.prepare(`INSERT INTO content_topics (id,chu_de,noi_dung,loai_bai,muc_tieu,tags,active,uu_tien,updated_at,content_item_id) VALUES (?,?,?,?,?,?,1,0,?,?)`)
@@ -2732,6 +2765,8 @@ async function handleApi(request, env){
     if(!isStaff(me)) return json({error:'Không có quyền'},403);
     const sid=m[1]; const sc=await env.DB.prepare(`SELECT * FROM scripts WHERE id=?`).bind(sid).first();
     if(!sc) return json({error:'Không tìm thấy kịch bản'},404);
+    // ADR-001: shot list là danh sách cảnh QUAY — bài post/ảnh/carousel không có cảnh quay
+    if((sc.dinh_dang||'VIDEO')!=='VIDEO') return json({error:'Shot list chỉ áp dụng cho định dạng Video'},400);
     const cur=(await env.DB.prepare(`SELECT COUNT(*) c FROM shot_list WHERE script_id=?`).bind(sid).first())?.c||0;
     if(Number(cur)>0) return json({error:'Kịch bản này đã có shot list — xoá cảnh cũ trước nếu muốn sinh lại'},409);
     const secs=JSON.parse(sc.sections||'[]');
