@@ -1511,7 +1511,7 @@ function Shell(){
     </div>
 
     {/* Bottom nav mobile — CHỈ 5 nhóm lớn, chia đều, không cuộn ngang */}
-    <nav className="sm:hidden fixed bottom-0 inset-x-0 z-20 bg-white/97 backdrop-blur border-t border-line flex"
+    <nav data-bottomnav className="sm:hidden fixed bottom-0 inset-x-0 z-20 bg-white/97 backdrop-blur border-t border-line flex"
       style={{paddingBottom:'env(safe-area-inset-bottom)'}}>
       {groups.map(g=>{ const on=curGroup.key===g.key; const b=groupBadge(g); return <button key={g.key} onClick={()=>openGroup(g)}
         className={"flex-1 min-w-0 flex flex-col items-center pt-1.5 pb-1 relative "+(on?'text-brand-dark':'text-ink-muted')}>
@@ -2470,27 +2470,30 @@ const SCRIPT_ST_STYLE = { NHAP:'bg-slate-100 text-slate-600', CHO_DUYET:'bg-ambe
 // Công cụ Lọc video chạy cục bộ trên máy (File System Access API + AI chạy trong trình duyệt).
 // Phục vụ từ /tools/loc-video.html — không nhúng thẳng vào app để không phình bộ mã và không đụng CSS.
 const LOC_VIDEO_URL = '/tools/loc-video.html';
-function LocVideoTool(){
-  const [full,setFull]=useState(false);
-  return <div className="space-y-3">
-    <div className="bg-white rounded-2xl border border-line shadow-card p-3">
-      <div className="flex items-center justify-between flex-wrap gap-2">
-        <div className="text-[11px] text-slate-500 flex-1 min-w-[220px]">
-          Lọc source · chấm chất lượng · <b>dựng video</b> · AI tự học khi bạn sửa tay. Chạy <b>ngay trên máy bạn</b> — video không tải lên server.
-          Cần <b>Chrome/Edge trên máy tính</b> để chọn được folder.
-        </div>
-        <div className="flex gap-2 shrink-0">
-          <Btn variant="ghost" onClick={()=>setFull(v=>!v)}>{full?'⤡ Thu nhỏ':'⤢ Toàn màn hình'}</Btn>
-          <Btn variant="ghost" onClick={()=>window.open(LOC_VIDEO_URL,'_blank')}>↗ Mở tab mới</Btn>
-        </div>
+function LocVideoTool({tabBar}){
+  const ref=useRef(); const [h,setH]=useState(640); const [kho,setKho]=useState(false);
+  // Khung cao vừa khít tới đáy màn hình (trừ thanh menu dưới trên mobile) — trông như một trang con, chỉ một thanh cuộn.
+  // Không kéo iframe cao theo nội dung vì công cụ có toast / thanh tiến độ / popup video gắn cố định theo màn hình.
+  useEffect(()=>{
+    const fit=()=>{ const el=ref.current; if(!el) return;
+      const top=el.getBoundingClientRect().top+window.scrollY;
+      const nav=document.querySelector('[data-bottomnav]'); const nb=(nav&&nav.offsetParent!==null)?nav.offsetHeight:0;
+      setH(Math.max(480, window.innerHeight-top-nb-8)); };
+    fit(); window.addEventListener('resize',fit); return ()=>window.removeEventListener('resize',fit);
+  },[kho]);
+  return <div className="space-y-2">
+    <div className="flex items-center justify-between flex-wrap gap-2">
+      <div className="flex items-center gap-3 flex-wrap">
+        <h2 className="font-display text-lg font-bold text-ink">🎬 Lọc &amp; dựng video</h2>
+        {tabBar}
+      </div>
+      <div className="flex gap-2">
+        <Btn variant="ghost" onClick={()=>setKho(v=>!v)}>{kho?'✕ Đóng kho':'📥 Đưa vào Kho footage'}</Btn>
+        <Btn variant="ghost" onClick={()=>window.open(LOC_VIDEO_URL,'_blank')}>↗ Mở tab mới</Btn>
       </div>
     </div>
-    <div className={full?'fixed inset-0 z-40 bg-white':'rounded-2xl overflow-hidden border border-line shadow-card'}>
-      {full && <button onClick={()=>setFull(false)} className="absolute top-2 right-2 z-10 bg-ink text-white text-xs px-3 py-1.5 rounded-lg shadow-lift">✕ Đóng</button>}
-      <iframe src={LOC_VIDEO_URL} title="Lọc video" className={full?'w-full h-full border-0':'w-full border-0'} style={full?undefined:{height:'calc(100vh - 150px)',minHeight:640}} allow="camera; microphone"/>
-    </div>
-    <p className="text-[11px] text-slate-400">Nếu nút chọn folder không mở được trong khung này, bấm <b>Mở tab mới</b> — một số trình duyệt chỉ cho chọn folder ở tab riêng.</p>
-    <CauNoiFootage/>
+    {kho && <CauNoiFootage/>}
+    <iframe ref={ref} src={LOC_VIDEO_URL} title="Lọc & dựng video" className="block w-full border-0 bg-transparent" style={{height:h}} allow="camera; microphone"/>
   </div>;
 }
 // AI CHẠY NGAY TRÊN MÁY — miễn phí, không gọi API, video không rời máy bạn.
@@ -2631,13 +2634,7 @@ function CreativeStudio(){
     {[['kich_ban','✍️ Kịch bản'],['loc_video','🎬 Lọc & dựng video']].map(([k,l])=>
       <button key={k} onClick={()=>setTab(k)} className={"px-3 py-1 rounded-lg text-xs font-semibold whitespace-nowrap "+(tab===k?'bg-white text-ink shadow-sm':'text-slate-500')}>{l}</button>)}
   </div>;
-  if(tab==='loc_video') return <div className="space-y-4">
-    <div className="flex items-center justify-between flex-wrap gap-2">
-      <h2 className="font-display text-lg font-bold text-ink">🎬 Lọc &amp; dựng video</h2>
-    </div>
-    {TabBar}
-    <LocVideoTool/>
-  </div>;
+  if(tab==='loc_video') return <LocVideoTool tabBar={TabBar}/>;
   return <div className="space-y-4">
     <div className="flex items-center justify-between flex-wrap gap-2">
       <h2 className="font-display text-lg font-bold text-ink">✍️ Creative Studio — Kịch bản</h2>

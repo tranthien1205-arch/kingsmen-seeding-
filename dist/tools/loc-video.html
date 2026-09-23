@@ -9,7 +9,13 @@
 <title>Lọc Video — Masfico</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script>
+  // Khi được nhúng trong app Seeding: bỏ nền/lề riêng để trông như một trang con của app.
+  try{ if(window.self!==window.top) document.documentElement.classList.add('embedded'); }catch(e){ document.documentElement.classList.add('embedded'); }
+</script>
 <style>
+  html.embedded,html.embedded body{background:transparent}
+  html.embedded .wrap{max-width:none;padding:0 0 16px}
   :root{
     --teal:#0C7B6F; --dark:#1A3A4A; --gold:#C9A84C;
     --lgray:#F5F5F5; --mgray:#8C8C8C; --border:#E0E0E0;
