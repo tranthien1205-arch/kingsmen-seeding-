@@ -231,3 +231,78 @@ Mỗi đợt: ADR 6 dòng → duyệt → code + test D1 giả lập + DEMO → 
 
 ---
 *Quyết định cần bạn chốt để bắt đầu đợt 1: (a) duyệt bản vẽ này làm hồ sơ nền của app mới; (b) repo mới `kingsmen-content-os` chạy song song app cũ (đã chốt: bỏ dữ liệu cũ); (c) ai được gạt mức người/AI (đề xuất: Admin + Trưởng MKT); (d) ngưỡng sẵn sàng mặc định 80/100 và ≥ 30 mẫu.*
+
+---
+
+## 11. SEEDING HỘI NHÓM FACEBOOK — BẢN VẼ (ADR-007, viết lại 2026-09-23 · trạng thái: CHỜ THIỆN DUYỆT)
+
+### 11.1 Bối cảnh & mục đích
+- **Thợ ốp lát / thợ hoàn thiện / thầu nhỏ tập trung ở hội nhóm Facebook** (nhóm thợ, nhóm vật liệu, nhóm xây nhà). Họ không đọc fanpage; họ tin *người trong nghề* nói.
+- Seeding = **truyền thông điệp định vị Kingsmen một cách tự nhiên, đúng hướng, đều đặn** qua giọng của người trong nghề — không phải "đăng bài quảng cáo vào nhóm".
+- **Phòng MKT tự vận hành, máy làm gần hết, không Sales, không tiền** (Thiện chốt): Trạm đăng bằng **tài khoản của phòng MKT** đã đăng nhập trên Trạm; người giữ vai trò đặt thông điệp, khai nhóm/tài khoản, duyệt gói, xử lý nghi ngờ & lead.
+- Zalo nhóm để sau (không phải nơi thợ tụ; Trạm vẫn nghe nhóm Zalo được nếu cần). Quay công trình: bỏ.
+
+### 11.2 Ba tầng của một bài seeding "đúng hướng định vị"
+```
+ ĐỊNH VỊ (G1)  →  BẢN ĐỒ THÔNG ĐIỆP  →  BIẾN THỂ (giọng × dạng bài × thông điệp)  →  BÀI TRONG NHÓM
+```
+1. **Bản đồ thông điệp** (`thong_diep_seeding`, thuộc chiến lược, chốt cùng G1): 5–8 thông điệp cốt lõi rút từ định vị + pillar; mỗi thông điệp có *ý chính*, *dữ kiện được phép dùng* (thông số/bảo hành thật), *cách thợ hay nói* (từ ngữ nghề), *điều KHÔNG nói* (giá, "tốt nhất", vĩnh viễn). Ví dụ: "ron polyurea không ố vàng sau mùa mưa", "bảo hành 30 năm là cam kết in trên bảng giá", "thi công dễ hơn epoxy, không phải lau gấp". Máy đề xuất bản đồ từ chiến lược, người chốt.
+2. **Giọng** = persona của tài khoản MKT: *thợ ốp lát* (mộc, kể việc), *thầu nhỏ* (tính chi phí bảo hành, uy tín với chủ nhà), *chủ nhà đã làm* (khoe/hỏi). Mỗi tài khoản MKT trên Trạm giữ **một giọng cố định** (hồ sơ tự nhiên, ảnh công trình, đăng đời thường) — giọng đổi liên tục là dấu hiệu tài khoản giả.
+3. **Dạng bài** (luân phiên, ≥70% không có link): *kể trải nghiệm* · *hỏi tư vấn* (kéo bình luận) · *khoe công trình* (ảnh/footage thật từ tài sản) · *so sánh vật liệu* · *cảnh báo lỗi thi công* · *trả lời câu hỏi người khác* (bình luận dẫn dắt).
+
+### 11.3 Vòng lặp seeding (máy chạy, người ở cổng)
+```
+ S1 NGUỒN     : (a) bài chính đã đăng (qua G3)  hoặc  (b) GÓI ĐỊNH KỲ theo chỉ tiêu seeding/tuần trong kế hoạch tháng (không cần bài chính)
+ S2 SOẠN GÓI  : máy chọn thông điệp đang "đói" (ít bài trong 30 ngày) → N biến thể = giọng của tài khoản sẵn có × dạng bài × thông điệp,
+                kèm 2–3 bình luận dẫn dắt (vai khác nhau: hỏi kinh nghiệm · xác nhận đã dùng · hỏi mua ở đâu) — guardrail claim, chống trùng câu chữ
+ [G3-gói]     : Trưởng MKT DUYỆT CẢ GÓI một lần (máy chấm sẵn: đúng thông điệp? đúng giọng? link quá tỷ lệ? nhắc giá?) — không duyệt từng bài
+ S3 LỊCH      : nhóm × tài khoản × giờ vàng thợ (5–7h · 11–13h · 19–22h) · ≤1 bài/nhóm/tuần · ≤2–3 bài/tài khoản/ngày · giãn 2–4 phút · luân phiên dạng bài
+ S4 ĐĂNG      : Trạm đăng bằng tài khoản MKT (Facebook nhóm); nhóm có duyệt bài → chờ quản trị; bình luận dẫn dắt do tài khoản KHÁC đăng sau 30–120 phút
+ S5 KIỂM & ĐO : Trạm mở lại bài sau 2 ngày & 7 ngày: còn sống · react · bình luận · CÓ NGƯỜI HỎI MUA/HỎI GIÁ? → tạo LEAD giao MKT trả lời
+ S6 HỌC       : nhóm/thông điệp/giọng/dạng bài/giờ nào kéo tương tác & lead → đề xuất G4 (tắt nhóm yếu, ưu tiên thông điệp/giọng, đổi giờ) + tự chỉnh nhịp trong biên
+```
+Cổng người: **G1** (chốt định vị + bản đồ thông điệp), **G3-gói** (duyệt gói seeding, máy chấm sẵn), **G4** (đề xuất từ học). Không cổng tiền.
+
+### 11.4 Bước mới trong bộ quyền
+| Bước | Máy | Người (giai đoạn 1) | Máy học gì | Tối đa |
+|---|---|---|---|---|
+| B13 Soạn gói & biến thể | chọn thông điệp đói, viết biến thể + bình luận dẫn dắt, chấm sẵn | sửa biến thể, duyệt gói (G3-gói) | người sửa gì | AI_TU_LAM (khi B13 ở AI_TU_LAM và máy chấm ĐẠT → gói tự qua) |
+| B14 Xếp lịch | nhóm × tài khoản × giờ vàng, nhịp, luân phiên | đổi lịch | người đổi gì | AI_TU_LAM |
+| B15 Đăng & bình luận dẫn dắt | Trạm đăng; tài khoản khác bình luận sau 30–120' | (NGƯỜI = giao việc đăng tay) | — | AI_TU_LAM |
+| B16 Kiểm, đo & bắt lead | Trạm đọc bài; ĐẠT/KHÔNG ĐẠT/NGHI NGỜ; bình luận hỏi mua → LEAD | xử lý nghi ngờ; trả lời lead | người lật kết luận | AI_TU_LAM (lead luôn người trả lời) |
+| B17 Học seeding | đề xuất G4; tự chỉnh nhịp nhóm/tài khoản trong biên | duyệt đề xuất | duyệt/bỏ | AI_GOI_Y |
+
+### 11.5 Dữ liệu
+| Bảng | Vai trò |
+|---|---|
+| `thong_diep_seeding (id, ten, y_chinh, du_kien[], cach_noi_tho, khong_noi, pillar_id, active, thu_tu)` | bản đồ thông điệp — thuộc chiến lược (snapshot khi chốt G1) |
+| `tai_khoan_seeding (id, nhan, tram_id, giong, persona{nghe, khu_vuc, cau_chuyen}, nhip_ngay, active, tam_dung_den, suc_khoe)` | tài khoản MKT trên Trạm, mỗi tài khoản một giọng |
+| `nhom_seeding (id, ten, link, chu_de, quy_tac{duyet_bai, cam_ban_hang, cam_link}, gio_vang[], tai_khoan_ids[], nhip_tuan, active, hieu_qua)` | nhóm thợ; quy tắc nhóm quyết định dạng bài được phép |
+| `goi_seeding (id, loai BAI_CHINH\|DINH_KY, bai_dang_id?, thong_diep_ids[], so_bien_the, trang_thai NHAP\|CHO_DUYET\|DUYET\|HET_HAN, cham_may, duyet_boi, duyet_at, han)` | gói = đơn vị duyệt (G3-gói) |
+| `bien_the (id, goi_id, thong_diep_id, giong, dang_bai, noi_dung, tai_san_ids[], binh_luan[{vai, text}], bam, tao_boi, sua_boi)` | biến thể |
+| `viec_seeding (id, goi_id, bien_the_id, nhom_id, tai_khoan_id, gio_dang, trang_thai CHO\|DANG_GUI\|DA_DANG\|CHO_QUAN_TRI\|LOI\|DAT\|KHONG_DAT\|NGHI_NGO\|HUY, link, kiem{lan2, lan7}, binh_luan_viec[{tai_khoan_id, text, gio, trang_thai}])` | việc đăng + việc con bình luận dẫn dắt |
+| `lead_seeding (id, viec_id, nguoi, noi_dung_hoi, link_bl, trang_thai MOI\|DA_TRA_LOI\|CHUYEN_SALE, giao_cho, tra_loi_at)` | người hỏi mua/giá dưới bài seeding → giao MKT |
+| `ke_hoach_thang.chi_tieu.seeding_tuan` | số bài seeding/tuần → máy tạo gói định kỳ |
+
+### 11.6 Trạm (tay máy)
+- `content_os/seeding_dang`: hỏi `/hub/viec/seeding_dang` → đăng bằng hồ sơ Facebook của tài khoản MKT (mỗi tài khoản một hồ sơ `facebook-<id>-profile`) → báo `content_os.seeding_dang_ket_qua`; nhóm duyệt bài → `CHO_QUAN_TRI`; checkpoint → tạm dừng tài khoản 24h, không vượt.
+- `content_os/seeding_binh_luan` (007b): việc con bình luận dẫn dắt bằng tài khoản khác sau 30–120 phút.
+- `content_os/seeding_kiem`: mở bài sau 2 & 7 ngày → còn sống, react, bình luận, **liệt kê bình luận hỏi mua/hỏi giá** (từ khoá + AI phân loại) → `content_os.seeding_kiem`.
+- `content_os/seeding_nuoi` (007b): nuôi tài khoản — like/bình luận bài người khác theo nhịp thấp để hồ sơ tự nhiên.
+
+### 11.7 An toàn thương hiệu & tài khoản
+- Guardrail claim cấm áp cho mọi biến thể và bình luận; **không nhắc giá**; mỗi thông điệp có danh sách "không nói".
+- Tỷ lệ bài có link ≤ 30%; link chỉ tới bài chính/fanpage, không tới trang bán.
+- Nhóm cấm bán hàng → chỉ dạng *kể trải nghiệm / hỏi tư vấn / cảnh báo lỗi*; nhóm duyệt bài → chờ quản trị, không đăng lại.
+- Nhịp: ≤1 bài/nhóm/tuần/tài khoản, ≤2–3 bài/tài khoản/ngày, giãn 2–4 phút, giờ vàng; tài khoản mới nuôi ≥ 2 tuần trước khi seeding.
+- Checkpoint/captcha → dừng tài khoản 24h + việc kiểm tra; bài bị gỡ ≥ 40% trong nhóm → máy đề xuất tắt nhóm (G4).
+- Mọi bài đăng, bình luận dẫn dắt, lead đều có dấu vết (audit + viec_seeding).
+
+### 11.8 Màn "Seeding hội nhóm"
+Thông điệp (bản đồ, máy đề xuất từ chiến lược) · Nhóm (quy tắc, giờ vàng, hiệu quả) · Tài khoản MKT (giọng, sức khoẻ) · Gói (duyệt gói G3-gói, sửa biến thể) · Lịch & việc (kanban CHỜ → ĐÃ ĐĂNG → ĐẠT/NGHI NGỜ) · Lead (trả lời) · Hiệu quả (theo thông điệp/giọng/dạng/nhóm/giờ).
+
+### 11.9 Lộ trình
+- **ADR-007a**: thông điệp · nhóm · tài khoản · gói (bài chính + định kỳ) + biến thể + G3-gói · lịch · Trạm đăng · kiểm 2/7 ngày · nghi ngờ · học đề xuất nhóm/thông điệp/giọng.
+- **ADR-007b**: bình luận dẫn dắt đa tài khoản · lead từ bình luận (AI phân loại) · nuôi tài khoản · tự chỉnh nhịp.
+
+*Quyết định cần Thiện chốt: (a) G3-gói (Trưởng MKT duyệt cả gói một lần) — giữ hay bỏ hẳn? (b) có gói ĐỊNH KỲ theo chỉ tiêu seeding/tuần không cần bài chính? (c) số tài khoản MKT dự kiến trên Trạm (1 hay nhiều — quyết định có bình luận dẫn dắt đa tài khoản hay không).*

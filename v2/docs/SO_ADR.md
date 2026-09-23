@@ -95,6 +95,20 @@ Quyết định: (1) buoc_thuc_hien thêm san_sang_gan/so_mau_gan (N ngày gần
 Người duyệt: Thiện · Trạng thái: ĐÃ DUYỆT (2026-09-23, "tiếp 006")
 ```
 
+```
+ADR-007 · 2026-09-23 · SEEDING TỰ ĐỘNG — thay Domain A của app cũ, thiết kế mới (bản vẽ §11)
+Bối cảnh : App cũ: người soạn/đăng/chụp màn hình/nghiệm thu/tính tiền seeding; Thiện: "thiết kế 007 mới hoàn toàn theo hướng tự động
+            seeding", "tự động thông qua agent Trạm", KHÔNG cho Trạm gửi hộ Zalo, BỎ quay công trình.
+Quyết định: (1) Seeding chỉ từ bài chính đã đăng (qua G3). (2) B13 soạn biến thể (AI, giọng thợ/chủ nhà/thầu, chống trùng, guardrail),
+            B14 phân công & lịch (Sales × nhóm phụ trách, xoay vòng, nhịp), B15 Sales tự đăng Zalo/FB (NGƯỜI), B16 nghiệm thu tự động
+            (FB: Trạm mở link; Zalo: Trạm nghe nhóm → lô zalo.tin khớp việc; ĐẠT/KHÔNG ĐẠT theo luật cứng, NGHI NGỜ → người), B17
+            tính tiền & tự chốt bảng chi trả tháng (không cổng người; Admin ghi đã chi / điều chỉnh có audit). (3) Bảng nhom_seeding,
+            goi_seeding, bien_the, viec_seeding, bang_gia_seeding, chi_tra. (4) Trạm: việc seeding_kiem cho agent content_os; món zalo.tin.
+            (5) Màn Seeding: Sales (Việc hôm nay · Thu nhập · Nhóm của tôi) / staff (gói, việc, nhóm, bảng giá, chi trả). (6) Chống gian:
+            trùng link/nội dung, react bất thường, không kiểm được 7 ngày → NGHI NGỜ. Quay công trình: BỎ.
+Người duyệt: Thiện · Trạng thái: CHỜ DUYỆT BẢN VẼ §11 (viết lại 23/09 theo "thợ ở hội nhóm Facebook, seeding truyền thông điệp định vị tự nhiên"; không Sales, không tiền, bỏ quay CT). Mã nháp trong working tree chưa commit.
+```
+
 ## Changelog
 
 ### 2026-09-23 · ADR-006 (gạt bước)
