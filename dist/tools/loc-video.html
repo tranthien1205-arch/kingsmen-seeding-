@@ -5673,7 +5673,7 @@ function kbAiPopOpen(){
   if(!tok) return;
   if(_kbAiNguCanh){ kbAiDienChon(_kbAiNguCanh); return; }
   document.getElementById("kbAiStatus").textContent="Đang tải framework/sản phẩm/kênh từ app…";
-  fetch("/scripts/ngu-canh",{headers:{Authorization:"Bearer "+tok}}).then(function(r){ return r.json(); })
+  fetch("/api/scripts/ngu-canh",{headers:{Authorization:"Bearer "+tok}}).then(function(r){ return r.json(); })
     .then(function(j){
       if(!j || !Array.isArray(j.frameworks)){ document.getElementById("kbAiStatus").textContent="⚠ Không đọc được danh mục từ app."; return; }
       _kbAiNguCanh=j; kbAiDienChon(j);
@@ -5696,7 +5696,7 @@ function kbAiSinh(){
   if(!fwId){ document.getElementById("kbAiStatus").textContent="⚠ Chọn framework trước."; return; }
   var btn=document.getElementById("kbAiBtn"); btn.disabled=true;
   document.getElementById("kbAiStatus").textContent="🧠 AI đang viết kịch bản theo đúng nguồn + định hướng thương hiệu…";
-  fetch("/scripts/ai-sinh",{method:"POST",headers:{"Content-Type":"application/json",Authorization:"Bearer "+tok},
+  fetch("/api/scripts/ai-sinh",{method:"POST",headers:{"Content-Type":"application/json",Authorization:"Bearer "+tok},
     body:JSON.stringify({
       framework_id:fwId,
       san_pham_id:document.getElementById("kbAiSp").value||undefined,
@@ -5861,6 +5861,10 @@ function renderXuatLib(){
       '<div class="strow" style="margin-top:6px">'+
         '<button class="stbtn" style="font-size:11px;flex:1;justify-content:center" data-libsua="'+idx+'" '+
           'title="Nạp lại đúng timeline bản này để chỉnh và kết xuất thành phiên bản kế">✏️ Sửa tiếp</button>'+
+        (e.daLen
+          ? '<span class="stchip" style="font-size:11px;background:#E1F5EE;border-color:#9FE1CB;color:#0F6E56" title="'+escAttr(e.daLen)+'">✓ Đã lên Kho footage</span>'
+          : '<button class="stbtn stbtn-ai" style="font-size:11px;flex:1;justify-content:center" data-libup="'+idx+'" '+
+            'title="Tải video này lên Kho footage của app'+(window.KB_STUDIO?' và gắn vào kịch bản đang dựng':'')+'">'+(e.dangLen||'📤 Đưa lên Kho footage')+'</button>')+
       '</div></div>';
   }).join("");
   g.querySelectorAll("[data-libxem]").forEach(function(el){
@@ -5872,6 +5876,56 @@ function renderXuatLib(){
   g.querySelectorAll("[data-libsua]").forEach(function(b){
     b.onclick=function(){ suaTiepBan(+b.getAttribute("data-libsua")); };
   });
+  g.querySelectorAll("[data-libup]").forEach(function(b){
+    b.onclick=function(){ xuatLenKho(+b.getAttribute("data-libup")); };
+  });
+}
+// ====== NỐI VỚI APP KINGSMEN — đưa bản kết xuất lên Kho footage, gắn vào kịch bản Studio nếu có ======
+// Dùng đúng phiên đăng nhập của app (cùng origin). Không có token → nói rõ, không âm thầm hỏng.
+function xuatLenKho(idx){
+  var e=XUAT_LIB[idx]; if(!e || !e.blob) return;
+  var tok=appToken();
+  if(!tok){ announce("Chưa có phiên đăng nhập app Kingsmen — mở công cụ từ trong app (Creative Studio) rồi thử lại.","err"); return; }
+  if(e.daLen){ announce("Bản này đã đưa lên Kho footage rồi.","ok"); return; }
+  if(e.dangLen) return;
+  var MB=e.blob.size/1048576;
+  if(e.blob.size>100*1024*1024){ announce("File "+MB.toFixed(0)+"MB vượt 100MB — app chỉ nhận tới 100MB. Hạ chất lượng kết xuất rồi thử lại.","err"); return; }
+  var kb=window.KB_STUDIO||null;
+  var setTien=function(t){ e.dangLen=t; renderXuatLib(); };
+  setTien("⏳ 0%");
+  var xhr=new XMLHttpRequest();
+  xhr.open("POST","/api/filming/upload?type="+encodeURIComponent(e.blob.type||"video/mp4"));
+  xhr.setRequestHeader("Authorization","Bearer "+tok);
+  xhr.setRequestHeader("Content-Type", e.blob.type||"video/mp4");
+  xhr.timeout=15*60*1000;
+  xhr.upload.onprogress=function(ev){ if(ev.lengthComputable) setTien("⏳ "+Math.round(ev.loaded/ev.total*100)+"%"); };
+  var thatBai=function(msg){ e.dangLen=null; renderXuatLib(); announce("Đưa lên Kho footage thất bại: "+msg,"err"); };
+  xhr.onerror=function(){ thatBai("lỗi mạng"); };
+  xhr.ontimeout=function(){ thatBai("hết thời gian tải lên"); };
+  xhr.onload=function(){
+    var d={}; try{ d=JSON.parse(xhr.responseText); }catch(_){}
+    if(xhr.status<200||xhr.status>=300||!d.media_url){ thatBai(d.error||("HTTP "+xhr.status)); return; }
+    setTien("⏳ Ghi vào kho…");
+    var ten=(kb&&kb.tieu_de) ? (kb.tieu_de+" · v"+e.ver) : (e.name||("Video dựng v"+e.ver));
+    var moTa="Dựng bằng công cụ Dựng video · v"+e.ver+" · ~"+e.dur+"s · "+e.mota+(kb?(" · kịch bản: "+(kb.tieu_de||kb.script_id)):"");
+    fetch("/api/footage",{method:"POST",headers:{"Content-Type":"application/json",Authorization:"Bearer "+tok},
+      body:JSON.stringify({ten:ten, mo_ta:moTa, media_url:d.media_url, media_type:"VIDEO", tags:["dựng","video ngắn"], san_pham_id:(kb&&kb.san_pham_id)||null, kenh_id:(kb&&kb.kenh_id)||null})})
+    .then(function(r){ return r.json().then(function(j){ return {ok:r.ok, j:j}; }); })
+    .then(function(x){
+      if(!x.ok){ throw new Error((x.j&&x.j.error)||"không ghi được vào Kho footage"); }
+      e.daLen=d.media_url; e.dangLen=null; renderXuatLib();
+      if(!(kb&&kb.script_id)){ announce("✅ Đã đưa lên Kho footage — vào app › Kho footage để dùng.","ok"); return; }
+      return fetch("/api/scripts/"+encodeURIComponent(kb.script_id)+"/video",{method:"POST",headers:{"Content-Type":"application/json",Authorization:"Bearer "+tok},
+        body:JSON.stringify({media_url:d.media_url, footage_id:x.j.id||""})})
+        .then(function(r){ return r.json().then(function(j){ return {ok:r.ok, j:j}; }); })
+        .then(function(y){
+          if(!y.ok) throw new Error((y.j&&y.j.error)||"không gắn được vào kịch bản");
+          announce("✅ Đã đưa lên Kho footage và gắn vào kịch bản “"+(kb.tieu_de||"")+"” — quay lại Creative Studio sẽ thấy video, bài Đăng sẽ tự lấy video này.","ok");
+        });
+    })
+    .catch(function(err){ if(e.daLen) announce("Video đã lên Kho footage nhưng "+err.message+" — vào Creative Studio gắn tay.","err"); else thatBai(err.message); });
+  };
+  xhr.send(e.blob);
 }
 // Lan xuat khong ra ban ghep -> THU VIEN phai noi ro ly do, khong duoc trong trom
 function xuatLibLoi(lyDo){
@@ -7725,6 +7779,38 @@ if(!window.showDirectoryPicker){
   document.getElementById("pickSrcBtn").disabled=true;
   document.getElementById("pickDstBtn").disabled=true;
 }
+</script>
+<script>
+// ====== NỐI VỚI APP KINGSMEN — 2 công cụ trên cùng một mã nguồn (không tách file để khỏi thành 2 bản song song) ======
+//   ?mode=loc  → "Lọc source sau buổi quay": chỉ tab Lọc (+ Dạy AI, Cài đặt)
+//   ?mode=dung → "Dựng video ngắn": chỉ tab Dựng (+ Dạy AI, Cài đặt); tự nạp kịch bản Creative Studio gửi sang
+(function(){
+  var MODE=""; try{ MODE=new URLSearchParams(location.search).get("mode")||""; }catch(e){}
+  window.APP_MODE=MODE;
+  if(MODE==="loc"||MODE==="dung"){
+    var an=(MODE==="loc")?"dung":"loc";
+    document.querySelectorAll('.tabs .tab[data-tab="'+an+'"]').forEach(function(b){ b.style.display="none"; });
+    document.title=(MODE==="loc")?"Lọc source sau buổi quay — Kingsmen":"Dựng video ngắn — Kingsmen";
+    showTab(MODE);
+  }
+  if(MODE==="loc") return;
+  // Kịch bản Creative Studio để lại ở localStorage (cùng origin). Chỉ nạp khi ô kịch bản đang trống — không đè bài đang làm dở.
+  var kb=null; try{ kb=JSON.parse(localStorage.getItem("kingsmen_kichban_dung")||"null"); }catch(e){}
+  if(!kb || !kb.text) return;
+  var ta=document.getElementById("scriptText"), st=document.getElementById("scriptStatus");
+  if(!ta) return;
+  window.KB_STUDIO=kb;
+  if(!ta.value.trim()){ ta.value=kb.text; ta.classList.remove("hidden"); var tn=document.getElementById("scriptTextN"); if(tn) tn.value=kb.text; }
+  var kbd=document.getElementById("kbDetails"); if(kbd) kbd.open=true;
+  if(st){
+    st.innerHTML='📜 Kịch bản từ <b>Creative Studio</b>: “'+esc(kb.tieu_de||"")+'” (đã duyệt 2 cổng). '+
+      'Chọn <b>📂 kho đã lọc</b> ở trên rồi bấm <b>🪄 AI DỰNG</b>; kết xuất xong bấm <b>📤 Đưa lên Kho footage</b> là video tự gắn về kịch bản. '+
+      '<a href="#" id="kbStudioBo" style="margin-left:6px">✕ Bỏ kịch bản này</a>';
+    var bo=document.getElementById("kbStudioBo");
+    if(bo) bo.onclick=function(ev){ ev.preventDefault(); try{ localStorage.removeItem("kingsmen_kichban_dung"); }catch(e){} window.KB_STUDIO=null; st.textContent="Đã bỏ kịch bản từ Studio."; };
+  }
+  if(MODE!=="loc") showTab("dung");
+})();
 </script>
 </body>
 </html>

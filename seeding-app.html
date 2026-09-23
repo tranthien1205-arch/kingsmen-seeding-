@@ -2589,8 +2589,27 @@ const SCRIPT_ST_STYLE = { NHAP:TONE.muted, CHO_DUYET:TONE.warn, DUYET:TONE.ok };
 // Công cụ Lọc video chạy cục bộ trên máy (File System Access API + AI chạy trong trình duyệt).
 // Phục vụ từ /tools/loc-video.html — không nhúng thẳng vào app để không phình bộ mã và không đụng CSS.
 const LOC_VIDEO_URL = '/tools/loc-video.html';
-function LocVideoTool({tabBar}){
+// Hai công cụ trên cùng một mã nguồn tools/loc-video.html (?mode=loc | ?mode=dung) — không tách file để khỏi thành 2 bản song song.
+//   loc  = "Lọc source sau buổi quay": phân loại, chấm điểm, chọn source vào thư mục.
+//   dung = "Dựng video ngắn": lấy từ thư mục đã lọc, ráp theo kịch bản Creative Studio, kết xuất → Kho footage.
+const LOC_VIDEO_MODE = {
+  loc:  { title:'🎛 Lọc source sau buổi quay', sub:'Chọn folder vừa quay → quét & chấm điểm → gom take trùng → chuyển clip đạt vào folder đích (SOURCE_DA_LOC hoặc theo công trình).' },
+  dung: { title:'🎬 Dựng video ngắn', sub:'Mở kho đã lọc → nạp kịch bản (tự nạp khi bấm “Dựng video” từ kịch bản đã duyệt) → 🪄 AI DỰNG → 💾 KẾT XUẤT → 📤 Đưa lên Kho footage (tự gắn về kịch bản).' },
+};
+// Kịch bản Studio → dạng công cụ đọc được: mỗi dòng "<tên cảnh>: <lời bình>" (khớp parseScriptRules trong công cụ)
+function kichBanSangCongCu(s){
+  const dong=[];
+  if((s.hook||'').trim()) dong.push('Hook: '+s.hook.trim());
+  (s.sections||[]).forEach((x,i)=>{ if(!x||!(x.text||x.hinh)) return;
+    dong.push((x.label||('Cảnh '+(i+1)))+': '+String(x.text||'').trim()+(x.hinh?' ('+String(x.hinh).trim()+')':'')); });
+  if((s.cta||'').trim()) dong.push('CTA: '+s.cta.trim());
+  return dong.join('\n');
+}
+const KB_DUNG_KEY = 'kingsmen_kichban_dung';
+function LocVideoTool({tabBar, mode='loc'}){
   const ref=useRef(); const [h,setH]=useState(640); const [kho,setKho]=useState(false);
+  const M=LOC_VIDEO_MODE[mode]||LOC_VIDEO_MODE.loc; const src=LOC_VIDEO_URL+'?mode='+mode;
+  const [kbCho,setKbCho]=useState(()=>{ try{ return JSON.parse(localStorage.getItem(KB_DUNG_KEY)||'null'); }catch(e){ return null; } });
   // Khung cao vừa khít tới đáy màn hình (trừ thanh menu dưới trên mobile) — trông như một trang con, chỉ một thanh cuộn.
   // Không kéo iframe cao theo nội dung vì công cụ có toast / thanh tiến độ / popup video gắn cố định theo màn hình.
   useEffect(()=>{
@@ -2601,11 +2620,15 @@ function LocVideoTool({tabBar}){
     fit(); window.addEventListener('resize',fit); return ()=>window.removeEventListener('resize',fit);
   },[kho]);
   return <div className="space-y-2">
-    <PageHeader title={<>🎬 Lọc &amp; dựng video</>} right={<>{tabBar}
+    <PageHeader title={M.title} sub={M.sub} right={<>{tabBar}
         <Btn variant="ghost" onClick={()=>setKho(v=>!v)}>{kho?'✕ Đóng kho':'📥 Đưa vào Kho footage'}</Btn>
-        <Btn variant="ghost" onClick={()=>window.open(LOC_VIDEO_URL,'_blank')}>↗ Mở tab mới</Btn></>}/>
+        <Btn variant="ghost" onClick={()=>window.open(src,'_blank')}>↗ Mở tab mới</Btn></>}/>
+    {mode==='dung' && kbCho && kbCho.text && <div className={CALLOUT.info+" flex items-center gap-2 flex-wrap"}>
+      <span className="flex-1 min-w-0">📜 Kịch bản đang chờ dựng: <b>{kbCho.tieu_de||'(không tên)'}</b> — công cụ đã tự nạp vào ô kịch bản bên dưới.</span>
+      <LinkBtn onClick={()=>{ try{ localStorage.removeItem(KB_DUNG_KEY); }catch(e){} setKbCho(null); }}>✕ Bỏ</LinkBtn>
+    </div>}
     {kho && <CauNoiFootage/>}
-    <iframe ref={ref} src={LOC_VIDEO_URL} title="Lọc & dựng video" className="block w-full border-0 bg-transparent" style={{height:h}} allow="camera; microphone"/>
+    <iframe key={mode} ref={ref} src={src} title={M.title} className="block w-full border-0 bg-transparent" style={{height:h}} allow="camera; microphone"/>
   </div>;
 }
 // AI CHẠY NGAY TRÊN MÁY — miễn phí, không gọi API, video không rời máy bạn.
@@ -2747,9 +2770,11 @@ function ScriptPreview({s, kenhTen}){
   const Caption = () => (ct.caption||ct.hashtag) ? <div className="text-xs text-ink whitespace-pre-line leading-relaxed">{[ct.caption,ct.hashtag].filter(Boolean).join('\n')}</div> : null;
   if(dd==='VIDEO') return <div className="space-y-2">
     <div className={"relative bg-ink rounded-2xl overflow-hidden text-white "+(TI_LE_CLS[tl]||TI_LE_CLS['9:16'])+hep}>
+      {ct.video_url ? <video src={ct.video_url} controls preload="metadata" className="absolute inset-0 w-full h-full object-contain bg-ink"/> : <>
       <div className="absolute top-2 left-3 text-[10px] opacity-70">{ten}</div>
       <div className="absolute inset-x-0 top-[36%] px-3 text-center font-display font-extrabold text-base leading-snug">{s.hook||<span className="opacity-40">Hook hiện ở đây</span>}</div>
       {s.cta && <div className="absolute inset-x-3 bottom-3 rounded-lg bg-brand px-2 py-1.5 text-center text-[11px] font-semibold">{s.cta}</div>}
+      </>}
     </div>
     {secs.length>0 && <ol className="space-y-1.5">{secs.map((x,i)=><li key={i} className="text-[11px] leading-snug">
       <span className="font-semibold text-brand-dark">{x.label||('Cảnh '+(i+1))}:</span> <span className="text-ink-soft">{x.text}</span>
@@ -2800,9 +2825,12 @@ function CreativeStudio(){
   const [q,setQ]=useState(''); const [loc,setLoc]=useState('ALL'); const [st,setSt]=useState('');
   const [tab,setTab]=useState('sang_tao');
   const nameById=(arr,id)=>{ const x=(arr||[]).find(o=>o.id===id); return x?x.ten:''; };
-  if(edit) return <ScriptEditor init={edit} onClose={()=>setEdit(null)}/>;
-  const TabBar = <Tabs size="sm" active={tab} onChange={setTab} tabs={[{key:'sang_tao',label:'✍️ Sáng tạo nội dung'},{key:'loc_video',label:'🎬 Lọc & dựng video'}]}/>;
-  if(tab==='loc_video') return <LocVideoTool tabBar={TabBar}/>;
+  // "Dựng video" từ kịch bản đã duyệt: để kịch bản lại cho công cụ (cùng origin) rồi chuyển sang tab Dựng
+  const dungVideo=(s)=>{ try{ localStorage.setItem(KB_DUNG_KEY, JSON.stringify({ script_id:s.id, tieu_de:s.tieu_de||s.hook||'', text:kichBanSangCongCu(s), san_pham_id:s.san_pham_id||null, kenh_id:s.kenh_id||null, luc:Date.now() })); }catch(e){}
+    setEdit(null); setTab('dung'); };
+  if(edit) return <ScriptEditor init={edit} onClose={()=>setEdit(null)} onDung={dungVideo}/>;
+  const TabBar = <Tabs size="sm" active={tab} onChange={setTab} tabs={[{key:'sang_tao',label:'✍️ Sáng tạo nội dung'},{key:'loc',label:'🎛 Lọc source'},{key:'dung',label:'🎬 Dựng video'}]}/>;
+  if(tab==='loc'||tab==='dung') return <LocVideoTool tabBar={TabBar} mode={tab}/>;
   const kw=q.trim().toLowerCase();
   const filtered = scripts.filter(s=>(loc==='ALL'||ddOf(s)===loc) && (!st||(s.trang_thai||'NHAP')===st)
     && (!kw || (s.tieu_de||'').toLowerCase().includes(kw) || (s.hook||'').toLowerCase().includes(kw)));
@@ -2855,7 +2883,7 @@ function CreativeStudio(){
   </div>;
 }
 
-function ScriptEditor({init, onClose}){
+function ScriptEditor({init, onClose, onDung}){
   const { db, upsertScript, deleteScript, fetchScriptVersions, aiSinhKichBan, aiSinhKichBanGemini, notify } = useApp();
   const brandVoice0 = (db.content_strategy||{}).brand_voice||'';
   const [f,setF]=useState(()=>({
@@ -3076,6 +3104,17 @@ function ScriptEditor({init, onClose}){
           <div className="text-[10px] text-slate-400 mt-2">Mô phỏng gần đúng để hình dung — không phải giao diện thật của nền tảng.</div>
           {dd!=='VIDEO' && noiDungDangFE(f) && <CopyBtn text={noiDungDangFE(f)} className="w-full mt-2" label="📋 Copy nội dung đăng"/>}
         </Card>
+        {/* VIDEO → công cụ Dựng video: chỉ từ kịch bản ĐÃ DUYỆT 2 cổng (dựng xong không phải sửa lại vì claim) */}
+        {dd==='VIDEO' && (()=>{ const vu=(cur.chi_tiet||{}).video_url; const ly=!f.id?'Lưu kịch bản trước.':dirty?'Lưu thay đổi trước.':curTrangThai!=='DUYET'?'Chỉ dựng từ kịch bản ĐÃ DUYỆT 2 cổng — gửi duyệt trước.':'';
+          return <Card>
+            <SectionTitle className="mb-2">🎬 Dựng video</SectionTitle>
+            {vu ? <>
+              <video src={vu} controls preload="metadata" className="w-full rounded-xl bg-ink max-h-72"/>
+              <div className="text-[11px] text-ink-muted mt-1">Đã dựng bằng công cụ{(cur.chi_tiet||{}).video_luc?' · '+fmtDate((cur.chi_tiet||{}).video_luc):''} · đã có trong Kho footage · bài Đăng sẽ tự lấy video này.</div>
+            </> : <div className="text-[11px] text-ink-muted">Chưa có video. Bấm nút dưới để mở công cụ Dựng video với kịch bản này nạp sẵn; kết xuất xong bấm <b>📤 Đưa lên Kho footage</b> là video tự gắn về đây.</div>}
+            <Btn variant={vu?'ghost':'soft'} className="w-full mt-2" disabled={!!ly} onClick={()=>onDung&&onDung(cur.id?cur:f)} title={ly}>{vu?'🎬 Dựng lại phiên bản mới':'🎬 Dựng video từ kịch bản này'}</Btn>
+            {ly && <div className="text-[11px] text-amber-600 mt-1">{ly}</div>}
+          </Card>; })()}
         {/* Guardrail claim */}
         {flags.length>0 ? <div className={"rounded-2xl border p-3 "+(blocked.length?'bg-rose-50 border-rose-200':'bg-amber-50 border-amber-200')}>
           <div className={"text-sm font-semibold "+(blocked.length?'text-rose-700':'text-amber-700')}>{blocked.length?'⛔ Có cụm từ bị CHẶN — phải gỡ mới lưu được':'⚠ Cụm từ cần rà lại (cảnh báo)'}</div>

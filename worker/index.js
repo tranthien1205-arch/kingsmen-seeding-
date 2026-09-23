@@ -1932,6 +1932,20 @@ async function handleApi(request, env){
     await logAudit(env,me,'sửa kịch bản','scripts',id);
     return json({ db: await bootstrap(env, me) });
   }
+  // Công cụ Dựng video gắn bản kết xuất (đã đưa lên Kho footage) vào kịch bản → chi_tiet.video_url.
+  // Gộp ở server (không nhận cả chi_tiet từ client) để không đè mất caption/hashtag đang có.
+  if((m=path.match(/^\/scripts\/(.+)\/video$/)) && method==='POST'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    const id=m[1]; const r=await env.DB.prepare(`SELECT * FROM scripts WHERE id=?`).bind(id).first();
+    if(!r) return json({error:'Không tìm thấy kịch bản'},404);
+    if((r.dinh_dang||'VIDEO')!=='VIDEO') return json({error:'Chỉ gắn video cho kịch bản định dạng Video'},400);
+    const media_url=String(body.media_url||'').trim();
+    if(!media_url) return json({error:'Thiếu media_url'},400);
+    const ct={ ...docChiTiet(r.chi_tiet), video_url:media_url, video_footage_id:String(body.footage_id||'').trim(), video_luc:nowISO() };
+    await env.DB.prepare(`UPDATE scripts SET chi_tiet=?, updated_at=? WHERE id=?`).bind(JSON.stringify(lamSachChiTiet(ct)), nowISO(), id).run();
+    await logAudit(env,me,'gắn video đã dựng','scripts',id,media_url);
+    return json({ db: await bootstrap(env, me) });
+  }
   if((m=path.match(/^\/scripts\/(.+)\/versions$/)) && method==='GET'){
     if(!isStaff(me)) return json({error:'Không có quyền'},403);
     const rows=(await env.DB.prepare(`SELECT * FROM script_versions WHERE script_id=? ORDER BY version DESC`).bind(m[1]).all()).results
@@ -2017,10 +2031,12 @@ async function handleApi(request, env){
       if(dup) return json({error:'Mã theo dõi đã dùng cho bài khác — 1 mã chỉ thuộc 1 bài'},409);
     }
     const id=uid('air');
-    await env.DB.prepare(`INSERT INTO air_posts (id,content_item_id,script_id,kenh_id,tieu_de,ngay_dang,link_bai,ma_theo_doi,loai_ma,checklist,ghi_chu,trang_thai,nguoi_dang,nguoi_dang_ten,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+    // media đăng kèm: kịch bản Video đã dựng bằng công cụ thì lấy sẵn video đó, khỏi chọn lại
+    const media_url=String(body.media_url||'').trim() || (body.script_id ? String(docChiTiet(src.chi_tiet).video_url||'') : '');
+    await env.DB.prepare(`INSERT INTO air_posts (id,content_item_id,script_id,kenh_id,tieu_de,ngay_dang,link_bai,ma_theo_doi,loai_ma,checklist,ghi_chu,trang_thai,nguoi_dang,nguoi_dang_ten,created_at,updated_at,media_url) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
       .bind(id, body.content_item_id||src.content_item_id||null, body.script_id||null, body.kenh_id||src.kenh_id||null, tieu_de,
         (body.ngay_dang||'').trim(), (body.link_bai||'').trim(), ma, (body.loai_ma||'VOUCHER').trim(),
-        JSON.stringify(body.checklist||{}), (body.ghi_chu||'').trim(), AIR_ST.CHUAN_BI, me.id, me.ho_ten, nowISO(), nowISO()).run();
+        JSON.stringify(body.checklist||{}), (body.ghi_chu||'').trim(), AIR_ST.CHUAN_BI, me.id, me.ho_ten, nowISO(), nowISO(), media_url).run();
     await logAudit(env,me,'tạo bài đăng','air_posts',id,tieu_de);
     return json({ db: await bootstrap(env, me), id });
   }
