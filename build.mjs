@@ -12,11 +12,13 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
+import { fileURLToPath } from 'node:url';
 const require = createRequire(import.meta.url);
 
 const args = process.argv.slice(2);
 const opt = (k, d) => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] : d; };
-const ROOT = path.dirname(new URL(import.meta.url).pathname);
+// fileURLToPath thay vì URL.pathname: trên Windows pathname ra "/D:/OS%20MKT/..." (thừa "/" + dấu cách bị mã hoá) → build hỏng
+const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const SRC = path.resolve(opt('--src', path.join(ROOT, 'seeding-app.html')));
 const OUT = path.resolve(opt('--out', path.join(ROOT, 'dist')));
 const TOOLS = path.join(ROOT, 'tools');
@@ -53,6 +55,10 @@ fs.writeFileSync(path.join(OUT, cssName), css);
 const NM = path.join(ROOT, 'node_modules');
 fs.copyFileSync(path.join(NM, 'react/umd/react.production.min.js'), path.join(OUT, 'vendor', 'react.production.min.js'));
 fs.copyFileSync(path.join(NM, 'react-dom/umd/react-dom.production.min.js'), path.join(OUT, 'vendor', 'react-dom.production.min.js'));
+// vendor/ tự host (xlsx…): trước đây chép tay vào dist → xoá dist rồi build lại là mất import Excel mà không báo
+const VENDOR = path.join(ROOT, 'vendor');
+if (fs.existsSync(VENDOR)) for (const f of fs.readdirSync(VENDOR)) fs.copyFileSync(path.join(VENDOR, f), path.join(OUT, 'vendor', f));
+if (!fs.existsSync(path.join(OUT, 'vendor', 'xlsx.full.min.js'))) throw new Error('Thiếu vendor/xlsx.full.min.js — import Excel sẽ hỏng');
 if (fs.existsSync(TOOLS)) { fs.rmSync(path.join(OUT, 'tools'), { recursive: true, force: true }); fs.cpSync(TOOLS, path.join(OUT, 'tools'), { recursive: true }); }
 
 // 4) index.html: thay các <script> CDN + khối nguồn + khối tự biên dịch bằng tệp đã build
