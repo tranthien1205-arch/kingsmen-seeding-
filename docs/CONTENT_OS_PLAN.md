@@ -206,6 +206,20 @@ Thay cho : (không) — cập nhật §4 registry (san_xuat: chỉ đọc lịch
             màn Quản lý sản xuất viết lại; ContentItemModal thêm khối Sản xuất; VietCuaToi; demo.
 Người duyệt: Thiện · Trạng thái: ĐÃ DUYỆT (2026-09-23)
 ```
+```
+ADR-005 · 2026-09-23 · Ghi nhận & chi phí AI (ai_usage) + ngân sách tháng
+Bối cảnh : không biết AI dùng bao nhiêu, ai dùng, tốn bao nhiêu; hết tín dụng mới biết.
+Quyết định: bảng ai_usage (chỉ ghi thêm): at, thang, provider, model, tinh_nang, user, tokens_vao/ra, chi_phi_usd
+            (ƯỚC TÍNH = token × module_config.ai.gia[model] USD/1M token), ok, ms, loi.
+            Ghi ở: goiAI (Anthropic, mọi tính năng) + n8n sinh workflow + POST /ai/usage (Gemini từ trình duyệt/công cụ).
+            Ngân sách: module_config.ai {ngan_sach_thang_usd (0 = không giới hạn), canh_bao_pct 80, chan_khi_vuot true,
+            ty_gia_vnd}. Vượt 100% + chặn → kiemNganSachAI chặn bộ não Anthropic (vuot_ngan_sach:true); key Gemini cá nhân
+            không chặn, chỉ ghi. Cảnh báo vào "Việc của tôi" (Admin/Trưởng MKT).
+Thay cho : (không)
+Ảnh hưởng: +1 bảng; goiAI thêm tinh_nang/me; validator module ai nới số (tỷ giá); bootstrap thêm ai_thang;
+            màn Bộ não AI 4 tab; công cụ Dựng video báo lượt Gemini (tool_vision, tool_tts).
+Người duyệt: Thiện · Trạng thái: ĐÃ DUYỆT (2026-09-23)
+```
 **Ánh xạ trường theo định dạng** (một nguồn: `DINH_DANG` worker ⟷ `DINH_DANG_FE` frontend):
 | Định dạng | `hook` | `sections[]` | `cta` | `chi_tiet` |
 |---|---|---|---|---|
@@ -525,6 +539,12 @@ Tokens Tailwind (inline config trong `seeding-app.html`): `ink #0b3543` (soft #1
   - **Phím tắt (B):** Space phát/dừng · ←/→ cảnh trước/sau · Delete/Backspace xoá cảnh · `[`/`]` bớt/thêm 1 giây — không bắt khi đang gõ. (Kéo thả, kéo mép, ▶ Xem cả video kèm voice đã có sẵn trong v4.0 → đợt C chỉ còn "playhead theo ruler" — bỏ, vì ô timeline không tuyến tính theo giây.)
   - **Dựng trong luồng:** thẻ "Dựng video" ở màn soạn (chỉ mở khi kịch bản ĐÃ DUYỆT) → `DungVideoPopup`: cửa sổ toàn màn có iframe `mode=dung`, kịch bản nạp sẵn qua `localStorage.kingsmen_kichban_dung`. Công cụ sau 📤 gắn video xong `postMessage({type:'KINGSMEN_VIDEO_GAN'})` → app `refresh()` bootstrap, hiện "✓ Đã gắn video", nút "Xong, quay lại" → thẻ Dựng video hiện video, Đăng bài tự lấy. Esc đóng; "↗ Tab mới" khi iframe không cho chọn folder. Tab "🎬 Dựng video" trong Studio vẫn còn cho dựng tự do.
   - Kiểm DEMO: luồng soạn → duyệt (người khác) → Dựng mở popup đúng kịch bản; bơm POOL/TL giả → 4 cảnh lên timeline, `]` tăng giây, tín hiệu gắn video → banner + nút Xong.
+
+- ✅ **Bộ não AI thiết kế lại: kết nối · sử dụng · chi phí & ngân sách** (ADR-005, §4b).
+  - **Backend:** bảng `ai_usage` + `ghiAIUsage` (chi phí ước tính `tinhChiPhiAI` từ `module_config.ai.gia`, model không có giá → 0 + "[chưa có giá model]"); `goiAI(env,{…,tinh_nang,me})` ghi mọi lượt (kể cả lỗi, ms); n8n sinh workflow ghi riêng; `POST /ai/usage` (staff; provider gemini/ollama/local) cho trình duyệt & công cụ; `GET /ai/usage?thang=` (tổng hợp theo tính năng/ngày/người/model + 200 dòng + 12 tháng gần); `bootstrap.ai_thang`. **Ngân sách:** `kiemNganSachAI` trước mỗi lượt Anthropic — vượt 100% + `chan_khi_vuot` → `{ok:false, vuot_ngan_sach:true}` không gọi AI; Gemini cá nhân không chặn. Validator module `ai` nới số (tỷ giá) + kiểm bảng giá.
+  - **Frontend:** `BoNaoAI` 4 tab — 📊 Tổng quan (4 thẻ số: chi phí tháng USD≈VND · ngân sách % · lượt/lỗi · token vào/ra; thanh ngân sách đổi màu 80/100%; biểu đồ cột theo ngày; bảng theo tính năng/model/người) · 🔌 Kết nối (Anthropic secret + Gemini máy này, kiểm tra kết nối có ghi lượt `kiem_tra`) · 💰 Chi phí & ngân sách (ngân sách USD, cảnh báo %, tỷ giá, chặn khi vượt, **bảng giá theo model sửa được**, lưu qua `setModuleConfig('ai')`) · 🕑 Nhật ký (lọc tháng). `goiGemini` trả `usage`; Studio (Gemini) và Kiểm tra kết nối báo lượt qua `baoAIUsage`. "Việc của tôi" nhắc Admin/Trưởng MKT khi ≥ ngưỡng cảnh báo. Công cụ Dựng video báo lượt Gemini (`tool_vision`, `tool_tts`) khi có phiên app.
+  - Test `test_ai_usage.mjs` **24/24** (ghi lượt, chi phí đúng token×giá, lỗi vẫn ghi, gemini/model lạ, chặn & mở chặn, validator, RBAC, lọc tháng); hồi quy 100/100 · 28/28 · 26/26.
+  - ⚠️ Chi phí là **ước tính**: bảng giá mặc định theo giá công bố lúc cài (Sonnet 4.5 $3/$15, Haiku 4.5 $1/$5, Opus 4.1 $15/$75, Gemini 2.5 Flash $0.3/$2.5, Flash-Lite $0.1/$0.4, Pro $1.25/$10 mỗi 1M token) — Admin đối chiếu hoá đơn và sửa ở tab Chi phí.
 
 ### ⚙️ Quy trình deploy (CẬP NHẬT)
 `npm run build` (build.mjs: biên dịch JSX, build CSS Tailwind từ chính khối `tailwind.config` trong seeding-app.html, chép vendor React và `tools/`) → `node --check worker/index.js` → commit cả `dist/` → push. `node_modules/` đã trong .gitignore.

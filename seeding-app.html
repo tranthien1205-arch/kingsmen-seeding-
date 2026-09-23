@@ -184,8 +184,9 @@ async function goiGemini({key, model}, system, user){
     const c=(j.candidates||[])[0];
     if(!c) return {ok:false, loi:'Gemini không trả về nội dung'+(j.promptFeedback&&j.promptFeedback.blockReason?(' (bị chặn: '+j.promptFeedback.blockReason+')'):'')};
     const txt=((c.content&&c.content.parts)||[]).map(p=>p.text||'').join('').trim();
-    if(!txt) return {ok:false, loi:'Gemini trả về rỗng'+(c.finishReason?(' — '+c.finishReason):'')};
-    return {ok:true, text:txt};
+    const um=j.usageMetadata||{}; const usage={tokens_vao:um.promptTokenCount||0, tokens_ra:(um.candidatesTokenCount||0)+(um.thoughtsTokenCount||0)};
+    if(!txt) return {ok:false, loi:'Gemini trả về rỗng'+(c.finishReason?(' — '+c.finishReason):''), usage};
+    return {ok:true, text:txt, usage};
   } catch(e){ return {ok:false, loi:'Không gọi được Gemini: '+(e.message||e)}; }
 }
 // Giá chưa công bố phải hiện chữ, KHÔNG hiện "0 ₫" — 0đ người đọc hiểu thành miễn phí.
@@ -938,6 +939,7 @@ function AppProvider({children}){
       aiDanhGiaTrend: async id=>({ok:false, thieu_key:true, loi:'Chế độ offline không gọi AI được'}),
       aiSinhKichBan: async o=>({ok:false, thieu_key:true, loi:'Chế độ offline không gọi AI được'}),
       aiSinhKichBanGemini: async o=>({ok:false, loi:'Chế độ offline không gọi AI được'}),
+      baoAIUsage: async ()=>{}, layAIUsage: async ()=>({tong_hop:null, rows:[], thangs:[]}),
       chuyenDinhDang: async (id, dd)=>{ const src=(S.scripts||[]).find(x=>x.id===id); if(!src) return {ok:false,msg:'Không tìm thấy'}; if(dd===ddOf(src)) return {ok:false,msg:'Đã là định dạng này rồi'};
         const moi=chuyenDinhDangFE(src, dd); const flags=scanClaims(scriptTextFE(moi), S.claim_cam); if(flags.some(x=>x.muc_do==='CHAN')) return {ok:false, msg:'Nội dung gốc có cụm bị CHẶN — sửa bản gốc trước'};
         const nid=uid('scr'); S.scripts.unshift({ id:nid, content_item_id:src.content_item_id||null, framework_id:src.framework_id||null, san_pham_id:src.san_pham_id||null, kenh_id:src.kenh_id||null, ...moi, brand_voice:src.brand_voice||'', trang_thai:'NHAP', version:1, dinh_dang:dd, claim_flags:flags, created_at:now(), created_by:meRef.current.id, created_by_name:meRef.current.ho_ten, updated_at:now() }); commit(); return {ok:true, id:nid}; },
@@ -1057,6 +1059,9 @@ function AppProvider({children}){
     db, me, meId, notify, loading, token,
     login, logout,
     refresh: () => call('/bootstrap').then(r=>setDb(r.db)).catch(()=>{}),
+    // ADR-005: lượt gọi AI từ trình duyệt (Gemini key cá nhân) báo về để tính chi phí; tổng hợp theo tháng
+    baoAIUsage: o => call('/ai/usage',{method:'POST',body:o}).catch(()=>{}),
+    layAIUsage: thang => call('/ai/usage'+(thang?('?thang='+encodeURIComponent(thang)):'')),
     audit: ()=>{},
     updateProfile: patch => mut('/me', {method:'PATCH', body:patch}),
     upsertGroup: g => mut(g.id?`/groups/${g.id}`:'/groups', {method:g.id?'PATCH':'POST', body:g}),
@@ -1155,12 +1160,13 @@ function AppProvider({children}){
     // Đường AI riêng của người dùng: server dựng prompt → trình duyệt tự gọi Gemini bằng key
     // đã cắm sẵn ở công cụ Lọc video → server thẩm định lại. Key không rời máy người dùng.
     aiSinhKichBanGemini: async o => {
-      const kg=keyGemini();
+      const kg=keyGemini(); const baoAIUsage=(x)=>call('/ai/usage',{method:'POST',body:x}).catch(()=>{});
       if(!kg) return {ok:false, loi:'Chưa cắm key Gemini ở công cụ Lọc & dựng video'};
       try {
         const p=await call('/scripts/ai-sinh/prompt',{method:'POST',body:o});
         if(!p||!p.ok) return {ok:false, loi:(p&&p.error)||'Không dựng được prompt'};
         const t=await goiGemini(kg, p.system, p.user);
+        baoAIUsage({provider:'gemini', model:kg.model, tinh_nang:'kich_ban', ...(t.usage||{}), ok:t.ok, loi:t.ok?'':t.loi});
         if(!t.ok) return t;
         return await call('/scripts/ai-sinh/ket-qua',{method:'POST',body:{text:t.text, cac_buoc:p.cac_buoc, dinh_dang:p.dinh_dang||o.dinh_dang}});
       } catch(e){ return {ok:false,loi:e.message}; }
@@ -1622,8 +1628,22 @@ const BETA_KEYS = new Set([]);
 //     dùng chung với công cụ Lọc & dựng video; KHÔNG bao giờ gửi lên server/D1.
 const GEMINI_MODELS=['gemini-2.5-flash','gemini-2.5-flash-lite','gemini-2.5-pro'];
 function docVisionCfg(){ try{ return JSON.parse(localStorage.getItem(LS_VISION)||'{}')||{}; }catch(e){ return {}; } }
+// ADR-005 — nhãn tính năng dùng AI (khớp tinh_nang ghi ở worker/công cụ)
+// Bảng giá mặc định phía FE (khớp CONFIG_MAC_DINH.ai.gia ở worker) — dùng khi bản demo / cấu hình chưa có
+const AI_GIA_MAC_DINH={ 'claude-sonnet-4-5':{vao:3,ra:15}, 'claude-haiku-4-5-20251001':{vao:1,ra:5}, 'claude-opus-4-1':{vao:15,ra:75}, 'gemini-2.5-flash':{vao:0.3,ra:2.5}, 'gemini-2.5-flash-lite':{vao:0.1,ra:0.4}, 'gemini-2.5-pro':{vao:1.25,ra:10} };
+const AI_TINH_NANG={ kich_ban:'AI viết kịch bản', trend_cham:'Chấm trend', chatbot:'Chatbot', n8n_workflow:'Sinh workflow n8n', tool_vision:'Dựng video · chấm shot', tool_tts:'Dựng video · giọng đọc', kiem_tra:'Kiểm tra kết nối', khac:'Khác' };
+const fmtUsd=v=>{ v=Number(v)||0; return '$'+(v>=100?v.toFixed(0):v>=1?v.toFixed(2):v.toFixed(3)); };
+const fmtVnd=(u,tg)=>Math.round((Number(u)||0)*(Number(tg)||26000)).toLocaleString('vi-VN')+' ₫';
+const fmtTok=t=>{ t=Number(t)||0; return t>=1e6?(t/1e6).toFixed(2)+'M':t>=1e3?(t/1e3).toFixed(1)+'k':String(t); };
+// 🧠 BỘ NÃO AI — 4 phần: Tổng quan (chi phí tháng · ngân sách) · Kết nối · Chi phí & ngân sách (cấu hình) · Nhật ký.
+//   · Chi phí là ƯỚC TÍNH: token × bảng giá (USD/1 triệu token) trong cấu hình — đối chiếu hoá đơn nhà cung cấp.
+//   · Anthropic = secret Worker (server, cả công ty); Gemini = key của người dùng trong trình duyệt này (localStorage 'locvideo_vision').
 function BoNaoAI(){
-  const { db, me, notify } = useApp();
+  const { db, me, notify, layAIUsage, setModuleConfig, baoAIUsage } = useApp();
+  const T=db.ai_thang||null; const cfgAI=((db.module_config||{}).ai)||{};
+  const duocSua=db.can_cau_hinh!==false;
+  const [tab,setTab]=useState('tong');
+  // Gemini (máy này)
   const [cfg,setCfg]=useState(()=>docVisionCfg());
   const [key,setKey]=useState(cfg.geminiKey||''); const [model,setModel]=useState(cfg.geminiModel||GEMINI_MODELS[0]);
   const [kq,setKq]=useState(null); const [busy,setBusy]=useState(false);
@@ -1631,52 +1651,124 @@ function BoNaoAI(){
   const luu=()=>{ try{ const v={...docVisionCfg(), geminiKey:key.trim(), geminiModel:model, engine:key.trim()?'gemini':(docVisionCfg().engine||'')};
       localStorage.setItem(LS_VISION, JSON.stringify(v)); setCfg(v); setKq(null); notify(key.trim()?'Đã lưu key Gemini trên máy này':'Đã gỡ key Gemini'); }catch(e){ notify('Trình duyệt không cho lưu (chế độ riêng tư?)','err'); } };
   const kiem=async()=>{ const k=key.trim(); if(!k) return notify('Dán key trước','warn');
-    setBusy(true); setKq(null);
+    setBusy(true); setKq(null); const t0=Date.now();
     const r=await goiGemini({key:k, model}, 'Trả lời đúng một từ.', 'Nói "OK".');
-    setBusy(false); setKq(r.ok?{ok:true, t:'Kết nối được · model '+model+' trả lời: '+String(r.text||'').slice(0,40)}:{ok:false, t:r.loi||'Lỗi'}); };
-  const Row=({k,v})=><div className="flex gap-2 text-[12px]"><span className="w-40 shrink-0 text-ink-muted">{k}</span><span className="text-ink">{v}</span></div>;
+    setBusy(false); setKq(r.ok?{ok:true, t:'Kết nối được · '+model+' trả lời: '+String(r.text||'').slice(0,40)}:{ok:false, t:r.loi||'Lỗi'});
+    if(typeof baoAIUsage==='function') baoAIUsage({provider:'gemini', model, tinh_nang:'kiem_tra', ...(r.usage||{}), ok:r.ok, ms:Date.now()-t0, loi:r.ok?'':r.loi}); };
+  // Chi phí & ngân sách (cấu hình module 'ai')
+  const [cf,setCf]=useState(()=>({ ngan_sach_thang_usd:cfgAI.ngan_sach_thang_usd||0, canh_bao_pct:cfgAI.canh_bao_pct||80, chan_khi_vuot:cfgAI.chan_khi_vuot!==false, ty_gia_vnd:cfgAI.ty_gia_vnd||26000, gia:Object.fromEntries(Object.entries(cfgAI.gia&&Object.keys(cfgAI.gia).length?cfgAI.gia:AI_GIA_MAC_DINH).map(([k,g])=>[k,{vao:g.vao,ra:g.ra}])) }));
+  const [busyCf,setBusyCf]=useState(false);
+  const luuCf=async()=>{ setBusyCf(true);
+    const gia={}; Object.entries(cf.gia).forEach(([k,g])=>{ const m=k.trim(); if(m) gia[m]={vao:Number(g.vao)||0, ra:Number(g.ra)||0}; });
+    const r=await setModuleConfig('ai', { ngan_sach_thang_usd:Number(cf.ngan_sach_thang_usd)||0, canh_bao_pct:Math.min(100,Math.max(1,Number(cf.canh_bao_pct)||80)), chan_khi_vuot:!!cf.chan_khi_vuot, ty_gia_vnd:Number(cf.ty_gia_vnd)||26000, gia });
+    setBusyCf(false); if(r&&r.ok) notify('Đã lưu chi phí & ngân sách AI'); else notify((r&&r.msg)||'Lỗi','err'); };
+  const setGia=(m,k,v)=>setCf(c=>({...c, gia:{...c.gia, [m]:{...(c.gia[m]||{vao:0,ra:0}), [k]:v}}}));
+  const doiTenGia=(cu,moi)=>setCf(c=>{ const g={}; Object.entries(c.gia).forEach(([k,x])=>{ g[k===cu?moi:k]=x; }); return {...c, gia:g}; });
+  // Nhật ký (tải khi mở tab)
+  const [ct,setCt]=useState(null); const [thang,setThang]=useState((T&&T.thang)||new Date().toISOString().slice(0,7));
+  useEffect(()=>{ if(tab!=='nhat_ky') return; setCt(null); (typeof layAIUsage==='function'?layAIUsage(thang):Promise.resolve(null)).then(r=>setCt(r||{rows:[],thangs:[]})).catch(()=>setCt({rows:[],thangs:[]})); },[tab, thang]);
+  const pct=T&&T.pct!=null?Math.min(999,T.pct):null;
+  const mauPct = pct==null?'bg-slate-300':pct>=100?'bg-rose-500':pct>=(T.canh_bao_pct||80)?'bg-amber-500':'bg-emerald-500';
+  const Tile=({label,value,sub,tone})=><div className={"rounded-2xl p-3 border "+(tone||'bg-white border-line')}><div className="text-[11px] text-ink-muted">{label}</div><div className="font-display text-xl font-extrabold text-ink mt-0.5">{value}</div>{sub&&<div className="text-[11px] text-ink-muted mt-0.5">{sub}</div>}</div>;
+  const Bang=({cols,rows,keyOf})=><div className="overflow-auto"><table className="w-full text-xs"><thead className="text-[10px] uppercase text-ink-muted text-left"><tr>{cols.map((c,i)=><th key={i} className={"py-1 pr-2 "+(c.r?'text-right':'')}>{c.t}</th>)}</tr></thead>
+    <tbody className="divide-y divide-line/60">{rows.map((r,i)=><tr key={keyOf?keyOf(r,i):i}>{cols.map((c,j)=><td key={j} className={"py-1.5 pr-2 "+(c.r?'text-right tabular-nums':'')}>{c.v(r)}</td>)}</tr>)}</tbody></table></div>;
   return <div className="space-y-4">
-    <PageHeader title="🧠 Bộ não AI" sub="Mọi tính năng AI của app dùng một trong hai bộ não dưới đây. Cắm ở đây là mọi màn (Studio, Trend, Chatbot, công cụ Dựng video) dùng chung."/>
-    <Card>
-      <div className="flex items-center justify-between gap-2 flex-wrap">
-        <SectionTitle>1 · Anthropic (Claude) — bộ não của app trên máy chủ</SectionTitle>
-        <StatusPill size="md" cls={db.ai_san_sang?TONE.ok:TONE.warn}>{db.ai_san_sang?'● Đang hoạt động':'○ Chưa cắm key'}</StatusPill>
+    <PageHeader title="🧠 Bộ não AI" sub="Kết nối · mức dùng · chi phí ước tính · ngân sách. Chi phí = token × bảng giá bạn đặt, đối chiếu hoá đơn nhà cung cấp."/>
+    <Tabs active={tab} onChange={setTab} tabs={[{key:'tong',label:'📊 Tổng quan'},{key:'ket_noi',label:'🔌 Kết nối'},{key:'chi_phi',label:'💰 Chi phí & ngân sách'},{key:'nhat_ky',label:'🕑 Nhật ký'}]}/>
+
+    {tab==='tong' && (!T ? <Card><div className="text-sm text-ink-muted">Chưa có số liệu AI (bản demo hoặc chưa có lượt gọi nào tháng này).</div></Card> : <>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <Tile label={'Chi phí ước tính · tháng '+T.thang} value={fmtUsd(T.usd)} sub={'≈ '+fmtVnd(T.usd,T.ty_gia_vnd)}/>
+        <Tile label="Ngân sách tháng" value={T.ngan_sach_usd?fmtUsd(T.ngan_sach_usd):'chưa đặt'} sub={T.ngan_sach_usd?(Math.round(T.pct)+'% đã dùng'+(T.chan_khi_vuot?' · chặn khi vượt':' · chỉ cảnh báo')):'đặt ở tab Chi phí & ngân sách'} tone={pct!=null&&pct>=100?'bg-rose-50 border-rose-200':pct!=null&&pct>=T.canh_bao_pct?'bg-amber-50 border-amber-200':undefined}/>
+        <Tile label="Lượt gọi" value={T.n} sub={T.loi?(T.loi+' lượt lỗi'):'không lỗi'}/>
+        <Tile label="Token vào / ra" value={fmtTok(T.tokens_vao)+' / '+fmtTok(T.tokens_ra)} sub="ra đắt hơn vào 3–5 lần"/>
       </div>
-      <div className="text-[12px] text-ink-muted mt-1 leading-relaxed">Key nằm trong <b>secret của Cloudflare Worker</b> (<code>ANTHROPIC_API_KEY</code>) — không hiện, không sửa được từ app, dùng chung cho cả công ty. Dùng cho: AI viết kịch bản (mọi định dạng), chấm trend, agent gom trend, chatbot, sinh workflow n8n.</div>
-      {!db.ai_san_sang && <div className={CALLOUT.info+" mt-2"}>Người có quyền Cloudflare cắm bằng lệnh (chạy trong thư mục dự án, dán key khi được hỏi):<pre className="mt-1 text-[11px] bg-white rounded-lg p-2 border border-line overflow-auto">npx wrangler secret put ANTHROPIC_API_KEY</pre>Cắm xong không cần deploy lại — tải lại app là thấy “Đang hoạt động”.</div>}
-    </Card>
-    <Card>
-      <div className="flex items-center justify-between gap-2 flex-wrap">
-        <SectionTitle>2 · Gemini (Google) — key của chính bạn, lưu trên máy này</SectionTitle>
-        <StatusPill size="md" cls={daCo?TONE.ok:TONE.muted}>{daCo?('● Đã cắm · '+(cfg.geminiModel||'')):'○ Chưa cắm'}</StatusPill>
+      {T.ngan_sach_usd>0 && <Card pad="p-3"><div className="flex items-center justify-between text-[11px] text-ink-muted mb-1"><span>Ngân sách tháng</span><span>{fmtUsd(T.usd)} / {fmtUsd(T.ngan_sach_usd)}</span></div>
+        <div className="h-2.5 rounded-full bg-slate-100 overflow-hidden"><div className={"h-full "+mauPct} style={{width:Math.min(100,pct)+'%'}}/></div>
+        {pct>=T.canh_bao_pct && <div className={"text-[11px] mt-1 "+(pct>=100?'text-rose-600':'text-amber-700')}>{pct>=100?(T.chan_khi_vuot?'⛔ Đã vượt — bộ não Anthropic của app đang bị chặn; nâng ngân sách hoặc tắt chặn ở tab Chi phí.':'⚠ Đã vượt ngân sách (đang để chỉ cảnh báo).'):('⚠ Đã dùng '+Math.round(pct)+'% — sắp chạm ngân sách.')}</div>}
+      </Card>}
+      <div className="grid lg:grid-cols-2 gap-3">
+        <Card pad="p-3"><SectionTitle className="mb-2">Theo ngày</SectionTitle>
+          {T.theo_ngay.length===0 ? <div className="text-xs text-ink-muted">Chưa có lượt gọi.</div> :
+          (()=>{ const mx=Math.max(...T.theo_ngay.map(d=>d.usd),1e-9); return <div className="flex items-end gap-1 h-28">{T.theo_ngay.map(d=><div key={d.ngay} className="flex-1 min-w-0 flex flex-col items-center justify-end" title={d.ngay+' · '+d.n+' lượt · '+fmtUsd(d.usd)}><div className="w-full bg-brand rounded-t" style={{height:Math.max(3,d.usd/mx*100)+'%'}}/><div className="text-[9px] text-slate-400 mt-0.5">{d.ngay.slice(8)}</div></div>)}</div>; })()}
+        </Card>
+        <Card pad="p-3"><SectionTitle className="mb-2">Theo tính năng</SectionTitle>
+          {T.theo_tinh_nang.length===0 ? <div className="text-xs text-ink-muted">Chưa có lượt gọi.</div> :
+          <Bang rows={T.theo_tinh_nang} cols={[{t:'Tính năng',v:r=>AI_TINH_NANG[r.tinh_nang]||r.tinh_nang},{t:'Lượt',r:1,v:r=>r.n},{t:'Token',r:1,v:r=>fmtTok(r.tokens)},{t:'Chi phí',r:1,v:r=>fmtUsd(r.usd)}]}/>}
+        </Card>
+        <Card pad="p-3"><SectionTitle className="mb-2">Theo bộ não / model</SectionTitle>
+          {T.theo_model.length===0 ? <div className="text-xs text-ink-muted">Chưa có lượt gọi.</div> :
+          <Bang rows={T.theo_model} keyOf={r=>r.provider+r.model} cols={[{t:'Model',v:r=><span><span className="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-600 mr-1">{r.provider}</span>{r.model||'—'}</span>},{t:'Lượt',r:1,v:r=>r.n},{t:'Vào/ra',r:1,v:r=>fmtTok(r.vao)+'/'+fmtTok(r.ra)},{t:'Chi phí',r:1,v:r=>fmtUsd(r.usd)}]}/>}
+        </Card>
+        <Card pad="p-3"><SectionTitle className="mb-2">Theo người</SectionTitle>
+          {T.theo_nguoi.length===0 ? <div className="text-xs text-ink-muted">Chưa có lượt gọi.</div> :
+          <Bang rows={T.theo_nguoi} keyOf={r=>r.user_name} cols={[{t:'Người',v:r=>r.user_name||'Hệ thống / agent'},{t:'Lượt',r:1,v:r=>r.n},{t:'Chi phí',r:1,v:r=>fmtUsd(r.usd)}]}/>}
+        </Card>
       </div>
-      <div className="text-[12px] text-ink-muted mt-1 leading-relaxed">Dùng khi app chưa có key Anthropic, hoặc cho công cụ Lọc & dựng video (chấm shot, viết kịch bản). Key <b>chỉ nằm trong trình duyệt này</b>, không gửi lên máy chủ; máy khác/tài khoản khác phải cắm riêng. Lấy key và nạp tín dụng tại <a className="text-brand-dark underline" href="https://aistudio.google.com/" target="_blank" rel="noreferrer">Google AI Studio</a>.</div>
-      <div className="grid sm:grid-cols-[1fr_200px] gap-2 mt-3">
-        <Field label="API key Gemini"><PasswordInput value={key} onChange={e=>setKey(e.target.value)} placeholder="AIza…" autoComplete="off"/></Field>
-        <Field label="Model"><Select value={model} onChange={e=>setModel(e.target.value)}>{[...new Set([...GEMINI_MODELS, model].filter(Boolean))].map(m=><option key={m} value={m}>{m}</option>)}</Select></Field>
-      </div>
-      <div className="flex flex-wrap gap-2">
-        <Btn variant="brand" onClick={luu}>💾 Lưu trên máy này</Btn>
-        <Btn variant="ghost" onClick={kiem} disabled={busy}>{busy?'Đang gọi…':'🔌 Kiểm tra kết nối'}</Btn>
-        {daCo && <Btn variant="ghost" onClick={()=>{ setKey(''); setTimeout(luu,0); }}>Gỡ key</Btn>}
-      </div>
-      {kq && <div className={(kq.ok?CALLOUT.ok:CALLOUT.danger)+" mt-2"}>{kq.t}{!kq.ok && /credit|hạn mức|quota|billing/i.test(kq.t) && <div className="mt-1">→ Tài khoản Google hết tín dụng/hạn mức: nạp thêm ở AI Studio › Billing, hoặc đổi model <b>gemini-2.5-flash-lite</b> (rẻ nhất) rồi kiểm tra lại.</div>}</div>}
-      <div className="text-[10px] text-slate-400 mt-2">Cùng ô cấu hình với công cụ Lọc & dựng video (⚙ Cài đặt AI) — sửa ở đâu cũng được.</div>
-    </Card>
-    <Card>
-      <SectionTitle>3 · AI chạy ngay trên máy (miễn phí)</SectionTitle>
-      <div className="text-[12px] text-ink-muted mt-1 leading-relaxed">Bóc lời thoại video (Whisper) và chấm shot/CLIP chạy trong trình duyệt, không tốn phí, không gửi video đi đâu. Ollama (máy cục bộ) bật trong công cụ Lọc & dựng video › ⚙ Cài đặt AI.</div>
-    </Card>
-    <Card>
-      <SectionTitle className="mb-2">Chỗ nào dùng bộ não nào</SectionTitle>
-      <div className="space-y-1">
-        <Row k="Studio · Nhờ AI viết" v="Anthropic → nếu chưa có thì Gemini (máy này) → không có thì khuôn rule-based"/>
-        <Row k="Trend · AI chấm / agent" v="Anthropic (server, chạy theo lịch)"/>
-        <Row k="Chatbot 🤖" v="Anthropic"/>
-        <Row k="Lọc & dựng video" v="Gemini hoặc Ollama (máy này) + Whisper/CLIP trên máy"/>
-        <Row k="n8n sinh workflow" v="Anthropic"/>
-      </div>
-    </Card>
+    </>)}
+
+    {tab==='ket_noi' && <div className="grid lg:grid-cols-2 gap-3 items-start">
+      <Card>
+        <div className="flex items-center justify-between gap-2 flex-wrap"><SectionTitle>Anthropic (Claude) — bộ não của app</SectionTitle>
+          <StatusPill size="md" cls={db.ai_san_sang?TONE.ok:TONE.warn}>{db.ai_san_sang?'● Đang hoạt động':'○ Chưa cắm key'}</StatusPill></div>
+        <div className="text-[12px] text-ink-muted mt-1 leading-relaxed">Key là <b>secret của Cloudflare Worker</b> (<code>ANTHROPIC_API_KEY</code>), dùng chung cả công ty, tính vào ngân sách tháng. Dùng cho: viết kịch bản (mọi định dạng), chấm trend, agent gom trend, chatbot, sinh workflow n8n.</div>
+        <div className={CALLOUT.info+" mt-2"}>Cắm/đổi key (người có quyền Cloudflare, chạy trong thư mục dự án):<pre className="mt-1 text-[11px] bg-white rounded-lg p-2 border border-line overflow-auto">npx wrangler secret put ANTHROPIC_API_KEY</pre>Đổi model: <code>npx wrangler secret put ANTHROPIC_MODEL</code> (mặc định claude-sonnet-4-5). Không cần deploy lại.</div>
+      </Card>
+      <Card>
+        <div className="flex items-center justify-between gap-2 flex-wrap"><SectionTitle>Gemini (Google) — key của bạn, máy này</SectionTitle>
+          <StatusPill size="md" cls={daCo?TONE.ok:TONE.muted}>{daCo?('● Đã cắm · '+(cfg.geminiModel||'')):'○ Chưa cắm'}</StatusPill></div>
+        <div className="text-[12px] text-ink-muted mt-1 leading-relaxed">Dùng khi app chưa có key Anthropic, và cho công cụ Dựng video (chấm shot, giọng đọc). Key chỉ nằm trong trình duyệt này; lượt gọi vẫn được ghi để tính chi phí nhưng <b>không bị chặn</b> bởi ngân sách (bạn tự trả). Lấy key và nạp tín dụng tại <a className="text-brand-dark underline" href="https://aistudio.google.com/" target="_blank" rel="noreferrer">Google AI Studio</a>.</div>
+        <div className="grid sm:grid-cols-[1fr_190px] gap-2 mt-3">
+          <Field label="API key Gemini"><PasswordInput value={key} onChange={e=>setKey(e.target.value)} placeholder="AIza…" autoComplete="off"/></Field>
+          <Field label="Model"><Select value={model} onChange={e=>setModel(e.target.value)}>{[...new Set([...GEMINI_MODELS, model].filter(Boolean))].map(m=><option key={m} value={m}>{m}</option>)}</Select></Field>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Btn variant="brand" onClick={luu}>💾 Lưu trên máy này</Btn>
+          <Btn variant="ghost" onClick={kiem} disabled={busy}>{busy?'Đang gọi…':'🔌 Kiểm tra kết nối'}</Btn>
+          {daCo && <Btn variant="ghost" onClick={()=>{ setKey(''); setTimeout(luu,0); }}>Gỡ key</Btn>}
+        </div>
+        {kq && <div className={(kq.ok?CALLOUT.ok:CALLOUT.danger)+" mt-2"}>{kq.t}{!kq.ok && /credit|hạn mức|quota|billing/i.test(kq.t) && <div className="mt-1">→ Tài khoản Google hết tín dụng/hạn mức: nạp thêm ở AI Studio › Billing, hoặc đổi model <b>gemini-2.5-flash-lite</b> rồi kiểm tra lại.</div>}</div>}
+        <div className="text-[10px] text-slate-400 mt-2">Cùng ô cấu hình với công cụ Lọc & dựng video (⚙ Cài đặt AI). AI chạy trên máy (Whisper/CLIP/Ollama) miễn phí, không ghi chi phí.</div>
+      </Card>
+      <Card pad="p-3" className="lg:col-span-2"><SectionTitle className="mb-2">Chỗ nào dùng bộ não nào</SectionTitle>
+        <div className="space-y-1 text-[12px]">
+          {[['Studio · Nhờ AI viết','Anthropic → chưa có thì Gemini (máy này) → không có thì khuôn rule-based'],['Trend · AI chấm / agent','Anthropic (server, chạy theo lịch)'],['Chatbot 🤖','Anthropic'],['Dựng video','Gemini hoặc Ollama (máy này) + Whisper/CLIP trên máy'],['n8n sinh workflow','Anthropic']].map(([k,v])=><div key={k} className="flex gap-2"><span className="w-44 shrink-0 text-ink-muted">{k}</span><span className="text-ink">{v}</span></div>)}
+        </div></Card>
+    </div>}
+
+    {tab==='chi_phi' && <div className="space-y-3">
+      {!duocSua && <div className={CALLOUT.note}>Chỉ Admin / Trưởng MKT / Marketing sửa được. Bạn xem được.</div>}
+      <Card>
+        <SectionTitle className="mb-2">Ngân sách tháng</SectionTitle>
+        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-2">
+          <Field label="Ngân sách (USD/tháng)" hint="0 = không giới hạn"><Input type="number" min="0" step="1" value={cf.ngan_sach_thang_usd} onChange={e=>setCf({...cf,ngan_sach_thang_usd:e.target.value})} disabled={!duocSua}/></Field>
+          <Field label="Cảnh báo từ (%)"><Input type="number" min="1" max="100" value={cf.canh_bao_pct} onChange={e=>setCf({...cf,canh_bao_pct:e.target.value})} disabled={!duocSua}/></Field>
+          <Field label="Tỷ giá (₫ / 1 USD)" hint="để quy đổi khi hiển thị"><Input type="number" min="1" value={cf.ty_gia_vnd} onChange={e=>setCf({...cf,ty_gia_vnd:e.target.value})} disabled={!duocSua}/></Field>
+          <Field label="Khi vượt 100%"><label className="flex items-center gap-2 text-sm text-ink mt-2"><input type="checkbox" checked={!!cf.chan_khi_vuot} onChange={e=>setCf({...cf,chan_khi_vuot:e.target.checked})} disabled={!duocSua}/> Chặn bộ não Anthropic của app</label><div className="text-[11px] text-ink-muted mt-1">Bỏ tick = chỉ cảnh báo. Không chặn key Gemini cá nhân.</div></Field>
+        </div>
+      </Card>
+      <Card>
+        <div className="flex items-center justify-between gap-2 flex-wrap"><SectionTitle>Bảng giá (USD / 1 triệu token)</SectionTitle>
+          {duocSua && <LinkBtn onClick={()=>setCf(c=>({...c, gia:{...c.gia, ['model-moi-'+(Object.keys(c.gia).length+1)]:{vao:0,ra:0}}}))}>＋ Thêm model</LinkBtn>}</div>
+        <div className="text-[11px] text-ink-muted mt-1 mb-2">Mặc định theo bảng giá công bố lúc cài; nhà cung cấp đổi giá thì sửa ở đây. Model không có trong bảng → chi phí ghi 0 và đánh dấu "[chưa có giá model]" trong nhật ký.</div>
+        <div className="space-y-1.5">{Object.entries(cf.gia).map(([m,g])=><div key={m} className="grid grid-cols-[1fr_90px_90px_auto] gap-2 items-center">
+          <Input value={m} onChange={e=>doiTenGia(m,e.target.value)} disabled={!duocSua} className="!py-1.5 text-xs font-mono"/>
+          <Input type="number" min="0" step="0.01" value={g.vao} onChange={e=>setGia(m,'vao',e.target.value)} disabled={!duocSua} className="!py-1.5 text-xs" title="USD / 1M token vào"/>
+          <Input type="number" min="0" step="0.01" value={g.ra} onChange={e=>setGia(m,'ra',e.target.value)} disabled={!duocSua} className="!py-1.5 text-xs" title="USD / 1M token ra"/>
+          {duocSua ? <LinkBtn tone="danger" onClick={()=>setCf(c=>{ const gg={...c.gia}; delete gg[m]; return {...c,gia:gg}; })}>Xoá</LinkBtn> : <span/>}
+        </div>)}
+        <div className="grid grid-cols-[1fr_90px_90px_auto] gap-2 text-[10px] text-slate-400"><span>model</span><span>vào</span><span>ra</span><span/></div></div>
+      </Card>
+      {duocSua && <div className="flex gap-2"><Btn variant="brand" onClick={luuCf} disabled={busyCf}>{busyCf?'Đang lưu…':'💾 Lưu chi phí & ngân sách'}</Btn></div>}
+    </div>}
+
+    {tab==='nhat_ky' && <Card pad="p-3">
+      <div className="flex items-center justify-between gap-2 flex-wrap mb-2"><SectionTitle>Nhật ký lượt gọi AI</SectionTitle>
+        <Select className="!w-auto" value={thang} onChange={e=>setThang(e.target.value)}>{[...new Set([thang, ...((ct&&ct.thangs)||[]).map(t=>t.thang)])].map(t=><option key={t} value={t}>{t}</option>)}</Select></div>
+      {!ct ? <div className="text-xs text-ink-muted">Đang tải…</div> : ct.rows.length===0 ? <div className="text-xs text-ink-muted">Không có lượt gọi nào trong tháng này.</div> :
+      <Bang rows={ct.rows} keyOf={r=>r.id} cols={[{t:'Lúc',v:r=>fmtDate(r.at)},{t:'Tính năng',v:r=>AI_TINH_NANG[r.tinh_nang]||r.tinh_nang},{t:'Người',v:r=>r.user_name||'—'},{t:'Model',v:r=><span className="font-mono text-[11px]">{r.provider}/{r.model||'?'}</span>},{t:'Vào/ra',r:1,v:r=>fmtTok(r.tokens_vao)+'/'+fmtTok(r.tokens_ra)},{t:'Chi phí',r:1,v:r=>fmtUsd(r.chi_phi_usd)},{t:'KQ',v:r=>r.ok?<span className="text-emerald-700">✓</span>:<span className="text-rose-600" title={r.loi}>✗ {String(r.loi||'').slice(0,40)}</span>}]}/>}
+      <div className="text-[10px] text-slate-400 mt-2">Hiện tối đa 200 dòng gần nhất của tháng.</div>
+    </Card>}
   </div>;
 }
 // Lưới an toàn: một màn vẽ lỗi thì chỉ màn đó báo lỗi (kèm nút tải lại), không trắng cả app
@@ -3537,6 +3629,9 @@ function vietCuaToiFE(db, me){
     v.push({uu:UU.KHAN, icon:'🚀', ten:'Đăng tay: '+(a.tieu_de||'(không tên)'), meta:a.loi||'tới giờ mà chưa tự đăng được', page:'air'}));
   (db.air_posts||[]).filter(a=>a.trang_thai==='CHUAN_BI' && String(a.ngay_dang||'').slice(0,10)===homNay).forEach(a=>
     v.push({uu:UU.HOM_NAY, icon:'🚀', ten:'Đăng hôm nay: '+(a.tieu_de||'(không tên)'), meta:'xong checklist rồi đăng', page:'air'}));
+  // 4b. ngân sách AI (ADR-005) — chỉ Admin/Trưởng MKT
+  { const T=db.ai_thang; if(T && T.ngan_sach_usd>0 && T.pct!=null && T.pct>=T.canh_bao_pct && (me.vai_tro===ROLES.ADMIN||me.vai_tro===ROLES.TRUONG_MKT))
+      v.push({uu: T.pct>=100?UU.KHAN:UU.HOM_NAY, icon:'🧠', ten:'Ngân sách AI tháng đã dùng '+Math.round(T.pct)+'%', meta:'$'+T.usd.toFixed(2)+' / $'+T.ngan_sach_usd+(T.pct>=100&&T.chan_khi_vuot?' — đang CHẶN bộ não của app':''), page:'ai'}); }
   // 5. kết quả chưa nhập (dùng lại nhắc việc chung)
   const vk=db.viec_ket||tinhViecKetFE(db);
   (vk.chua_nhap_kq||[]).forEach(a=>v.push({uu:UU.SAP, icon:'📈', ten:'Nhập kết quả: '+a.ten, meta:'đăng '+a.ngay+' ngày chưa có số', page:'ketqua'}));

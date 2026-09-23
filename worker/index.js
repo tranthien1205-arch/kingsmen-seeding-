@@ -196,6 +196,9 @@ async function ensureSchema(env){
       chi_tiet TEXT, so_lieu TEXT, created_at TEXT, updated_at TEXT)`,
     // CẤU HÌNH THEO MODULE — để admin/quản lý đổi ngưỡng mà KHÔNG phải sửa code + deploy
     `CREATE TABLE IF NOT EXISTS module_config (id TEXT PRIMARY KEY, cau_hinh TEXT, updated_at TEXT, updated_by_name TEXT)`,
+    // ADR-005 — mỗi lượt gọi AI một dòng (chỉ ghi thêm). chi_phi_usd = ƯỚC TÍNH từ token × bảng giá trong Cấu hình, không phải hoá đơn.
+    `CREATE TABLE IF NOT EXISTS ai_usage (id TEXT PRIMARY KEY, at TEXT, thang TEXT, provider TEXT, model TEXT, tinh_nang TEXT, user_id TEXT, user_name TEXT, tokens_vao INTEGER DEFAULT 0, tokens_ra INTEGER DEFAULT 0, chi_phi_usd REAL DEFAULT 0, ok INTEGER DEFAULT 1, ms INTEGER DEFAULT 0, loi TEXT)`,
+    `CREATE INDEX IF NOT EXISTS idx_ai_usage_thang ON ai_usage(thang)`,
     // CONTENT OS · TREND — nghiên cứu & triển khai. KHÔNG scrape (ToS): người tự ghi nhận + đánh giá.
     `CREATE TABLE IF NOT EXISTS trends (id TEXT PRIMARY KEY, ten TEXT, nguon TEXT, link TEXT, mo_ta TEXT, phat_hien_ngay TEXT, han_dung TEXT, pillar_id TEXT, san_pham_id TEXT, danh_gia TEXT, rui_ro TEXT, trang_thai TEXT, ly_do TEXT, nguoi_de_xuat TEXT, nguoi_duyet_ten TEXT, content_item_id TEXT, script_id TEXT, created_at TEXT, decided_at TEXT)`,
     // CONTENT OS · P10 — Thư viện học. ĐỀ XUẤT do máy rút ra nhưng PHẢI người duyệt mới thành quy tắc.
@@ -667,6 +670,11 @@ const CONFIG_MAC_DINH = {
   viec_ket:{ sua_lai:3, cho_duyet:2, chua_nhap_kq:14, trend_sap_het:7, don_cho_gan:3 },
   // ADR-003: người gửi không tự duyệt bài mình. Mặc định BẬT; tắt là có audit (qua setModuleConfig).
   duyet:   { chan_tu_duyet:true },
+  // ADR-005: chi phí AI. gia = USD / 1 TRIỆU token (vào/ra) — mặc định theo bảng giá công bố, Admin sửa được;
+  // ngan_sach_thang_usd = 0 → không giới hạn. Vượt ngân sách chỉ CHẶN bộ não Anthropic của app; key Gemini cá nhân vẫn chạy.
+  ai:      { ngan_sach_thang_usd:0, canh_bao_pct:80, chan_khi_vuot:true, ty_gia_vnd:26000,
+             gia:{ 'claude-sonnet-4-5':{vao:3,ra:15}, 'claude-haiku-4-5-20251001':{vao:1,ra:5}, 'claude-opus-4-1':{vao:15,ra:75},
+                   'gemini-2.5-flash':{vao:0.3,ra:2.5}, 'gemini-2.5-flash-lite':{vao:0.1,ra:0.4}, 'gemini-2.5-pro':{vao:1.25,ra:10} } },
   hoc:     { min_mau:5 },
   dash:    { min_mau:5, lech_pillar:15 },
   ketqua:  { nguon_mac_dinh:{ TIKTOK_SHOP:'TRUC_TIEP', SHOPEE:'GIAN_TIEP', API_KENH:'KHONG_QUY_DON', NHAP_TAY:'KHONG_QUY_DON' } },
@@ -752,19 +760,62 @@ async function dangLenNenTang(env, kenh, post){
 }
 // ===== HẠ TẦNG AI DÙNG CHUNG =====
 const AI_MODEL_MAC_DINH='claude-sonnet-4-5';
-async function goiAI(env, {system, messages, max_tokens=4000}){
+// ADR-005 — GHI NHẬN & CHI PHÍ AI. Giá là ƯỚC TÍNH (token × bảng giá cấu hình); model chưa có giá → 0 và đánh dấu.
+const thangHienTai = () => nowISO().slice(0,7);
+function tinhChiPhiAI(cfgAI, model, vao, ra){
+  const g=(cfgAI && cfgAI.gia && cfgAI.gia[model]) || null;
+  if(!g) return {usd:0, coGia:false};
+  return {usd:(Number(vao)||0)/1e6*(Number(g.vao)||0) + (Number(ra)||0)/1e6*(Number(g.ra)||0), coGia:true};
+}
+async function ghiAIUsage(env, o){
+  try{
+    const cfg=(await docCauHinh(env)).ai||{};
+    const cp=tinhChiPhiAI(cfg, o.model, o.tokens_vao, o.tokens_ra);
+    await env.DB.prepare(`INSERT INTO ai_usage (id,at,thang,provider,model,tinh_nang,user_id,user_name,tokens_vao,tokens_ra,chi_phi_usd,ok,ms,loi) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+      .bind(uid('aiu'), nowISO(), thangHienTai(), String(o.provider||''), String(o.model||''), String(o.tinh_nang||'khac').slice(0,40), (o.me&&o.me.id)||null, (o.me&&o.me.ho_ten)||'',
+        Number(o.tokens_vao)||0, Number(o.tokens_ra)||0, cp.usd, o.ok?1:0, Number(o.ms)||0, String(o.loi||'').slice(0,300)+(cp.coGia?'':(o.model?' [chưa có giá model]':''))).run();
+  }catch(e){ try{ console.error('ghiAIUsage', e&&e.message); }catch(_){} }
+}
+async function tongHopAI(env, thang){
+  const q=async(sql,...b)=>(await env.DB.prepare(sql).bind(...b).all()).results;
+  const cfg=(await docCauHinh(env)).ai||{};
+  const t=(await env.DB.prepare(`SELECT COALESCE(SUM(chi_phi_usd),0) usd, COUNT(*) n, COALESCE(SUM(tokens_vao),0) vao, COALESCE(SUM(tokens_ra),0) ra, SUM(CASE WHEN ok=0 THEN 1 ELSE 0 END) loi FROM ai_usage WHERE thang=?`).bind(thang).first())||{};
+  const ns=Number(cfg.ngan_sach_thang_usd)||0, usd=Number(t.usd)||0;
+  return { thang, usd, n:Number(t.n)||0, tokens_vao:Number(t.vao)||0, tokens_ra:Number(t.ra)||0, loi:Number(t.loi)||0,
+    ngan_sach_usd:ns, canh_bao_pct:Number(cfg.canh_bao_pct)||80, chan_khi_vuot:cfg.chan_khi_vuot!==false, ty_gia_vnd:Number(cfg.ty_gia_vnd)||26000,
+    pct: ns? usd/ns*100 : null,
+    theo_tinh_nang: await q(`SELECT tinh_nang, COUNT(*) n, COALESCE(SUM(chi_phi_usd),0) usd, COALESCE(SUM(tokens_vao+tokens_ra),0) tokens FROM ai_usage WHERE thang=? GROUP BY tinh_nang ORDER BY usd DESC`, thang),
+    theo_ngay: await q(`SELECT substr(at,1,10) ngay, COUNT(*) n, COALESCE(SUM(chi_phi_usd),0) usd FROM ai_usage WHERE thang=? GROUP BY substr(at,1,10) ORDER BY ngay`, thang),
+    theo_nguoi: await q(`SELECT COALESCE(user_name,'') user_name, COUNT(*) n, COALESCE(SUM(chi_phi_usd),0) usd FROM ai_usage WHERE thang=? GROUP BY user_name ORDER BY usd DESC`, thang),
+    theo_model: await q(`SELECT provider, model, COUNT(*) n, COALESCE(SUM(chi_phi_usd),0) usd, COALESCE(SUM(tokens_vao),0) vao, COALESCE(SUM(tokens_ra),0) ra FROM ai_usage WHERE thang=? GROUP BY provider, model ORDER BY usd DESC`, thang) };
+}
+// Vượt ngân sách tháng → CHẶN bộ não Anthropic (của app). Không đụng key Gemini cá nhân (người dùng tự trả).
+async function kiemNganSachAI(env){
+  const cfg=(await docCauHinh(env)).ai||{};
+  const ns=Number(cfg.ngan_sach_thang_usd)||0; if(!ns) return {ok:true};
+  const t=(await env.DB.prepare(`SELECT COALESCE(SUM(chi_phi_usd),0) usd FROM ai_usage WHERE thang=?`).bind(thangHienTai()).first())||{};
+  const usd=Number(t.usd)||0;
+  if(cfg.chan_khi_vuot!==false && usd>=ns) return {ok:false, vuot_ngan_sach:true, loi:'Đã vượt ngân sách AI tháng này ('+usd.toFixed(2)+' / '+ns+' USD ước tính). Admin nâng ngân sách hoặc tắt chặn ở Hệ thống › 🧠 Bộ não AI.'};
+  return {ok:true, pct:usd/ns*100};
+}
+async function goiAI(env, {system, messages, max_tokens=4000, tinh_nang='khac', me=null}){
   const key=env.ANTHROPIC_API_KEY;
   if(!key) return {ok:false, thieu_key:true, loi:'Chưa cắm ANTHROPIC_API_KEY'};
+  const ns=await kiemNganSachAI(env); if(!ns.ok) return ns;
+  const model=env.ANTHROPIC_MODEL||AI_MODEL_MAC_DINH; const t0=Date.now();
   try{
     const res=await fetch('https://api.anthropic.com/v1/messages',{ method:'POST',
       headers:{ 'content-type':'application/json', 'x-api-key':key, 'anthropic-version':'2023-06-01' },
-      body: JSON.stringify({ model: env.ANTHROPIC_MODEL||AI_MODEL_MAC_DINH, max_tokens, system, messages }) });
+      body: JSON.stringify({ model, max_tokens, system, messages }) });
     const j=await res.json().catch(()=>({}));
-    if(!res.ok) return {ok:false, loi:'AI trả lỗi: '+((j.error&&j.error.message)||('HTTP '+res.status))};
+    const u=j.usage||{};
+    if(!res.ok){ const loi='AI trả lỗi: '+((j.error&&j.error.message)||('HTTP '+res.status));
+      await ghiAIUsage(env,{provider:'anthropic', model, tinh_nang, me, tokens_vao:u.input_tokens, tokens_ra:u.output_tokens, ok:false, ms:Date.now()-t0, loi}); return {ok:false, loi}; }
     const txt=((j.content||[]).map(c=>c.text||'').join('')||'').trim();
+    await ghiAIUsage(env,{provider:'anthropic', model, tinh_nang, me, tokens_vao:u.input_tokens, tokens_ra:u.output_tokens, ok:!!txt, ms:Date.now()-t0, loi:txt?'':'AI trả về rỗng'});
     if(!txt) return {ok:false, loi:'AI trả về rỗng'};
     return {ok:true, text:txt};
-  }catch(e){ return {ok:false, loi:'Không gọi được AI: '+(e.message||e)}; }
+  }catch(e){ await ghiAIUsage(env,{provider:'anthropic', model, tinh_nang, me, ok:false, ms:Date.now()-t0, loi:'Không gọi được AI: '+(e.message||e)}); return {ok:false, loi:'Không gọi được AI: '+(e.message||e)}; }
 }
 // Bảng dữ liệu THẬT đưa cho AI. Chỉ gửi số đã có; KHÔNG bịa, không suy diễn.
 async function boiCanhAI(env, me){
@@ -843,7 +894,7 @@ async function aiDanhGiaTrend(env, me, tr){
     'SẢN PHẨM THẬT: '+JSON.stringify(sp.map(x=>({ten:x.ten,dong:x.dong,thong_so:JSON.parse(x.thong_so||'[]'),tieu_chuan:x.tieu_chuan})))+'\n'+
     'CỤM TỪ CẤM: '+JSON.stringify(cc.map(c=>({cum_tu:c.cum_tu,muc_do:c.muc_do})))+'\n\n'+
     'CHECKLIST CẦN CHẤM: '+JSON.stringify(chk.map(c=>({ma:c.k,noi_dung:c.label,bat_buoc:!!c.bat_buoc})));
-  const r=await goiAI(env,{system:sys, messages:[{role:'user',content:usr}], max_tokens:1500});
+  const r=await goiAI(env,{system:sys, messages:[{role:'user',content:usr}], max_tokens:1500, tinh_nang:'trend_cham', me});
   if(!r.ok) return r;
   let txt=r.text.replace(/^```(?:json)?\s*/i,'').replace(/```\s*$/,'').trim();
   const i=txt.indexOf('{'), k=txt.lastIndexOf('}');
@@ -1087,11 +1138,14 @@ async function aiSinhWorkflow(env, {mo_ta, kenh_loai, token, app_base}){
     'TOKEN dùng chung: '+(token||'DAN_N8N_TOKEN_VAO_DAY')+'\n'+
     'App base URL: '+(app_base||'')+'\n'+
     'Yêu cầu thêm của người dùng: '+((mo_ta||'').trim()||'(không có)');
+  const nsWf=await kiemNganSachAI(env); if(!nsWf.ok) return nsWf;
+  const t0Wf=Date.now();
   try{
     const res=await fetch('https://api.anthropic.com/v1/messages',{ method:'POST',
       headers:{ 'content-type':'application/json', 'x-api-key':key, 'anthropic-version':'2023-06-01' },
       body: JSON.stringify({ model: env.ANTHROPIC_MODEL||'claude-sonnet-4-5', max_tokens:8000, system:sys, messages:[{role:'user',content:usr}] }) });
     const j=await res.json().catch(()=>({}));
+    await ghiAIUsage(env,{provider:'anthropic', model:env.ANTHROPIC_MODEL||'claude-sonnet-4-5', tinh_nang:'n8n_workflow', tokens_vao:(j.usage||{}).input_tokens, tokens_ra:(j.usage||{}).output_tokens, ok:res.ok, ms:Date.now()-t0Wf, loi:res.ok?'':((j.error&&j.error.message)||('HTTP '+res.status))});
     if(!res.ok) return {ok:false, loi:'AI trả lỗi: '+((j.error&&j.error.message)||('HTTP '+res.status))};
     let txt=((j.content||[]).map(c=>c.text||'').join('')||'').trim();
     txt=txt.replace(/^```(?:json)?\s*/i,'').replace(/```\s*$/,'').trim();
@@ -1476,6 +1530,7 @@ async function bootstrap(env, u){
     youtube_san_sang: staff ? !!env.YOUTUBE_API_KEY : false,
     agent_log,
     ai_san_sang: staff ? !!env.ANTHROPIC_API_KEY : false,
+    ai_thang: staff ? await tongHopAI(env, thangHienTai()) : null,
     module_config: cfg, can_cau_hinh: canCauHinh(u),
     co_truong_mkt: await coTruongMktHoatDong(env),
     san_xuat, sx_khau: SX_KHAU,
@@ -2641,8 +2696,13 @@ async function handleApi(request, env){
     const cu=hienTai?JSON.parse(hienTai.cau_hinh||'{}'):{};
     const moi={...cu, ...(body.cau_hinh||{})};
     // Chặn số vô lý — cấu hình sai còn nguy hơn không cho cấu hình
+    const maxSo = key==='ai' ? 1e9 : 3650;   // ai: tỷ giá VND / ngân sách USD vượt 3650 là bình thường
     for(const [k,v] of Object.entries(moi)){
-      if(typeof v==='number' && (!isFinite(v) || v<0 || v>3650)) return json({error:'Giá trị "'+k+'" không hợp lệ (0–3650)'},422);
+      if(typeof v==='number' && (!isFinite(v) || v<0 || v>maxSo)) return json({error:'Giá trị "'+k+'" không hợp lệ (0–'+maxSo+')'},422);
+    }
+    if(key==='ai' && moi.gia!=null){
+      if(typeof moi.gia!=='object' || Array.isArray(moi.gia)) return json({error:'Bảng giá không hợp lệ'},422);
+      for(const [mdl,g] of Object.entries(moi.gia)){ if(!g || !isFinite(Number(g.vao)) || !isFinite(Number(g.ra)) || Number(g.vao)<0 || Number(g.ra)<0 || Number(g.vao)>1e4 || Number(g.ra)>1e4) return json({error:'Giá model "'+mdl+'" không hợp lệ'},422); }
     }
     if(Array.isArray(moi.checklist)){
       if(!moi.checklist.length) return json({error:'Checklist không được rỗng'},422);
@@ -2709,8 +2769,8 @@ async function handleApi(request, env){
     if(!isStaff(me)) return json({error:'Không có quyền'},403);
     const p=await promptKichBan(env, body);
     if(!p.ok) return json({error:p.loi},400);
-    const r=await goiAI(env,{system:p.sys, messages:[{role:'user',content:p.usr}], max_tokens:2000});
-    if(!r.ok) return json({ok:false, thieu_key:!!r.thieu_key, loi:r.loi},200);
+    const r=await goiAI(env,{system:p.sys, messages:[{role:'user',content:p.usr}], max_tokens:2000, tinh_nang:'kich_ban', me});
+    if(!r.ok) return json({ok:false, thieu_key:!!r.thieu_key, vuot_ngan_sach:!!r.vuot_ngan_sach, loi:r.loi},200);
     return json(duyetKichBanAI(r.text, p.cacBuoc, p.claims, p.dinhDang),200);
   }
   // ĐƯỜNG AI CỦA NGƯỜI DÙNG (vd Gemini bằng key riêng lưu trong trình duyệt, giống công cụ
@@ -2732,6 +2792,22 @@ async function handleApi(request, env){
     return json(duyetKichBanAI(body.text, cacBuoc, claims, body.dinh_dang),200);
   }
 
+  // ===== ADR-005 — GHI NHẬN AI từ trình duyệt (Gemini key cá nhân, công cụ Dựng video) & tổng hợp =====
+  if(path==='/ai/usage' && method==='POST'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    const provider=String(body.provider||'').toLowerCase();
+    if(!['gemini','ollama','local'].includes(provider)) return json({error:'provider không hợp lệ'},400);
+    await ghiAIUsage(env,{provider, model:String(body.model||'').slice(0,80), tinh_nang:String(body.tinh_nang||'khac').slice(0,40), me,
+      tokens_vao:Math.max(0,Number(body.tokens_vao)||0), tokens_ra:Math.max(0,Number(body.tokens_ra)||0), ok:body.ok!==false, ms:Number(body.ms)||0, loi:String(body.loi||'').slice(0,300)});
+    return json({ok:true});
+  }
+  if(path==='/ai/usage' && method==='GET'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    const thang=/^\d{4}-\d{2}$/.test(url.searchParams.get('thang')||'') ? url.searchParams.get('thang') : thangHienTai();
+    const rows=(await env.DB.prepare(`SELECT * FROM ai_usage WHERE thang=? ORDER BY at DESC LIMIT 200`).bind(thang).all()).results;
+    const thangs=(await env.DB.prepare(`SELECT thang, COALESCE(SUM(chi_phi_usd),0) usd, COUNT(*) n FROM ai_usage GROUP BY thang ORDER BY thang DESC LIMIT 12`).all()).results;
+    return json({ tong_hop: await tongHopAI(env, thang), rows, thangs });
+  }
   // ===== CHATBOT AI — hỏi đáp trên dữ liệu thật của chính mình =====
   if(path==='/ai/chat' && method==='POST'){
     if(!isStaff(me)) return json({error:'Không có quyền'},403);
@@ -2743,8 +2819,8 @@ async function handleApi(request, env){
       'Bạn giúp: tra cứu tình hình, giải thích số liệu, gợi ý việc nên làm tiếp, tư vấn hướng nội dung.\n'+
       'Khi được hỏi con số, trả lời đúng con số trong DỮ LIỆU. Nếu dữ liệu không có, nói rõ là chưa có và gợi ý cần nhập ở đâu.\n'+
       'DỮ LIỆU THẬT CỦA HỆ THỐNG (JSON):\n'+JSON.stringify(bc);
-    const r=await goiAI(env,{system:sys, messages:msgs, max_tokens:1500});
-    if(!r.ok) return json({ok:false, thieu_key:!!r.thieu_key, loi:r.loi},200);
+    const r=await goiAI(env,{system:sys, messages:msgs, max_tokens:1500, tinh_nang:'chatbot', me});
+    if(!r.ok) return json({ok:false, thieu_key:!!r.thieu_key, vuot_ngan_sach:!!r.vuot_ngan_sach, loi:r.loi},200);
     return json({ok:true, tra_loi:r.text});
   }
 
@@ -2787,7 +2863,7 @@ async function handleApi(request, env){
     if(!tr) return json({error:'Không tìm thấy trend'},404);
     if(tr.trang_thai==='DA_TRIEN_KHAI') return json({error:'Trend này đã triển khai'},409);
     const r=await chamVaGhiTrend(env, me, tr);
-    if(!r.ok) return json({ok:false, thieu_key:!!r.thieu_key, loi:r.loi},200);
+    if(!r.ok) return json({ok:false, thieu_key:!!r.thieu_key, vuot_ngan_sach:!!r.vuot_ngan_sach, loi:r.loi},200);
     await logAudit(env,me,r.tu_duyet?'AI tự duyệt trend':'AI đánh giá trend','trends',id,(tr.ten||'')+' · '+(r.tom_tat||'').slice(0,120));
     return json({ ...r, db: await bootstrap(env, me) });
   }
