@@ -2,7 +2,7 @@
 
 Trạm (repo `tranthien1205-arch/masfico-insight`, thư mục `may/`, chạy trên máy văn phòng cổng 8899) là **hub** cho nhiều app theo hợp đồng hub1 (`hub-apps.mjs`). Content OS ghép như một app hub1 — **không sửa `tram.mjs`**, chỉ thêm một agent + 3 script + 1 thư viện.
 
-> Thư mục Trạm/repo đang được phiên Claude khác dùng (khoá bằng `~/.claude/hooks/khoa-thu-muc.mjs`). Các file ở đây để **ghép sau khi khoá mở**.
+> **Đã ghép 23/09/2026:** các file này đã vào repo masfico-insight (`may/`, commit v9.154) và đã chép vào bản Trạm đang chạy trên máy Ngoc-Han (Trạm ở đó không phải git và chưa có mã GitHub nên không tự cập nhật được — chép tay, giữ bản sao `*.bak-23-09c`). **Trạm cần khởi động lại** (đóng cửa sổ Trạm → bấm đôi BAT-DAU.bat) để nạp agent content_os. Đã ghép hub bằng mã HUB1 trỏ `http://localhost:5180/api` (bản dev) — khi Content OS lên Cloudflare phải đặt `APP_BASE_URL` (wrangler vars) rồi **Tạo khoá mới → dán lại mã ghép** ở Trạm. Bản ở đây là bản gốc để đối chiếu; sửa thì sửa trong repo masfico-insight rồi chép lại.
 
 ## 1. Chép vào repo masfico-insight (`may/`)
 ```
