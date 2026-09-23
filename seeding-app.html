@@ -528,6 +528,7 @@ function ensureDemoSlots(S){
 }
 
 function seedDB(){
+  const now = () => nowISO();   // seedDB gọi now() ở các mảng seed — trước đây thiếu nên DEMO=true vỡ ngay lúc mở
   const uMkt   = { id:uid('u'), ho_ten:'Ngọc (Marketing)', email:'mkt@kingsmen.vn', vai_tro:ROLES.MARKETING, active:true, is_dev:false, password:'123456' };
   const uS1    = { id:uid('u'), ho_ten:'Hùng (Sales)',     email:'sale1@kingsmen.vn', vai_tro:ROLES.SALES, active:true, is_dev:false, password:'123456' };
   const uS2    = { id:uid('u'), ho_ten:'Lan (Sales)',      email:'sale2@kingsmen.vn', vai_tro:ROLES.SALES, active:true, is_dev:false, password:'123456' };
@@ -599,7 +600,7 @@ function seedDB(){
     post_slots: [],
     media_library: [],
     san_pham: [],
-    claim_cam: [],
+    claim_cam: [{id:'cc_demo1',cum_tu:'vĩnh viễn',ly_do:'không có căn cứ (dữ liệu demo)',muc_do:'CHAN',active:true,created_at:now()},{id:'cc_demo2',cum_tu:'tốt nhất',ly_do:'so sánh tuyệt đối (dữ liệu demo)',muc_do:'CANH_BAO',active:true,created_at:now()}],
     pillars: [
       {id:uid('pil'),ten:'Branding',objective:'Giới thiệu thương hiệu Kingsmen: nguồn gốc, công nghệ mới, đội ngũ chuyên gia.',point_of_difference:'Nguồn gốc · Công nghệ mới · Chuyên gia',request:'Mỗi tuần 1–2 bài branding.',ty_trong:50,thu_tu:1,active:true,created_at:now()},
       {id:uid('pil'),ten:'Information',objective:'Cung cấp thông tin, kiến thức hữu ích về keo ron gạch & ngành hoàn thiện.',point_of_difference:'Kiến thức chuyên môn',request:'Xen kẽ mỗi tuần.',ty_trong:30,thu_tu:2,active:true,created_at:now()},
@@ -1394,8 +1395,8 @@ function Login(){
         {DEMO && <div className="mt-4 pt-3 border-t border-line">
           <div className="text-[11px] text-amber-600 text-center mb-2">⚡ BẢN PREVIEW — bấm để vào nhanh (mật khẩu demo: 123456)</div>
           <div className="grid grid-cols-3 gap-1.5">
-            {[['mkt@kingsmen.vn','Marketing'],['truongmkt@kingsmen.vn','Trưởng MKT'],['sale1@kingsmen.vn','Sales'],['admin@kingsmen.vn','Kế toán'],['gd@kingsmen.vn','Giám đốc'],['dev@masfico.vn','Admin Dev']].map(([em,lb])=>
-              <button key={em} onClick={()=>login(em,'123456')} className="text-xs bg-slate-100 hover:bg-brand hover:text-white text-slate-600 rounded-lg py-2 transition">{lb}</button>)}
+            {[['mkt@kingsmen.vn','Marketing'],['truongmkt@kingsmen.vn','Trưởng MKT'],['sale1@kingsmen.vn','Sales'],['admin@kingsmen.vn','Kế toán'],['gd@kingsmen.vn','Giám đốc'],['dev@masfico.vn','Admin Dev','Dev2026!']].map(([em,lb,pw])=>
+              <button key={em} onClick={()=>login(em,pw||'123456')} className="text-xs bg-slate-100 hover:bg-brand hover:text-white text-slate-600 rounded-lg py-2 transition">{lb}</button>)}
           </div>
         </div>}
 
