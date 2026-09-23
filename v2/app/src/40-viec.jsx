@@ -6,9 +6,11 @@ function ViecCuaToi({go}){
   const buoc=db.buoc||[]; const soAI=buoc.filter(b=>b.nguoi_thuc_hien!=='NGUOI').length;
   const cl=db.chien_luoc||{};
   // 4 cổng — đợt 1 mới có G1 (chiến lược); G2–G4 mở ở đợt 2–4
+  const thangNay=db.hang_so.thang_nay; const khNay=(db.ke_hoach_thang||[]).find(k=>k.thang===thangNay); const ytMoi=(db.y_tuong||[]).filter(y=>y.trang_thai==='MOI').length;
+  const daSuaCL=cl.updated_at&&cl.chot_at&&cl.updated_at>cl.chot_at;
   const cong=[
-    { ma:'G1', ten:'Chốt định vị & chiến lược', tt: cl.phien_ban>0?('Đã chốt phiên bản '+cl.phien_ban):(cl.dinh_vi?'Đã soạn, chưa chốt (chốt ở đợt 2)':'Chưa soạn'), page:'chienluoc', ok:!!cl.dinh_vi },
-    { ma:'G2', ten:'Chốt kế hoạch tháng', tt:db.mo_phong?'Kế hoạch 10/2026 máy đề xuất — CHỜ CHỐT':'Mở ở đợt 2', page:'chienluoc', ok:db.mo_phong?false:null },
+    { ma:'G1', ten:'Chốt định vị & chiến lược', tt: cl.phien_ban>0?('Phiên bản '+cl.phien_ban+(daSuaCL?' · đã sửa, chưa chốt lại':'')):(cl.dinh_vi?'Đã soạn, chưa chốt':'Chưa soạn'), page:'chienluoc', ok:cl.phien_ban>0&&!daSuaCL },
+    { ma:'G2', ten:'Chốt kế hoạch tháng', tt: khNay?(khNay.trang_thai==='CHOT'?('Tháng '+thangNay+' đã chốt'):('Tháng '+thangNay+' — '+(khNay.nguon==='DE_XUAT'?'máy đề xuất':'đang soạn')+', CHỜ CHỐT')):('Tháng '+thangNay+' chưa lập'+(ytMoi?(' · '+ytMoi+' ý tưởng chờ chấm'):'')), page:'chienluoc', ok:khNay?khNay.trang_thai==='CHOT':false },
     { ma:'G3', ten:'Duyệt nội dung trước đăng', tt:db.mo_phong?'2 bài chờ duyệt · 1 bài quá 24h':'Mở ở đợt 3', page:'dongchay', ok:db.mo_phong?false:null },
     { ma:'G4', ten:'Duyệt đề xuất cải tiến', tt:db.mo_phong?'3 đề xuất từ báo cáo tháng 9':'Mở ở đợt 4', page:'ketqua', ok:db.mo_phong?false:null },
   ];

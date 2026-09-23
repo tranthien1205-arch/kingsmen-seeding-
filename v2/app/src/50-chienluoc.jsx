@@ -1,61 +1,181 @@
-// ===== MÀN 2 — CHIẾN LƯỢC & KẾ HOẠCH. Đợt 1: chiến lược cơ bản + danh mục gốc. Kế hoạch tháng/tuần/trend: đợt 2 =====
+// ===== MÀN 2 — CHIẾN LƯỢC & KẾ HOẠCH (ADR-002): G1 chốt chiến lược · danh mục gốc · kế hoạch tháng (G2) · tuần & mục · ý tưởng/trend (B1) =====
+const MUC_TIEU_LABEL = { BRAND:'Brand', BAN_HANG:'Bán hàng' };
+const MUC_TIEU_CLS = { BRAND:'bg-sky-100 text-sky-800', BAN_HANG:'bg-orange-100 text-orange-800' };
+const DINH_DANG_ICON = { VIDEO:'🎬 Video ngắn', POST:'📝 Bài post', ANH:'🖼️ Ảnh / banner', CAROUSEL:'🎠 Carousel' };
 function ChienLuocKeHoach(){
   const { me, db } = useApp();
   const [tab,setTab]=useState('chienluoc');
   const chiXem=!laStaff(me);
-  const tabs=[{key:'chienluoc',label:'Định vị & chiến lược'},{key:'pillars',label:'Pillar'},{key:'frameworks',label:'Framework'},{key:'san_pham',label:'Sản phẩm'},{key:'claim_cam',label:'Claim cấm'},{key:'kenh',label:'Kênh'},{key:'kehoach',label:'Kế hoạch tháng · tuần'}];
+  const ytMoi=(db.y_tuong||[]).filter(y=>y.trang_thai==='MOI').length;
+  const tabs=[{key:'chienluoc',label:'Định vị & chiến lược'},{key:'kehoach',label:'Kế hoạch tháng'},{key:'tuan',label:'Tuần & mục'},{key:'ytuong',label:'Ý tưởng & trend',count:ytMoi||null},{key:'pillars',label:'Pillar'},{key:'frameworks',label:'Framework'},{key:'san_pham',label:'Sản phẩm'},{key:'claim_cam',label:'Claim cấm'},{key:'kenh',label:'Kênh'}];
   return <div className="space-y-4">
     <PageHeader title="🎯 Chiến lược & Kế hoạch" sub="Cổng G1 (chốt chiến lược) và G2 (chốt kế hoạch tháng). Danh mục gốc ở đây là dữ kiện thật duy nhất máy được dùng."/>
     <Tabs size="sm" active={tab} onChange={setTab} tabs={tabs}/>
     {tab==='chienluoc' && <ChienLuocForm chiXem={chiXem}/>}
-    {tab==='pillars' && <DanhMuc bang="pillars" chiXem={chiXem}/>}
-    {tab==='frameworks' && <DanhMuc bang="frameworks" chiXem={chiXem}/>}
-    {tab==='san_pham' && <DanhMuc bang="san_pham" chiXem={chiXem}/>}
-    {tab==='claim_cam' && <DanhMuc bang="claim_cam" chiXem={chiXem}/>}
-    {tab==='kenh' && <DanhMuc bang="kenh" chiXem={chiXem}/>}
-    {tab==='kehoach' && db.mo_phong && <KeHoachMoPhong/>}
-    {tab==='kehoach' && !db.mo_phong && <Callout tone="note"><b>Đợt 2 (ADR-002):</b> kế hoạch tháng máy đề xuất ngày 25 từ chiến lược + kết quả tháng trước + trend đã duyệt → Trưởng MKT sửa & <b>Chốt</b> (G2) → máy chia tuần, tạo mục nội dung. Trend & ý tưởng máy gom cũng nằm ở tab này.</Callout>}
+    {tab==='kehoach' && <KeHoachThang chiXem={chiXem}/>}
+    {tab==='tuan' && <TuanVaMuc chiXem={chiXem}/>}
+    {tab==='ytuong' && <YTuong chiXem={chiXem}/>}
+    {['pillars','frameworks','san_pham','claim_cam','kenh'].includes(tab) && <DanhMuc bang={tab} chiXem={chiXem}/>}
   </div>;
 }
 function ChienLuocForm({chiXem}){
-  const { db, goi, notify } = useApp(); const cl=db.chien_luoc||{};
+  const { db, me, goi, notify } = useApp(); const cl=db.chien_luoc||{};
   const [f,setF]=useState({dinh_vi:cl.dinh_vi||'', tong_giong:cl.tong_giong||'', doi_tuong:cl.doi_tuong||''});
   useEffect(()=>{ setF({dinh_vi:cl.dinh_vi||'', tong_giong:cl.tong_giong||'', doi_tuong:cl.doi_tuong||''}); },[cl.updated_at]);
-  const [busy,setBusy]=useState(false);
+  const [busy,setBusy]=useState(false); const [ghiChu,setGhiChu]=useState('');
   const luu=async()=>{ setBusy(true); const r=await goi('/chien-luoc',{method:'PUT',body:f}); setBusy(false); if(r.ok) notify('Đã lưu chiến lược'); else notify(r.msg,'err'); };
+  const chot=async()=>{ if(!confirm('Chốt chiến lược thành phiên bản '+((cl.phien_ban||0)+1)+'? Máy sẽ dùng bản này để đề xuất kế hoạch.')) return; setBusy(true); const r=await goi('/chien-luoc/chot',{method:'POST',body:{ghi_chu:ghiChu}}); setBusy(false); if(r.ok){ notify('Đã chốt chiến lược (G1)'); setGhiChu(''); } else notify(r.msg,'err'); };
+  const duocChot=laGat(me)||me.vai_tro==='GIAM_DOC';
+  const daSua=cl.updated_at && cl.chot_at && cl.updated_at>cl.chot_at;
   const tongPillar=(db.pillars||[]).filter(p=>p.active).reduce((s,p)=>s+Number(p.ty_trong||0),0);
   return <div className="grid lg:grid-cols-[2fr_1fr] gap-3">
     <Card>
-      <div className="flex items-center justify-between mb-3"><SectionTitle>Định vị & chiến lược</SectionTitle><Pill cls={cl.phien_ban>0?'bg-emerald-100 text-emerald-800':'bg-amber-100 text-amber-800'}>{cl.phien_ban>0?('phiên bản '+cl.phien_ban+' · chốt '+fmtDate(cl.chot_at)):'chưa chốt (G1 mở ở đợt 2)'}</Pill></div>
+      <div className="flex items-center justify-between mb-3 gap-2 flex-wrap"><SectionTitle>Định vị & chiến lược</SectionTitle><Pill cls={cl.phien_ban>0&&!daSua?'bg-emerald-100 text-emerald-800':'bg-amber-100 text-amber-800'}>{cl.phien_ban>0?('phiên bản '+cl.phien_ban+' · '+cl.chot_boi+' · '+fmtDate(cl.chot_at)+(daSua?' · đã sửa sau khi chốt':'')):'chưa chốt (G1)'}</Pill></div>
       <Field label="Định vị thương hiệu" hint="Kingsmen là gì, khác gì, hứa gì. Máy dùng nguyên văn để giữ nhất quán."><Textarea rows="4" value={f.dinh_vi} onChange={e=>setF({...f,dinh_vi:e.target.value})} disabled={chiXem}/></Field>
       <Field label="Tông giọng"><Textarea rows="2" value={f.tong_giong} onChange={e=>setF({...f,tong_giong:e.target.value})} disabled={chiXem} placeholder="VD: chuyên gia, chắc chắn, không hô hào…"/></Field>
       <Field label="Đối tượng"><Textarea rows="2" value={f.doi_tuong} onChange={e=>setF({...f,doi_tuong:e.target.value})} disabled={chiXem} placeholder="VD: nhà thầu, thợ ốp lát, chủ nhà đang hoàn thiện…"/></Field>
-      {!chiXem && <Btn variant="brand" onClick={luu} disabled={busy}>{busy?'Đang lưu…':'💾 Lưu'}</Btn>}
+      <div className="flex gap-2 flex-wrap items-end">{!chiXem && <Btn variant="ghost" onClick={luu} disabled={busy}>💾 Lưu nháp</Btn>}
+        {duocChot && <><Input className="!w-56" placeholder="ghi chú phiên bản (tuỳ chọn)" value={ghiChu} onChange={e=>setGhiChu(e.target.value)}/><Btn variant="brand" onClick={chot} disabled={busy||!cl.dinh_vi}>✅ Chốt chiến lược (G1)</Btn></>}</div>
     </Card>
-    <Card pad="p-3"><SectionTitle className="mb-2">Trụ cột nội dung</SectionTitle>
-      {(db.pillars||[]).filter(p=>p.active).map(p=><div key={p.id} className="mb-2"><div className="flex justify-between text-xs"><span className="text-ink font-semibold">{p.ten}</span><span className="text-ink-muted">{p.ty_trong}%</span></div><Thanh pct={p.ty_trong}/></div>)}
-      <div className={"text-[11px] mt-2 "+(tongPillar===100?'text-emerald-700':'text-amber-700')}>Tổng {tongPillar}% {tongPillar!==100 && '— nên bằng 100%'}</div>
-    </Card>
+    <div className="space-y-3">
+      <Card pad="p-3"><SectionTitle className="mb-2">Trụ cột nội dung</SectionTitle>
+        {(db.pillars||[]).filter(p=>p.active).map(p=><div key={p.id} className="mb-2"><div className="flex justify-between text-xs"><span className="text-ink font-semibold">{p.ten} <Pill cls={MUC_TIEU_CLS[p.muc_tieu]||''}>{MUC_TIEU_LABEL[p.muc_tieu]||'Brand'}</Pill></span><span className="text-ink-muted">{p.ty_trong}%</span></div><Thanh pct={p.ty_trong}/></div>)}
+        <div className={"text-[11px] mt-2 "+(tongPillar===100?'text-emerald-700':'text-amber-700')}>Tổng {tongPillar}% {tongPillar!==100 && '— nên bằng 100%'}</div></Card>
+      {(db.chien_luoc_phien_ban||[]).length>0 && <Card pad="p-3"><SectionTitle className="mb-1">Lịch sử chốt</SectionTitle>{(db.chien_luoc_phien_ban||[]).map(v=><div key={v.id} className="text-[11px] text-ink-muted py-1 border-t border-line">v{v.phien_ban} · {v.chot_boi} · {fmtDate(v.chot_at)}{v.ghi_chu?(' · '+v.ghi_chu):''} · {(v.pillars||[]).map(p=>p.ten+' '+p.ty_trong+'%').join(', ')}</div>)}</Card>}
+    </div>
   </div>;
 }
-// Mô phỏng màn Kế hoạch (đợt 2): Tháng (máy đề xuất ↔ người chốt G2) · Tuần (còn thiếu) · Trend & ý tưởng
-function KeHoachMoPhong(){
-  const { notify } = useApp(); const bao=mpBao(notify,2); const k=MP.ke_hoach;
-  const Khoi=({tieu,rows})=><Card pad="p-3"><SectionTitle className="mb-2">{tieu}</SectionTitle>{rows.map(([ten,ct,co])=><div key={ten} className="mb-1.5"><div className="flex justify-between text-xs"><span className="text-ink">{ten}</span><span className={co<ct?'text-amber-700':'text-emerald-700'}>{co}/{ct}</span></div><Thanh pct={ct?co/ct*100:0} cls={co>=ct?'bg-emerald-500':'bg-brand'}/></div>)}</Card>;
+// ----- Kế hoạch tháng: máy đề xuất (kèm lý do) ↔ người sửa ↔ Trưởng MKT chốt (G2) -----
+function KeHoachThang({chiXem}){
+  const { db, me, goi, notify } = useApp();
+  const [thang,setThang]=useState(db.hang_so.thang_nay); const kh=(db.ke_hoach_thang||[]).find(k=>k.thang===thang)||null;
+  const rong={tong_bai:0,theo_pillar:{},theo_dinh_dang:{},theo_kenh:{},theo_muc_tieu:{},ket_qua:{}};
+  const [f,setF]=useState(()=>({chi_tieu:kh?JSON.parse(JSON.stringify(kh.chi_tieu)):rong, dinh_huong:(kh&&kh.dinh_huong)||''}));
+  useEffect(()=>{ setF({chi_tieu:kh?JSON.parse(JSON.stringify(kh.chi_tieu)):rong, dinh_huong:(kh&&kh.dinh_huong)||''}); },[thang,(kh&&kh.updated_at)||'']);
+  const [busy,setBusy]=useState(false); const [tongMuon,setTongMuon]=useState('');
+  const pillars=(db.pillars||[]).filter(p=>p.active); const kenhs=(db.kenh||[]).filter(k=>k.active);
+  const muc=(db.muc_noi_dung||[]).filter(m=>m.thang===thang);
+  const dem=f=>{ const r={}; muc.forEach(m=>{ const k=f(m); if(k) r[k]=(r[k]||0)+1; }); return r; };
+  const tt={ pillar:dem(m=>m.pillar_id), dd:dem(m=>m.dinh_dang), kenh:dem(m=>m.kenh_id), mt:dem(m=>m.muc_tieu) };
+  const daChot=kh&&kh.trang_thai==='CHOT'; const khoa=chiXem||(daChot&&!laGat(me));
+  const set=(nhom,k,v)=>setF(x=>({...x, chi_tieu:{...x.chi_tieu, [nhom]:{...(x.chi_tieu[nhom]||{}), [k]:Math.max(0,Number(v)||0)}}}));
+  const deXuat=async()=>{ setBusy(true); const r=await goi('/ke-hoach/'+thang+'/de-xuat',{method:'POST',body:{tong_bai:Number(tongMuon)||0}}); setBusy(false); if(r.ok) notify('Máy đã đề xuất '+r.de_xuat.chi_tieu.tong_bai+' bài — xem lý do từng nhóm, sửa rồi lưu/chốt'); else notify(r.msg,'err'); };
+  const luu=async()=>{ setBusy(true); const r=await goi('/ke-hoach/'+thang,{method:'PUT',body:f}); setBusy(false); if(r.ok) notify('Đã lưu kế hoạch '+thang); else notify(r.msg,'err'); };
+  const chot=async()=>{ if(!confirm('Chốt kế hoạch tháng '+thang+' (G2)? Sau khi chốt, máy (nếu B3 ở mức AI) sẽ chia tuần và tạo mục còn thiếu.')) return; setBusy(true); const r1=await goi('/ke-hoach/'+thang,{method:'PUT',body:f}); if(!r1.ok){ setBusy(false); return notify(r1.msg,'err'); } const r=await goi('/ke-hoach/'+thang+'/chot',{method:'POST'}); setBusy(false); if(r.ok) notify('Đã chốt (G2)'+(r.tao!=null?(' · máy tạo '+r.tao+' mục'):' · đã giao việc chia tuần')); else notify(r.msg,'err'); };
+  const Khoi=({tieu,nhom,keys,ten,thucTe,lyDo})=><Card pad="p-3"><div className="flex justify-between items-start gap-2 mb-2"><SectionTitle>{tieu}</SectionTitle>{lyDo&&<span className="text-[10px] text-ink-muted text-right max-w-[60%]" title={lyDo}>🤖 {lyDo}</span>}</div>
+    <div className="space-y-1.5">{keys.map(k=><div key={k} className="grid grid-cols-[minmax(0,1fr)_64px_minmax(0,1fr)] gap-2 items-center"><span className="text-xs text-ink truncate">{ten(k)}</span><Input type="number" min="0" className="!py-1 !px-2 text-xs" value={(f.chi_tieu[nhom]||{})[k]||0} onChange={e=>set(nhom,k,e.target.value)} disabled={khoa}/>
+      <div className="flex items-center gap-1"><div className="flex-1"><Thanh pct={((f.chi_tieu[nhom]||{})[k]||0)?(thucTe[k]||0)/((f.chi_tieu[nhom]||{})[k]||1)*100:0} cls={(thucTe[k]||0)>=((f.chi_tieu[nhom]||{})[k]||0)&&((f.chi_tieu[nhom]||{})[k]||0)?'bg-emerald-500':'bg-brand'}/></div><span className="text-[10px] text-ink-muted w-10 text-right">{thucTe[k]||0}/{(f.chi_tieu[nhom]||{})[k]||0}</span></div></div>)}</div></Card>;
+  const kq=f.chi_tieu.ket_qua||{}; const setKq=(k,v)=>setF(x=>({...x, chi_tieu:{...x.chi_tieu, ket_qua:{...(x.chi_tieu.ket_qua||{}), [k]:Math.max(0,Number(v)||0)}}}));
+  const tongPillar=Object.values(f.chi_tieu.theo_pillar||{}).reduce((s,v)=>s+(Number(v)||0),0);
   return <div className="space-y-3">
-    <Card><div className="flex items-center justify-between gap-2 flex-wrap"><div><SectionTitle>Kế hoạch tháng {MP.thang} <Pill cls="bg-amber-100 text-amber-800">CHỜ CHỐT (G2)</Pill></SectionTitle><div className="text-[11px] text-ink-muted">{k.nguon}</div></div>
-      <div className="flex gap-2"><Btn variant="ghost" onClick={bao}>✨ Máy đề xuất lại</Btn><Btn variant="brand" onClick={bao}>✅ Chốt kế hoạch tháng</Btn></div></div>
-      <div className="grid sm:grid-cols-3 gap-2 mt-3"><div className="rounded-xl bg-slate-50 p-2"><div className="text-[11px] text-ink-muted">Chỉ tiêu tổng</div><div className="font-display text-xl font-extrabold text-ink">{k.tong} bài</div></div><div className="rounded-xl bg-slate-50 p-2 sm:col-span-2"><div className="text-[11px] text-ink-muted">Định hướng (máy viết từ chiến lược + kết quả tháng 9, người sửa được)</div><div className="text-xs text-ink mt-1">{k.dinh_huong}</div></div></div></Card>
-    <div className="grid lg:grid-cols-3 gap-3"><Khoi tieu="Theo pillar" rows={k.pillar}/><Khoi tieu="Theo định dạng" rows={k.dinh_dang}/><Khoi tieu="Theo kênh" rows={k.kenh}/></div>
-    <SectionTitle>Tuần — máy chia, người sửa khi cần</SectionTitle>
-    <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">{MP.tuan.map(t=><Card key={t.t} pad="p-3"><div className="flex justify-between text-xs font-bold text-ink-muted"><span>Tuần {t.t}</span><span className={t.co<t.ct?'text-amber-700':'text-emerald-700'}>{t.co}/{t.ct}</span></div>{t.thieu.length?<div className="text-[10px] text-amber-700 mt-1">thiếu: {t.thieu.join(' · ')}</div>:<div className="text-[10px] text-emerald-700 mt-1">✓ đủ</div>}<LinkBtn className="mt-1" onClick={bao}>+ máy tạo mục còn thiếu</LinkBtn></Card>)}</div>
-    <SectionTitle>Trend & ý tưởng máy gom (B1 — người chấm, máy học)</SectionTitle>
-    <Card pad="">{MP.y_tuong.map((y,i)=><div key={i} className="px-3 py-2 border-b border-line/60 flex items-center gap-3 text-xs"><span className={"font-display font-extrabold w-8 text-center "+(y.diem>=70?'text-emerald-600':y.diem>=40?'text-amber-600':'text-rose-500')}>{y.diem}</span><div className="min-w-0 flex-1"><div className="font-semibold text-ink">{y.ten}</div><div className="text-[10px] text-ink-muted">{y.nguon} · pillar {y.pillar} · {y.tt}</div></div>{/CHỜ/.test(y.tt)&&<div className="flex gap-1"><Btn variant="ok" className="!py-1 !px-2 text-[11px]" onClick={bao}>Duyệt</Btn><Btn variant="ghost" className="!py-1 !px-2 text-[11px]" onClick={bao}>Bỏ</Btn></div>}</div>)}</Card>
+    <Card><div className="flex items-center justify-between gap-2 flex-wrap">
+      <div className="flex items-center gap-2"><Input type="month" className="!w-40 !py-1.5" value={thang} onChange={e=>setThang(e.target.value)}/>
+        {kh ? <Pill cls={daChot?'bg-emerald-100 text-emerald-800':'bg-amber-100 text-amber-800'}>{daChot?('ĐÃ CHỐT · '+kh.chot_boi+' · '+fmtDate(kh.chot_at)):('ĐỀ XUẤT · '+(kh.nguon==='DE_XUAT'?'máy lập':'người lập')+' · '+kh.updated_by_name)}</Pill> : <Pill>chưa lập</Pill>}</div>
+      {!khoa && <div className="flex items-center gap-2 flex-wrap"><Input type="number" min="1" className="!w-28 !py-1.5 text-xs" placeholder="tổng bài (tự tính)" value={tongMuon} onChange={e=>setTongMuon(e.target.value)}/><Btn variant="ghost" onClick={deXuat} disabled={busy}>✨ Máy đề xuất</Btn><Btn variant="ghost" onClick={luu} disabled={busy}>💾 Lưu</Btn>{laGat(me)&&!daChot&&<Btn variant="brand" onClick={chot} disabled={busy||!kh}>✅ Chốt (G2)</Btn>}</div>}</div>
+      <div className="grid sm:grid-cols-3 gap-2 mt-3">
+        <div className="rounded-xl bg-slate-50 p-2"><div className="text-[11px] text-ink-muted">Chỉ tiêu tổng {kh&&kh.ly_do&&kh.ly_do.tong_bai&&<span title={kh.ly_do.tong_bai}>🤖</span>}</div><div className="flex items-center gap-2"><Input type="number" min="0" className="!py-1 text-sm font-bold !w-24" value={f.chi_tieu.tong_bai||0} onChange={e=>setF(x=>({...x,chi_tieu:{...x.chi_tieu,tong_bai:Math.max(0,Number(e.target.value)||0)}}))} disabled={khoa}/><span className="text-[11px] text-ink-muted">bài · thực tế {muc.length} mục{tongPillar!==(Number(f.chi_tieu.tong_bai)||0)&&<span className="text-amber-700"> · pillar cộng {tongPillar} (lệch)</span>}</span></div></div>
+        <div className="rounded-xl bg-slate-50 p-2 sm:col-span-2"><div className="text-[11px] text-ink-muted">Định hướng tháng</div><Textarea rows="2" className="!py-1 text-xs" value={f.dinh_huong} onChange={e=>setF({...f,dinh_huong:e.target.value})} disabled={khoa} placeholder="VD: đẩy G7000 mùa mưa, 2 video review KOC…"/></div></div>
+    </Card>
+    <div className="grid lg:grid-cols-2 xl:grid-cols-4 gap-3">
+      <Khoi tieu="Theo pillar" nhom="theo_pillar" keys={pillars.map(p=>p.id)} ten={id=>{ const p=pillars.find(x=>x.id===id); return p?(p.ten+' · '+(p.ty_trong||0)+'%'):id; }} thucTe={tt.pillar} lyDo={kh&&kh.ly_do&&kh.ly_do.theo_pillar}/>
+      <Khoi tieu="Theo mục tiêu" nhom="theo_muc_tieu" keys={['BRAND','BAN_HANG']} ten={k=>MUC_TIEU_LABEL[k]} thucTe={tt.mt} lyDo={kh&&kh.ly_do&&kh.ly_do.theo_muc_tieu}/>
+      <Khoi tieu="Theo định dạng" nhom="theo_dinh_dang" keys={db.hang_so.dinh_dang} ten={k=>DINH_DANG_ICON[k]} thucTe={tt.dd} lyDo={kh&&kh.ly_do&&kh.ly_do.theo_dinh_dang}/>
+      <Khoi tieu="Theo kênh" nhom="theo_kenh" keys={kenhs.map(k=>k.id)} ten={id=>{ const k=kenhs.find(x=>x.id===id); return k?k.ten:id; }} thucTe={tt.kenh} lyDo={kh&&kh.ly_do&&kh.ly_do.theo_kenh}/>
+    </div>
+    <Card pad="p-3"><div className="flex justify-between items-start gap-2 mb-2"><SectionTitle>KPI kết quả mong muốn của tháng</SectionTitle><span className="text-[10px] text-ink-muted">Brand đo tiếp cận / xem / chia sẻ / tương tác · Bán hàng đo đơn. {kh&&kh.ly_do&&kh.ly_do.ket_qua&&<span title={kh.ly_do.ket_qua}>🤖 {kh.ly_do.ket_qua}</span>}</span></div>
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">{[['tiep_can','Tiếp cận'],['luot_xem','Lượt xem'],['chia_se','Chia sẻ'],['tuong_tac','Tương tác'],['so_don','Số đơn']].map(([k,l])=><Field key={k} label={l} className="!mb-0"><Input type="number" min="0" className="!py-1 text-xs" value={kq[k]||0} onChange={e=>setKq(k,e.target.value)} disabled={khoa}/></Field>)}</div></Card>
+    <Callout tone="note">Chỉ tiêu chảy xuống tuần: mỗi tuần = chỉ tiêu tháng ÷ số tuần (làm tròn lên). Bản chốt được so với bản máy đề xuất để chấm điểm sẵn sàng bước B2 — càng ít phải sửa, máy càng sớm được tự lập kế hoạch.</Callout>
   </div>;
 }
-// Danh mục gốc — một bảng dùng chung, khác nhau ở cột & form
+// ----- Tuần & mục nội dung -----
+function TuanVaMuc({chiXem}){
+  const { db, goi, notify } = useApp();
+  const [thang,setThang]=useState(db.hang_so.thang_nay); const [thieu,setThieu]=useState(null); const [edit,setEdit]=useState(null); const [busy,setBusy]=useState(false);
+  const kh=(db.ke_hoach_thang||[]).find(k=>k.thang===thang)||null; const muc=(db.muc_noi_dung||[]).filter(m=>m.thang===thang);
+  useEffect(()=>{ let s=true; goi('/ke-hoach/'+thang).then(r=>{ if(s) setThieu(r.ok?r.thieu:null); }); return ()=>{ s=false; }; },[thang, muc.length, (kh&&kh.updated_at)||'']);
+  const soTuan=(thieu&&thieu.so_tuan)||4; const tuanCua=m=>m.tuan!=null?Number(m.tuan):(m.ngay_dang?tuanCuaNgayFE(m.ngay_dang):null);
+  const taoMuc=async()=>{ setBusy(true); const r=await goi('/ke-hoach/'+thang+'/tao-muc',{method:'POST'}); setBusy(false); if(r.ok) notify('Máy tạo '+r.tao+' mục còn thiếu — người đặt tiêu đề & sản phẩm'); else notify(r.msg,'err'); };
+  const doiTuan=async(m,t)=>{ const r=await goi('/muc/'+m.id,{method:'PATCH',body:{tuan:t}}); if(!r.ok) notify(r.msg,'err'); };
+  const pTen=id=>((db.pillars||[]).find(p=>p.id===id)||{}).ten||'—'; const kTen=id=>((db.kenh||[]).find(k=>k.id===id)||{}).ten||'—';
+  const The=({m})=><div className="bg-white rounded-lg border border-line p-2"><div className="flex items-start gap-1"><div className="text-[11px] font-semibold text-ink min-w-0 flex-1 cursor-pointer hover:text-brand" onClick={()=>!chiXem&&setEdit(m)}>{DINH_DANG_ICON[m.dinh_dang]?DINH_DANG_ICON[m.dinh_dang].split(' ')[0]:'📄'} {m.tieu_de}</div>{m.tao_boi==='AGENT'&&<span title="máy tạo">🤖</span>}</div>
+    <div className="text-[10px] text-ink-muted mt-0.5">{pTen(m.pillar_id)} · {kTen(m.kenh_id)} · <Pill cls={MUC_TIEU_CLS[m.muc_tieu]}>{MUC_TIEU_LABEL[m.muc_tieu]}</Pill> · {m.giai_doan}</div>
+    {!chiXem && <select value={String(tuanCua(m)||'')} onChange={e=>doiTuan(m,Number(e.target.value))} className="mt-1 text-[10px] border border-line rounded px-1 py-0.5 bg-white w-full"><option value="">— tuần —</option>{Array.from({length:soTuan},(_,i)=>i+1).map(x=><option key={x} value={x}>Tuần {x}</option>)}</select>}</div>;
+  const chuaTuan=muc.filter(m=>!tuanCua(m));
+  return <div className="space-y-3">
+    <div className="flex items-center justify-between gap-2 flex-wrap"><div className="flex items-center gap-2"><Input type="month" className="!w-40 !py-1.5" value={thang} onChange={e=>setThang(e.target.value)}/><span className="text-xs text-ink-muted">{muc.length} mục{kh?(' · kế hoạch '+(kh.trang_thai==='CHOT'?'đã chốt':'chưa chốt')):' · chưa có kế hoạch tháng'}</span></div>
+      {!chiXem && <div className="flex gap-2"><Btn variant="ghost" onClick={taoMuc} disabled={busy||!kh}>🤖 Máy tạo mục còn thiếu</Btn><Btn variant="brand" onClick={()=>setEdit({thang})}>＋ Thêm mục</Btn></div>}</div>
+    <div className="flex gap-2 overflow-x-auto pb-2 snap-x">{Array.from({length:soTuan},(_,i)=>i+1).map(t=>{ const col=muc.filter(m=>tuanCua(m)===t); const th=thieu&&thieu.tuan.find(x=>x.tuan===t);
+      return <div key={t} className="bg-slate-50 rounded-xl p-2 w-[76vw] max-w-[240px] sm:w-auto sm:flex-1 sm:min-w-0 shrink-0 snap-start"><div className="text-[11px] font-bold text-ink-muted mb-1 flex justify-between"><span>Tuần {t}</span><span className={th&&col.length<th.chi_tieu?'text-amber-700':'text-slate-400'}>{col.length}{th?('/'+th.chi_tieu):''}</span></div>
+        {th&&th.thieu.length>0&&<div className="text-[10px] text-amber-700 mb-1.5">thiếu: {th.thieu.map(x=>(x.loai==='dinh_dang'?(DINH_DANG_ICON[x.ten]||x.ten).split(' ').slice(1).join(' '):x.ten)+' '+x.thieu).join(' · ')}</div>}
+        {th&&th.thieu.length===0&&col.length>=th.chi_tieu&&<div className="text-[10px] text-emerald-700 mb-1.5">✓ đủ chỉ tiêu tuần</div>}
+        <div className="space-y-1.5">{col.map(m=><The key={m.id} m={m}/>)}</div></div>; })}</div>
+    {chuaTuan.length>0 && <Card pad=""><div className="px-3 py-2 bg-amber-50 border-b border-amber-200 text-sm font-semibold text-amber-700 rounded-t-2xl">⏳ Chưa xếp tuần ({chuaTuan.length})</div><div className="p-2 grid sm:grid-cols-2 lg:grid-cols-4 gap-2">{chuaTuan.map(m=><The key={m.id} m={m}/>)}</div></Card>}
+    {edit && <MucForm init={edit} onClose={()=>setEdit(null)}/>}
+  </div>;
+}
+function tuanCuaNgayFE(ymd){ if(!/^\d{4}-\d{2}-\d{2}$/.test(ymd||'')) return null; const d=new Date(ymd+'T00:00:00Z'); const lech=(new Date(Date.UTC(d.getUTCFullYear(),d.getUTCMonth(),1)).getUTCDay()+6)%7; return Math.min(6, Math.floor((d.getUTCDate()-1+lech)/7)+1); }
+function MucForm({init,onClose}){
+  const { db, goi, notify } = useApp(); const [f,setF]=useState({thang:init.thang||db.hang_so.thang_nay, tuan:init.tuan==null?'':init.tuan, ngay_dang:init.ngay_dang||'', tieu_de:init.tieu_de||'', muc_tieu:init.muc_tieu||'BRAND', pillar_id:init.pillar_id||'', framework_id:init.framework_id||'', san_pham_id:init.san_pham_id||'', kenh_id:init.kenh_id||'', dinh_dang:init.dinh_dang||'', ghi_chu:init.ghi_chu||''}); const [busy,setBusy]=useState(false);
+  const set=(k,v)=>setF(o=>({...o,[k]:v}));
+  useEffect(()=>{ if(f.pillar_id){ const p=(db.pillars||[]).find(x=>x.id===f.pillar_id); if(p&&p.muc_tieu&&!init.id) set('muc_tieu',p.muc_tieu); } },[f.pillar_id]);
+  const luu=async()=>{ setBusy(true); const body={...f, tuan:f.tuan===''?'':Number(f.tuan)}; const r=await goi(init.id?('/muc/'+init.id):'/muc',{method:init.id?'PATCH':'POST',body}); setBusy(false); if(r.ok){ notify('Đã lưu'); onClose(); } else notify(r.msg,'err'); };
+  const xoa=async()=>{ if(!confirm('Xoá mục này?')) return; const r=await goi('/muc/'+init.id,{method:'DELETE'}); if(r.ok){ notify('Đã xoá'); onClose(); } else notify(r.msg,'err'); };
+  const Sel=({k,l,ds,ten})=><Field label={l}><Select value={f[k]} onChange={e=>set(k,e.target.value)}><option value="">— chọn —</option>{ds.map(x=><option key={x.id||x} value={x.id||x}>{ten?ten(x):x.ten}</option>)}</Select></Field>;
+  return <Modal open onClose={onClose} title={init.id?'Sửa mục nội dung':'Thêm mục nội dung'} wide>
+    {init.tao_boi==='AGENT' && <div className={CALLOUT.info+' mb-3'}>🤖 Mục do máy tạo vì thiếu so với kế hoạch. Bạn sửa gì, máy học nấy (bước B3).{init.ghi_chu?(' '+init.ghi_chu):''}</div>}
+    <div className="grid sm:grid-cols-2 gap-x-3">
+      <Field label="Tiêu đề" required className="sm:col-span-2"><Input value={f.tieu_de} onChange={e=>set('tieu_de',e.target.value)}/></Field>
+      <Sel k="pillar_id" l="Pillar" ds={(db.pillars||[]).filter(p=>p.active)}/>
+      <Field label="Mục tiêu"><Select value={f.muc_tieu} onChange={e=>set('muc_tieu',e.target.value)}><option value="BRAND">Brand (đo tiếp cận, xem, chia sẻ)</option><option value="BAN_HANG">Bán hàng (đo đơn, doanh thu)</option></Select></Field>
+      <Field label="Định dạng"><Select value={f.dinh_dang} onChange={e=>set('dinh_dang',e.target.value)}><option value="">— chưa quy định —</option>{db.hang_so.dinh_dang.map(d=><option key={d} value={d}>{DINH_DANG_ICON[d]}</option>)}</Select></Field>
+      <Sel k="kenh_id" l="Kênh" ds={(db.kenh||[]).filter(k=>k.active)}/>
+      <Sel k="framework_id" l="Framework" ds={(db.frameworks||[]).filter(x=>x.active)}/>
+      <Sel k="san_pham_id" l="Sản phẩm" ds={(db.san_pham||[]).filter(x=>x.active)} ten={s=>(s.ma?s.ma+' · ':'')+s.ten}/>
+      <Field label="Tháng"><Input type="month" value={f.thang} onChange={e=>set('thang',e.target.value)}/></Field>
+      <Field label="Ngày đăng dự kiến" hint={f.ngay_dang?('→ tuần '+(tuanCuaNgayFE(f.ngay_dang)||'?')):''}><Input type="date" value={f.ngay_dang} onChange={e=>set('ngay_dang',e.target.value)}/></Field>
+      <Field label="Tuần (đặt tay)" hint="để trống = theo ngày đăng"><Select value={String(f.tuan)} onChange={e=>set('tuan',e.target.value)}><option value="">— theo ngày đăng —</option>{[1,2,3,4,5,6].map(t=><option key={t} value={t}>Tuần {t}</option>)}</Select></Field>
+      <Field label="Ghi chú / brief" className="sm:col-span-2"><Textarea rows="2" value={f.ghi_chu} onChange={e=>set('ghi_chu',e.target.value)}/></Field>
+    </div>
+    <div className="flex justify-between gap-2">{init.id&&init.giai_doan==='Y_TUONG'?<LinkBtn tone="danger" onClick={xoa}>Xoá</LinkBtn>:<span/>}<div className="flex gap-2"><Btn variant="ghost" onClick={onClose}>Huỷ</Btn><Btn variant="brand" onClick={luu} disabled={busy||!f.tieu_de.trim()}>Lưu</Btn></div></div>
+  </Modal>;
+}
+// ----- Ý tưởng & trend (B1): máy gom + chấm, người quyết (máy học) -----
+function YTuong({chiXem}){
+  const { db, me, goi, notify } = useApp(); const [loc,setLoc]=useState('MOI'); const [them,setThem]=useState(false); const [busy,setBusy]=useState(false); const [lyDo,setLyDo]=useState({});
+  const ds=(db.y_tuong||[]).filter(y=>loc==='TAT_CA'||y.trang_thai===loc); const b1=(db.buoc||[]).find(b=>b.ma==='B1')||{}; const cfgT=(db.module_config||{}).trend||{};
+  const quyet=async(y,q)=>{ const r=await goi('/y-tuong/'+y.id+'/quyet',{method:'POST',body:{quyet:q, ly_do:lyDo[y.id]||''}}); if(r.ok) notify(q==='DUYET'?('Đã duyệt'+(r.muc_id?' → tạo mục kế hoạch':'')):'Đã bỏ'); else notify(r.msg,'err'); };
+  const gomThu=async()=>{ setBusy(true); const r=await goi('/may/chay-thu',{method:'POST',body:{agent:'GOM_TREND'}}); setBusy(false); if(r.ok) notify((r.kq[0]||{}).tom_tat||'Xong'); else notify(r.msg,'err'); };
+  const pTen=id=>((db.pillars||[]).find(p=>p.id===id)||{}).ten;
+  return <div className="space-y-3">
+    <Card pad="p-3"><div className="flex items-center justify-between gap-2 flex-wrap"><div><SectionTitle>Máy gom trend mỗi sáng (B1 · {MUC_LABEL[b1.nguoi_thuc_hien]||'Người làm'})</SectionTitle><div className="text-[11px] text-ink-muted">Nguồn: Google Trends VN{db.san_sang.youtube?' · YouTube VN':' · (YouTube: chưa cắm key)'} · từ khoá ngành: {(cfgT.tu_khoa_nganh||[]).length?(cfgT.tu_khoa_nganh||[]).join(', '):'chưa đặt (nhận tất cả — dễ ngập)'} · {db.san_sang.ai?'AI chấm sẵn':'chưa có AI chấm (ANTHROPIC_API_KEY)'} · tự duyệt khi AI tự làm & điểm ≥ {cfgT.nguong_tu_duyet}</div></div>
+      <div className="flex gap-2">{laGat(me)&&<Btn variant="ghost" onClick={gomThu} disabled={busy}>{busy?'Đang gom…':'▶ Gom thử ngay'}</Btn>}{!chiXem&&<Btn variant="brand" onClick={()=>setThem(true)}>＋ Ý tưởng của tôi</Btn>}</div></div></Card>
+    <Tabs size="sm" active={loc} onChange={setLoc} tabs={[{key:'MOI',label:'Chờ chấm',count:(db.y_tuong||[]).filter(y=>y.trang_thai==='MOI').length},{key:'DUYET',label:'Đã duyệt'},{key:'BO',label:'Đã bỏ'},{key:'TAT_CA',label:'Tất cả'}]}/>
+    {ds.length===0 ? <Empty>Không có ý tưởng nào ở mục này.</Empty> : <Card pad="">{ds.map(y=><div key={y.id} className="px-3 py-2 border-b border-line/60 flex items-start gap-3 text-xs flex-wrap">
+      <div className={"font-display font-extrabold w-9 text-center shrink-0 "+(y.diem_may==null?'text-slate-300':y.diem_may>=(cfgT.nguong_tu_duyet||70)?'text-emerald-600':y.diem_may>=40?'text-amber-600':'text-rose-500')} title="điểm máy chấm">{y.diem_may==null?'—':y.diem_may}</div>
+      <div className="min-w-0 flex-1"><div className="font-semibold text-ink">{y.ten} {y.rui_ro&&<Pill cls="bg-rose-100 text-rose-700">rủi ro claim</Pill>} {y.muc_id&&<Pill cls="bg-emerald-100 text-emerald-800">đã thành mục</Pill>}</div>
+        <div className="text-[10px] text-ink-muted">{y.nguon} · {y.ngay}{y.pillar_id?(' · '+pTen(y.pillar_id)):''}{y.dinh_dang?(' · '+y.dinh_dang):''} · <Pill cls={MUC_TIEU_CLS[y.muc_tieu]}>{MUC_TIEU_LABEL[y.muc_tieu]||'Brand'}</Pill>{y.link&&<> · <a className="text-brand-dark hover:underline" href={y.link} target="_blank" rel="noreferrer">link</a></>}</div>
+        {y.ly_do_may&&<div className="text-[10px] text-ink-soft mt-0.5">🤖 {y.ly_do_may}</div>}{y.mo_ta&&<div className="text-[10px] text-ink-muted mt-0.5 line-clamp-2">{y.mo_ta}</div>}
+        {y.trang_thai!=='MOI'&&<div className="text-[10px] text-ink-muted mt-0.5">{y.trang_thai==='DUYET'?'✓ duyệt':'✗ bỏ'} · {y.quyet_boi} · {fmtDate(y.quyet_at)}{y.ly_do_nguoi?(' · '+y.ly_do_nguoi):''}</div>}</div>
+      {y.trang_thai==='MOI'&&!chiXem&&<div className="flex flex-col gap-1 shrink-0 w-full sm:w-40"><Input className="!py-1 !px-2 text-[11px]" placeholder="lý do (máy học)" value={lyDo[y.id]||''} onChange={e=>setLyDo({...lyDo,[y.id]:e.target.value})}/><div className="flex gap-1"><Btn variant="ok" className="!py-1 !px-2 text-[11px] flex-1" onClick={()=>quyet(y,'DUYET')}>Duyệt → mục</Btn><Btn variant="ghost" className="!py-1 !px-2 text-[11px]" onClick={()=>quyet(y,'BO')}>Bỏ</Btn></div></div>}
+    </div>)}</Card>}
+    {them && <YTuongForm onClose={()=>setThem(false)}/>}
+  </div>;
+}
+function YTuongForm({onClose}){
+  const { db, goi, notify } = useApp(); const [f,setF]=useState({ten:'',mo_ta:'',link:'',pillar_id:'',dinh_dang:'',muc_tieu:'BRAND'}); const [busy,setBusy]=useState(false);
+  const luu=async()=>{ setBusy(true); const r=await goi('/y-tuong',{method:'POST',body:f}); setBusy(false); if(r.ok){ notify('Đã thêm ý tưởng'+(db.san_sang.ai?' — máy đã chấm':'')); onClose(); } else notify(r.msg,'err'); };
+  return <Modal open onClose={onClose} title="Ý tưởng của tôi">
+    <Field label="Tên ý tưởng" required><Input value={f.ten} onChange={e=>setF({...f,ten:e.target.value})}/></Field>
+    <Field label="Mô tả"><Textarea rows="3" value={f.mo_ta} onChange={e=>setF({...f,mo_ta:e.target.value})}/></Field>
+    <Field label="Link tham khảo"><Input value={f.link} onChange={e=>setF({...f,link:e.target.value})}/></Field>
+    <div className="grid grid-cols-3 gap-2"><Field label="Pillar"><Select value={f.pillar_id} onChange={e=>setF({...f,pillar_id:e.target.value})}><option value="">—</option>{(db.pillars||[]).filter(p=>p.active).map(p=><option key={p.id} value={p.id}>{p.ten}</option>)}</Select></Field>
+      <Field label="Định dạng"><Select value={f.dinh_dang} onChange={e=>setF({...f,dinh_dang:e.target.value})}><option value="">—</option>{db.hang_so.dinh_dang.map(d=><option key={d} value={d}>{d}</option>)}</Select></Field>
+      <Field label="Mục tiêu"><Select value={f.muc_tieu} onChange={e=>setF({...f,muc_tieu:e.target.value})}><option value="BRAND">Brand</option><option value="BAN_HANG">Bán hàng</option></Select></Field></div>
+    <div className="flex justify-end gap-2"><Btn variant="ghost" onClick={onClose}>Huỷ</Btn><Btn variant="brand" onClick={luu} disabled={busy||!f.ten.trim()}>Lưu</Btn></div></Modal>;
+}
+// ----- Danh mục gốc — một bảng dùng chung, khác nhau ở cột & form -----
 const DM_META = {
-  pillars:    { ten:'Pillar (trụ cột)', cot:[['ten','Tên'],['ty_trong','Tỷ trọng %'],['mo_ta','Mô tả']], form:[['ten','Tên','text'],['ty_trong','Tỷ trọng (%)','number'],['thu_tu','Thứ tự','number'],['mo_ta','Mô tả','textarea']] },
+  pillars:    { ten:'Pillar (trụ cột)', cot:[['ten','Tên'],['ty_trong','Tỷ trọng %'],['muc_tieu','Mục tiêu'],['mo_ta','Mô tả']], form:[['ten','Tên','text'],['ty_trong','Tỷ trọng (%)','number'],['muc_tieu','Mục tiêu (KPI đo)','muctieu'],['thu_tu','Thứ tự','number'],['mo_ta','Mô tả','textarea']] },
   frameworks: { ten:'Framework (nhóm kịch bản)', cot:[['ten','Tên'],['pillar_id','Pillar'],['mo_ta','Mô tả']], form:[['ten','Tên','text'],['pillar_id','Pillar','pillar'],['mo_ta','Mô tả / cấu trúc','textarea']] },
   san_pham:   { ten:'Sản phẩm & thông số thật', cot:[['ma','Mã'],['ten','Tên'],['dong','Dòng'],['thong_so','Thông số']], form:[['ma','Mã','text'],['ten','Tên','text'],['dong','Dòng','text'],['thong_so','Thông số (mỗi dòng: tên: giá trị)','thongso'],['tieu_chuan','Tiêu chuẩn','text'],['bao_hanh','Bảo hành (cam kết chính thức)','text'],['huong_dan','Hướng dẫn dùng','textarea'],['mo_ta','Mô tả','textarea']] },
   claim_cam:  { ten:'Claim cấm', cot:[['cum_tu','Cụm từ'],['muc_do','Mức'],['ly_do','Lý do']], form:[['cum_tu','Cụm từ','text'],['muc_do','Mức độ','mucdo'],['ly_do','Lý do','textarea']] },
@@ -65,7 +185,7 @@ function DanhMuc({bang, chiXem}){
   const { db, goi, notify } = useApp(); const meta=DM_META[bang]; const rows=db[bang]||[];
   const [edit,setEdit]=useState(null); const [anTat,setAnTat]=useState(true);
   const ds=rows.filter(r=>!anTat || r.active!==false);
-  const hien=(r,k)=>{ if(k==='thong_so') return (r.thong_so||[]).map(x=>x.k+': '+x.v).join(' · ').slice(0,80); if(k==='pillar_id') return ((db.pillars||[]).find(p=>p.id===r.pillar_id)||{}).ten||'—'; if(k==='co_token') return r.co_token?'● có':'○ chưa'; if(k==='muc_do') return r.muc_do==='CHAN'?'CHẶN':'cảnh báo'; return r[k]==null?'':String(r[k]); };
+  const hien=(r,k)=>{ if(k==='thong_so') return (r.thong_so||[]).map(x=>x.k+': '+x.v).join(' · ').slice(0,80); if(k==='pillar_id') return ((db.pillars||[]).find(p=>p.id===r.pillar_id)||{}).ten||'—'; if(k==='co_token') return r.co_token?'● có':'○ chưa'; if(k==='muc_do') return r.muc_do==='CHAN'?'CHẶN':'cảnh báo'; if(k==='muc_tieu') return MUC_TIEU_LABEL[r.muc_tieu]||'Brand'; return r[k]==null?'':String(r[k]); };
   const xoa=async(r)=>{ if(!confirm((bang==='claim_cam'?'Xoá':'Tắt')+' "'+(r.ten||r.cum_tu)+'"?')) return; const x=await goi('/danh-muc/'+bang+'/'+r.id,{method:'DELETE'}); if(x.ok) notify('Đã '+(bang==='claim_cam'?'xoá':'tắt')); else notify(x.msg,'err'); };
   return <Card pad="">
     <div className="px-3 py-2 border-b border-line flex items-center justify-between gap-2 flex-wrap"><SectionTitle>{meta.ten} <span className="text-ink-muted font-normal">({ds.length})</span></SectionTitle>
@@ -89,6 +209,7 @@ function DanhMucForm({bang, init, onClose}){
     if(t==='number') return <Field label={l}><Input type="number" value={v} onChange={e=>set(e.target.value)}/></Field>;
     if(t==='thongso') return <Field label={l} hint="VD: Phạm vi sử dụng: Trong nhà và ngoài trời"><Textarea rows="5" value={f.thong_so_text||''} onChange={e=>setF(o=>({...o,thong_so_text:e.target.value}))}/></Field>;
     if(t==='pillar') return <Field label={l}><Select value={v} onChange={e=>set(e.target.value)}><option value="">— chọn —</option>{(db.pillars||[]).map(p=><option key={p.id} value={p.id}>{p.ten}</option>)}</Select></Field>;
+    if(t==='muctieu') return <Field label={l} hint="Brand: đo tiếp cận, lượt xem, chia sẻ, tương tác. Bán hàng: đo đơn, doanh thu (3 mức tin cậy)."><Select value={v||'BRAND'} onChange={e=>set(e.target.value)}><option value="BRAND">Brand</option><option value="BAN_HANG">Bán hàng</option></Select></Field>;
     if(t==='mucdo') return <Field label={l} hint="CHẶN: không cho lưu nội dung có cụm này. Cảnh báo: chỉ nhắc."><Select value={v||'CANH_BAO'} onChange={e=>set(e.target.value)}><option value="CHAN">CHẶN</option><option value="CANH_BAO">Cảnh báo</option></Select></Field>;
     if(t==='cachdang') return <Field label={l}><Select value={v||'TAY'} onChange={e=>set(e.target.value)}><option value="TAY">Đăng tay (máy giao việc)</option><option value="API">API nền tảng (cần TOKEN_)</option><option value="N8N">Qua n8n</option></Select></Field>;
     return <Field label={l}><Input value={v} onChange={e=>set(e.target.value)}/></Field>; };

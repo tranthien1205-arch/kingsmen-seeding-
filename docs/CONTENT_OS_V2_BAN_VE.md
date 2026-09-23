@@ -150,7 +150,7 @@ Schema — nhóm theo tầng của vòng lặp (tên bảng tiếng Việt khôn
 | Kế hoạch (G2) | `ke_hoach_thang (thang, phien_ban, chi_tieu, dinh_huong, nguon DE_XUAT/NGUOI, chot_boi, chot_at)`, `y_tuong`, `muc_noi_dung (id, thang, tuan, ngay_dang, pillar, dinh_dang, kenh, san_pham, framework, giai_doan, tao_boi NGUOI/AGENT)` | `muc_noi_dung` thay `content_items` + `san_xuat` — một thẻ đi hết 6 giai đoạn |
 | Nội dung (G3) | `noi_dung (id, muc_id, dinh_dang, phien_ban, hook, sections, cta, chi_tiet, tao_boi, trang_thai)`, `noi_dung_phien_ban`, `duyet (id, doi_tuong, cong, trang_thai, cham_may, ly_do_nguoi)` | `noi_dung` thay `scripts`; `duyet.cham_may` = điểm & lý do máy chấm sẵn |
 | Sản xuất & Đăng | `tai_san (id, loai FOOTAGE/ANH/VIDEO_XUAT/GOI_DUNG, nguon, muc_id, r2_key)`, `bai_dang (id, noi_dung_id, kenh, gio_dang, cach, link, trang_thai)`, `suat_lich` | `tai_san` gộp footage + media_library + video xuất (ADR-004 hoàn tất) |
-| Đo & Học | `ket_qua` (3 mức, API_KENH delta/ngày như ADR-008), `bao_cao`, `bai_hoc`, `de_xuat` | |
+| Đo & Học | `ket_qua` (3 mức tin cậy; cột KPI đủ cho cả brand lẫn bán hàng: tiep_can, luot_xem, chia_se, luu, binh_luan, tuong_tac, click, so_don, doanh_thu; API_KENH ghi phần tăng/ngày), `bao_cao`, `bai_hoc`, `de_xuat` | Thiện 2026-09-23: nội dung brand đo tiếp cận/xem/chia sẻ, không chỉ đơn. Mỗi mục nội dung và mỗi pillar có `muc_tieu` BRAND | BAN_HANG để chọn bộ KPI |
 | Máy | `buoc_thuc_hien`, `mau_hoc`, `agent_run`, `cong_viec` | mới — xem §3b |
 | Seeding/Sales | `nhiem_vu, bang_chung, don` | chép logic app cũ sang schema mới ở đợt cuối |
 
