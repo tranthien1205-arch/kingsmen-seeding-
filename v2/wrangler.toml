@@ -5,6 +5,7 @@ main = "worker/index.js"
 compatibility_date = "2025-06-01"
 # Tên miền riêng (zone masfico.vn trên Cloudflare) — độc lập với app cũ kingsmen-app-seeding. Phải đặt TRƯỚC mọi [bảng] TOML.
 routes = [{ pattern = "content.masfico.vn", custom_domain = true }]
+workers_dev = true   # giữ thêm địa chỉ workers.dev để dự phòng / kiểm tra
 
 [assets]
 directory = "./dist"
