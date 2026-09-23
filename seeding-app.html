@@ -67,15 +67,39 @@ const ROLE_LABEL = { MARKETING:'Marketing', SALES:'Sales', ADMIN:'Admin / Kế t
 // Content OS · P3 — kế hoạch nội dung
 const CONTENT_LOAI = { ECOM:'ECOM', SOCIAL:'SOCIAL' };
 const CONTENT_LOAI_LABEL = { ECOM:'Ecom (video bán hàng)', SOCIAL:'Social (thương hiệu)' };
+// ADR-002 — 6 giai đoạn, khớp PIPELINE_BE ở worker. Sự kiện đẩy TỚI (kịch bản → gửi duyệt → duyệt → đăng → có kết quả);
+// người vẫn đặt tay được. Quay/Dựng không còn là giai đoạn riêng: hiện thành NHÃN CON tính từ dữ liệu (nhanConKeHoach).
 const PIPELINE = [
-  {k:'Y_TUONG', label:'Ý tưởng', icon:'💡'},
-  {k:'SCRIPT', label:'Script/Brief', icon:'✍️'},
-  {k:'QUAY', label:'Quay', icon:'🎥'},
-  {k:'DUNG', label:'Dựng', icon:'🛠'},
+  {k:'Y_TUONG',   label:'Ý tưởng',   icon:'💡'},
+  {k:'SCRIPT',    label:'Kịch bản',  icon:'✍️'},
   {k:'CHO_DUYET', label:'Chờ duyệt', icon:'⏳'},
-  {k:'DA_DANG', label:'Đã đăng', icon:'✅'},
-  {k:'DA_DO', label:'Đã đo', icon:'📊'},
+  {k:'SAN_XUAT',  label:'Sản xuất',  icon:'🎬'},
+  {k:'DA_DANG',   label:'Đã đăng',   icon:'✅'},
+  {k:'DA_DO',     label:'Đã đo',     icon:'📊'},
 ];
+const PIPELINE_CU = { QUAY:'SAN_XUAT', DUNG:'SAN_XUAT', DUYET:'SAN_XUAT', NHAP:'SCRIPT' };   // dữ liệu trước ADR-002 (demo/localStorage)
+const pipeIdx = k => PIPELINE.findIndex(s=>s.k===k);
+const GIAI_DOAN_DA_DUYET = ['SAN_XUAT','DA_DANG','DA_DO'];   // từ đây trở đi kịch bản đã qua 2 cổng
+// Nhãn con của một mục kế hoạch — tính từ dữ liệu thật (kịch bản, shot list, video, bài đăng), KHÔNG lưu
+function nhanConKeHoach(db, it){
+  const scs=(db.scripts||[]).filter(x=>x.content_item_id===it.id); const out=[];
+  if(!scs.length){ if(it.trang_thai!=='Y_TUONG') out.push({t:'chưa có kịch bản', cls:TONE.warn}); return out; }
+  const sc=scs.slice().sort((a,b)=>String(b.updated_at||'').localeCompare(String(a.updated_at||'')))[0];
+  out.push({t:DINH_DANG_FE[ddOf(sc)].icon+' '+(SCRIPT_ST[sc.trang_thai]||'Nháp'), cls:SCRIPT_ST_STYLE[sc.trang_thai]||TONE.muted});
+  if(Number(sc.so_lan_tra)>0 && sc.trang_thai==='NHAP') out.push({t:'bị trả '+sc.so_lan_tra+' lần', cls:TONE.danger});
+  const shots=(db.shot_list||[]).filter(x=>x.script_id===sc.id);
+  if(shots.length) out.push({t:'🎥 '+shots.filter(x=>x.trang_thai!=='CHUA_QUAY').length+'/'+shots.length+' cảnh', cls:TONE.info});
+  if((sc.chi_tiet||{}).video_url) out.push({t:'🎞 đã dựng', cls:TONE.ok});
+  const air=(db.air_posts||[]).find(a=>a.script_id===sc.id||a.content_item_id===it.id);
+  if(air) out.push({t:'🚀 '+(air.trang_thai==='DA_DANG'?'đã đăng':(air.trang_thai==='DA_LEN_LICH'||air.trang_thai==='DANG_GUI')?'đã lên lịch':'chuẩn bị đăng'), cls:air.trang_thai==='DA_DANG'?TONE.ok:TONE.muted});
+  return out;
+}
+// Demo (in-memory) — bản sao của dayGiaiDoan / luiVeKichBan / ciCuaAir / ghiNgayDangVeKeHoach ở worker
+function dayGiaiDoanFE(S, ciId, toi){ if(!ciId) return; const ci=(S.content_items||[]).find(c=>c.id===ciId); if(!ci) return;
+  const a=pipeIdx(PIPELINE_CU[ci.trang_thai]||ci.trang_thai), b=pipeIdx(toi); if(b<0||a>=b) return; ci.trang_thai=toi; ci.updated_at=new Date().toISOString(); }
+function luiVeKichBanFE(S, ciId){ const ci=(S.content_items||[]).find(c=>c.id===ciId); if(ci && ci.trang_thai==='CHO_DUYET'){ ci.trang_thai='SCRIPT'; ci.updated_at=new Date().toISOString(); } }
+function ciCuaAirFE(S, a){ if(!a) return null; if(a.content_item_id) return a.content_item_id; const sc=(S.scripts||[]).find(x=>x.id===a.script_id); return (sc&&sc.content_item_id)||null; }
+function ghiNgayDangFE(S, ciId, ngay){ const d=String(ngay||'').slice(0,10); const ci=(S.content_items||[]).find(c=>c.id===ciId); if(!ci||!/^\d{4}-\d{2}-\d{2}$/.test(d)) return; ci.chi_tiet={...(ci.chi_tiet||{}), ngay_dang:d}; }
 const pipeLabel = k => (PIPELINE.find(s=>s.k===k)||{}).label||k;
 const LOAI_MUC_TIEU_KPI = [
   {v:'BAN_HANG', label:'Bán hàng'}, {v:'THUONG_HIEU', label:'Thương hiệu'},
@@ -557,6 +581,7 @@ function migrate(db){
   db.kenh ||= [];
   db.content_items ||= [];
   db.scripts ||= []; db.approvals ||= []; db.air_posts ||= []; db.air_checklist ||= AIR_CHECKLIST_FE;
+  (db.content_items||[]).forEach(c=>{ if(PIPELINE_CU[c.trang_thai]) c.trang_thai=PIPELINE_CU[c.trang_thai]; });
   db.ket_qua ||= []; db.don_cho_gan ||= []; db.footage ||= []; db.shot_list ||= []; db.bai_hoc ||= []; db.min_mau ||= MIN_MAU; db.trends ||= []; db.trend_check ||= TREND_CHECK_FE; db.viec_ket ||= null; db.seeding_theo_noi_dung ||= {}; db.kenh_tu_dong ||= KENH_TU_DONG_FE; db.kenh_san_sang ||= {}; db.n8n_san_sang ||= false; db.youtube_san_sang ||= false; db.agent_log ||= []; db.module_config ||= {}; db.can_cau_hinh ??= true; db.san_xuat ||= []; db.sx_khau ||= SX_KHAU_FE; db.san_xuat_theo_noi_dung ||= {};
   db.post_seedings.forEach(p=>{ p.react ??= 0; p.so_cmt_seeding ??= 0; p.so_cmt_tu_nhien ??= 0; p.thanh_tien ??= 0; });
   db.cmt_seedings.forEach(c=>{ c.proofs ||= []; c.so_cmt_seeding ??= 0; c.react ??= 0; c.so_cmt_tu_nhien ??= 0; c.thanh_tien ??= 0; });
@@ -675,20 +700,21 @@ function AppProvider({children}){
       deleteFramework: async id=>{ S.frameworks=(S.frameworks||[]).filter(x=>x.id!==id); commit(); return true; },
       upsertScript: async o=>{ S.scripts ||= []; const flags=scanClaims(scriptTextFE(o), S.claim_cam); if(flags.some(f=>f.muc_do==='CHAN')){ return {ok:false, blocked:flags.filter(f=>f.muc_do==='CHAN').map(f=>f.cum_tu)}; }
         if(o.id){ const i=S.scripts.findIndex(x=>x.id===o.id); if(i>=0){ if(o.dinh_dang && o.dinh_dang!==ddOf(S.scripts[i])) return {ok:false,msg:'Không đổi được định dạng sau khi tạo'}; S.scripts[i]={...S.scripts[i],...o, dinh_dang:ddOf(S.scripts[i]), claim_flags:flags, version:(S.scripts[i].version||1)+1, updated_at:now()}; } }
-        else { const nid=uid('scr'); S.scripts.unshift({ id:nid, tieu_de:'', hook:'', sections:[], cta:'', framework_id:null, san_pham_id:null, kenh_id:null, brand_voice:'', trang_thai:'NHAP', version:1, dinh_dang:'VIDEO', chi_tiet:{}, claim_flags:flags, created_at:now(), created_by:meRef.current.id, created_by_name:meRef.current.ho_ten, updated_at:now(), ...o, id:nid }); commit(); return {ok:true, id:nid}; } commit(); return {ok:true}; },
+        else { const nid=uid('scr'); S.scripts.unshift({ id:nid, tieu_de:'', hook:'', sections:[], cta:'', framework_id:null, san_pham_id:null, kenh_id:null, brand_voice:'', trang_thai:'NHAP', version:1, dinh_dang:'VIDEO', chi_tiet:{}, claim_flags:flags, created_at:now(), created_by:meRef.current.id, created_by_name:meRef.current.ho_ten, updated_at:now(), ...o, id:nid }); dayGiaiDoanFE(S,o.content_item_id,'SCRIPT'); commit(); return {ok:true, id:nid}; } dayGiaiDoanFE(S,o.content_item_id,'SCRIPT'); commit(); return {ok:true}; },
       deleteScript: async id=>{ S.scripts=(S.scripts||[]).filter(x=>x.id!==id); commit(); return true; },
       fetchScriptVersions: async id=>({ versions: [] }),
-      submitApproval: async (doi_tuong,doi_tuong_id)=>{ S.approvals ||= []; const arr = doi_tuong==='SCRIPT'?S.scripts:S.content_items; const o=(arr||[]).find(x=>x.id===doi_tuong_id); if(!o) return {ok:false,msg:'Không tìm thấy'};
+      submitApproval: async (doi_tuong,doi_tuong_id)=>{ if(doi_tuong!=='SCRIPT') return {ok:false,msg:'Chỉ kịch bản đi qua cổng duyệt (ADR-002)'}; S.approvals ||= []; const o=(S.scripts||[]).find(x=>x.id===doi_tuong_id); if(!o) return {ok:false,msg:'Không tìm thấy'};
         S.approvals=(S.approvals||[]).filter(a=>!(a.doi_tuong===doi_tuong&&a.doi_tuong_id===doi_tuong_id));
         ['NOI_DUNG','CLAIM'].forEach(cong=>S.approvals.unshift({ id:uid('ap'), doi_tuong, doi_tuong_id, cong, trang_thai:'CHO', nguoi_gui:meRef.current.id, nguoi_gui_ten:meRef.current.ho_ten, ghi_chu:'', created_at:now() }));
-        o.trang_thai='CHO_DUYET'; commit(); return {ok:true}; },
-      createAir: async o=>{ S.air_posts ||= []; const src=(o.script_id?(S.scripts||[]):(S.content_items||[])).find(x=>x.id===(o.script_id||o.content_item_id));
+        o.trang_thai='CHO_DUYET'; dayGiaiDoanFE(S,o.content_item_id,'CHO_DUYET'); commit(); return {ok:true}; },
+      createAir: async o=>{ S.air_posts ||= []; if(!o.script_id) return {ok:false,msg:'Bài đăng lấy từ kịch bản đã duyệt — chọn kịch bản (ADR-002)'}; const src=(S.scripts||[]).find(x=>x.id===o.script_id);
         if(!src) return {ok:false,msg:'Không tìm thấy'}; if(src.trang_thai!=='DUYET') return {ok:false,msg:'Chỉ đăng nội dung ĐÃ DUYỆT'};
         const ma=String(o.ma_theo_doi||'').trim(); if(ma && (S.air_posts||[]).some(a=>a.ma_theo_doi===ma)) return {ok:false,msg:'Mã theo dõi đã dùng cho bài khác'};
-        const id=uid('air'); S.air_posts.unshift({ id, content_item_id:o.content_item_id||null, script_id:o.script_id||null, kenh_id:o.kenh_id||src.kenh_id||null, tieu_de:o.tieu_de||src.tieu_de||'', ngay_dang:o.ngay_dang||'', link_bai:o.link_bai||'', ma_theo_doi:ma, loai_ma:o.loai_ma||'VOUCHER', checklist:o.checklist||{}, ghi_chu:'', trang_thai:'CHUAN_BI', nguoi_dang:meRef.current.id, nguoi_dang_ten:meRef.current.ho_ten, created_at:now(), updated_at:now() });
+        const id=uid('air'); S.air_posts.unshift({ id, content_item_id:o.content_item_id||null, script_id:o.script_id||null, kenh_id:o.kenh_id||src.kenh_id||null, tieu_de:o.tieu_de||src.tieu_de||'', media_url:o.media_url||(src.chi_tiet&&src.chi_tiet.video_url)||'', ngay_dang:o.ngay_dang||((((S.content_items||[]).find(c=>c.id===src.content_item_id)||{}).chi_tiet||{}).ngay_dang)||'', link_bai:o.link_bai||'', ma_theo_doi:ma, loai_ma:o.loai_ma||'VOUCHER', checklist:o.checklist||{}, ghi_chu:'', trang_thai:'CHUAN_BI', nguoi_dang:meRef.current.id, nguoi_dang_ten:meRef.current.ho_ten, created_at:now(), updated_at:now() });
         commit(); return {ok:true, id}; },
       patchAir: async (id,patch)=>{ const a=(S.air_posts||[]).find(x=>x.id===id); if(!a) return {ok:false,msg:'Không tìm thấy'};
         if(patch.ma_theo_doi!=null){ const ma=String(patch.ma_theo_doi).trim(); if(ma && (S.air_posts||[]).some(x=>x.ma_theo_doi===ma && x.id!==id)) return {ok:false,msg:'Mã theo dõi đã dùng cho bài khác'}; }
+        if(patch.ngay_dang && patch.ngay_dang!==a.ngay_dang) ghiNgayDangFE(S, ciCuaAirFE(S,a), patch.ngay_dang);
         Object.assign(a, patch, {updated_at:now()}); commit(); return {ok:true}; },
       publishAir: async id=>{ const a=(S.air_posts||[]).find(x=>x.id===id); if(!a) return {ok:false,msg:'Không tìm thấy'};
         if(a.trang_thai==='DA_DANG') return {ok:false,msg:'Bài này đã đăng'};
@@ -696,7 +722,7 @@ function AppProvider({children}){
         if(thieu.length) return {ok:false, thieu, msg:'Chưa xong checklist bắt buộc'};
         if(!String(a.link_bai||'').trim()) return {ok:false,msg:'Cần dán link bài đã đăng'};
         if(!String(a.ma_theo_doi||'').trim()) return {ok:false,msg:'Cần mã theo dõi để quy đơn'};
-        a.trang_thai='DA_DANG'; a.posted_at=now(); a.updated_at=now(); commit(); return {ok:true}; },
+        a.trang_thai='DA_DANG'; a.posted_at=now(); a.updated_at=now(); dayGiaiDoanFE(S,ciCuaAirFE(S,a),'DA_DANG'); commit(); return {ok:true}; },
       deleteAir: async id=>{ S.air_posts=(S.air_posts||[]).filter(x=>x.id!==id); commit(); return true; },
       scheduleAir: async (id,o)=>{ const a=(S.air_posts||[]).find(x=>x.id===id); if(!a) return {ok:false,msg:'Không tìm thấy'};
         if(a.trang_thai==='DA_DANG') return {ok:false,msg:'Bài đã đăng rồi'};
@@ -724,6 +750,7 @@ function AppProvider({children}){
         S.ket_qua.unshift({ id:uid('kq'), air_post_id:ap.id, muc_tin_cay:muc, nguon:o.nguon||'NHAP_TAY', ky:o.ky||'', doanh_thu:dt, so_don:sd,
           luot_xem:Number(o.luot_xem)||0, luot_tuong_tac:Number(o.luot_tuong_tac)||0, luot_click:Number(o.luot_click)||0,
           ma_theo_doi:ap.ma_theo_doi||'', ghi_chu:o.ghi_chu||'', created_at:now(), created_by_name:meRef.current.ho_ten });
+        dayGiaiDoanFE(S,ciCuaAirFE(S,ap),'DA_DO');
         commit(); return {ok:true}; },
       deleteKetQua: async id=>{ S.ket_qua=(S.ket_qua||[]).filter(x=>x.id!==id); commit(); return true; },
       importKetQua: async o=>{ S.ket_qua ||= []; S.don_cho_gan ||= []; const nguon=o.nguon||'SHOPEE';
@@ -733,7 +760,7 @@ function AppProvider({children}){
         (o.rows||[]).forEach(r=>{ const ma=String(r.ma_theo_doi||r.ma||'').trim(); const dt=Number(r.doanh_thu)||0, sd=Number(r.so_don)||0;
           if(!ma&&!dt&&!sd) return;
           const hits=ma?(S.air_posts||[]).filter(a=>a.ma_theo_doi===ma):[];
-          if(hits.length===1){ S.ket_qua.unshift({ id:uid('kq'), air_post_id:hits[0].id, muc_tin_cay:muc, nguon, ky:r.ky||o.ky||'', doanh_thu:dt, so_don:sd, luot_xem:0, luot_tuong_tac:0, luot_click:0, ma_theo_doi:ma, ghi_chu:'Khớp mã tự động', created_at:now(), created_by_name:meRef.current.ho_ten }); gan++; }
+          if(hits.length===1){ S.ket_qua.unshift({ id:uid('kq'), air_post_id:hits[0].id, muc_tin_cay:muc, nguon, ky:r.ky||o.ky||'', doanh_thu:dt, so_don:sd, luot_xem:0, luot_tuong_tac:0, luot_click:0, ma_theo_doi:ma, ghi_chu:'Khớp mã tự động', created_at:now(), created_by_name:meRef.current.ho_ten }); dayGiaiDoanFE(S,ciCuaAirFE(S,hits[0]),'DA_DO'); gan++; }
           else { S.don_cho_gan.unshift({ id:uid('dcg'), nguon, ma_doi_soat:ma, doanh_thu:dt, so_don:sd, ky:r.ky||o.ky||'', trang_thai:'CHO_GAN', created_at:now(),
             ly_do: !ma?'Dòng không có mã theo dõi':(hits.length===0?'Mã không khớp bài nào':'Mã khớp nhiều bài ('+hits.length+')') }); cho++; } });
         commit(); return {ok:true,gan,cho}; },
@@ -741,7 +768,7 @@ function AppProvider({children}){
         if(d.trang_thai!=='CHO_GAN') return {ok:false,msg:'Đơn này đã xử lý'};
         const ap=(S.air_posts||[]).find(x=>x.id===air_post_id); if(!ap) return {ok:false,msg:'Chọn bài đăng để gán'};
         S.ket_qua.unshift({ id:uid('kq'), air_post_id:ap.id, muc_tin_cay:'GIAN_TIEP', nguon:d.nguon, ky:d.ky||'', doanh_thu:Number(d.doanh_thu)||0, so_don:Number(d.so_don)||0, luot_xem:0, luot_tuong_tac:0, luot_click:0, ma_theo_doi:d.ma_doi_soat||'', ghi_chu:'Gán tay từ hàng đợi', created_at:now(), created_by_name:meRef.current.ho_ten });
-        Object.assign(d,{trang_thai:'DA_GAN',air_post_id:ap.id,decided_at:now(),decided_by_name:meRef.current.ho_ten}); commit(); return {ok:true}; },
+        Object.assign(d,{trang_thai:'DA_GAN',air_post_id:ap.id,decided_at:now(),decided_by_name:meRef.current.ho_ten}); dayGiaiDoanFE(S,ciCuaAirFE(S,ap),'DA_DO'); commit(); return {ok:true}; },
       createFootage: async o=>{ S.footage ||= []; if(!(o.media_url||'').trim()) return {ok:false,msg:'Cần file hoặc link media'};
         const id=uid('ft'); S.footage.unshift({ id, ten:o.ten||'', mo_ta:o.mo_ta||'', media_url:o.media_url, media_type:o.media_type||'VIDEO',
           tags:Array.isArray(o.tags)?o.tags:[], san_pham_id:o.san_pham_id||null, kenh_id:o.kenh_id||null, dia_diem:o.dia_diem||'', ngay_quay:o.ngay_quay||'',
@@ -831,7 +858,7 @@ function AppProvider({children}){
       aiChat: async m=>({ok:false, thieu_key:true, loi:'Chế độ offline không gọi AI được'}),
       sinhWorkflowAI: async o=>({ok:false, thieu_key:true, loi:'Chế độ offline không gọi AI được'}),
       daySangSeeding: async (id,o)=>{ const ci=(S.content_items||[]).find(x=>x.id===id); if(!ci) return {ok:false,msg:'Không tìm thấy nội dung'};
-        if(ci.trang_thai!=='DUYET') return {ok:false,msg:'Chỉ đẩy nội dung ĐÃ DUYỆT sang seeding'};
+        if(!GIAI_DOAN_DA_DUYET.includes(ci.trang_thai)) return {ok:false,msg:'Chỉ đẩy nội dung có kịch bản ĐÃ DUYỆT (từ giai đoạn Sản xuất) sang seeding'};
         if((S.content_topics||[]).some(x=>x.content_item_id===id)) return {ok:false,msg:'Nội dung này đã có trong thư viện seeding'};
         const sc=(S.scripts||[]).filter(x=>x.content_item_id===id && x.trang_thai==='DUYET')[0];
         let noi_dung=''; if(sc) noi_dung=noiDungDangFE(sc);
@@ -845,8 +872,8 @@ function AppProvider({children}){
       decideApproval: async (id,result,ghi_chu)=>{ const ap=(S.approvals||[]).find(a=>a.id===id); if(!ap) return false;
         const arr = ap.doi_tuong==='SCRIPT'?S.scripts:S.content_items; const o=(arr||[]).find(x=>x.id===ap.doi_tuong_id);
         Object.assign(ap,{ trang_thai:result==='DAT'?'DAT':'TRA_LAI', nguoi_duyet:meRef.current.id, nguoi_duyet_ten:meRef.current.ho_ten, ghi_chu:ghi_chu||'', decided_at:now() });
-        if(result!=='DAT'){ (S.approvals||[]).forEach(a=>{ if(a.doi_tuong===ap.doi_tuong&&a.doi_tuong_id===ap.doi_tuong_id&&a.trang_thai==='CHO'){ a.trang_thai='HUY'; a.decided_at=now(); } }); if(o){ o.trang_thai='NHAP'; o.so_lan_tra=(Number(o.so_lan_tra)||0)+1; } }
-        else { const rest=(S.approvals||[]).filter(a=>a.doi_tuong===ap.doi_tuong&&a.doi_tuong_id===ap.doi_tuong_id); if(rest.length&&rest.every(a=>a.trang_thai==='DAT')&&o) o.trang_thai='DUYET'; }
+        if(result!=='DAT'){ (S.approvals||[]).forEach(a=>{ if(a.doi_tuong===ap.doi_tuong&&a.doi_tuong_id===ap.doi_tuong_id&&a.trang_thai==='CHO'){ a.trang_thai='HUY'; a.decided_at=now(); } }); if(o){ o.trang_thai='NHAP'; o.so_lan_tra=(Number(o.so_lan_tra)||0)+1; luiVeKichBanFE(S,o.content_item_id); } }
+        else { const rest=(S.approvals||[]).filter(a=>a.doi_tuong===ap.doi_tuong&&a.doi_tuong_id===ap.doi_tuong_id); if(rest.length&&rest.every(a=>a.trang_thai==='DAT')&&o){ o.trang_thai='DUYET'; dayGiaiDoanFE(S,o.content_item_id,'SAN_XUAT'); } }
         commit(); return true; },
       createLibImg: async o=>{ S.media_library ||= []; S.media_library.unshift({ id:uid('lib'), media_url:o.media_url, caption:o.caption||'', muc_dich:o.muc_dich||'CA_HAI', topic_id:o.topic_id||null, tags:o.tags||[], uploaded_by:meRef.current.id, uploaded_by_name:meRef.current.ho_ten, active:true, uploaded_at:now() }); commit(); return true; },
       patchLibImg: async (id, patch)=>{ const r=(S.media_library||[]).find(x=>x.id===id); if(r) Object.assign(r, patch); commit(); return true; },
@@ -1628,7 +1655,9 @@ function Shell(){
         </div>}
       </header>
 
-      <main className="p-3 sm:p-2 w-full">{render()}</main>
+      <main className="p-3 sm:p-2 w-full">{/* ADR-002: máy giao việc ngay trang đầu tiên mỗi vai trò nhìn thấy khi mở app (không phải Sales) */}
+        {me.vai_tro!==ROLES.SALES && page===((allItems[0]||{}).key) && <div className="mb-4"><VietCuaToi go={setPage}/></div>}
+        {render()}</main>
     </div>
 
     {/* Bottom nav mobile — CHỈ 5 nhóm lớn, chia đều, không cuộn ngang */}
@@ -2247,6 +2276,7 @@ function ContentPlan(){
         {it.loai_muc_tieu && <span className="text-[9px] px-1 py-0.5 rounded-full bg-emerald-50 text-emerald-700">{kpiLabel(it.loai_muc_tieu)}</span>}
         {kn && <span className="text-[9px] px-1 py-0.5 rounded-full bg-sky-50 text-sky-700">{kn.ten}</span>}
       </div>
+      {(()=>{ const nc=nhanConKeHoach(db,it); return nc.length>0 && <div className="flex flex-wrap gap-1 mt-1">{nc.map((x,i)=><span key={i} className={"text-[9px] px-1 py-0.5 rounded-full "+x.cls}>{x.t}</span>)}</div>; })()}
       <div className="flex items-center justify-between mt-1.5 gap-1">
         <span className="text-[9px] text-slate-400 truncate">{pic?('👤 '+pic.ho_ten):(it.created_by_name||'')}</span>
         <div className="flex gap-1 shrink-0">
@@ -2342,9 +2372,9 @@ function SeedingCell({it,onDay}){
   const { db } = useApp();
   const topic=(db.content_topics||[]).find(t=>t.content_item_id===it.id);
   const st=(db.seeding_theo_noi_dung||{})[it.id];
-  if(!topic) return it.trang_thai==='DUYET'
+  if(!topic) return GIAI_DOAN_DA_DUYET.includes(it.trang_thai)
     ? <button onClick={onDay} className="text-[11px] px-2 py-0.5 rounded-full bg-brand/10 text-brand-dark font-semibold hover:bg-brand/20">↗ Đẩy sang seeding</button>
-    : <span className="text-[10px] text-slate-300">cần duyệt xong</span>;
+    : <span className="text-[10px] text-slate-300">cần kịch bản duyệt xong</span>;
   return <div className="text-[11px]">
     <span className="px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-semibold">✓ đã đẩy</span>
     {st ? <div className="text-ink-muted mt-0.5">{st.so_bai_dat}/{st.so_bai} bài đạt · {st.react} react · {st.cmt} cmt</div>
@@ -3198,6 +3228,59 @@ function ApprovalStatus({doi_tuong, doi_tuong_id, trang_thai, canSubmit}){
     {trang_thai==='NHAP' && gates.some(g=>g.trang_thai==='TRA_LAI') && <div className="text-[11px] text-rose-600 mt-2">Đã bị trả lại — sửa theo góp ý rồi bấm <b>Gửi duyệt</b> lại.</div>}
   </div>;
 }
+// ADR-002 · "Việc của tôi hôm nay" — máy GIAO VIỆC theo vai trò + người phụ trách + hạn, mở app là thấy.
+// Tính hoàn toàn từ bootstrap (một nguồn), không lưu, không thêm bảng.
+function vietCuaToiFE(db, me){
+  const homNay=todayYMD(); const v=[]; const UU={KHAN:0, HOM_NAY:1, SAP:2};
+  // 1. cổng duyệt đang chờ tôi (không tính bài chính mình gửi)
+  (db.approvals||[]).filter(a=>a.trang_thai==='CHO' && canDecideGateFE(me,a.cong) && a.nguoi_gui!==me.id).forEach(a=>{
+    const sc=(db.scripts||[]).find(x=>x.id===a.doi_tuong_id)||{}; const ngay=soNgayFE(a.created_at);
+    v.push({uu: ngay>=2?UU.KHAN:UU.HOM_NAY, icon:GATE_ICON[a.cong]||'🛂', ten:'Duyệt cổng '+(GATE_LABEL[a.cong]||a.cong)+': '+(sc.tieu_de||sc.hook||'(không tên)'), meta:(a.nguoi_gui_ten||'')+' gửi '+(ngay?ngay+' ngày trước':'hôm nay'), page:'approve'}); });
+  // 2. kịch bản của tôi bị trả lại
+  (db.scripts||[]).filter(x=>x.created_by===me.id && x.trang_thai==='NHAP' && Number(x.so_lan_tra)>0).forEach(x=>{
+    const ly=(db.approvals||[]).find(a=>a.doi_tuong_id===x.id&&a.trang_thai==='TRA_LAI');
+    v.push({uu:UU.KHAN, icon:'↩', ten:'Sửa kịch bản bị trả: '+(x.tieu_de||x.hook||'(không tên)'), meta: ly&&ly.ghi_chu?('“'+ly.ghi_chu+'”'):'', page:'studio'}); });
+  // 3. mục kế hoạch tôi phụ trách, theo giai đoạn và ngày đăng dự kiến (chỉ nhắc khi còn ≤3 ngày hoặc chưa đặt ngày)
+  (db.content_items||[]).filter(c=>c.pic&&c.pic.chinh===me.id && !['DA_DANG','DA_DO'].includes(c.trang_thai)).forEach(c=>{
+    const nd=(c.chi_tiet||{}).ngay_dang||''; const con=nd?Math.round((new Date(nd+'T00:00:00')-new Date(homNay+'T00:00:00'))/864e5):null;
+    if(con!=null && con>3) return;
+    const viec = (c.trang_thai==='Y_TUONG'||c.trang_thai==='SCRIPT') ? 'Viết kịch bản' : c.trang_thai==='CHO_DUYET' ? 'Đang chờ duyệt' : 'Sản xuất (quay · dựng · đăng)';
+    v.push({uu: con!=null&&con<0?UU.KHAN:(con!=null&&con<=1)?UU.HOM_NAY:UU.SAP, icon:'🗓️', ten:viec+': '+(c.tieu_de||'(không tên)'),
+      meta: nd?(con<0?'quá ngày đăng dự kiến '+(-con)+' ngày':con===0?'đăng hôm nay':'đăng sau '+con+' ngày'):'chưa đặt ngày đăng dự kiến', page:'plan'}); });
+  // 4. bài đăng gặp sự cố / tới ngày
+  (db.air_posts||[]).filter(a=>(a.trang_thai==='DEN_GIO'||a.trang_thai==='LOI') && (!a.nguoi_dang||a.nguoi_dang===me.id)).forEach(a=>
+    v.push({uu:UU.KHAN, icon:'🚀', ten:'Đăng tay: '+(a.tieu_de||'(không tên)'), meta:a.loi||'tới giờ mà chưa tự đăng được', page:'air'}));
+  (db.air_posts||[]).filter(a=>a.trang_thai==='CHUAN_BI' && String(a.ngay_dang||'').slice(0,10)===homNay).forEach(a=>
+    v.push({uu:UU.HOM_NAY, icon:'🚀', ten:'Đăng hôm nay: '+(a.tieu_de||'(không tên)'), meta:'xong checklist rồi đăng', page:'air'}));
+  // 5. kết quả chưa nhập (dùng lại nhắc việc chung)
+  const vk=db.viec_ket||tinhViecKetFE(db);
+  (vk.chua_nhap_kq||[]).forEach(a=>v.push({uu:UU.SAP, icon:'📈', ten:'Nhập kết quả: '+a.ten, meta:'đăng '+a.ngay+' ngày chưa có số', page:'ketqua'}));
+  return v.sort((a,b)=>a.uu-b.uu);
+}
+function VietCuaToi({go}){
+  const { db, me } = useApp(); const [mo,setMo]=useState(true);
+  const v=useMemo(()=>vietCuaToiFE(db,me),[db,me]);
+  const khan=v.filter(x=>x.uu===0).length;
+  const UU_CLS=[TONE.danger, TONE.warn, TONE.muted], UU_LBL=['Gấp','Hôm nay','Sắp tới'];
+  return <Card pad="p-3">
+    <div className="flex items-center justify-between gap-2 flex-wrap">
+      <SectionTitle>☀️ Việc của tôi hôm nay</SectionTitle>
+      <div className="flex items-center gap-2">
+        {khan>0 && <StatusPill cls={TONE.danger}>{khan} gấp</StatusPill>}
+        <StatusPill cls={TONE.muted}>{v.length} việc</StatusPill>
+        <LinkBtn onClick={()=>setMo(x=>!x)}>{mo?'Thu gọn':'Mở'}</LinkBtn>
+      </div>
+    </div>
+    {mo && (v.length===0
+      ? <div className="text-xs text-emerald-700 mt-2">✓ Không có việc nào đang chờ. Máy sẽ giao việc ở đây khi có cổng duyệt, kịch bản bị trả, bài tới ngày đăng hoặc kết quả chưa nhập.</div>
+      : <div className="divide-y divide-line/60 mt-1">{v.slice(0,12).map((x,i)=><div key={i} className="flex items-center gap-2 py-2">
+          <span className="text-base w-6 text-center shrink-0">{x.icon}</span>
+          <div className="flex-1 min-w-0"><div className="text-[13px] text-ink leading-snug">{x.ten}</div>{x.meta && <div className="text-[11px] text-ink-muted truncate">{x.meta}</div>}</div>
+          <StatusPill cls={UU_CLS[x.uu]}>{UU_LBL[x.uu]}</StatusPill>
+          {go && <Btn variant="ghost" className="!px-2.5 !py-1.5 text-xs" onClick={()=>go(x.page)}>Mở</Btn>}
+        </div>)}{v.length>12 && <div className="text-[11px] text-ink-muted pt-2">… và {v.length-12} việc nữa</div>}</div>)}
+  </Card>;
+}
 // Màn hàng đợi: mỗi người chỉ thấy việc thuộc cổng mình có quyền
 function ApprovalQueue(){
   const { db, me, decideApproval, notify } = useApp();
@@ -3269,7 +3352,6 @@ function AirPosts(){
   const used=new Set(posts.map(p=>p.script_id||p.content_item_id));
   const ready=[
     ...(db.scripts||[]).filter(s=>s.trang_thai==='DUYET'&&!used.has(s.id)).map(s=>({...s,_loai:'SCRIPT'})),
-    ...(db.content_items||[]).filter(c=>c.trang_thai==='DUYET'&&!used.has(c.id)).map(c=>({...c,_loai:'CONTENT'})),
   ];
   const list=posts.filter(p=>tab==='DEN_GIO'?(p.trang_thai==='DEN_GIO'||p.trang_thai==='LOI'):tab==='DA_LEN_LICH'?(p.trang_thai==='DA_LEN_LICH'||p.trang_thai==='DANG_GUI'):p.trang_thai===tab);
   const add=async(o)=>{ const r=await createAir(o._loai==='SCRIPT'?{script_id:o.id}:{content_item_id:o.id});
@@ -4318,7 +4400,7 @@ function KeHoachVsThucHien(){
         <div className="text-[11px] text-ink-muted mb-2">Nhìn chỗ dồn nhiều nhất để biết nên gỡ ở đâu, thay vì chỉ thấy “chậm tiến độ”.</div>
         <div className="space-y-1.5">{Object.keys(theoTrangThai).sort((a,b)=>theoTrangThai[b]-theoTrangThai[a]).map(k=>
           <div key={k} className="flex items-center gap-2">
-            <span className="text-xs text-ink w-32 shrink-0 truncate">{(PIPELINE.find(p=>p.v===k)||{}).label||k}</span>
+            <span className="text-xs text-ink w-32 shrink-0 truncate">{(PIPELINE.find(p=>p.k===k)||{}).label||k}</span>
             <div className="flex-1"><Bar a={theoTrangThai[k]} b={keHoach.length}/></div>
             <span className="text-xs font-semibold text-ink w-8 text-right">{theoTrangThai[k]}</span>
           </div>)}

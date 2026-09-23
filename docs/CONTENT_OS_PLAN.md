@@ -149,6 +149,22 @@ Thay cho : (chưa có ADR trước)
             Shot list chỉ áp cho VIDEO; nội dung đẩy seeding ghép theo định dạng; AI/khuôn theo định dạng (lát 2)
 Người duyệt: Thiện · Trạng thái: ĐÃ DUYỆT (2026-09-23)
 ```
+```
+ADR-002 · 2026-09-23 · Một cổng duyệt tại kịch bản; Kế hoạch 6 giai đoạn tự chạy theo sự kiện
+Bối cảnh : Kế hoạch 7 giai đoạn kéo tay, "Chờ duyệt" ghi sau Dựng nhưng cổng thật nằm ở kịch bản;
+            content_items lẫn scripts đều duyệt được (FE không có nút gửi duyệt mục kế hoạch) → ghi
+            DUYET/NHAP (không thuộc pipeline) và có thể ra 2 bài đăng cho 1 nội dung.
+Quyết định: (1) approvals CHỈ nhận SCRIPT; Đăng bài chỉ nhận kịch bản đã duyệt.
+            (2) PIPELINE = Y_TUONG → SCRIPT → CHO_DUYET → SAN_XUAT → DA_DANG → DA_DO.
+                Migrate một lần: QUAY/DUNG/DUYET → SAN_XUAT; NHAP → SCRIPT.
+            (3) Giai đoạn do SỰ KIỆN đẩy tới (lưu kịch bản → SCRIPT; gửi duyệt → CHO_DUYET;
+                duyệt đủ 2 cổng → SAN_XUAT; trả lại → SCRIPT; đăng xong → DA_DANG; có kết quả → DA_DO).
+                Chỉ đẩy TỚI, không tự lùi. Người vẫn đặt tay được (có audit), nhãn con (shot list,
+                đã dựng) tính từ dữ liệu, không lưu.
+Thay cho : (không)
+Ảnh hưởng: PIPELINE FE/BE, kanban/lọc/form/import, approvals CONTENT bỏ, air ready list, dashboard, demo.
+Người duyệt: Thiện · Trạng thái: ĐÃ DUYỆT (2026-09-23)
+```
 **Ánh xạ trường theo định dạng** (một nguồn: `DINH_DANG` worker ⟷ `DINH_DANG_FE` frontend):
 | Định dạng | `hook` | `sections[]` | `cta` | `chi_tiet` |
 |---|---|---|---|---|
@@ -418,6 +434,17 @@ Tokens Tailwind (inline config trong `seeding-app.html`): `ink #0b3543` (soft #1
   - Không có token → nói rõ "mở công cụ từ trong app"; >100MB → chặn trước khi tải; lỗi upload → trả nút về trạng thái cũ + toast lý do; đã lên rồi → chip ✓, không tải trùng.
   - Test backend **56/56**; chạy tay bản DEMO: khoá/mở nút Dựng theo trạng thái, chuyển tab, công cụ ẩn đúng tab, nạp đúng kịch bản, chế độ Lọc độc lập.
   - ⏳ Chưa: công cụ chưa đọc được kịch bản qua `?script_id=` khi mở ở máy khác (localStorage là theo trình duyệt); lát 2/3 của Studio đa định dạng vẫn chờ.
+
+- ✅ **ĐỢT 1 "NỐI MẠCH" — Kế hoạch tự chạy theo sự kiện + một cổng duyệt + ngày đăng một nguồn + "Việc của tôi hôm nay"** (ADR-002, §4b).
+  - **Pipeline 6 giai đoạn** `Y_TUONG → SCRIPT → CHO_DUYET → SAN_XUAT → DA_DANG → DA_DO` (`PIPELINE` FE ⟷ `PIPELINE_BE` worker). Migration một lần trong `ensureSchema`: QUAY/DUNG/DUYET → SAN_XUAT, NHAP → SCRIPT; FE cũng chuẩn hoá `PIPELINE_CU` lúc nạp db (demo/localStorage). Tạo mục với giai đoạn lạ → về Y_TUONG; PATCH giai đoạn lạ → 400.
+  - **Sự kiện đẩy giai đoạn** (`dayGiaiDoan`: chỉ đẩy TỚI, có audit "tự chuyển giai đoạn → …"): lưu kịch bản → SCRIPT · gửi duyệt → CHO_DUYET · duyệt đủ 2 cổng → SAN_XUAT · trả lại → **lùi** SCRIPT (`luiVeKichBan`, chỗ duy nhất tự lùi, chỉ từ CHO_DUYET) · đăng xong (tay/cron/n8n) → DA_DANG · có kết quả (nhập tay/import khớp mã/gán tay) → DA_DO. Sửa kịch bản khi đã ở Sản xuất **không** kéo lùi. Người vẫn đặt tay được ở kanban/form.
+  - **Một cổng duyệt tại kịch bản:** `APPROVAL_TARGETS={SCRIPT}` — gửi duyệt CONTENT → 400. `POST /air` chỉ nhận `script_id` (content_item_id đơn lẻ → 400); màn Đăng bài bỏ nguồn "Nội dung". Đẩy seeding: điều kiện `DUYET` (không còn tồn tại) → từ **SAN_XUAT trở đi** (BE 409, FE `GIAI_DOAN_DA_DUYET`).
+  - **Nhãn con** (`nhanConKeHoach`, tính từ dữ liệu, không lưu) trên thẻ kanban: định dạng + trạng thái kịch bản · bị trả n lần · 🎥 x/y cảnh · 🎞 đã dựng · 🚀 chuẩn bị/đã lên lịch/đã đăng · "chưa có kịch bản".
+  - **Ngày đăng một nguồn** = `content_items.chi_tiet.ngay_dang`: tạo bài đăng không nhập ngày → lấy từ kế hoạch; đổi `ngay_dang` ở bài đăng hoặc lên lịch `lich_dang` → `ghiNgayDangVeKeHoach` ghi ngược (audit "đồng bộ ngày đăng").
+  - **"☀️ Việc của tôi hôm nay"** (`vietCuaToiFE` + `VietCuaToi`): hiện ở **trang đầu tiên mỗi vai trò nhìn thấy** khi mở app (`allItems[0]`, trừ Sales). Gom: cổng duyệt chờ tôi (không tính bài mình gửi) · kịch bản của tôi bị trả (kèm lý do) · mục kế hoạch tôi là PIC chính còn ≤3 ngày tới ngày đăng / quá hạn / chưa đặt ngày · bài đăng DEN_GIO/LOI hoặc tới ngày · kết quả chưa nhập. Xếp Gấp → Hôm nay → Sắp tới, nút Mở nhảy đúng màn. Tính từ bootstrap, không thêm bảng.
+  - **Vá kèm:** Dashboard nội dung "nghẽn ở khâu nào" dùng `PIPELINE.find(p=>p.v===k)` (sai key) → nhãn luôn rơi về mã; sửa `.k`. Demo `createAir` bỏ sót `media_url`/ngày đăng mặc định (lệnh vá trước bị chặn) → đã vá; demo `submitApproval/decideApproval/publishAir/createKetQua/importKetQua/assignDon/patchAir` gương đúng luật mới.
+  - **Ảnh hưởng dữ liệu:** không thêm bảng/cột; đổi giá trị `content_items.trang_thai` cũ (một lần, có thể chạy lại). Test backend **73/73**; chạy tay bản DEMO: Ý tưởng → Kịch bản → Chờ duyệt → Sản xuất tự chuyển, thẻ Việc của tôi ra đúng 3 việc (2 gấp).
+  - ⏳ **Đợt 2 (nền, cần ADR):** `TRUONG_MKT` + chặn người gửi = người duyệt · `GIAM_DOC`. **Đợt 3:** gộp 3 kho media · Quản lý sản xuất thành góc nhìn của Kế hoạch. **Đợt 4:** gỡ `BETA_KEYS` theo nhóm.
 
 ### ⚙️ Quy trình deploy (CẬP NHẬT)
 `npm run build` (build.mjs: biên dịch JSX, build CSS Tailwind từ chính khối `tailwind.config` trong seeding-app.html, chép vendor React và `tools/`) → `node --check worker/index.js` → commit cả `dist/` → push. `node_modules/` đã trong .gitignore.
