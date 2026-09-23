@@ -10,6 +10,8 @@ may/content-os-lib.mjs          ← v2/tram/content-os-lib.mjs
 may/content-os-dang.mjs         ← v2/tram/content-os-dang.mjs
 may/content-os-do-luong.mjs     ← v2/tram/content-os-do-luong.mjs
 may/content-os-dung-video.mjs   ← v2/tram/content-os-dung-video.mjs
+may/content-os-seeding-dang.mjs ← v2/tram/content-os-seeding-dang.mjs   (ADR-007)
+may/content-os-seeding-kiem.mjs ← v2/tram/content-os-seeding-kiem.mjs   (ADR-007)
 ```
 Trong `may/agents.mjs`: thêm `NHOM.noi_dung` và mục `AGENT_CONTENT_OS` (xem `agents-content_os.mjs`) vào mảng `AGENTS`. Tăng `VER` trong `tram.mjs`, commit, push `main` → trên trang Trạm bấm **Cài đặt → 🔄 Cập nhật Trạm** (Trạm tự `node --check` từng file rồi khởi động lại).
 
@@ -22,7 +24,7 @@ Mã ghép chứa: `url = <gốc app>/api`, `mon = ["content_os.*","doi_thu.*","t
 
 ## 3. Phiên đăng nhập trên Trạm mà Content OS dùng lại
 - TikTok: agent **"TikTok kênh cá nhân"** (hồ sơ `tiktok_cn-profile`) — đăng nhập một lần trên Trạm.
-- Facebook: agent **"Facebook"** (hồ sơ `facebook-profile`). Với Fanpage có token Page thì Content OS đăng/đo qua Graph API, không cần Trạm.
+- Facebook: agent **"Facebook"** (hồ sơ `facebook-profile (tài khoản thêm: facebook-2-profile, facebook-3-profile… đăng nhập tay một lần)`). Với Fanpage có token Page thì Content OS đăng/đo qua Graph API, không cần Trạm.
 - ffmpeg cho dựng video: `winget install Gyan.FFmpeg` trên máy Trạm.
 
 ## 4. Luồng
@@ -31,6 +33,8 @@ Mã ghép chứa: `url = <gốc app>/api`, `mon = ["content_os.*","doi_thu.*","t
 | Đăng bài kênh cách đăng **TRAM** | tới giờ → bài `DANG_GUI` + lệnh `chay_agent content_os/dang` | `content-os-dang.mjs` hỏi `/hub/viec/dang`, đăng, báo lô `content_os.dang_ket_qua` → bài `DA_DANG`/`LOI` |
 | Đo lường | (ADR-005) | `content-os-do-luong.mjs` 07:10 hỏi `/hub/viec/do_luong`, đọc số tích luỹ, lô `content_os.ket_qua` (Content OS giữ trong `tram_lo`, ADR-005 tính phần tăng) |
 | Dựng video nháp | nút 🎬 ở Máy › Trạm hoặc lịch | `content-os-dung-video.mjs` hỏi `/hub/viec/dung_video`, ffmpeg, tải lên `/hub/upload`, lô `content_os.video` → tài sản VIDEO_XUAT gắn nội dung |
+| Seeding hội nhóm (ADR-007) | tới giờ việc seeding (B15 ở mức AI) | `content-os-seeding-dang.mjs` hỏi `/hub/viec/seeding_dang`, mở nhóm FB bằng hồ sơ `facebook[-n]-profile` của tài khoản MKT, đăng biến thể, lô `content_os.seeding_dang_ket_qua` (link / chờ QTV / checkpoint) |
+| Kiểm bài seeding + lead | 07:30 hằng ngày (B16) | `content-os-seeding-kiem.mjs` hỏi `/hub/viec/seeding_kiem`, đọc sống / nội dung / react / bình luận + danh sách bình luận, lô `content_os.seeding_kiem` |
 | Tin đối thủ | nhận lô `doi_thu_tin` → Ý tưởng (chống trùng, AI chấm nếu có key) | agent `doi_thu` có sẵn |
 
 Trạm chỉ nhận bộ lệnh `VIEC_HUB` của nó (`chay_agent, chay_hang_loat, lich_viec, zalo_qr, gui_otp, huy_dang_nhap`); Content OS không sai được việc khác — đúng luật L4 (mọi hành động máy có dấu vết ở cả hai bên).

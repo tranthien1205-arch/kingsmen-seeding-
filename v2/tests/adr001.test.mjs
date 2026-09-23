@@ -11,10 +11,10 @@ const api = async (p, method = 'GET', body, tok) => {
 };
 const dangNhap = async (email, pw) => (await api('/login', 'POST', { email, password: pw })).j;
 let db;
-test('seed: admin đầu tiên phải đổi mật khẩu, 12 bước NGƯỜI, chiến lược trống', async () => {
+test('seed: admin đầu tiên phải đổi mật khẩu, 17 bước NGƯỜI (B1–B12 + B13–B17 seeding), chiến lược trống', async () => {
   const r = await dangNhap('admin@kingsmen.vn', 'admin123'); TOKEN = r.token; db = r.db;
   assert.equal(db.me.vai_tro, 'ADMIN'); assert.equal(db.me.doi_mat_khau, true);
-  assert.equal(db.buoc.length, 12); assert.ok(db.buoc.every(b => b.nguoi_thuc_hien === 'NGUOI' && b.hoc === true && b.san_sang === 0));
+  assert.equal(db.buoc.length, 17); assert.ok(db.buoc.every(b => b.nguoi_thuc_hien === 'NGUOI' && b.hoc === true && b.san_sang === 0));
   assert.equal(db.chien_luoc.phien_ban, 0); assert.equal(db.mo_phong, false);
   assert.equal(db.module_config.may.nguong_san_sang, 80); assert.equal(db.module_config.may.min_mau, 30); assert.equal(db.module_config.may.gio_chay, 6);
 });

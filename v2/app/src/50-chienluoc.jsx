@@ -7,11 +7,12 @@ function ChienLuocKeHoach(){
   const [tab,setTab]=useState('chienluoc');
   const chiXem=!laStaff(me);
   const ytMoi=(db.y_tuong||[]).filter(y=>y.trang_thai==='MOI').length;
-  const tabs=[{key:'chienluoc',label:'Định vị & chiến lược'},{key:'kehoach',label:'Kế hoạch tháng'},{key:'tuan',label:'Tuần & mục'},{key:'ytuong',label:'Ý tưởng & trend',count:ytMoi||null},{key:'pillars',label:'Pillar'},{key:'frameworks',label:'Framework'},{key:'san_pham',label:'Sản phẩm'},{key:'claim_cam',label:'Claim cấm'},{key:'kenh',label:'Kênh'}];
+  const tabs=[{key:'chienluoc',label:'Định vị & chiến lược'},{key:'thongdiep',label:'Thông điệp seeding',count:((db.seeding||{}).thong_diep||[]).filter(t=>t.active).length||null},{key:'kehoach',label:'Kế hoạch tháng'},{key:'tuan',label:'Tuần & mục'},{key:'ytuong',label:'Ý tưởng & trend',count:ytMoi||null},{key:'pillars',label:'Pillar'},{key:'frameworks',label:'Framework'},{key:'san_pham',label:'Sản phẩm'},{key:'claim_cam',label:'Claim cấm'},{key:'kenh',label:'Kênh'}];
   return <div className="space-y-4">
     <PageHeader title="🎯 Chiến lược & Kế hoạch" sub="Cổng G1 (chốt chiến lược) và G2 (chốt kế hoạch tháng). Danh mục gốc ở đây là dữ kiện thật duy nhất máy được dùng."/>
     <Tabs size="sm" active={tab} onChange={setTab} tabs={tabs}/>
     {tab==='chienluoc' && <ChienLuocForm chiXem={chiXem}/>}
+    {tab==='thongdiep' && <ThongDiepSeeding chiXem={chiXem}/>}
     {tab==='kehoach' && <KeHoachThang chiXem={chiXem}/>}
     {tab==='tuan' && <TuanVaMuc chiXem={chiXem}/>}
     {tab==='ytuong' && <YTuong chiXem={chiXem}/>}
@@ -84,6 +85,7 @@ function KeHoachThang({chiXem}){
     </div>
     <Card pad="p-3"><div className="flex justify-between items-start gap-2 mb-2"><SectionTitle>KPI kết quả mong muốn của tháng</SectionTitle><span className="text-[10px] text-ink-muted">Brand đo tiếp cận / xem / chia sẻ / tương tác · Bán hàng đo đơn. {kh&&kh.ly_do&&kh.ly_do.ket_qua&&<span title={kh.ly_do.ket_qua}>🤖 {kh.ly_do.ket_qua}</span>}</span></div>
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">{[['tiep_can','Tiếp cận'],['luot_xem','Lượt xem'],['chia_se','Chia sẻ'],['tuong_tac','Tương tác'],['so_don','Số đơn']].map(([k,l])=><Field key={k} label={l} className="!mb-0"><Input type="number" min="0" className="!py-1 text-xs" value={kq[k]||0} onChange={e=>setKq(k,e.target.value)} disabled={khoa}/></Field>)}</div></Card>
+    <Card pad="p-3"><div className="flex justify-between items-start gap-2 mb-2"><SectionTitle>Seeding hội nhóm (ADR-007)</SectionTitle><span className="text-[10px] text-ink-muted">Máy soạn gói ĐỊNH KỲ mỗi tuần theo chỉ tiêu này, chọn thông điệp ít được nói nhất trong bản đồ. 0 = mặc định cấu hình Máy.</span></div><Field label="Số bài seeding mỗi tuần" className="!mb-0"><Input type="number" min="0" max="30" className="!py-1 text-xs !w-28" value={f.chi_tieu.seeding_tuan||0} onChange={e=>setF(x=>({...x,chi_tieu:{...x.chi_tieu,seeding_tuan:Math.max(0,Number(e.target.value)||0)}}))} disabled={khoa}/></Field></Card>
     <Callout tone="note">Chỉ tiêu chảy xuống tuần: mỗi tuần = chỉ tiêu tháng ÷ số tuần (làm tròn lên). Bản chốt được so với bản máy đề xuất để chấm điểm sẵn sàng bước B2 — càng ít phải sửa, máy càng sớm được tự lập kế hoạch.</Callout>
   </div>;
 }
@@ -218,4 +220,32 @@ function DanhMucForm({bang, init, onClose}){
     {init.id && bang!=='claim_cam' && <label className="flex items-center gap-2 text-sm mb-3"><Toggle on={f.active!==false} onChange={v=>setF(o=>({...o,active:v}))}/> Đang dùng</label>}
     <div className="flex justify-end gap-2"><Btn variant="ghost" onClick={onClose}>Huỷ</Btn><Btn variant="brand" onClick={luu} disabled={busy}>Lưu</Btn></div>
   </Modal>;
+}
+// ----- Bản đồ thông điệp seeding (ADR-007 · bản vẽ §11 tầng 2): thuộc chiến lược, máy dùng để soạn biến thể -----
+function ThongDiepSeeding({chiXem}){
+  const { db, goi, notify } = useApp(); const ds=((db.seeding||{}).thong_diep||[]); const pillars=(db.pillars||[]).filter(p=>p.active);
+  const [edit,setEdit]=useState(null); const [busy,setBusy]=useState(false);
+  const luu=async()=>{ setBusy(true); const r=await goi('/seeding/thong-diep'+(edit.id?('/'+edit.id):''),{method:edit.id?'PATCH':'POST',body:{...edit, du_kien:(edit.du_kien_text||'').split('\n').map(x=>x.trim()).filter(Boolean)}}); setBusy(false); if(r.ok){ notify('Đã lưu thông điệp'); setEdit(null); } else notify(r.msg,'err'); };
+  const deXuat=async()=>{ if(!confirm('Máy đọc định vị + pillar + thông số sản phẩm thật để đề xuất 5–8 thông điệp. Tiếp tục?')) return; setBusy(true); const r=await goi('/seeding/thong-diep',{method:'POST',body:{de_xuat_ai:true}}); setBusy(false); if(r.ok) notify('Máy thêm '+r.them+' thông điệp — sửa lại cho đúng cách thợ nói'); else notify(r.msg,'err'); };
+  const tat=async(t)=>{ if(!confirm('Tắt thông điệp "'+t.ten+'"?')) return; const r=await goi('/seeding/thong-diep/'+t.id,{method:'DELETE'}); if(r.ok) notify('Đã tắt'); else notify(r.msg,'err'); };
+  return <div className="space-y-3">
+    <div className="flex items-center justify-between gap-2 flex-wrap"><div><SectionTitle>Bản đồ thông điệp ({ds.filter(t=>t.active).length} đang dùng)</SectionTitle><div className="text-[11px] text-ink-muted">Mỗi thông điệp = một ý định vị được nói bằng ngôn ngữ thợ, kèm dữ kiện thật được phép dùng và điều không được nói. Máy soạn biến thể seeding chỉ từ đây.</div></div>
+      {!chiXem&&<div className="flex gap-2"><Btn variant="ghost" className="!py-1.5 text-xs" onClick={deXuat} disabled={busy||!db.san_sang.ai} title={db.san_sang.ai?'':'Cần ANTHROPIC_API_KEY'}>✨ Máy đề xuất từ chiến lược</Btn><Btn variant="brand" className="!py-1.5 text-xs" onClick={()=>setEdit({active:true, du_kien_text:''})}>＋ Thêm thông điệp</Btn></div>}</div>
+    {ds.length===0?<Empty>Chưa có thông điệp — máy chưa soạn được gói seeding. Thêm tay hoặc để máy đề xuất từ chiến lược.</Empty>:<div className="grid md:grid-cols-2 gap-2">{ds.map(t=><Card key={t.id} pad="p-3" className={t.active?'':'opacity-50'}>
+      <div className="flex items-start justify-between gap-2"><div className="font-semibold text-ink text-sm">{t.ten}</div><div className="flex gap-2 shrink-0">{t.pillar_id&&<Pill>{(pillars.find(p=>p.id===t.pillar_id)||{}).ten||t.pillar_id}</Pill>}<Pill cls={t.tao_boi==='AGENT'?'bg-brand-bg text-brand-dark':'bg-slate-100 text-ink-muted'}>{t.tao_boi==='AGENT'?'🤖 máy đề xuất':'người'}</Pill></div></div>
+      <div className="text-xs text-ink-soft mt-1">{t.y_chinh}</div>
+      {(t.du_kien||[]).length>0&&<div className="text-[11px] text-ink-muted mt-1">📌 Dữ kiện: {t.du_kien.join(' · ')}</div>}
+      {t.cach_noi_tho&&<div className="text-[11px] text-ink-muted mt-0.5">🗣 Thợ hay nói: {t.cach_noi_tho}</div>}
+      {t.khong_noi&&<div className="text-[11px] text-rose-700 mt-0.5">🚫 Không nói: {t.khong_noi}</div>}
+      {!chiXem&&<div className="flex gap-3 mt-2"><LinkBtn onClick={()=>setEdit({...t, du_kien_text:(t.du_kien||[]).join('\n')})}>Sửa</LinkBtn>{t.active&&<LinkBtn tone="danger" onClick={()=>tat(t)}>Tắt</LinkBtn>}</div>}
+    </Card>)}</div>}
+    {edit&&<Modal open onClose={()=>setEdit(null)} title={edit.id?'Sửa thông điệp':'Thêm thông điệp seeding'}>
+      <Field label="Tên thông điệp" required><Input value={edit.ten||''} onChange={e=>setEdit({...edit,ten:e.target.value})} placeholder="VD: Ron không ố sau mùa mưa"/></Field>
+      <Field label="Ý chính (1–2 câu)"><Textarea rows="2" value={edit.y_chinh||''} onChange={e=>setEdit({...edit,y_chinh:e.target.value})}/></Field>
+      <Field label="Dữ kiện được dùng — mỗi dòng một dữ kiện" hint="chỉ lấy từ thông số / bảo hành / tiêu chuẩn thật của sản phẩm"><Textarea rows="3" value={edit.du_kien_text||''} onChange={e=>setEdit({...edit,du_kien_text:e.target.value})}/></Field>
+      <div className="grid grid-cols-2 gap-2"><Field label="Thợ hay nói thế nào"><Input value={edit.cach_noi_tho||''} onChange={e=>setEdit({...edit,cach_noi_tho:e.target.value})} placeholder="ron sạch, không mốc đen…"/></Field><Field label="Không được nói"><Input value={edit.khong_noi||''} onChange={e=>setEdit({...edit,khong_noi:e.target.value})} placeholder="giá, 'tuyệt đối', tên đối thủ…"/></Field></div>
+      <div className="grid grid-cols-2 gap-2"><Field label="Pillar"><Select value={edit.pillar_id||''} onChange={e=>setEdit({...edit,pillar_id:e.target.value||null})}><option value="">—</option>{pillars.map(p=><option key={p.id} value={p.id}>{p.ten}</option>)}</Select></Field><Field label="Thứ tự ưu tiên" hint="số nhỏ = ưu tiên"><Input type="number" value={edit.thu_tu??0} onChange={e=>setEdit({...edit,thu_tu:e.target.value})}/></Field></div>
+      {edit.id&&<label className="flex items-center gap-2 text-sm mb-3"><Toggle on={edit.active!==false} onChange={v=>setEdit({...edit,active:v})}/> Đang dùng</label>}
+      <div className="flex justify-end gap-2"><Btn variant="ghost" onClick={()=>setEdit(null)}>Huỷ</Btn><Btn variant="brand" onClick={luu} disabled={busy||!(edit.ten||'').trim()}>Lưu</Btn></div></Modal>}
+  </div>;
 }

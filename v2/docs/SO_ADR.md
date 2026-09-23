@@ -96,20 +96,32 @@ Người duyệt: Thiện · Trạng thái: ĐÃ DUYỆT (2026-09-23, "tiếp 00
 ```
 
 ```
-ADR-007 · 2026-09-23 · SEEDING TỰ ĐỘNG — thay Domain A của app cũ, thiết kế mới (bản vẽ §11)
-Bối cảnh : App cũ: người soạn/đăng/chụp màn hình/nghiệm thu/tính tiền seeding; Thiện: "thiết kế 007 mới hoàn toàn theo hướng tự động
-            seeding", "tự động thông qua agent Trạm", KHÔNG cho Trạm gửi hộ Zalo, BỎ quay công trình.
-Quyết định: (1) Seeding chỉ từ bài chính đã đăng (qua G3). (2) B13 soạn biến thể (AI, giọng thợ/chủ nhà/thầu, chống trùng, guardrail),
-            B14 phân công & lịch (Sales × nhóm phụ trách, xoay vòng, nhịp), B15 Sales tự đăng Zalo/FB (NGƯỜI), B16 nghiệm thu tự động
-            (FB: Trạm mở link; Zalo: Trạm nghe nhóm → lô zalo.tin khớp việc; ĐẠT/KHÔNG ĐẠT theo luật cứng, NGHI NGỜ → người), B17
-            tính tiền & tự chốt bảng chi trả tháng (không cổng người; Admin ghi đã chi / điều chỉnh có audit). (3) Bảng nhom_seeding,
-            goi_seeding, bien_the, viec_seeding, bang_gia_seeding, chi_tra. (4) Trạm: việc seeding_kiem cho agent content_os; món zalo.tin.
-            (5) Màn Seeding: Sales (Việc hôm nay · Thu nhập · Nhóm của tôi) / staff (gói, việc, nhóm, bảng giá, chi trả). (6) Chống gian:
-            trùng link/nội dung, react bất thường, không kiểm được 7 ngày → NGHI NGỜ. Quay công trình: BỎ.
-Người duyệt: Thiện · Trạng thái: CHỜ DUYỆT BẢN VẼ §11 (viết lại 23/09 theo "thợ ở hội nhóm Facebook, seeding truyền thông điệp định vị tự nhiên"; không Sales, không tiền, bỏ quay CT). Mã nháp trong working tree chưa commit.
+ADR-007 · 2026-09-23 · SEEDING HỘI NHÓM FACEBOOK — thay Domain A của app cũ, thiết kế mới (bản vẽ §11)
+Bối cảnh : Thợ ốp lát tập trung ở hội nhóm Facebook; cần seeding truyền thông điệp định vị một cách tự nhiên. Thiện: "chỉ MKT tự
+            vận hành", không Sales, không tiền, Trạm tự đăng bằng tài khoản phòng MKT, bỏ quay công trình. Chốt thêm: G3-gói giữ,
+            có gói ĐỊNH KỲ, 2–5 tài khoản mỗi tài khoản một giọng.
+Quyết định: (1) Ba tầng: định vị → BẢN ĐỒ THÔNG ĐIỆP (thuộc chiến lược, người/AI đề xuất, kèm dữ kiện thật & "không nói") → biến thể
+            = giọng (theo tài khoản) × dạng bài (kể/hỏi/khoe/so sánh/cảnh báo) × thông điệp "đói". (2) Bước B13 soạn gói (G3-gói,
+            tối đa AI tự làm), B14 xếp lịch nhóm × tài khoản trong nhóm × giờ vàng nhóm, B15 Trạm đăng (hồ sơ facebook[-n]-profile;
+            NGƯỜI = giao đăng tay), B16 kiểm 2 & 7 ngày (luật cứng: bị gỡ/khớp < 70% → KHÔNG ĐẠT; trùng link/react bất thường/quá
+            10 ngày → NGHI NGỜ người quyết) + bắt LEAD từ bình luận hỏi mua (giao MKT, máy không trả lời), B17 học → đề xuất G4
+            (tắt nhóm bị gỡ ≥ 40%, ưu tiên giọng/thông điệp kéo tương tác+lead ≥ 1.5×). (3) Gói BAI_CHINH (bài chính mới đăng) và
+            DINH_KY (chỉ tiêu ke_hoach_thang.chi_tieu.seeding_tuan, mặc định 4); máy chấm gói (claim, Kingsmen, giá, ≤30% link,
+            khác nhau); trạng thái NHAP|CHO_DUYET|DUYET|TRA_LAI|HET_HAN. (4) Quy tắc nhóm (QTV duyệt → CHO_QUAN_TRI; cấm link;
+            cấm bán hàng) lọc biến thể. (5) Checkpoint/captcha → tạm dừng tài khoản 24h + việc kiểm tra, không vượt. (6) Bảng
+            thong_diep_seeding, tai_khoan_seeding(giong, persona), nhom_seeding(quy_tac, gio_vang, tai_khoan_ids), goi_seeding,
+            bien_the(binh_luan[{vai,text}]), viec_seeding, lead_seeding. (7) Trạm: việc seeding_dang, seeding_kiem (kèm danh sách
+            bình luận). (8) 007b sau: bình luận dẫn dắt đa tài khoản, lead AI phân loại, nuôi tài khoản, tự chỉnh nhịp.
+Người duyệt: Thiện · Trạng thái: ĐÃ DUYỆT (2026-09-23, "thiết kế bản vẽ trước" + 3 câu trả lời) · ADR-007a ĐÃ LÀM
 ```
 
 ## Changelog
+
+### 2026-09-23 · ADR-007a (Seeding hội nhóm Facebook)
+- **Worker**: bước B13–B17; config `seeding {so_bien_the, so_ngay_lich, khoang_cach_phut, gio_vang, khop_toi_thieu, ngay_kiem, ngay_kiem_2, ngay_kiem_toi_da, goi_tu_dong_ngay, react_bat_thuong_x, tam_dung_gio, ty_le_link_toi_da, seeding_tuan_mac_dinh, thong_diep_doi_ngay, nhom_go_bai_pct}`; `lamSachChiTieu.seeding_tuan`; bảng `thong_diep_seeding, tai_khoan_seeding, nhom_seeding, goi_seeding, bien_the, viec_seeding, lead_seeding`; helpers `thongDiepDoi, soanBienThe, chamGoiMay, taoGoiSeeding, xepLichGoi, chayDangSeeding, napSeedingDang, chamSeeding, napSeedingKiem, chayHocSeeding`; agents `TAO_GOI_SEEDING (B13), XEP_LICH_SEEDING (B14), DANG_SEEDING (B15, 15'), KIEM_SEEDING (B16), HOC_SEEDING (B17, ngày 3)`; endpoints `/seeding/thong-diep[/:id] (+de_xuat_ai)`, `/seeding/tai-khoan[/:id]`, `/seeding/nhom[/:id]`, `/seeding/goi` + `/:id/(duyet|tra-lai|gui-duyet|xep-lich)`, `/seeding/bien-the/:id`, `/seeding/viec/:id/(quyet|huy|dang-ngay|da-dang)`, `/seeding/lead/:id`; hub `/hub/viec/seeding_dang|seeding_kiem`, lô `content_os.seeding_dang_ket_qua|seeding_kiem`; `apDungDeXuat` SEEDING_NHOM/GIONG/THONG_DIEP; bootstrap `seeding {giong, dang_bai, thong_diep, tai_khoan, nhom, goi, bien_the, viec, lead}`.
+- **Giao diện**: màn **📣 Seeding hội nhóm Facebook** (Gói & duyệt · Lịch & việc · Nhóm · Tài khoản MKT · Lead · Nghi ngờ · Hiệu quả); Chiến lược › tab **Thông điệp seeding** (bản đồ thông điệp, ✨ máy đề xuất); Kế hoạch tháng thêm chỉ tiêu **seeding/tuần**.
+- **v2/tram/**: `content-os-seeding-dang.mjs` (hồ sơ theo tài khoản, xen kẽ tài khoản, gõ chậm, chờ QTV, checkpoint), `content-os-seeding-kiem.mjs` (sống/nội dung/react/bình luận + danh sách bình luận cho lead); `agents-content_os.mjs` thêm 2 việc.
+- Test `tests/adr007.test.mjs`: 10 nhóm; `adr001` cập nhật 17 bước. Tổng 56/56.
 
 ### 2026-09-23 · ADR-006 (gạt bước)
 - **Worker**: cột `san_sang_gan, so_mau_gan, de_nghi, de_nghi_ly_do, de_nghi_at`; config `may {nguong_ha, ngay_gan, mau_ha}`; `tinhSanSang` tính thêm điểm gần đây; `deNghiGat` (việc GAT_BUOC cho Trưởng MKT, huỷ khi hết lý do); PATCH /buoc đóng việc & tính lại; agent `HOAN_THIEN_BAI` (THUC_HIEN/B6); mẫu học B6 ở PATCH /bai-dang; `GET /buoc/:ma/mau`; cách đăng TRAM khi tạo bài đăng.

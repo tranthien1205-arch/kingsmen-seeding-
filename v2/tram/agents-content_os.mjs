@@ -19,5 +19,11 @@ export const AGENT_CONTENT_OS = {
       mo_ta: "mở link bài đã đăng (30 ngày) bằng trình duyệt đã đăng nhập, đọc xem/thích/bình luận/chia sẻ/lưu tích luỹ → content_os.ket_qua" },
     { id: "dung_video", ten: "Dựng video nháp (ffmpeg)", script: "content-os-dung-video.mjs", lich: false, san_sang: true,
       mo_ta: "kịch bản VIDEO đã duyệt + footage gắn thẻ → mp4 1080x1920 có lời bình → tải lên R2 Content OS → content_os.video" },
+    // ADR-007 — seeding hội nhóm Facebook bằng tài khoản MKT trên Trạm (mỗi tài khoản một hồ sơ facebook[-n]-profile; không Sales, không tiền)
+    { id: "seeding_dang", ten: "Đăng seeding vào hội nhóm FB", script: "content-os-seeding-dang.mjs", lich: false, san_sang: true,
+      mo_ta: "hỏi /hub/viec/seeding_dang → mở nhóm bằng hồ sơ tài khoản MKT tương ứng → đăng biến thể → content_os.seeding_dang_ket_qua (link / chờ QTV); checkpoint → báo, không vượt" },
+    { id: "seeding_kiem", ten: "Kiểm & đo bài seeding + bắt lead", script: "content-os-seeding-kiem.mjs", lich: true, san_sang: true,
+      gio: "07:30", lap: "ngay",
+      mo_ta: "mở link bài seeding đã đăng 2 & 7 ngày → còn sống / nội dung / react / bình luận + danh sách bình luận (Content OS bắt lead hỏi mua) → content_os.seeding_kiem" },
   ],
 };

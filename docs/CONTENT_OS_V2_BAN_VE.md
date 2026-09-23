@@ -305,4 +305,4 @@ Thông điệp (bản đồ, máy đề xuất từ chiến lược) · Nhóm (q
 - **ADR-007a**: thông điệp · nhóm · tài khoản · gói (bài chính + định kỳ) + biến thể + G3-gói · lịch · Trạm đăng · kiểm 2/7 ngày · nghi ngờ · học đề xuất nhóm/thông điệp/giọng.
 - **ADR-007b**: bình luận dẫn dắt đa tài khoản · lead từ bình luận (AI phân loại) · nuôi tài khoản · tự chỉnh nhịp.
 
-*Quyết định cần Thiện chốt: (a) G3-gói (Trưởng MKT duyệt cả gói một lần) — giữ hay bỏ hẳn? (b) có gói ĐỊNH KỲ theo chỉ tiêu seeding/tuần không cần bài chính? (c) số tài khoản MKT dự kiến trên Trạm (1 hay nhiều — quyết định có bình luận dẫn dắt đa tài khoản hay không).*
+*Quyết định Thiện đã chốt (23/09): (a) **G3-gói giữ** — Trưởng MKT duyệt cả gói một lần, mỗi lần duyệt/trả là mẫu học B13; khi B13 lên AI tự làm, gói máy chấm ĐẠT tự duyệt. (b) **Có gói ĐỊNH KỲ** — máy soạn đều đặn theo chỉ tiêu `seeding_tuan` của kế hoạch tháng, chọn thông điệp "đói" nhất trong bản đồ. (c) **2–5 tài khoản MKT, mỗi tài khoản một giọng cố định** (thợ / thầu / chủ nhà), hồ sơ `facebook[-n]-profile` trên Trạm. → ADR-007a đã làm.*
