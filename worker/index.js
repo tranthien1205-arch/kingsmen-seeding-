@@ -199,6 +199,8 @@ async function ensureSchema(env){
     // ADR-005 — mỗi lượt gọi AI một dòng (chỉ ghi thêm). chi_phi_usd = ƯỚC TÍNH từ token × bảng giá trong Cấu hình, không phải hoá đơn.
     `CREATE TABLE IF NOT EXISTS ai_usage (id TEXT PRIMARY KEY, at TEXT, thang TEXT, provider TEXT, model TEXT, tinh_nang TEXT, user_id TEXT, user_name TEXT, tokens_vao INTEGER DEFAULT 0, tokens_ra INTEGER DEFAULT 0, chi_phi_usd REAL DEFAULT 0, ok INTEGER DEFAULT 1, ms INTEGER DEFAULT 0, loi TEXT)`,
     `CREATE INDEX IF NOT EXISTS idx_ai_usage_thang ON ai_usage(thang)`,
+    // ADR-006 — kế hoạch tháng: chỉ tiêu số bài theo pillar / định dạng / kênh + định hướng; nguồn = 'de_xuat' | 'tay'
+    `CREATE TABLE IF NOT EXISTS ke_hoach_thang (thang TEXT PRIMARY KEY, dinh_huong TEXT, chi_tieu TEXT, nguon TEXT, updated_at TEXT, updated_by_name TEXT)`,
     // CONTENT OS · TREND — nghiên cứu & triển khai. KHÔNG scrape (ToS): người tự ghi nhận + đánh giá.
     `CREATE TABLE IF NOT EXISTS trends (id TEXT PRIMARY KEY, ten TEXT, nguon TEXT, link TEXT, mo_ta TEXT, phat_hien_ngay TEXT, han_dung TEXT, pillar_id TEXT, san_pham_id TEXT, danh_gia TEXT, rui_ro TEXT, trang_thai TEXT, ly_do TEXT, nguoi_de_xuat TEXT, nguoi_duyet_ten TEXT, content_item_id TEXT, script_id TEXT, created_at TEXT, decided_at TEXT)`,
     // CONTENT OS · P10 — Thư viện học. ĐỀ XUẤT do máy rút ra nhưng PHẢI người duyệt mới thành quy tắc.
@@ -252,6 +254,8 @@ async function ensureSchema(env){
   try { await env.DB.prepare(`ALTER TABLE san_xuat ADD COLUMN da_chuyen INTEGER DEFAULT 0`).run(); } catch(e){}
   // ADR-007: mục kế hoạch quy định định dạng nội dung (tool nào soạn); null = chưa quy định
   try { await env.DB.prepare(`ALTER TABLE content_items ADD COLUMN dinh_dang TEXT`).run(); } catch(e){}
+  // ADR-006: tuần trong tháng (1–6) — null = suy từ ngày đăng dự kiến
+  try { await env.DB.prepare(`ALTER TABLE content_items ADD COLUMN tuan INTEGER`).run(); } catch(e){}
   try { await chuyenSanXuatVaoKeHoach(env); } catch(e){ console.error('chuyenSanXuatVaoKeHoach', e && e.message); }
   // ADR-002: gộp giai đoạn cũ về 6 giai đoạn mới (chạy lại vô hại)
   try { await env.DB.prepare(`UPDATE content_items SET trang_thai='SAN_XUAT' WHERE trang_thai IN ('QUAY','DUNG','DUYET')`).run(); } catch(e){}
@@ -1415,10 +1419,19 @@ function duyetKichBanAI(text, cacBuoc, claims, dinhDang){
 }
 // ADR-007: định dạng của mục kế hoạch — hợp lệ hoặc null (chưa quy định); giá trị lạ → null, không đoán
 function dinhDangKeHoach(v){ const d=String(v||'').toUpperCase(); return DINH_DANG.includes(d)?d:null; }
+// ADR-006: tuần 1–6 hoặc null
+function tuanKeHoach(v){ if(v==null||v==='') return null; const t=Number(v); return (Number.isInteger(t)&&t>=1&&t<=6)?t:undefined; }
+// Chỉ tiêu tháng: chỉ giữ số nguyên ≥0, khoá hợp lệ; không tin object lạ
+function lamSachChiTieu(o){
+  const so=x=>{ const v=Number(x); return Number.isFinite(v)&&v>=0?Math.round(v):0; };
+  const map=m=>{ const r={}; Object.entries((m&&typeof m==='object')?m:{}).slice(0,60).forEach(([k,v])=>{ if(String(k).trim()) r[String(k).trim().slice(0,40)]=so(v); }); return r; };
+  o=(o&&typeof o==='object')?o:{};
+  return { tong_bai:so(o.tong_bai), theo_pillar:map(o.theo_pillar), theo_dinh_dang:map(o.theo_dinh_dang), theo_kenh:map(o.theo_kenh) };
+}
 async function insertContentItem(env, me, body){
   const id=uid('ci');
-  await env.DB.prepare(`INSERT INTO content_items (id,loai,tieu_de,loai_muc_tieu,pillar_id,framework_id,san_pham_id,kenh_id,thang,trang_thai,pic,chi_tiet,links,created_at,created_by,created_by_name,updated_at,dinh_dang) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
-    .bind(id, body.loai||'SOCIAL', (body.tieu_de||'').trim(), body.loai_muc_tieu||'', body.pillar_id||null, body.framework_id||null, body.san_pham_id||null, body.kenh_id||null, (body.thang||'').trim(), (PIPELINE_BE.includes(body.trang_thai)?body.trang_thai:'Y_TUONG'), JSON.stringify(body.pic||{}), JSON.stringify(body.chi_tiet||{}), JSON.stringify(body.links||{}), nowISO(), me.id, me.ho_ten, nowISO(), dinhDangKeHoach(body.dinh_dang)).run();
+  await env.DB.prepare(`INSERT INTO content_items (id,loai,tieu_de,loai_muc_tieu,pillar_id,framework_id,san_pham_id,kenh_id,thang,trang_thai,pic,chi_tiet,links,created_at,created_by,created_by_name,updated_at,dinh_dang,tuan) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+    .bind(id, body.loai||'SOCIAL', (body.tieu_de||'').trim(), body.loai_muc_tieu||'', body.pillar_id||null, body.framework_id||null, body.san_pham_id||null, body.kenh_id||null, (body.thang||'').trim(), (PIPELINE_BE.includes(body.trang_thai)?body.trang_thai:'Y_TUONG'), JSON.stringify(body.pic||{}), JSON.stringify(body.chi_tiet||{}), JSON.stringify(body.links||{}), nowISO(), me.id, me.ho_ten, nowISO(), dinhDangKeHoach(body.dinh_dang), tuanKeHoach(body.tuan)||null).run();
   return id;
 }
 
@@ -1505,6 +1518,8 @@ async function bootstrap(env, u){
   const frameworks = fwR.map(r=>({ ...r, active:uBool(r.active) }));
   const kenh = kenhR.map(r=>({ ...r, active:uBool(r.active), tu_dong_dang:uBool(r.tu_dong_dang) }));
   const content_items = ciR.map(r=>({ ...r, pic: JSON.parse(r.pic||'{}'), chi_tiet: JSON.parse(r.chi_tiet||'{}'), links: JSON.parse(r.links||'{}') }));
+  // ADR-006: 12 tháng kế hoạch gần nhất (chỉ tiêu đã parse)
+  const ke_hoach_thang = canContent ? (await all(`SELECT * FROM ke_hoach_thang ORDER BY thang DESC LIMIT 12`)).map(r=>({ ...r, chi_tieu: lamSachChiTieu(docChiTiet(r.chi_tieu)) })) : [];
   // P4 — kịch bản (chỉ staff xem; Sales không cần)
   const scripts = scriptsR.map(r=>({ ...r, dinh_dang: r.dinh_dang||'VIDEO', chi_tiet: docChiTiet(r.chi_tiet), sections: JSON.parse(r.sections||'[]'), claim_flags: JSON.parse(r.claim_flags||'[]') }));
   const san_xuat = sxR.map(rowSX);
@@ -1535,6 +1550,7 @@ async function bootstrap(env, u){
     agent_log,
     ai_san_sang: staff ? !!env.ANTHROPIC_API_KEY : false,
     ai_thang: staff ? await tongHopAI(env, thangHienTai()) : null,
+    ke_hoach_thang,
     module_config: cfg, can_cau_hinh: canCauHinh(u),
     co_truong_mkt: await coTruongMktHoatDong(env),
     san_xuat, sx_khau: SX_KHAU,
@@ -1635,7 +1651,7 @@ async function handleApi(request, env){
     return json({ media_url: '/media/'+key, media_type: ct.startsWith('image/') ? 'IMAGE' : 'VIDEO' });
   }
 
-  const body = (method==='POST'||method==='PATCH') ? await request.json().catch(()=>({})) : {};
+  const body = (method==='POST'||method==='PATCH'||method==='PUT') ? await request.json().catch(()=>({})) : {};
 
   await ensureSchema(env);
 
@@ -2104,8 +2120,10 @@ async function handleApi(request, env){
     const links = body.links!=null?JSON.stringify(body.links):r.links;
     if(body.dinh_dang!=null && body.dinh_dang!=='' && !dinhDangKeHoach(body.dinh_dang)) return json({error:'Định dạng không hợp lệ'},400);
     const dinh_dang = body.dinh_dang!==undefined ? dinhDangKeHoach(body.dinh_dang) : (r.dinh_dang||null);
-    await env.DB.prepare(`UPDATE content_items SET loai=?, tieu_de=?, loai_muc_tieu=?, pillar_id=?, framework_id=?, san_pham_id=?, kenh_id=?, thang=?, trang_thai=?, pic=?, chi_tiet=?, links=?, updated_at=?, dinh_dang=? WHERE id=?`)
-      .bind(g('loai',r.loai),g('tieu_de',r.tieu_de),g('loai_muc_tieu',r.loai_muc_tieu),body.pillar_id!==undefined?(body.pillar_id||null):r.pillar_id,body.framework_id!==undefined?(body.framework_id||null):r.framework_id,body.san_pham_id!==undefined?(body.san_pham_id||null):r.san_pham_id,body.kenh_id!==undefined?(body.kenh_id||null):r.kenh_id,g('thang',r.thang),g('trang_thai',r.trang_thai),pic,chi_tiet,links,nowISO(),dinh_dang,id).run();
+    if(body.tuan!==undefined && tuanKeHoach(body.tuan)===undefined) return json({error:'Tuần phải từ 1 đến 6'},400);
+    const tuan = body.tuan!==undefined ? tuanKeHoach(body.tuan) : (r.tuan==null?null:r.tuan);
+    await env.DB.prepare(`UPDATE content_items SET loai=?, tieu_de=?, loai_muc_tieu=?, pillar_id=?, framework_id=?, san_pham_id=?, kenh_id=?, thang=?, trang_thai=?, pic=?, chi_tiet=?, links=?, updated_at=?, dinh_dang=?, tuan=? WHERE id=?`)
+      .bind(g('loai',r.loai),g('tieu_de',r.tieu_de),g('loai_muc_tieu',r.loai_muc_tieu),body.pillar_id!==undefined?(body.pillar_id||null):r.pillar_id,body.framework_id!==undefined?(body.framework_id||null):r.framework_id,body.san_pham_id!==undefined?(body.san_pham_id||null):r.san_pham_id,body.kenh_id!==undefined?(body.kenh_id||null):r.kenh_id,g('thang',r.thang),g('trang_thai',r.trang_thai),pic,chi_tiet,links,nowISO(),dinh_dang,tuan,id).run();
     await logAudit(env,me,'sửa nội dung','content_items',id);
     return json({ db: await bootstrap(env, me) });
   }
@@ -2195,6 +2213,17 @@ async function handleApi(request, env){
     const ct={ ...docChiTiet(r.chi_tiet), video_url:media_url, video_footage_id:String(body.footage_id||'').trim(), video_luc:nowISO() };
     await env.DB.prepare(`UPDATE scripts SET chi_tiet=?, updated_at=? WHERE id=?`).bind(JSON.stringify(lamSachChiTiet(ct)), nowISO(), id).run();
     await logAudit(env,me,'gắn video đã dựng','scripts',id,media_url);
+    return json({ db: await bootstrap(env, me) });
+  }
+  // ADR-006: kế hoạch tháng — upsert theo tháng. Đề xuất từ chiến lược tính ở FE (thuần từ pillar % + thực tế tháng trước), server chỉ lưu.
+  if((m=path.match(/^\/kehoach-thang\/(\d{4}-\d{2})$/)) && method==='PUT'){
+    if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    const thang=m[1]; const ct=lamSachChiTieu(body.chi_tieu);
+    const nguon=body.nguon==='de_xuat'?'de_xuat':'tay';
+    const cu=await env.DB.prepare(`SELECT thang FROM ke_hoach_thang WHERE thang=?`).bind(thang).first();
+    if(cu) await env.DB.prepare(`UPDATE ke_hoach_thang SET dinh_huong=?, chi_tieu=?, nguon=?, updated_at=?, updated_by_name=? WHERE thang=?`).bind(String(body.dinh_huong||'').slice(0,2000), JSON.stringify(ct), nguon, nowISO(), me.ho_ten, thang).run();
+    else await env.DB.prepare(`INSERT INTO ke_hoach_thang (thang,dinh_huong,chi_tieu,nguon,updated_at,updated_by_name) VALUES (?,?,?,?,?,?)`).bind(thang, String(body.dinh_huong||'').slice(0,2000), JSON.stringify(ct), nguon, nowISO(), me.ho_ten).run();
+    await logAudit(env,me,'lưu kế hoạch tháng','ke_hoach_thang',thang,'tổng '+ct.tong_bai+' bài · '+nguon);
     return json({ db: await bootstrap(env, me) });
   }
   // ADR-007: KHO KỊCH BẢN cho công cụ Dựng video — chỉ kịch bản VIDEO đã duyệt 2 cổng, kèm tên mục kế hoạch/kênh

@@ -227,7 +227,10 @@ Quyết định: bảng ke_hoach_thang (thang, chi_tieu[] {pillar_id, kenh_id, d
             đề xuất từ pillar % + kết quả tháng trước, sửa tay được. Tuần = cột content_items.tuan (ISO, T2–CN),
             chỉ tiêu tuần = tháng chia đều (sửa tay). Màn Kế hoạch thêm lớp Tháng (chỉ tiêu vs thực tế) và Tuần
             (còn thiếu gì theo pillar/kênh/định dạng).
-Người duyệt: Thiện · Trạng thái: ĐÃ DUYỆT (2026-09-23) — làm sau ADR-007
+Người duyệt: Thiện · Trạng thái: ĐÃ LÀM (2026-09-23, commit ADR-006). Chi tiết thực thi: chi_tieu lưu dạng map
+            {tong_bai, theo_pillar{id:n}, theo_dinh_dang{dd:n}, theo_kenh{id:n}} (mỗi chiều độc lập, không tổ hợp 3 chiều —
+            đủ cho tuần "còn thiếu gì", gọn hơn mảng {pillar,kenh,dinh_dang,so_bai}); tuần = tuần TRONG THÁNG 1–6 (T2–CN,
+            tuần 1 từ ngày 1), không phải ISO week số 1–53, để chỉ tiêu tháng chia được xuống tuần.
 
 ADR-007 · 2026-09-23 · Mục kế hoạch quy định ĐỊNH DẠNG; tool tạo nội dung mở TỪ kế hoạch; Dựng chọn từ kho kịch bản
 Bối cảnh : Studio tạo tự do rồi mới nối kế hoạch; công cụ Dựng còn dán kịch bản tay → nội dung trôi ngoài luồng.
@@ -577,6 +580,14 @@ Tokens Tailwind (inline config trong `seeding-app.html`): `ink #0b3543` (soft #1
   - Kế hoạch (thẻ kanban + bảng): nút **✍️ Soạn nội dung** (chưa đặt định dạng → nhắc đặt). `soanTuKeHoach`: đã có kịch bản → mở kịch bản; chưa → `window.__studioMo={moi:{dinh_dang, content_item_id, framework/sp/kênh, _tuKeHoach:true}}` rồi `window.__kingsmenGo('studio')` (móc điều hướng đặt ở `Shell`). Studio đọc `__studioMo` lúc mount. Trình soạn mở từ kế hoạch: ô "Thuộc mục kế hoạch" **khoá**, header hiện chip 📋 tên mục. Thư viện Studio: chip 📋 mục kế hoạch / "chưa thuộc kế hoạch".
   - `GET /scripts/kho` (staff): kịch bản VIDEO `DUYET` kèm `ke_hoach`, `kenh_ten`, sections/chi_tiet đã parse. Công cụ Dựng: ô **📚 Kho kịch bản đã duyệt** (`napKhoKB/chonKhoKB`, chỉ khi có phiên app) → nạp kịch bản + `KB_STUDIO` + localStorage handoff, nên 📤 vẫn gắn video về đúng kịch bản.
   - Test `test_adr7.mjs` 10/10; hồi quy 100/100 · 28/28 · 26/26 · 24/24.
+
+### 2026-09-23 · ADR-006 — Kế hoạch THÁNG → TUẦN (chỉ tiêu chảy xuống từ chiến lược)
+- **BE**: bảng `ke_hoach_thang(thang PK, dinh_huong, chi_tieu JSON, nguon 'de_xuat'|'tay', updated_at, updated_by_name)`; `lamSachChiTieu` (số nguyên ≥0, chỉ 4 nhóm, ≤60 khoá/nhóm); `PUT /kehoach-thang/:yyyy-mm` (staff, upsert, audit); bootstrap trả `ke_hoach_thang` (12 tháng gần nhất, staff). Cột `content_items.tuan` INTEGER 1–6 (`tuanKeHoach`: lạ → null khi tạo, 400 khi PATCH, `''` = null = suy từ ngày đăng). Router nay parse body cho cả PUT.
+- **FE thuần**: `tuanCuaNgay` (tuần trong tháng T2–CN), `soTuanThang`, `tuanCuaMuc` (đặt tay ưu tiên, không thì theo `chi_tiet.ngay_dang`), `deXuatChiTieuThang(db,ym,tong)` (tổng = nhập tay → số mục tháng trước → 20; pillar theo % ty_trong, dư dồn pillar lớn nhất; định dạng/kênh theo tỷ lệ thực tế tháng trước, không có thì chia đều), `thucTeThang`, `thieuTuan` (chỉ tiêu tuần = ceil(tháng ÷ số tuần)).
+- **Màn Kế hoạch**: thêm 2 lớp **Tháng** (`KeHoachThangView`: chỉ tiêu tổng/định hướng/3 khối pillar–định dạng–kênh có ô nhập + thanh thực tế, nút ✨ Đề xuất từ chiến lược, 💾 Lưu; GIAM_DOC chỉ xem) và **Tuần** (`KeHoachTuanView`: 4–6 cột tuần, đã có/chỉ tiêu, dòng "thiếu: …", select đổi tuần ngay trên thẻ; khối ⏳ Chưa xếp tuần). Form mục có ô "Tuần trong tháng" (gợi ý tuần suy từ ngày đăng).
+- **Việc của tôi**: mục 🗓️ "Tuần N còn thiếu X bài theo kế hoạch tháng" (hoặc "đủ số bài nhưng lệch cơ cấu") cho staff.
+- Kết quả tháng chảy ngược: đề xuất tháng sau lấy số bài + cơ cấu định dạng/kênh của tháng trước (chưa dùng ket_qua — chờ ADR-008 có số đo thật).
+- Test `test_adr6.mjs` 21/21; hồi quy 10/10 · 100/100 · 28/28 · 26/26 · 24/24. DEMO: đề xuất → lưu → Tuần → thêm mục ngày 08/09 rơi vào tuần 2 → đổi sang tuần 3 OK.
 
 ### ⚙️ Quy trình deploy (CẬP NHẬT)
 `npm run build` (build.mjs: biên dịch JSX, build CSS Tailwind từ chính khối `tailwind.config` trong seeding-app.html, chép vendor React và `tools/`) → `node --check worker/index.js` → commit cả `dist/` → push. `node_modules/` đã trong .gitignore.

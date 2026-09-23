@@ -97,6 +97,39 @@ function nhanConKeHoach(db, it){
   if(air) out.push({t:'🚀 '+(air.trang_thai==='DA_DANG'?'đã đăng':(air.trang_thai==='DA_LEN_LICH'||air.trang_thai==='DANG_GUI')?'đã lên lịch':'chuẩn bị đăng'), cls:air.trang_thai==='DA_DANG'?TONE.ok:TONE.muted});
   return out;
 }
+// ADR-006 — KẾ HOẠCH THÁNG → TUẦN. Thuần hàm, dùng cho màn Kế hoạch, Việc của tôi và demo.
+const SO_TUAN_MAC_DINH=4;
+// tuần trong tháng của một ngày: tuần 1 = từ ngày 1 tới CN đầu tiên, tuần kế tiếp theo T2–CN (ISO), tối đa 6
+function tuanCuaNgay(ymd){ if(!/^\d{4}-\d{2}-\d{2}$/.test(ymd||'')) return null; const d=new Date(ymd+'T00:00:00'); const d1=new Date(d.getFullYear(), d.getMonth(), 1);
+  const lechT2=(d1.getDay()+6)%7; return Math.min(6, Math.floor((d.getDate()-1+lechT2)/7)+1); }
+function soTuanThang(ym){ const [y,m]=String(ym||'').split('-').map(Number); if(!y||!m) return SO_TUAN_MAC_DINH; const cuoi=new Date(y,m,0); return tuanCuaNgay(ym+'-'+String(cuoi.getDate()).padStart(2,'0'))||SO_TUAN_MAC_DINH; }
+const tuanCuaMuc=it=>(it.tuan!=null?Number(it.tuan):tuanCuaNgay((it.chi_tiet||{}).ngay_dang))||null;
+const khtCua=(db,ym)=>(db.ke_hoach_thang||[]).find(k=>k.thang===ym)||null;
+// Đề xuất chỉ tiêu tháng từ chiến lược: tổng bài = tháng trước có bài thì lấy tháng trước, không thì 20; chia theo pillar % (làm tròn, dư dồn pillar lớn nhất);
+// định dạng/kênh theo tỷ lệ thực tế tháng trước (không có → chia đều theo danh mục đang hoạt động)
+function deXuatChiTieuThang(db, ym, tongMuon){
+  const pillars=(db.pillars||[]).filter(p=>p.active!==false); const items=db.content_items||[];
+  const [y,m]=ym.split('-').map(Number); const truoc=new Date(y,m-2,1); const ymTruoc=truoc.getFullYear()+'-'+String(truoc.getMonth()+1).padStart(2,'0');
+  const cu=items.filter(it=>it.thang===ymTruoc);
+  const tong=Math.max(1, Math.round(Number(tongMuon)||cu.length||20));
+  const theo_pillar={}; let cong=0, maxP=null;
+  pillars.forEach(p=>{ const n=Math.round(tong*(Number(p.ty_trong)||0)/100); theo_pillar[p.id]=n; cong+=n; if(!maxP||(Number(p.ty_trong)||0)>(Number(maxP.ty_trong)||0)) maxP=p; });
+  if(maxP) theo_pillar[maxP.id]+= (tong-cong);
+  const chia=(keys, dem)=>{ const r={}; const tongDem=keys.reduce((s,k)=>s+(dem[k]||0),0); let c2=0; keys.forEach((k,i)=>{ const n= tongDem? Math.round(tong*(dem[k]||0)/tongDem) : Math.round(tong/keys.length); r[k]=n; c2+=n; }); if(keys.length) r[keys[0]]+= (tong-c2); return r; };
+  const demDD={}; cu.forEach(it=>{ if(it.dinh_dang) demDD[it.dinh_dang]=(demDD[it.dinh_dang]||0)+1; });
+  const demKenh={}; cu.forEach(it=>{ if(it.kenh_id) demKenh[it.kenh_id]=(demKenh[it.kenh_id]||0)+1; });
+  const kenhs=(db.kenh||[]).filter(k=>k.active!==false).map(k=>k.id);
+  return { tong_bai:tong, theo_pillar, theo_dinh_dang:chia(Object.keys(DINH_DANG_FE), demDD), theo_kenh:chia(kenhs, demKenh), _tuThang:cu.length?ymTruoc:null };
+}
+// Thực tế tháng: đếm mục theo pillar/định dạng/kênh + số đã đăng
+function thucTeThang(db, ym){ const items=(db.content_items||[]).filter(it=>it.thang===ym); const dem=(f)=>{ const r={}; items.forEach(it=>{ const k=f(it); if(k) r[k]=(r[k]||0)+1; }); return r; };
+  return { tong_bai:items.length, da_dang:items.filter(it=>['DA_DANG','DA_DO'].includes(it.trang_thai)).length, theo_pillar:dem(it=>it.pillar_id), theo_dinh_dang:dem(it=>it.dinh_dang), theo_kenh:dem(it=>it.kenh_id), items }; }
+// Còn thiếu của một tuần: chỉ tiêu tuần = chỉ tiêu tháng / số tuần (làm tròn lên), so với số mục đã xếp vào tuần đó
+function thieuTuan(db, ym, tuan){ const kh=khtCua(db,ym); if(!kh) return null; const soTuan=soTuanThang(ym); const items=(db.content_items||[]).filter(it=>it.thang===ym && tuanCuaMuc(it)===tuan);
+  const pillars=(db.pillars||[]).filter(p=>p.active!==false); const thieu=[];
+  pillars.forEach(p=>{ const ct=Math.ceil((kh.chi_tieu.theo_pillar[p.id]||0)/soTuan); const co=items.filter(it=>it.pillar_id===p.id).length; if(ct>co) thieu.push({ten:p.ten, thieu:ct-co}); });
+  Object.keys(DINH_DANG_FE).forEach(dd=>{ const ct=Math.ceil((kh.chi_tieu.theo_dinh_dang[dd]||0)/soTuan); const co=items.filter(it=>it.dinh_dang===dd).length; if(ct>co) thieu.push({ten:DINH_DANG_FE[dd].label, thieu:ct-co}); });
+  return { co:items.length, chi_tieu:Math.ceil((kh.chi_tieu.tong_bai||0)/soTuan), thieu }; }
 // ADR-004 — KHO CHUNG: footage ∪ Thư viện ảnh seeding (không gộp bảng, chỉ gộp cách nhìn). Mọi bộ chọn media đọc từ đây.
 function khoMediaFE(db){
   const ft=(db.footage||[]).filter(x=>x.active!==false);
@@ -657,7 +690,7 @@ function migrate(db){
   db.frameworks ||= [];
   db.kenh ||= [];
   db.content_items ||= [];
-  db.scripts ||= []; db.approvals ||= []; db.air_posts ||= []; db.air_checklist ||= AIR_CHECKLIST_FE;
+  db.scripts ||= []; db.approvals ||= []; db.air_posts ||= []; db.air_checklist ||= AIR_CHECKLIST_FE; db.ke_hoach_thang ||= [];
   (db.content_items||[]).forEach(c=>{ if(PIPELINE_CU[c.trang_thai]) c.trang_thai=PIPELINE_CU[c.trang_thai]; });
   if(db.co_truong_mkt==null) db.co_truong_mkt=(db.users||[]).some(u=>u.active && u.vai_tro===ROLES.TRUONG_MKT);   // demo; bản thật do bootstrap trả
   db.ket_qua ||= []; db.don_cho_gan ||= []; db.footage ||= []; db.shot_list ||= []; db.bai_hoc ||= []; db.min_mau ||= MIN_MAU; db.trends ||= []; db.trend_check ||= TREND_CHECK_FE; db.viec_ket ||= null; db.seeding_theo_noi_dung ||= {}; db.kenh_tu_dong ||= KENH_TU_DONG_FE; db.kenh_san_sang ||= {}; db.n8n_san_sang ||= false; db.youtube_san_sang ||= false; db.agent_log ||= []; db.module_config ||= {}; db.can_cau_hinh ??= true; db.san_xuat ||= []; db.sx_khau ||= SX_KHAU_FE; db.san_xuat_theo_noi_dung ||= {};
@@ -940,6 +973,8 @@ function AppProvider({children}){
       aiSinhKichBan: async o=>({ok:false, thieu_key:true, loi:'Chế độ offline không gọi AI được'}),
       aiSinhKichBanGemini: async o=>({ok:false, loi:'Chế độ offline không gọi AI được'}),
       baoAIUsage: async ()=>{}, layAIUsage: async ()=>({tong_hop:null, rows:[], thangs:[]}),
+      luuKeHoachThang: async (thang,o)=>{ S.ke_hoach_thang ||= []; const i=S.ke_hoach_thang.findIndex(k=>k.thang===thang); const rec={ thang, dinh_huong:o.dinh_huong||'', chi_tieu:o.chi_tieu||{tong_bai:0,theo_pillar:{},theo_dinh_dang:{},theo_kenh:{}}, nguon:o.nguon||'tay', updated_at:now(), updated_by_name:meRef.current.ho_ten };
+        if(i>=0) S.ke_hoach_thang[i]=rec; else S.ke_hoach_thang.unshift(rec); commit(); return {ok:true}; },
       chuyenDinhDang: async (id, dd)=>{ const src=(S.scripts||[]).find(x=>x.id===id); if(!src) return {ok:false,msg:'Không tìm thấy'}; if(dd===ddOf(src)) return {ok:false,msg:'Đã là định dạng này rồi'};
         const moi=chuyenDinhDangFE(src, dd); const flags=scanClaims(scriptTextFE(moi), S.claim_cam); if(flags.some(x=>x.muc_do==='CHAN')) return {ok:false, msg:'Nội dung gốc có cụm bị CHẶN — sửa bản gốc trước'};
         const nid=uid('scr'); S.scripts.unshift({ id:nid, content_item_id:src.content_item_id||null, framework_id:src.framework_id||null, san_pham_id:src.san_pham_id||null, kenh_id:src.kenh_id||null, ...moi, brand_voice:src.brand_voice||'', trang_thai:'NHAP', version:1, dinh_dang:dd, claim_flags:flags, created_at:now(), created_by:meRef.current.id, created_by_name:meRef.current.ho_ten, updated_at:now() }); commit(); return {ok:true, id:nid}; },
@@ -1061,6 +1096,7 @@ function AppProvider({children}){
     refresh: () => call('/bootstrap').then(r=>setDb(r.db)).catch(()=>{}),
     // ADR-005: lượt gọi AI từ trình duyệt (Gemini key cá nhân) báo về để tính chi phí; tổng hợp theo tháng
     baoAIUsage: o => call('/ai/usage',{method:'POST',body:o}).catch(()=>{}),
+    luuKeHoachThang: async (thang,o) => { try { const r=await call('/kehoach-thang/'+thang,{method:'PUT',body:o}); if(r&&r.db) setDb(r.db); return {ok:true}; } catch(e){ return {ok:false,msg:e.message}; } },
     layAIUsage: thang => call('/ai/usage'+(thang?('?thang='+encodeURIComponent(thang)):'')),
     audit: ()=>{},
     updateProfile: patch => mut('/me', {method:'PATCH', body:patch}),
@@ -2610,7 +2646,7 @@ function ContentPlan(){
     </div>;
   };
   return <div className="space-y-4">
-    <PageHeader title={<>🗓️ Kế hoạch nội dung</>} right={<><div className="flex rounded-lg overflow-hidden border border-line"> <button onClick={()=>setView('kanban')} className={"px-3 py-1.5 text-xs font-semibold "+(view==='kanban'?'bg-brand text-white':'bg-white text-ink-muted')}>Kanban</button> <button onClick={()=>setView('list')} className={"px-3 py-1.5 text-xs font-semibold "+(view==='list'?'bg-brand text-white':'bg-white text-ink-muted')}>Danh sách</button> <button onClick={()=>setView('calendar')} className={"px-3 py-1.5 text-xs font-semibold "+(view==='calendar'?'bg-brand text-white':'bg-white text-ink-muted')}>Lịch</button> </div> {!chiXem && <Btn variant="ghost" onClick={()=>setImp(true)}>⬆ Import</Btn>} {!chiXem && <Btn variant="brand" onClick={()=>setEdit({...blank})}>＋ Thêm nội dung</Btn>}</>}/>
+    <PageHeader title={<>🗓️ Kế hoạch nội dung</>} right={<><div className="flex rounded-lg overflow-hidden border border-line"> <button onClick={()=>setView('kanban')} className={"px-3 py-1.5 text-xs font-semibold "+(view==='kanban'?'bg-brand text-white':'bg-white text-ink-muted')}>Kanban</button> <button onClick={()=>setView('list')} className={"px-3 py-1.5 text-xs font-semibold "+(view==='list'?'bg-brand text-white':'bg-white text-ink-muted')}>Danh sách</button> <button onClick={()=>setView('calendar')} className={"px-3 py-1.5 text-xs font-semibold "+(view==='calendar'?'bg-brand text-white':'bg-white text-ink-muted')}>Lịch</button> <button onClick={()=>setView('thang')} className={"px-3 py-1.5 text-xs font-semibold "+(view==='thang'?'bg-brand text-white':'bg-white text-ink-muted')}>Tháng</button> <button onClick={()=>setView('tuan')} className={"px-3 py-1.5 text-xs font-semibold "+(view==='tuan'?'bg-brand text-white':'bg-white text-ink-muted')}>Tuần</button> </div> {!chiXem && <Btn variant="ghost" onClick={()=>setImp(true)}>⬆ Import</Btn>} {!chiXem && <Btn variant="brand" onClick={()=>setEdit({...blank})}>＋ Thêm nội dung</Btn>}</>}/>
     <div className="bg-white rounded-2xl border border-line shadow-card p-3 flex flex-wrap gap-2 items-center">
       <Select value={fLoai} onChange={e=>setFLoai(e.target.value)} className="max-w-[140px]"><option value="">Mọi loại</option><option value="ECOM">Ecom</option><option value="SOCIAL">Social</option></Select>
       <Select value={fKenh} onChange={e=>setFKenh(e.target.value)} className="max-w-[180px]"><option value="">Mọi kênh</option>{kenhs.map(k=><option key={k.id} value={k.id}>{k.ten}</option>)}</Select>
@@ -2621,7 +2657,9 @@ function ContentPlan(){
     {showLech && <div className={CALLOUT.warn}>
       ⚠️ <b>Lệch tỷ lệ pillar &gt;{lechNguong}%:</b> {lech.map((x,i)=><span key={x.p.id}>{i>0?' · ':''}{x.p.ten} thực tế {Math.round(x.actual)}% (mục tiêu {x.p.ty_trong}%)</span>)}. Cân nhắc phân bổ lại nội dung theo trụ cột.
     </div>}
-    {view==='calendar' ? <ContentCalendar/> :
+    {view==='thang' ? <KeHoachThangView ym={fThang||todayYMD().slice(0,7)} onEdit={setEdit} chiXem={chiXem}/> :
+     view==='tuan' ? <KeHoachTuanView ym={fThang||todayYMD().slice(0,7)} onEdit={setEdit} chiXem={chiXem} Card={Card} setView={setView}/> :
+     view==='calendar' ? <ContentCalendar/> :
      filtered.length===0 ? <Empty>Chưa có nội dung. Bấm "Thêm nội dung" hoặc "Import" 2 file kế hoạch.</Empty> :
      view==='kanban' ?
       <div className="flex gap-2 overflow-x-auto pb-2 -mx-3 px-3 sm:mx-0 sm:px-0 snap-x">
@@ -2647,6 +2685,70 @@ function ContentPlan(){
     {edit && <ContentItemModal edit={edit} onClose={()=>setEdit(null)}/>}
     {imp && <ContentImportModal onClose={()=>setImp(false)}/>}
     {day && <DaySeedingModal it={day} onClose={()=>setDay(null)}/>}
+  </div>;
+}
+// ADR-006 — LỚP THÁNG: chỉ tiêu (từ chiến lược, sửa tay) vs thực tế. Thanh tiến độ theo pillar / định dạng / kênh.
+function KeHoachThangView({ym, onEdit, chiXem}){
+  const { db, luuKeHoachThang, notify } = useApp();
+  const kh=khtCua(db,ym); const tt=thucTeThang(db,ym);
+  const pillars=(db.pillars||[]).filter(p=>p.active!==false); const kenhs=(db.kenh||[]).filter(k=>k.active!==false);
+  const [f,setF]=useState(()=>({ dinh_huong:(kh&&kh.dinh_huong)||'', chi_tieu: kh?JSON.parse(JSON.stringify(kh.chi_tieu)):{tong_bai:0,theo_pillar:{},theo_dinh_dang:{},theo_kenh:{}}, nguon:(kh&&kh.nguon)||'tay' }));
+  useEffect(()=>{ const k=khtCua(db,ym); setF({ dinh_huong:(k&&k.dinh_huong)||'', chi_tieu: k?JSON.parse(JSON.stringify(k.chi_tieu)):{tong_bai:0,theo_pillar:{},theo_dinh_dang:{},theo_kenh:{}}, nguon:(k&&k.nguon)||'tay' }); },[ym, (kh&&kh.updated_at)||'']);
+  const [busy,setBusy]=useState(false); const [tongMuon,setTongMuon]=useState('');
+  const setCT=(nhom,k,v)=>setF(x=>({...x, nguon:'tay', chi_tieu:{...x.chi_tieu, [nhom]:{...(x.chi_tieu[nhom]||{}), [k]:Math.max(0,Number(v)||0)}}}));
+  const deXuat=()=>{ const dx=deXuatChiTieuThang(db, ym, tongMuon); setF(x=>({...x, nguon:'de_xuat', chi_tieu:{tong_bai:dx.tong_bai, theo_pillar:dx.theo_pillar, theo_dinh_dang:dx.theo_dinh_dang, theo_kenh:dx.theo_kenh}}));
+    notify('Đã đề xuất '+dx.tong_bai+' bài theo tỷ trọng pillar'+(dx._tuThang?(' · định dạng/kênh theo thực tế tháng '+dx._tuThang):' · định dạng/kênh chia đều')+' — sửa rồi Lưu'); };
+  const luu=async()=>{ setBusy(true); const r=await luuKeHoachThang(ym, f); setBusy(false); if(r&&r.ok) notify('Đã lưu kế hoạch tháng '+ym); else notify((r&&r.msg)||'Lỗi','err'); };
+  const tongPillar=Object.values(f.chi_tieu.theo_pillar||{}).reduce((s,v)=>s+(Number(v)||0),0);
+  const Thanh=({ct,co})=>{ const pct=ct?Math.min(100,Math.round(co/ct*100)):0; return <div className="flex items-center gap-2"><div className="flex-1 h-2 rounded-full bg-slate-100 overflow-hidden"><div className={"h-full "+(ct&&co>=ct?'bg-emerald-500':'bg-brand')} style={{width:pct+'%'}}/></div><span className={"text-[11px] tabular-nums w-16 text-right "+(ct&&co<ct?'text-amber-700':'text-ink-muted')}>{co}/{ct||'–'}</span></div>; };
+  const Khoi=({tieu,keys,ten,nhom})=><Card pad="p-3"><SectionTitle className="mb-2">{tieu}</SectionTitle>
+    <div className="space-y-1.5">{keys.map(k=><div key={k} className="grid grid-cols-[minmax(0,1fr)_70px_minmax(0,1.2fr)] gap-2 items-center">
+      <span className="text-xs text-ink truncate" title={ten(k)}>{ten(k)}</span>
+      <Input type="number" min="0" className="!py-1 text-xs" value={f.chi_tieu[nhom][k]||0} onChange={e=>setCT(nhom,k,e.target.value)} disabled={chiXem}/>
+      <Thanh ct={Number(f.chi_tieu[nhom][k])||0} co={tt[nhom][k]||0}/>
+    </div>)}</div></Card>;
+  return <div className="space-y-3">
+    <Card>
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div><SectionTitle>Kế hoạch tháng {ym}</SectionTitle><div className="text-[11px] text-ink-muted">{kh?('Lưu lần cuối '+fmtDate(kh.updated_at)+' · '+kh.updated_by_name+' · nguồn: '+(kh.nguon==='de_xuat'?'đề xuất từ chiến lược':'sửa tay')):'Chưa lập — bấm Đề xuất từ chiến lược rồi sửa và Lưu.'}</div></div>
+        {!chiXem && <div className="flex items-center gap-2 flex-wrap"><Input type="number" min="1" className="!w-24 !py-1.5 text-xs" placeholder={'tổng bài ('+(tt.tong_bai||20)+')'} value={tongMuon} onChange={e=>setTongMuon(e.target.value)} title="Tổng số bài muốn làm tháng này; để trống = theo tháng trước hoặc 20"/>
+          <Btn variant="ghost" onClick={deXuat}>✨ Đề xuất từ chiến lược</Btn><Btn variant="brand" onClick={luu} disabled={busy}>{busy?'Đang lưu…':'💾 Lưu kế hoạch tháng'}</Btn></div>}
+      </div>
+      <div className="grid sm:grid-cols-3 gap-2 mt-3">
+        <div className="rounded-xl bg-slate-50 p-2"><div className="text-[11px] text-ink-muted">Chỉ tiêu tổng</div><div className="flex items-center gap-2"><Input type="number" min="0" className="!py-1 text-sm font-bold !w-24" value={f.chi_tieu.tong_bai||0} onChange={e=>setF(x=>({...x,nguon:'tay',chi_tieu:{...x.chi_tieu,tong_bai:Math.max(0,Number(e.target.value)||0)}}))} disabled={chiXem}/><span className="text-[11px] text-ink-muted">bài · theo pillar cộng lại {tongPillar}{tongPillar!==(Number(f.chi_tieu.tong_bai)||0)&&<span className="text-amber-700"> (lệch)</span>}</span></div></div>
+        <div className="rounded-xl bg-slate-50 p-2"><div className="text-[11px] text-ink-muted">Thực tế đã lập</div><div className="font-display text-xl font-extrabold text-ink">{tt.tong_bai} <span className="text-xs font-normal text-ink-muted">mục · {tt.da_dang} đã đăng</span></div></div>
+        <div className="rounded-xl bg-slate-50 p-2"><div className="text-[11px] text-ink-muted">Định hướng tháng</div><Textarea rows="2" className="!py-1 text-xs" value={f.dinh_huong} onChange={e=>setF(x=>({...x,dinh_huong:e.target.value}))} placeholder="VD: đẩy mạnh G7000 mùa mưa, 2 video review KOC…" disabled={chiXem}/></div>
+      </div>
+    </Card>
+    <div className="grid lg:grid-cols-3 gap-3">
+      <Khoi tieu="Theo trụ cột (pillar)" nhom="theo_pillar" keys={pillars.map(p=>p.id)} ten={id=>{ const p=pillars.find(x=>x.id===id); return p?(p.ten+' · '+(p.ty_trong||0)+'%'):id; }}/>
+      <Khoi tieu="Theo định dạng" nhom="theo_dinh_dang" keys={Object.keys(DINH_DANG_FE)} ten={dd=>DINH_DANG_FE[dd].icon+' '+DINH_DANG_FE[dd].label}/>
+      <Khoi tieu="Theo kênh" nhom="theo_kenh" keys={kenhs.map(k=>k.id)} ten={id=>{ const k=kenhs.find(x=>x.id===id); return k?k.ten:id; }}/>
+    </div>
+    <div className={CALLOUT.note}>Chỉ tiêu chảy xuống tuần: mỗi tuần = chỉ tiêu tháng ÷ số tuần (làm tròn lên). Mục nội dung không có định dạng/pillar thì không được đếm vào ô tương ứng.</div>
+  </div>;
+}
+// ADR-006 — LỚP TUẦN: 4–6 cột tuần của tháng; mỗi cột: đã có / chỉ tiêu tuần và còn thiếu gì; đổi tuần ngay trên thẻ
+function KeHoachTuanView({ym, onEdit, chiXem, Card, setView}){
+  const { db, upsertContentItem } = useApp();
+  const kh=khtCua(db,ym); const soTuan=soTuanThang(ym);
+  const items=(db.content_items||[]).filter(it=>it.thang===ym);
+  const chuaTuan=items.filter(it=>!tuanCuaMuc(it));
+  return <div className="space-y-3">
+    {!kh && <div className={CALLOUT.warn}>Tháng {ym} chưa có kế hoạch tháng → chưa tính được "còn thiếu". <LinkBtn onClick={()=>setView('thang')}>Lập kế hoạch tháng</LinkBtn></div>}
+    <div className="flex gap-2 overflow-x-auto pb-2 -mx-3 px-3 sm:mx-0 sm:px-0 snap-x">
+      {Array.from({length:soTuan},(_,i)=>i+1).map(t=>{ const col=items.filter(it=>tuanCuaMuc(it)===t); const th=thieuTuan(db,ym,t);
+        return <div key={t} className="bg-slate-50 rounded-xl p-2 w-[78vw] max-w-[240px] sm:w-auto sm:flex-1 sm:min-w-0 shrink-0 snap-start">
+          <div className="text-[11px] font-bold text-ink-muted mb-1 flex items-center justify-between"><span>Tuần {t}</span><span className={th&&col.length<th.chi_tieu?'text-amber-700':'text-slate-400'}>{col.length}{th?('/'+th.chi_tieu):''}</span></div>
+          {th && th.thieu.length>0 && <div className="text-[10px] text-amber-700 mb-1.5 leading-snug">thiếu: {th.thieu.map(x=>x.ten+' '+x.thieu).join(' · ')}</div>}
+          {th && th.thieu.length===0 && col.length>=th.chi_tieu && <div className="text-[10px] text-emerald-700 mb-1.5">✓ đủ chỉ tiêu tuần</div>}
+          <div className="space-y-2">{col.map(it=><div key={it.id}><Card it={it}/>{!chiXem && <select value={String(tuanCuaMuc(it)||'')} onChange={e=>upsertContentItem({id:it.id, tuan:Number(e.target.value)})} className="mt-1 text-[10px] border border-line rounded px-1 py-0.5 bg-white w-full" title="Đổi tuần">{Array.from({length:soTuan},(_,i)=>i+1).map(x=><option key={x} value={x}>Tuần {x}</option>)}</select>}</div>)}</div>
+        </div>; })}
+    </div>
+    {chuaTuan.length>0 && <div className="bg-white rounded-2xl border border-amber-200 overflow-hidden">
+      <div className="px-3 py-2 bg-amber-50 border-b text-sm font-semibold text-amber-700">⏳ Chưa xếp tuần ({chuaTuan.length}) — đặt ngày đăng dự kiến hoặc chọn tuần</div>
+      <div className="p-2 grid sm:grid-cols-2 lg:grid-cols-4 gap-2">{chuaTuan.map(it=><div key={it.id}><Card it={it}/>{!chiXem && <select value="" onChange={e=>upsertContentItem({id:it.id, tuan:Number(e.target.value)})} className="mt-1 text-[10px] border border-line rounded px-1 py-0.5 bg-white w-full"><option value="">— chọn tuần —</option>{Array.from({length:soTuan},(_,i)=>i+1).map(x=><option key={x} value={x}>Tuần {x}</option>)}</select>}</div>)}</div>
+    </div>}
   </div>;
 }
 // Ô "Sản xuất" trong bảng kế hoạch — cho biết nội dung này đang ở khâu nào
@@ -2707,7 +2809,7 @@ function ContentItemModal({edit, onClose}){
     if(!f.pillar_id) return notify('Chọn pillar','warn');
     if(!f.framework_id) return notify('Chọn nhóm kịch bản (framework)','warn');
     if(!f.kenh_id) return notify('Chọn kênh','warn');
-    const ok=await upsertContentItem({...(edit.id?{id:edit.id}:{}), loai:f.loai, dinh_dang:f.dinh_dang||null, tieu_de:f.tieu_de.trim(), loai_muc_tieu:f.loai_muc_tieu, pillar_id:f.pillar_id, framework_id:f.framework_id, san_pham_id:f.san_pham_id||null, kenh_id:f.kenh_id, thang:f.thang, trang_thai:f.trang_thai, pic:f.pic, chi_tiet:f.chi_tiet, links:f.links});
+    const ok=await upsertContentItem({...(edit.id?{id:edit.id}:{}), loai:f.loai, dinh_dang:f.dinh_dang||null, tuan:f.tuan==null?null:f.tuan, tieu_de:f.tieu_de.trim(), loai_muc_tieu:f.loai_muc_tieu, pillar_id:f.pillar_id, framework_id:f.framework_id, san_pham_id:f.san_pham_id||null, kenh_id:f.kenh_id, thang:f.thang, trang_thai:f.trang_thai, pic:f.pic, chi_tiet:f.chi_tiet, links:f.links});
     if(ok){ notify(edit.id?'Đã lưu':'Đã thêm nội dung'); onClose(); }
   };
   return <Modal open={true} onClose={onClose} title={(edit.id?'Sửa ':'Thêm ')+'nội dung'} wide>
@@ -2722,6 +2824,7 @@ function ContentItemModal({edit, onClose}){
       <Field label="Sản phẩm" hint="nên có để AI trích spec đúng"><Select value={f.san_pham_id} onChange={e=>set('san_pham_id',e.target.value)}><option value="">— chọn —</option>{(db.san_pham||[]).map(x=><option key={x.id} value={x.id}>{x.ten}</option>)}</Select></Field>
       <Field label="Kênh" required><Select value={f.kenh_id} onChange={e=>set('kenh_id',e.target.value)}><option value="">— chọn —</option>{(db.kenh||[]).map(x=><option key={x.id} value={x.id}>{x.ten}</option>)}</Select></Field>
       <Field label="Ngày đăng dự kiến" hint="để lên Lịch"><Input type="date" value={f.chi_tiet.ngay_dang||''} onChange={e=>setSub('chi_tiet','ngay_dang',e.target.value)}/></Field>
+      <Field label="Tuần trong tháng" hint={f.chi_tiet.ngay_dang?('tự suy từ ngày đăng: tuần '+(tuanCuaNgay(f.chi_tiet.ngay_dang)||'?')):'đặt tay khi chưa có ngày đăng'}><Select value={f.tuan==null?'':String(f.tuan)} onChange={e=>set('tuan',e.target.value===''?null:Number(e.target.value))}><option value="">— theo ngày đăng —</option>{[1,2,3,4,5,6].map(t=><option key={t} value={t}>Tuần {t}</option>)}</Select></Field>
       <Field label="Giai đoạn"><Select value={f.trang_thai} onChange={e=>set('trang_thai',e.target.value)}>{PIPELINE.map(s=><option key={s.k} value={s.k}>{s.label}</option>)}</Select></Field>
       <Field label="Định dạng nội dung" hint="quy định tool nào sẽ soạn (ADR-007)"><Select value={f.dinh_dang||''} onChange={e=>set('dinh_dang',e.target.value)}><option value="">— chưa quy định —</option>{Object.keys(DINH_DANG_FE).map(k=><option key={k} value={k}>{DINH_DANG_FE[k].icon} {DINH_DANG_FE[k].label}</option>)}</Select></Field>
       <Field label="Người phụ trách chính"><Select value={(f.pic&&f.pic.chinh)||''} onChange={e=>setSub('pic','chinh',e.target.value)}><option value="">—</option>{users.map(u=><option key={u.id} value={u.id}>{u.ho_ten}</option>)}</Select></Field>
@@ -3648,6 +3751,9 @@ function vietCuaToiFE(db, me){
     v.push({uu:UU.KHAN, icon:'🚀', ten:'Đăng tay: '+(a.tieu_de||'(không tên)'), meta:a.loi||'tới giờ mà chưa tự đăng được', page:'air'}));
   (db.air_posts||[]).filter(a=>a.trang_thai==='CHUAN_BI' && String(a.ngay_dang||'').slice(0,10)===homNay).forEach(a=>
     v.push({uu:UU.HOM_NAY, icon:'🚀', ten:'Đăng hôm nay: '+(a.tieu_de||'(không tên)'), meta:'xong checklist rồi đăng', page:'air'}));
+  // 3c. ADR-006: tuần này còn thiếu so với kế hoạch tháng (Marketing/Trưởng MKT/Admin)
+  { const ym=homNay.slice(0,7); const t=tuanCuaNgay(homNay); const th=t?thieuTuan(db,ym,t):null;
+    if(th && th.thieu.length && laStaffFE(me)) v.push({uu:UU.HOM_NAY, icon:'🗓️', ten:'Tuần '+t+(th.chi_tieu>th.co?(' còn thiếu '+(th.chi_tieu-th.co)+' bài theo kế hoạch tháng'):' đủ số bài nhưng lệch cơ cấu kế hoạch tháng'), meta:th.thieu.map(x=>x.ten+' '+x.thieu).join(' · '), page:'plan'}); }
   // 4b. ngân sách AI (ADR-005) — chỉ Admin/Trưởng MKT
   { const T=db.ai_thang; if(T && T.ngan_sach_usd>0 && T.pct!=null && T.pct>=T.canh_bao_pct && (me.vai_tro===ROLES.ADMIN||me.vai_tro===ROLES.TRUONG_MKT))
       v.push({uu: T.pct>=100?UU.KHAN:UU.HOM_NAY, icon:'🧠', ten:'Ngân sách AI tháng đã dùng '+Math.round(T.pct)+'%', meta:'$'+T.usd.toFixed(2)+' / $'+T.ngan_sach_usd+(T.pct>=100&&T.chan_khi_vuot?' — đang CHẶN bộ não của app':''), page:'ai'}); }
