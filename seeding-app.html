@@ -3114,6 +3114,29 @@ function CreativeStudio(){
   </div>;
 }
 
+// Cửa sổ Dựng video trong luồng: iframe công cụ (mode=dung) + nghe tín hiệu "đã gắn video" từ công cụ → tải lại db.
+// Nút "Dựng" chỉ mở khi kịch bản ĐÃ DUYỆT (gác ở thẻ Dựng video) — nội dung đi đúng thứ tự: soạn → duyệt → dựng → đăng.
+function DungVideoPopup({script, onClose}){
+  const { refresh, notify } = useApp();
+  const [gan,setGan]=useState(null);
+  const src=LOC_VIDEO_URL+'?mode=dung';
+  useEffect(()=>{ const h=e=>{ const d=e.data||{}; if(d.type!=='KINGSMEN_VIDEO_GAN') return; if(script&&d.script_id&&script.id&&d.script_id!==script.id) return;
+      setGan(d.media_url||true); if(typeof refresh==='function') refresh(); notify('🎞 Video đã gắn vào kịch bản'); };
+    window.addEventListener('message',h); return ()=>window.removeEventListener('message',h); },[script&&script.id]);
+  useEffect(()=>{ const h=e=>{ if(e.key==='Escape') onClose(); }; window.addEventListener('keydown',h); return ()=>window.removeEventListener('keydown',h); },[]);
+  return <div className="fixed inset-0 z-50 bg-ink/80 backdrop-blur-sm flex flex-col p-2 sm:p-4">
+    <div className="bg-white rounded-2xl shadow-lift flex flex-col flex-1 min-h-0 overflow-hidden">
+      <div className="flex items-center gap-2 px-3 py-2 border-b border-line">
+        <div className="font-display font-bold text-ink text-sm flex-1 min-w-0 truncate">🎬 Dựng video — {script.tieu_de||script.hook||'(không tên)'}</div>
+        {gan ? <StatusPill size="md" cls={TONE.ok}>✓ Đã gắn video về kịch bản</StatusPill>
+             : <span className="text-[11px] text-ink-muted hidden md:inline">📂 kho đã lọc → 🪄 AI DỰNG → 💾 KẾT XUẤT → 📤 Đưa lên Kho footage</span>}
+        <Btn variant="ghost" className="!px-2.5 !py-1.5 text-xs" onClick={()=>window.open(src,'_blank')} title="Nếu khung nhúng không cho chọn folder">↗ Tab mới</Btn>
+        <Btn variant={gan?'brand':'ghost'} className="!px-2.5 !py-1.5 text-xs" onClick={onClose}>{gan?'✓ Xong, quay lại kịch bản':'✕ Đóng'}</Btn>
+      </div>
+      <iframe src={src} title="Dựng video" className="flex-1 w-full border-0" style={{background:'#0f1418'}} allow="camera; microphone"/>
+    </div>
+  </div>;
+}
 function ScriptEditor({init, onClose, onDung, onMo}){
   const { db, upsertScript, deleteScript, fetchScriptVersions, aiSinhKichBan, aiSinhKichBanGemini, chuyenDinhDang, notify } = useApp();
   const brandVoice0 = (db.content_strategy||{}).brand_voice||'';
@@ -3195,6 +3218,10 @@ function ScriptEditor({init, onClose, onDung, onMo}){
   const remove=async()=>{ if(!f.id) return onClose(); if(!confirm('Xoá nội dung này?')) return; const ok=await deleteScript(f.id); if(ok){ notify('Đã xoá'); onClose(); } };
   const loadVers=async()=>{ if(!f.id) return; const r=await fetchScriptVersions(f.id); setVers(r.versions||[]); };
   const [chuyenBusy,setChuyenBusy]=useState(false);
+  // Dựng video là MỘT BƯỚC của luồng: mở công cụ ngay tại chỗ (popup), kịch bản đã duyệt nạp sẵn; dựng xong video tự gắn về đây
+  const [dungMo,setDungMo]=useState(false);
+  const moDung=()=>{ const s=cur.id?cur:f; try{ localStorage.setItem(KB_DUNG_KEY, JSON.stringify({ script_id:s.id, tieu_de:s.tieu_de||s.hook||'', text:kichBanSangCongCu(s), san_pham_id:s.san_pham_id||null, kenh_id:s.kenh_id||null, luc:Date.now() })); }catch(e){}
+    setDungMo(true); };
   const chuyen=async(k)=>{ if(!f.id||dirty) return; setChuyenBusy(true); const r=await chuyenDinhDang(f.id, k); setChuyenBusy(false);
     if(r&&r.ok){ notify('Đã tạo bản '+DINH_DANG_FE[k].label+' — đang mở'); onMo&&onMo(r.id); }
     else notify((r&&r.msg)||'Không chuyển được','err'); };
@@ -3347,7 +3374,7 @@ function ScriptEditor({init, onClose, onDung, onMo}){
               <video src={vu} controls preload="metadata" className="w-full rounded-xl bg-ink max-h-72"/>
               <div className="text-[11px] text-ink-muted mt-1">Đã dựng bằng công cụ{(cur.chi_tiet||{}).video_luc?' · '+fmtDate((cur.chi_tiet||{}).video_luc):''} · đã có trong Kho footage · bài Đăng sẽ tự lấy video này.</div>
             </> : <div className="text-[11px] text-ink-muted">Chưa có video. Bấm nút dưới để mở công cụ Dựng video với kịch bản này nạp sẵn; kết xuất xong bấm <b>📤 Đưa lên Kho footage</b> là video tự gắn về đây.</div>}
-            <Btn variant={vu?'ghost':'soft'} className="w-full mt-2" disabled={!!ly} onClick={()=>onDung&&onDung(cur.id?cur:f)} title={ly}>{vu?'🎬 Dựng lại phiên bản mới':'🎬 Dựng video từ kịch bản này'}</Btn>
+            <Btn variant={vu?'ghost':'soft'} className="w-full mt-2" disabled={!!ly} onClick={moDung} title={ly}>{vu?'🎬 Dựng lại phiên bản mới':'🎬 Dựng video từ kịch bản này'}</Btn>
             {ly && <div className="text-[11px] text-amber-600 mt-1">{ly}</div>}
           </Card>; })()}
         {/* Lát 3 — chuyển sang định dạng khác: tạo bản nháp mới, bản này giữ nguyên */}
@@ -3383,6 +3410,7 @@ function ScriptEditor({init, onClose, onDung, onMo}){
       </div>
     </div>
 
+    {dungMo && <DungVideoPopup script={cur.id?cur:f} onClose={()=>setDungMo(false)}/>}
     {vers && <Modal open={true} onClose={()=>setVers(null)} title="Lịch sử phiên bản" wide>
       {vers.length===0 ? <Empty>Chưa có lịch sử.</Empty> : <div className="space-y-2">{vers.map(v=><div key={v.id} className="rounded-xl border border-line p-2">
         <div className="flex items-center justify-between"><span className="text-xs font-semibold text-ink">v{v.version} · {v.created_by_name||''}</span><span className="text-[10px] text-slate-400">{fmtDate(v.created_at)}</span></div>

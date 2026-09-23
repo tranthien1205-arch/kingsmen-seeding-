@@ -360,6 +360,48 @@
           border-top:1px dashed var(--border);padding-top:10px}
   }
 </style>
+<style id="wsCss">
+  /* ===== BÀN DỰNG (đợt A, 2026-09-23): nền tối kiểu CapCut, 3 khung + timeline dưới. Chỉ áp trong #tab-dung.ws ===== */
+  #tab-dung.ws{background:#0f1418;color:#e6edf3;border-radius:14px;padding:12px 12px 4px}
+  #tab-dung.ws .card{background:#161c22;box-shadow:none;border:1px solid #232c35;color:#e6edf3;margin-bottom:0}
+  #tab-dung.ws .note,#tab-dung.ws .empty{color:#8fa0ad}
+  #tab-dung.ws b,#tab-dung.ws label{color:#dbe4ec}
+  #tab-dung.ws .stbtn{background:#1c242c;border-color:#2b3640;color:#dbe4ec}
+  #tab-dung.ws .stbtn:hover{border-color:#5dcaa5;color:#9fe1cb}
+  #tab-dung.ws .stbtn-ai,#tab-dung.ws .stbtn-ai:hover{background:var(--teal);border-color:var(--teal);color:#fff}
+  #tab-dung.ws .stchip{background:#1c242c;border-color:#2b3640;color:#c7d2db}
+  #tab-dung.ws .stchip.ston{background:#123c31;border-color:#1d5a49;color:#9fe1cb}
+  #tab-dung.ws textarea,#tab-dung.ws input:not([type=checkbox]),#tab-dung.ws select{background:#0f1418;color:#e6edf3;border-color:#2b3640}
+  #tab-dung.ws .take{background:#1c242c;border-color:#2b3640} #tab-dung.ws .take .vd{color:#8fa0ad}
+  #tab-dung.ws .mswitch{background:#161c22} #tab-dung.ws .mswitch span{color:#9fe1cb} #tab-dung.ws .mswitch span.on{background:var(--teal);color:#fff}
+  #tab-dung.ws details>summary{color:#c7d2db}
+  #tab-dung.ws #timShotBox{background:#121a20 !important;border-color:#1d5a49 !important}
+  #tab-dung.ws #khoPanel>summary{background:#161c22 !important;box-shadow:none !important;color:#c7d2db;border:1px solid #232c35}
+  #tab-dung.ws .streview{background:#3a2c12;border-color:#4a3a18} #tab-dung.ws .streview #stReviewText{color:#fac775}
+  #tab-dung.ws .tldrop{border-color:#2b3640;color:#8fa0ad}
+  #tab-dung.ws .tlcard .tll2{color:#c7d2db}
+  #tab-dung.ws .tlcard.sel .tlth{box-shadow:0 0 0 2px #5dcaa5}
+  #tab-dung.ws .stseg .pre,#tab-dung.ws .stseg .post{background:#2b3640}
+  #tab-dung.ws .ddbox{background:#161c22;border-color:#2b3640;color:#dbe4ec}
+  #tab-dung.ws .streview,#tab-dung.ws .field label{color:#c7d2db}
+  /* lưới */
+  #dungWs{display:grid;grid-template-columns:minmax(270px,320px) minmax(0,1fr) minmax(300px,350px);gap:10px;align-items:stretch;margin-bottom:10px}
+  #wsLeft,#wsRight{display:flex;flex-direction:column;gap:10px;min-width:0}
+  #wsLeft>.card,#wsRight>.card{padding:12px 14px;max-height:calc(100vh - 340px);overflow:auto;min-height:120px}
+  #wsCenter{background:#0b0f13;border:1px solid #232c35;border-radius:var(--radius);display:flex;align-items:flex-start;justify-content:center;padding:14px;min-height:0}
+  #tab-dung.ws #prevCol{width:clamp(200px, calc((100vh - 330px)*9/16), 100%) !important}
+  #tab-dung.ws #prevCol .stprev{width:100%}
+  #wsBottom{grid-column:1/-1}
+  #wsBottom>.card{padding:10px 14px}
+  #tab-dung.ws #tlRow{padding-bottom:6px}
+  #wsDrawer{display:flex;flex-direction:column;gap:10px;margin-top:10px}
+  #wsDrawer>details>summary{cursor:pointer;font-weight:700;font-size:12.5px;color:#c7d2db;list-style:none}
+  #wsDrawer>details>summary::before{content:"▸ ";color:#5dcaa5} #wsDrawer>details[open]>summary::before{content:"▾ "}
+  #tab-dung.ws #xuatBar{background:#161c22;border:1px solid #2b3640;box-shadow:0 -8px 24px rgba(0,0,0,.45)}
+  #timShotBox:not(.hidden) ~ #khoTrong{display:none}
+  #tab-dung.ws #khoCuon{max-height:calc(100vh - 520px) !important;min-height:140px !important}
+  @media (max-width:1100px){ #dungWs{grid-template-columns:1fr} #wsCenter{order:-1;min-height:0} #wsLeft>.card,#wsRight>.card{max-height:none} }
+</style>
 </head>
 <body>
 <div id="toast" class="toast hidden"></div>
@@ -5921,6 +5963,8 @@ function xuatLenKho(idx){
         .then(function(y){
           if(!y.ok) throw new Error((y.j&&y.j.error)||"không gắn được vào kịch bản");
           announce("✅ Đã đưa lên Kho footage và gắn vào kịch bản “"+(kb.tieu_de||"")+"” — quay lại Creative Studio sẽ thấy video, bài Đăng sẽ tự lấy video này.","ok");
+          // đang mở trong cửa sổ của app → báo để app tải lại kịch bản (không cần F5)
+          try{ if(window.parent && window.parent!==window) window.parent.postMessage({type:"KINGSMEN_VIDEO_GAN", script_id:kb.script_id, media_url:d.media_url}, location.origin); }catch(_){}
         });
     })
     .catch(function(err){ if(e.daLen) announce("Video đã lên Kho footage nhưng "+err.message+" — vào Creative Studio gắn tay.","err"); else thatBai(err.message); });
@@ -7837,9 +7881,61 @@ if(!window.showDirectoryPicker){
 // ====== NỐI VỚI APP KINGSMEN — 2 công cụ trên cùng một mã nguồn (không tách file để khỏi thành 2 bản song song) ======
 //   ?mode=loc  → "Lọc source sau buổi quay": chỉ tab Lọc (+ Dạy AI, Cài đặt)
 //   ?mode=dung → "Dựng video ngắn": chỉ tab Dựng (+ Dạy AI, Cài đặt); tự nạp kịch bản Creative Studio gửi sang
+// ===== BÀN DỰNG kiểu CapCut (đợt A): di chuyển các khối có sẵn vào lưới 3 khung + timeline dưới. Giữ nguyên mọi id/hàm. =====
+function layoutDungWorkspace(){
+  try{
+    var tab=document.getElementById("tab-dung"), chinh=document.getElementById("dungChinh");
+    if(!tab||!chinh||tab.classList.contains("ws")) return;
+    var g=function(id){ return document.getElementById(id); };
+    var editCard=g("editCard"), cfg=g("cfgDungCard"), sanKhau=g("sanKhauCard"), lib=g("libCard"), xuat=g("xuatBar"),
+        prevCol=g("prevCol"), stBeats=g("stBeats"), timShot=g("timShotBox"), seg=g("segWrap"), tlBox=g("stTimeline");
+    if(!(editCard&&sanKhau&&lib&&xuat&&prevCol&&stBeats&&timShot&&seg&&tlBox)) return;
+    var tlCard=tlBox.closest(".card");
+    var mk=function(id,cls){ var d=document.createElement("div"); if(id) d.id=id; if(cls) d.className=cls; return d; };
+    var ws=mk("dungWs"), left=mk("wsLeft"), center=mk("wsCenter"), right=mk("wsRight"), bottom=mk("wsBottom"), drawer=mk("wsDrawer");
+    // TRÁI: nguồn + kịch bản, rồi kho shot (tìm/lọc/kéo thả)
+    left.appendChild(editCard);
+    var khoCard=mk(null,"card"); khoCard.appendChild(timShot);
+    var khoTrong=mk("khoTrong","empty"); khoTrong.innerHTML="🧺 Kho shot hiện ở đây sau khi chọn nguồn (đổi nguồn ▾ ở trên, hoặc mở kho đã lọc)."; khoCard.appendChild(khoTrong);
+    left.appendChild(khoCard);
+    // GIỮA: khung xem trước 9:16 + nút phát
+    center.appendChild(prevCol);
+    // PHẢI: bảng chỉnh cảnh đang chọn (lời bình · giây · đổi shot) + đoạn cắt
+    var insp=mk(null,"card"); var tieu=document.createElement("div"); tieu.innerHTML='<b style="font-size:11px;letter-spacing:.4px;color:#8fa0ad">✎ CẢNH ĐANG CHỌN — bấm một cảnh ở timeline</b>'; tieu.style.marginBottom="6px";
+    insp.appendChild(tieu); insp.appendChild(stBeats); insp.appendChild(seg); right.appendChild(insp);
+    // DƯỚI: timeline dải ảnh (rộng theo giây, kéo mép đổi giây, kéo đổi chỗ, thả shot từ kho)
+    bottom.appendChild(tlCard);
+    ws.appendChild(left); ws.appendChild(center); ws.appendChild(right); ws.appendChild(bottom);
+    // NGĂN KÉO: kho nguồn đã lọc · cấu hình dựng · thư viện bản xuất — gập lại, mở khi cần
+    var khoPanel=g("khoPanel"); if(khoPanel) drawer.appendChild(khoPanel);
+    var wrapLib=document.createElement("details"); wrapLib.className="card"; wrapLib.style.padding="8px 14px";
+    var sLib=document.createElement("summary"); sLib.textContent="📚 Thư viện bản xuất — mỗi lần kết xuất một phiên bản (v1, v2…), gói dựng nằm cùng folder"; wrapLib.appendChild(sLib);
+    lib.style.marginBottom="0"; lib.style.boxShadow="none"; lib.style.padding="8px 0 4px"; wrapLib.appendChild(lib);
+    drawer.appendChild(wrapLib);   // cfgDungCard đã nằm ở sub-tab ⚙ Cấu hình dựng (dungCau) — không lấy đi
+    sanKhau.parentNode.removeChild(sanKhau);
+    chinh.insertBefore(ws, chinh.firstChild);
+    chinh.insertBefore(xuat, ws.nextSibling);
+    chinh.insertBefore(drawer, xuat.nextSibling);
+    // chữ hướng dẫn theo bố cục mới
+    var hd=tlCard.querySelector("b"); if(hd) hd.textContent="🎬 TIMELINE — bấm cảnh để chỉnh ở bảng bên phải · kéo mép phải ô để đổi giây · kéo ô để đổi chỗ · kéo shot từ kho bên trái thả vào";
+    tab.classList.add("ws");
+  }catch(e){ try{ console.error("layoutDungWorkspace", e); }catch(_){} }
+}
 (function(){
   var MODE=""; try{ MODE=new URLSearchParams(location.search).get("mode")||""; }catch(e){}
   window.APP_MODE=MODE;
+  layoutDungWorkspace();
+  // Phím tắt bàn dựng (đợt B): Space phát/dừng · ←/→ cảnh trước/sau · Delete xoá cảnh · [ ] bớt/thêm 1 giây. Không bắt khi đang gõ.
+  document.addEventListener("keydown", function(ev){
+    var tab=document.getElementById("tab-dung"); if(!tab || tab.classList.contains("hidden")) return;
+    var tg=ev.target, tagN=(tg&&tg.tagName||"").toLowerCase();
+    if(tagN==="input"||tagN==="textarea"||tagN==="select"||(tg&&tg.isContentEditable)) return;
+    if(ev.key===" "){ ev.preventDefault(); if(typeof togglePlayAll==="function") togglePlayAll(); return; }
+    if(!TL.length || selBeat<0) return;
+    if(ev.key==="ArrowLeft"||ev.key==="ArrowRight"){ ev.preventDefault(); if(typeof chuyenCanh==="function") chuyenCanh(ev.key==="ArrowLeft"?-1:1); return; }
+    if(ev.key==="Delete"||ev.key==="Backspace"){ ev.preventDefault(); if(window._dangLapAI) return; TL.splice(selBeat,1); if(selBeat>=TL.length) selBeat=TL.length-1; renderEditor(); if(selBeat>=0&&typeof selectBeat==="function") selectBeat(selBeat); return; }
+    if(ev.key==="["||ev.key==="]"){ ev.preventDefault(); TL[selBeat].dur=Math.max(1,Math.min(60,TL[selBeat].dur+(ev.key==="]"?1:-1))); renderEditor(); return; }
+  });
   if(MODE==="loc"||MODE==="dung"){
     var an=(MODE==="loc")?"dung":"loc";
     document.querySelectorAll('.tabs .tab[data-tab="'+an+'"]').forEach(function(b){ b.style.display="none"; });
