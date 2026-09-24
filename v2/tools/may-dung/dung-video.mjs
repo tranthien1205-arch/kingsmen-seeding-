@@ -88,7 +88,7 @@ export default async function dung({ app, goiApp, lenh, dir, log, may, script })
     if (!c.shots || !c.shots.length) {
       c.shots = []; let con = c.d, truocCo = null, lap = 0;
       const ds = [c.ts, ...(c.ung_vien || []).map((u) => byId[u.id])].filter((t, i, a) => t && a.indexOf(t) === i);
-      const hang = [ds[0], ...ds.slice(1).filter((t) => !daDung.has(t.id)), ...ds.slice(1).filter((t) => daDung.has(t.id))];
+      const chuaDung = ds.filter((t) => !daDung.has(t.id)), daDungRoi = ds.filter((t) => daDung.has(t.id)); const hang = chuaDung.length ? [...chuaDung, ...daDungRoi] : ds;   // clip đã lên hình ở cảnh trước thì nhường clip chưa dùng (đo 24/09: một clip mở đầu 3 cảnh liền)
       while (con > 0.3 && lap < hang.length * 2 && c.shots.length < 6) {
         const t = hang[lap % hang.length]; lap++; const laAnh = t.media_type === "IMAGE"; const dai = laAnh ? 99 : (daiCua(t) || 99);
         let can = con > G.dai_max ? G.dai_tb : con; if (con - can < G.dai_min * 0.6) can = con; can = Math.min(can, dai); if (can < 0.6 && con > 0.6) continue;
