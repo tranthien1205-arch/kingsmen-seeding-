@@ -124,6 +124,8 @@ async function ensureSchema(env){
     // tac_nhan: NGUOI | AGENT — luật L4: máy làm gì cũng có dấu vết
     `CREATE TABLE IF NOT EXISTS audit (id TEXT PRIMARY KEY, at TEXT, tac_nhan TEXT, by_id TEXT, by_name TEXT, action TEXT, entity TEXT, entity_id TEXT, detail TEXT)`,
     `CREATE TABLE IF NOT EXISTS module_config (id TEXT PRIMARY KEY, cau_hinh TEXT, updated_at TEXT, updated_by_name TEXT)`,
+    // khoá API dán từ giao diện (chủ 24/09) — giá trị mã hoá AES-GCM bằng két riêng; chỉ trả 4 ký tự cuối
+    `CREATE TABLE IF NOT EXISTS khoa_api (ten TEXT PRIMARY KEY, gia_tri TEXT, iv TEXT, duoi TEXT, updated_at TEXT, updated_by_name TEXT)`,
     `CREATE TABLE IF NOT EXISTS ai_usage (id TEXT PRIMARY KEY, at TEXT, thang TEXT, provider TEXT, model TEXT, tinh_nang TEXT, user_id TEXT, user_name TEXT, tokens_vao INTEGER DEFAULT 0, tokens_ra INTEGER DEFAULT 0, chi_phi_usd REAL DEFAULT 0, ok INTEGER DEFAULT 1, ms INTEGER DEFAULT 0, loi TEXT)`,
     `CREATE INDEX IF NOT EXISTS idx_ai_usage_thang ON ai_usage(thang)`,
     // Chiến lược (G1) — có phiên bản; chốt = tăng phien_ban (đợt 2 làm đầy đủ)
@@ -1222,6 +1224,39 @@ async function dieuPhoi(env, {thu=false, chi=null}={}){
 // ============================================================
 const docJSON=(v,mac)=>{ try{ const o=JSON.parse(v||''); return o==null?mac:o; }catch(e){ return mac; } };
 function layToken(env, kenh){ const ma=String((kenh&&kenh.api_ma)||'').trim().toUpperCase().replace(/[^A-Z0-9_]/g,''); return ma? (env['TOKEN_'+ma]||null) : null; }
+// ===== KHOÁ API DÁN TỪ GIAO DIỆN (Máy › Bộ não AI › Khoá API) — chủ 24/09 "có UI ở app để ghép khoá" =====
+// Ưu tiên: secret Cloudflare (wrangler / dan-khoa.bat) > khoá dán ở app. Khoá dán lưu D1, mã hoá AES-GCM bằng két riêng
+// (module_config 'ket'); không bao giờ trả giá trị ra ngoài, chỉ "đã có …4 ký tự cuối". Kém secret Cloudflare một bậc
+// (ai đọc được cả D1 lẫn két thì mở được) — đổi lấy việc chủ tự cắm ngay trên app, không cần máy có wrangler.
+const KHOA_CHO_PHEP=[['ANTHROPIC_API_KEY','Bộ não Claude: kịch bản, chấm ý tưởng, soạn bài, báo cáo'],['GOOGLE_TTS_KEY','Giọng đọc Google cho video nháp'],['GEMINI_API_KEY','Gemini (dự phòng, rẻ)'],['OPENAI_API_KEY','OpenAI (dự phòng)'],['GROQ_API_KEY','Groq: Llama 3.3 70B rất nhanh'],['DEEPINFRA_API_KEY','DeepInfra: Qwen 72B'],['VLLM_API_KEY','vLLM máy chủ tự thuê'],['YOUTUBE_API_KEY','Xu hướng YouTube Việt Nam'],['N8N_WEBHOOK_URL','n8n: gửi báo cáo Zalo/mail, đăng bài'],['N8N_TOKEN','n8n: khoá bảo vệ tuyến ingest']];
+const tenKhoaHopLe=t=>/^(ANTHROPIC_API_KEY|GOOGLE_TTS_KEY|GEMINI_API_KEY|OPENAI_API_KEY|GROQ_API_KEY|DEEPINFRA_API_KEY|VLLM_API_KEY|YOUTUBE_API_KEY|N8N_WEBHOOK_URL|N8N_TOKEN|TOKEN_[A-Z0-9_]{1,40})$/.test(String(t||''));
+let KHOA_CACHE={luc:0, ds:null};
+const b64k=b=>btoa(String.fromCharCode(...new Uint8Array(b))), unb64k=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));
+async function ketKhoa(env){ const r=await env.DB.prepare(`SELECT cau_hinh FROM module_config WHERE id='ket'`).first(); let k=r?docJSON(r.cau_hinh,{}).k:null;
+  if(!k){ k=b64k(crypto.getRandomValues(new Uint8Array(32))); await env.DB.prepare(`INSERT INTO module_config (id,cau_hinh,updated_at,updated_by_name) VALUES ('ket',?,?,'hệ thống') ON CONFLICT(id) DO UPDATE SET cau_hinh=excluded.cau_hinh`).bind(JSON.stringify({k}), nowISO()).run(); }
+  return crypto.subtle.importKey('raw', unb64k(k), 'AES-GCM', false, ['encrypt','decrypt']); }
+async function maHoa(env, s){ const key=await ketKhoa(env); const iv=crypto.getRandomValues(new Uint8Array(12)); const ct=await crypto.subtle.encrypt({name:'AES-GCM', iv}, key, new TextEncoder().encode(s)); return { gia_tri:b64k(ct), iv:b64k(iv) }; }
+async function giaiMa(env, r){ try{ const key=await ketKhoa(env); const pt=await crypto.subtle.decrypt({name:'AES-GCM', iv:unb64k(r.iv)}, key, unb64k(r.gia_tri)); return new TextDecoder().decode(pt); }catch(e){ return ''; } }
+/** Phủ khoá dán ở app lên env (chỉ khoá env CHƯA có). Trả env mới, giữ mọi binding (DB, MEDIA, ASSETS). */
+async function napKhoa(env){
+  if(!env||!env.DB||env.__env_goc) return env;
+  if(!KHOA_CACHE.ds || Date.now()-KHOA_CACHE.luc>60000){ try{ const ds={}; const rows=(await env.DB.prepare(`SELECT ten,gia_tri,iv,duoi FROM khoa_api`).all()).results; for(const r of rows){ const v=await giaiMa(env,r); if(v) ds[r.ten]={v, duoi:r.duoi}; } KHOA_CACHE={luc:Date.now(), ds}; }catch(e){ return env; } }
+  const them={}, app={}; for(const [t,x] of Object.entries(KHOA_CACHE.ds||{})) if(!env[t]){ them[t]=x.v; app[t]=x.duoi; }
+  return Object.assign({}, env, them, { __khoa_app: app, __env_goc: env }); }
+/** Thử khoá với nhà cung cấp trước khi lưu — gọi nhẹ nhất có thể (danh sách mô hình / giọng, hoặc 5 token). null = không có cách thử. */
+async function thuKhoa(ten, key){ try{
+  const jOf=async r=>{ try{ return await r.json(); }catch(e){ return {}; } }; const loiCua=(j,r)=>(j&&j.error&&(j.error.message||j.error))||('HTTP '+r.status);
+  if(ten==='ANTHROPIC_API_KEY'){ const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'content-type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01'},body:JSON.stringify({model:AI_MODEL_MAC_DINH, max_tokens:5, messages:[{role:'user',content:'ping'}]})}); const j=await jOf(r); return r.ok?{ok:true, ghi:'Claude trả lời được'}:{ok:false, loi:String(loiCua(j,r)).slice(0,160)}; }
+  if(ten==='GOOGLE_TTS_KEY'){ const r=await fetch('https://texttospeech.googleapis.com/v1/voices?languageCode=vi-VN&key='+encodeURIComponent(key)); const j=await jOf(r); return r.ok?{ok:true, ghi:((j.voices||[]).length)+' giọng vi-VN'}:{ok:false, loi:String(loiCua(j,r)).slice(0,160)}; }
+  if(ten==='GEMINI_API_KEY'){ const r=await fetch('https://generativelanguage.googleapis.com/v1beta/models?key='+encodeURIComponent(key)); const j=await jOf(r); return r.ok?{ok:true, ghi:((j.models||[]).length)+' mô hình'}:{ok:false, loi:String(loiCua(j,r)).slice(0,160)}; }
+  if(ten==='OPENAI_API_KEY'||ten==='GROQ_API_KEY'||ten==='DEEPINFRA_API_KEY'){ const goc=ten==='GROQ_API_KEY'?'https://api.groq.com/openai/v1':ten==='DEEPINFRA_API_KEY'?'https://api.deepinfra.com/v1/openai':'https://api.openai.com/v1'; const r=await fetch(goc+'/models',{headers:{authorization:'Bearer '+key}}); const j=await jOf(r); return r.ok?{ok:true, ghi:((j.data||[]).length)+' mô hình'}:{ok:false, loi:String(loiCua(j,r)).slice(0,160)}; }
+  if(ten==='YOUTUBE_API_KEY'){ const r=await fetch('https://www.googleapis.com/youtube/v3/videoCategories?part=snippet&regionCode=VN&key='+encodeURIComponent(key)); const j=await jOf(r); return r.ok?{ok:true, ghi:'YouTube Data API trả lời'}:{ok:false, loi:String(loiCua(j,r)).slice(0,160)}; }
+  return null; }catch(e){ return {ok:false, loi:String(e.message||e).slice(0,120)}; } }
+/** Danh sách khoá cho màn Khoá API (Admin): tên, dùng cho, đã có?, nguồn (wrangler | app), 4 ký tự cuối. Không bao giờ có giá trị. */
+async function dsKhoaApi(env){ let kenh=[]; try{ kenh=(await env.DB.prepare(`SELECT ten, api_ma FROM kenh WHERE COALESCE(api_ma,'')<>''`).all()).results; }catch(e){}
+  const ds=[...KHOA_CHO_PHEP.map(([ten,dung])=>({ten, dung_cho:dung})), ...kenh.map(k=>({ten:'TOKEN_'+String(k.api_ma).toUpperCase().replace(/[^A-Z0-9_]/g,''), dung_cho:'Token đăng bài kênh '+k.ten})).filter(x=>tenKhoaHopLe(x.ten))];
+  const app=env.__khoa_app||{}, goc=env.__env_goc||env; let rows=[]; try{ rows=(await env.DB.prepare(`SELECT ten,duoi,updated_at,updated_by_name FROM khoa_api`).all()).results; }catch(e){} const byTen=Object.fromEntries(rows.map(r=>[r.ten,r]));
+  return ds.map(d=>{ const wr=!!goc[d.ten]&&!app[d.ten]; return {...d, co:!!env[d.ten], nguon: wr?'wrangler':(byTen[d.ten]?'app':null), duoi: wr?'':(byTen[d.ten]?byTen[d.ten].duoi:'')   /* khoá wrangler chỉ là cờ, không lộ ký tự nào (luật ADR-001) */, luc: byTen[d.ten]?byTen[d.ten].updated_at:null, boi: byTen[d.ten]?byTen[d.ten].updated_by_name:null, thu_duoc: ['ANTHROPIC_API_KEY','GOOGLE_TTS_KEY','GEMINI_API_KEY','OPENAI_API_KEY','GROQ_API_KEY','DEEPINFRA_API_KEY','YOUTUBE_API_KEY'].includes(d.ten)}; }); }
 async function bootstrap(env, u){
   const all=async(s,...a)=>(await env.DB.prepare(s).bind(...a).all()).results;
   const staff=isStaff(u), xem=canXemMkt(u);
@@ -1297,6 +1332,7 @@ async function bootstrap(env, u){
     // khoá Trạm không bao giờ ra khỏi server — chỉ cờ co_khoa ở tram
     module_config: xem ? {...cfg, tram:{...(cfg.tram||{}), khoa:undefined}} : {duyet:cfg.duyet},
     ai_thang: xem ? await tongHopAI(env, thangHienTai()) : null,
+    khoa_api: (u&&u.vai_tro===ROLES.ADMIN) ? await dsKhoaApi(env) : null,   // màn Khoá API (chỉ Admin)
     san_sang: { tts:!!env.GOOGLE_TTS_KEY, gemini:!!env.GEMINI_API_KEY, openai:!!env.OPENAI_API_KEY,  ai:!!env.ANTHROPIC_API_KEY, youtube:!!env.YOUTUBE_API_KEY, n8n:!!(env.N8N_TOKEN&&env.N8N_WEBHOOK_URL), media:!!env.MEDIA },
     // ADR-004: Trạm — cờ có khoá (không bao giờ trả khoá), nhịp tim & phiên, lệnh/lô gần đây
     tram: xem ? { co_khoa:!!chuoi((cfg.tram||{}).khoa), bat:(cfg.tram||{}).bat!==false, trang_thai: await docTramTrangThai(env),
@@ -1864,6 +1900,15 @@ async function handleApi(request, env){
   if((m=path.match(/^\/seeding\/nuoi\/([^/]+)\/huy$/)) && method==='POST'){ if(!isStaff(me)) return json({error:'Không có quyền'},403); await env.DB.prepare(`UPDATE nuoi_seeding SET trang_thai='HUY' WHERE id=? AND trang_thai IN ('CHO','DANG_GUI')`).bind(m[1]).run(); return json({ db: await bootstrap(env,me) }); }
   if((m=path.match(/^\/seeding\/lead\/([^/]+)$/)) && method==='PATCH'){ if(!isStaff(me)) return json({error:'Không có quyền'},403); const l=await env.DB.prepare(`SELECT * FROM lead_seeding WHERE id=?`).bind(m[1]).first(); if(!l) return json({error:'Không tìm thấy'},404); const tt=['MOI','DA_TRA_LOI','CHUYEN_SALE'].includes(String(body.trang_thai||'').toUpperCase())?String(body.trang_thai).toUpperCase():l.trang_thai;
     await env.DB.prepare(`UPDATE lead_seeding SET trang_thai=?, ghi_chu=?, tra_loi_at=CASE WHEN ?<>'MOI' THEN ? ELSE tra_loi_at END, tra_loi_boi=CASE WHEN ?<>'MOI' THEN ? ELSE tra_loi_boi END WHERE id=?`).bind(tt, body.ghi_chu!=null?chuoi(body.ghi_chu,500):l.ghi_chu, tt, nowISO(), tt, me.ho_ten, l.id).run(); if(tt!=='MOI') await env.DB.prepare(`UPDATE cong_viec SET trang_thai='XONG', xong_at=?, xong_boi=? WHERE loai='LEAD_SEEDING' AND doi_tuong_id=? AND trang_thai='MO'`).bind(nowISO(), me.ho_ten, l.id).run(); return json({ db: await bootstrap(env,me) }); }
+  // ===== KHOÁ API dán từ giao diện (Admin) — PUT lưu (thử trước với nhà cung cấp), DELETE gỡ; khoá wrangler không đè được =====
+  if((m=path.match(/^\/khoa-api\/([A-Z0-9_]+)$/)) && (method==='PUT'||method==='DELETE')){ if(me.vai_tro!==ROLES.ADMIN) return json({error:'Chỉ Admin cắm khoá'},403); const ten=m[1]; if(!tenKhoaHopLe(ten)) return json({error:'Tên khoá không nằm trong danh sách cho phép'},400);
+    const goc=env.__env_goc||env; if(goc[ten]&&!(env.__khoa_app||{})[ten]) return json({error:'Khoá này đang cắm bằng wrangler secret trên Cloudflare — app không đè được; gỡ ở Cloudflare (wrangler secret delete '+ten+') rồi dán lại ở đây'},409);
+    if(method==='DELETE'){ await env.DB.prepare(`DELETE FROM khoa_api WHERE ten=?`).bind(ten).run(); KHOA_CACHE={luc:0, ds:null}; await logAudit(env,me,'gỡ khoá API','khoa_api',ten,''); return json({ db: await bootstrap(await napKhoa(goc),me) }); }
+    const gt=String(body.gia_tri||'').trim(); if(gt.length<8||gt.length>4000||/\s/.test(gt)) return json({error:'Khoá không hợp lệ (quá ngắn, quá dài hoặc có khoảng trắng)'},400);
+    let thu=null; if(body.thu!==false){ thu=await thuKhoa(ten, gt); if(thu&&thu.ok===false&&!body.van_luu) return json({error:'Thử khoá không được: '+thu.loi+' — kiểm lại rồi dán lại, hoặc bấm Vẫn lưu', thu},422); }
+    const mh=await maHoa(env, gt); await env.DB.prepare(`INSERT INTO khoa_api (ten,gia_tri,iv,duoi,updated_at,updated_by_name) VALUES (?,?,?,?,?,?) ON CONFLICT(ten) DO UPDATE SET gia_tri=excluded.gia_tri, iv=excluded.iv, duoi=excluded.duoi, updated_at=excluded.updated_at, updated_by_name=excluded.updated_by_name`).bind(ten, mh.gia_tri, mh.iv, gt.slice(-4), nowISO(), me.ho_ten).run();
+    KHOA_CACHE={luc:0, ds:null}; await logAudit(env,me,'cắm khoá API','khoa_api',ten,'…'+gt.slice(-4)+(thu?(' · thử: '+(thu.ok?'được':'không')):''));
+    return json({ db: await bootstrap(await napKhoa(goc),me), thu }); }
   // ===== ADR-009 — bộ não AI: mô hình, định tuyến, kho mẫu, huấn luyện, phiên bản =====
   if(path==='/ai/mo-hinh' && method==='POST'){ if(me.vai_tro!==ROLES.ADMIN) return json({error:'Chỉ Admin thêm mô hình'},403); const id=chuoi(body.id,60).toLowerCase().replace(/[^a-z0-9-]/g,'-'); if(!id||!chuoi(body.ten)) return json({error:'Thiếu id/tên'},400); if(await docMoHinh(env,id)) return json({error:'Trùng id'},409);
     const kenv=chuoi(body.khoa_env,60).replace(/[^A-Z0-9_]/g,''); await env.DB.prepare(`INSERT INTO mo_hinh (id,ten,nha_cung_cap,loai,cach_goi,model_id,gia_vao,gia_ra,don_vi,kha_nang,trang_thai,ghi_chu,created_at,updated_at,base_url,khoa_env) VALUES (?,?,?,?,?,?,?,?,?,'[]','BAT',?,?,?,?,?)`).bind(id, chuoi(body.ten,80), chuoi(body.nha_cung_cap,30)||'anthropic', ['NGON_NGU','NHIN','NGHE','TTS','ANH'].includes(body.loai)?body.loai:'NGON_NGU', body.cach_goi==='MAY_GHEP'?'MAY_GHEP':'API', chuoi(body.model_id,120), Math.max(0,so(body.gia_vao)), Math.max(0,so(body.gia_ra)), body.don_vi==='1M_ky_tu'?'1M_ky_tu':'1M_token', chuoi(body.ghi_chu,300), nowISO(), nowISO(), chuoi(body.base_url,300), kenv||null).run(); await logAudit(env,me,'thêm mô hình AI','mo_hinh',id,chuoi(body.ten,80)); return json({ db: await bootstrap(env,me), id }); }
@@ -1987,9 +2032,10 @@ async function xoaMoPhong(env, me){
 }
 
 export default {
-  async scheduled(controller, env, ctx){ ctx.waitUntil(dieuPhoi(env).catch(()=>{})); },
+  async scheduled(controller, env, ctx){ ctx.waitUntil((async()=>dieuPhoi(await napKhoa(env)))().catch(()=>{})); },
   async fetch(request, env, ctx){
     const url=new URL(request.url);
+    env=await napKhoa(env);   // khoá dán ở app phủ lên env (secret Cloudflare vẫn ưu tiên)
     if(url.pathname.startsWith('/api/')){
       if(request.method==='OPTIONS') return new Response(null,{status:204, headers:CORS});
       try{ return await handleApi(request, env); }catch(e){ return json({error:'Lỗi server: '+(e.message||e)},500); }

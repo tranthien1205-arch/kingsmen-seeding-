@@ -213,6 +213,11 @@ Người duyệt: Thiện · Trạng thái: ĐÃ DUYỆT (2026-09-24, "tiếp t�
 
 ## Changelog
 
+### 2026-09-24 · Khoá API dán trên app (Máy › Bộ não AI › 🔑 Khoá API) — chủ: "có UI ở app để ghép khoá"
+- Đổi quy ước ADR-001 "khoá chỉ là secret Worker": nay **secret Cloudflare vẫn ưu tiên**, nhưng Admin dán được khoá ngay trên app. Bảng `khoa_api` (giá trị mã hoá AES-GCM bằng két `module_config.ket`, chỉ trả 4 ký tự cuối của khoá dán trên app; khoá wrangler chỉ là cờ). `napKhoa(env)` phủ khoá lên env ở cửa `fetch`/`scheduled` (cache 60 giây) nên mọi tuyến cũ (`env.ANTHROPIC_API_KEY`…) dùng được không sửa.
+- `PUT /khoa-api/:ten` (Admin; **thử với nhà cung cấp trước khi lưu**: Anthropic, Google TTS, Gemini, OpenAI/Groq/DeepInfra, YouTube; sai thì 422, có "Vẫn lưu"), `DELETE /khoa-api/:ten`; khoá đang cắm bằng wrangler → 409. Bootstrap `khoa_api[]` chỉ cho Admin. Test `tests/khoa-api.test.mjs` 3 nhóm.
+- Đánh đổi ghi rõ: kém secret Cloudflare một bậc (ai đọc được cả D1 lẫn két thì mở được) — đổi lấy việc chủ tự cắm không cần máy có wrangler.
+
 ### 2026-09-24 · ADR-T01 Trạm (đợt 4, phía Content OS) — Trạm chia ba: Tài khoản · Agent · Cài đặt
 - Trạm (masfico-insight v9.158→9.161) đổi giao diện theo bản vẽ `may/BAN-VE-GIAO-DIEN-3.md`; hợp đồng hub1 không đổi, thêm khối vào nhịp tim `/hub/trang_thai`: `tai_khoan[]` (phiên, `dung_den` khi Trạm dừng sau checkpoint, `dang_dung_boi`, `checkpoint_30d`) và `nhan_vien[]` (nhân viên máy làm cho Content OS + tài khoản được cấp theo vai/trần).
 - **Worker**: lưu hai khối đó vào `tram_trang_thai`; `tkDungTram` — xếp lịch đăng seeding và bình luận **không giao** việc cho tài khoản Trạm đang dừng, dời tới hết hạn dừng (không tự vượt).

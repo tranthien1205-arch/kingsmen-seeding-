@@ -102,8 +102,32 @@ function BoNaoAI(){
   const { db } = useApp(); const [tab,setTab]=useState('dinhtuyen'); const a=db.ai_nao||{};
   return <div className="space-y-3">
     <Callout tone="info"><b>Bộ não AI</b> = danh mục mô hình (API trả tiền + mô hình mở chạy trên máy ghép) và <b>định tuyến</b> theo từng tính năng. Mỗi tính năng đi ba mức như bộ quyền bước: <b>API</b> (thầy) → <b>BÓNG</b> (mô hình mở chạy song song, chỉ để chấm) → <b>MỞ</b> (mô hình mở tự làm, API dự phòng). Máy chấm điểm và đề nghị; Trưởng MKT/Admin gạt. Kho mẫu = mọi lượt gọi + phán quyết của người; đầu nhìn (chọn cảnh) huấn luyện từ mẫu người chấm trên máy ghép, người duyệt phiên bản mới bật.</Callout>
-    <Tabs size="sm" active={tab} onChange={setTab} tabs={[{key:'dinhtuyen',label:'Định tuyến',count:(a.dinh_tuyen||[]).filter(d=>d.de_nghi).length||null},{key:'mohinh',label:'Mô hình',count:(a.mo_hinh||[]).length||null},{key:'hoc',label:'Huấn luyện',count:(a.phien_ban||[]).filter(x=>x.trang_thai==='CHO_DUYET').length||null},{key:'chiphi',label:'Chi phí theo mô hình'}]}/>
-    {tab==='dinhtuyen'&&<DinhTuyenAI a={a}/>}{tab==='mohinh'&&<MoHinhAI a={a}/>}{tab==='hoc'&&<HuanLuyenAI a={a}/>}{tab==='chiphi'&&<ChiPhiMoHinh a={a}/>}
+    <Tabs size="sm" active={tab} onChange={setTab} tabs={[{key:'dinhtuyen',label:'Định tuyến',count:(a.dinh_tuyen||[]).filter(d=>d.de_nghi).length||null},{key:'mohinh',label:'Mô hình',count:(a.mo_hinh||[]).length||null},{key:'khoa',label:'🔑 Khoá API',count:(db.khoa_api||[]).filter(t=>!t.co).length||null},{key:'hoc',label:'Huấn luyện',count:(a.phien_ban||[]).filter(x=>x.trang_thai==='CHO_DUYET').length||null},{key:'chiphi',label:'Chi phí theo mô hình'}]}/>
+    {tab==='dinhtuyen'&&<DinhTuyenAI a={a}/>}{tab==='mohinh'&&<MoHinhAI a={a}/>}{tab==='hoc'&&<HuanLuyenAI a={a}/>}{tab==='chiphi'&&<ChiPhiMoHinh a={a}/>}{tab==='khoa'&&<KhoaAPI/>}
+  </div>;
+}
+// Khoá API dán ngay trên app (chủ 24/09) — Admin; thử với nhà cung cấp trước khi lưu; không bao giờ hiện lại giá trị
+function KhoaAPI(){
+  const { db, me, goi, notify } = useApp(); const ds=db.khoa_api||[]; const [gt,setGt]=useState({}); const [busy,setBusy]=useState('');
+  if(me.vai_tro!=='ADMIN') return <Callout tone="note">Chỉ Admin cắm khoá API. Nhờ Admin vào Máy › Bộ não AI › Khoá API.</Callout>;
+  const luu=async(t,vanLuu)=>{ const v=(gt[t.ten]||'').trim(); if(!v){ notify('Dán khoá vào ô trước','err'); return; } setBusy(t.ten); const r=await goi('/khoa-api/'+t.ten,{method:'PUT',body:{gia_tri:v, van_luu:!!vanLuu}}); setBusy('');
+    if(r.ok){ setGt({...gt,[t.ten]:''}); notify('Đã cắm '+t.ten+(r.thu?(r.thu.ok?' · thử được: '+(r.thu.ghi||''):''):'')); }
+    else if(/Vẫn lưu/.test(r.msg||'')){ if(confirm(r.msg+'\n\nVẫn lưu khoá này?')) luu(t,true); else notify(r.msg,'err'); }
+    else notify(r.msg,'err'); };
+  const go=async(t)=>{ if(!confirm('Gỡ '+t.ten+' khỏi app?')) return; setBusy(t.ten); const r=await goi('/khoa-api/'+t.ten,{method:'DELETE'}); setBusy(''); if(r.ok) notify('Đã gỡ '+t.ten); else notify(r.msg,'err'); };
+  const soCo=ds.filter(t=>t.co).length;
+  return <div className="space-y-3">
+    <Callout tone="info"><b>Dán khoá ở đây, không cần máy có wrangler.</b> Khoá lưu mã hoá trên máy chủ app và không bao giờ hiện lại, chỉ hiện 4 ký tự cuối. App <b>thử khoá với nhà cung cấp trước khi lưu</b>. Khoá đã cắm bằng <code>wrangler secret</code> (file dan-khoa.bat) vẫn được ưu tiên và không sửa được ở đây. Lấy khoá: Claude tại console.anthropic.com › API Keys · Google TTS / Gemini / YouTube tại console.cloud.google.com (bật API tương ứng rồi tạo API key) · OpenAI tại platform.openai.com.</Callout>
+    <Card pad=""><div className="px-3 py-2 border-b border-line text-xs text-ink-muted">{soCo}/{ds.length} khoá đã có · Hai khoá cần nhất: <b>ANTHROPIC_API_KEY</b> (bộ não) và <b>GOOGLE_TTS_KEY</b> (giọng đọc)</div>
+      <div className="overflow-x-auto"><table className="w-full text-xs min-w-[720px]"><thead><tr className="text-[10px] uppercase tracking-wide text-ink-muted"><th className="text-left px-3 py-2">Khoá</th><th className="text-left px-3 py-2">Dùng cho</th><th className="text-left px-3 py-2">Trạng thái</th><th className="text-left px-3 py-2">Dán khoá mới</th><th></th></tr></thead>
+        <tbody className="divide-y divide-line">{ds.map(t=><tr key={t.ten} className={t.co?'':'bg-amber-50/40'}>
+          <td className="px-3 py-2 font-mono text-[11px] text-ink">{t.ten}</td>
+          <td className="px-3 py-2 text-ink-muted">{t.dung_cho}</td>
+          <td className="px-3 py-2">{t.co?<span className="text-emerald-700">● đã có{t.duoi?(" …"+t.duoi):""}<div className="text-[10px] text-ink-muted">{t.nguon==='wrangler'?'cắm bằng wrangler (Cloudflare)':('dán trên app'+(t.boi?(' · '+t.boi):'')+(t.luc?(' · '+fmtDate(t.luc)):''))}</div></span>:<span className="text-rose-700">○ chưa có</span>}</td>
+          <td className="px-3 py-2">{t.nguon==='wrangler'?<span className="text-[11px] text-ink-muted">gỡ ở Cloudflare rồi mới dán được ở đây</span>:<Input type="password" autoComplete="new-password" className="!py-1 text-[11px] !w-64" placeholder={t.co?'dán khoá mới để thay':'dán khoá…'} value={gt[t.ten]||''} onChange={e=>setGt({...gt,[t.ten]:e.target.value})} disabled={busy===t.ten}/>}</td>
+          <td className="px-3 py-2 whitespace-nowrap">{t.nguon!=='wrangler'&&<><Btn variant="brand" className="!py-1 !px-2 text-[11px]" onClick={()=>luu(t)} disabled={busy===t.ten||!(gt[t.ten]||'').trim()}>{busy===t.ten?'Đang thử…':(t.thu_duoc?'Thử & lưu':'Lưu')}</Btn>{t.co&&t.nguon==='app'&&<Btn variant="ghost" className="!py-1 !px-2 text-[11px] ml-1" onClick={()=>go(t)} disabled={busy===t.ten}>Gỡ</Btn>}</>}</td>
+        </tr>)}</tbody></table></div></Card>
+    <div className="text-[11px] text-ink-muted">Cắm xong là dùng ngay, không cần deploy lại. Token đăng bài kênh (TOKEN_…) hiện ở đây khi kênh có mã API ở Chiến lược › Kênh.</div>
   </div>;
 }
 function DinhTuyenAI({a}){
