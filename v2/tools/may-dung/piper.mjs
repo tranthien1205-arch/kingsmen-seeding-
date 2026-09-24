@@ -11,7 +11,7 @@ async function taiFile(url, f, log) { if (existsSync(f)) return f; log("  tải"
 export async function taoPiper({ dir, log = console.log, giong = "vi_VN-vais1000-medium" } = {}) {
   const TH = join(dir, "..", "piper"); mkdirSync(TH, { recursive: true });
   const exe = join(TH, "piper", process.platform === "win32" ? "piper.exe" : "piper");
-  if (!existsSync(exe)) { const z = join(TH, PIPER_ZIP.split("/").pop()); await taiFile(PIPER_ZIP, z, log); const t = spawnSync("tar", ["-xf", z, "-C", TH], { encoding: "utf8" }); if (t.status !== 0 || !existsSync(exe)) throw new Error("không giải nén được piper: " + String(t.stderr || "").slice(0, 120)); rmSync(z, { force: true }); }
+  if (!existsSync(exe)) { const z = join(TH, PIPER_ZIP.split("/").pop()); await taiFile(PIPER_ZIP, z, log); const t = spawnSync("tar", ["-xf", PIPER_ZIP.split("/").pop()], { cwd: TH, encoding: "utf8" }); /* tên tương đối + cwd: bsdtar Windows hiểu "D:\…" là máy_chủ:đường (24/09) */ if (t.status !== 0 || !existsSync(exe)) throw new Error("không giải nén được piper: " + String(t.stderr || "").slice(0, 120)); rmSync(z, { force: true }); }
   const model = join(TH, giong + ".onnx"); await taiFile(GIONG_URL(giong), model, log); await taiFile(GIONG_URL(giong) + ".json", model + ".json", log);
   return {
     giong,
