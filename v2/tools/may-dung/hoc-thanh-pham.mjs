@@ -47,7 +47,7 @@ export default async function hoc({ app, goiApp, lenh, dir, log, script }) {
     // 24/09 tối (chủ: "tải về máy Q2 luôn để huấn luyện"): máy học tự tải thẳng từ TikTok về ổ của nó, giữ lại để học lại lần sau
     const slug = String(ts.kenh || nguon).replace(/^kalodata:/, "").replace(/^@/, "").replace(/[^a-z0-9_.-]/gi, "_").slice(0, 60) || "khac";
     thuMuc = join(dir, "thanh-pham", nguon.toLowerCase(), slug); mkdirSync(thuMuc, { recursive: true });
-    for (const x of ts.links) { const id = (String(x.link).match(/\/video\/(\d+)/) || [])[1]; if (!id) continue; const ten = id + ".mp4"; video.push({ id: ten, ten, link: x.link, f: join(thuMuc, ten) }); meta[ten] = { ...(x.meta || {}), link: x.link }; }
+    for (const x of ts.links) { const id = (String(x.link).match(/\/video\/(\d+)/) || [])[1]; if (!id) continue; const ten = id + ".mp4"; video.push({ id: ten, ten, link: x.link, play: (x.meta && x.meta.play) || null, f: join(thuMuc, ten) }); meta[ten] = { ...(x.meta || {}), link: x.link }; }
     try { writeFileSync(join(thuMuc, "_meta.json"), JSON.stringify(meta, null, 1)); } catch {}
   } else if (Array.isArray(ts.video) && ts.video.length) {
     // 24/09 (gom về một máy): Trạm tải xong đẩy video lên kho app → máy học lấy về từ app, không cần chung ổ với Trạm
@@ -76,6 +76,7 @@ export default async function hoc({ app, goiApp, lenh, dir, log, script }) {
     try {
       // tải một video TikTok thẳng về máy: yt-dlp nếu máy có Python + yt-dlp, không thì tikwm.com (chỉ gửi link công khai, không cookie)
       const taiTikTok = async (x, f) => { if (existsSync(f) && statSync(f).size > 50000) return f;
+        if (x.play) { try { const v = await fetch(x.play, { headers: { referer: "https://www.tiktok.com/", "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36" } }); if (v.ok) { writeFileSync(f, Buffer.from(await v.arrayBuffer())); if (statSync(f).size > 50000) return f; } } catch {} }   // đường dẫn file từ TikTok Studio (chủ kênh)
         const py = spawnSync("python", ["-m", "yt_dlp", "-q", "--no-playlist", "--no-warnings", "-f", "mp4/best", "-o", f, x.link], { encoding: "utf8", timeout: 240000, windowsHide: true });
         if (py.status === 0 && existsSync(f) && statSync(f).size > 50000) return f;
         for (let k = 0; k < 3; k++) { await new Promise((r) => setTimeout(r, 1500 * (k + 1))); const r = await fetch("https://www.tikwm.com/api/?url=" + encodeURIComponent(x.link) + "&hd=1", { headers: { "user-agent": "Mozilla/5.0" } }).catch(() => null); const j = r ? await r.json().catch(() => null) : null; const u = j && j.data && (j.data.hdplay || j.data.play);
