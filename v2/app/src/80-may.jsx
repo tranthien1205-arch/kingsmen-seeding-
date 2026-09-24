@@ -102,8 +102,8 @@ function BoNaoAI(){
   const { db } = useApp(); const [tab,setTab]=useState('dinhtuyen'); const a=db.ai_nao||{};
   return <div className="space-y-3">
     <Callout tone="info"><b>Bộ não AI</b> = danh mục mô hình (API trả tiền + mô hình mở chạy trên máy ghép) và <b>định tuyến</b> theo từng tính năng. Mỗi tính năng đi ba mức như bộ quyền bước: <b>API</b> (thầy) → <b>BÓNG</b> (mô hình mở chạy song song, chỉ để chấm) → <b>MỞ</b> (mô hình mở tự làm, API dự phòng). Máy chấm điểm và đề nghị; Trưởng MKT/Admin gạt. Kho mẫu = mọi lượt gọi + phán quyết của người; đầu nhìn (chọn cảnh) huấn luyện từ mẫu người chấm trên máy ghép, người duyệt phiên bản mới bật.</Callout>
-    <Tabs size="sm" active={tab} onChange={setTab} tabs={[{key:'dinhtuyen',label:'Định tuyến',count:(a.dinh_tuyen||[]).filter(d=>d.de_nghi).length||null},{key:'mohinh',label:'Mô hình',count:(a.mo_hinh||[]).length||null},{key:'khoa',label:'🔑 Khoá API',count:(db.khoa_api||[]).filter(t=>!t.co).length||null},{key:'hoc',label:'🎓 Lớp học',count:(a.phien_ban||[]).filter(x=>x.trang_thai==='CHO_DUYET').length||null},{key:'chiphi',label:'Chi phí theo mô hình'}]}/>
-    {tab==='dinhtuyen'&&<DinhTuyenAI a={a}/>}{tab==='mohinh'&&<MoHinhAI a={a}/>}{tab==='hoc'&&<LopHoc a={a}/>}{tab==='chiphi'&&<ChiPhiMoHinh a={a}/>}{tab==='khoa'&&<KhoaAPI/>}
+    <Tabs size="sm" active={tab} onChange={setTab} tabs={[{key:'dinhtuyen',label:'Định tuyến',count:(a.dinh_tuyen||[]).filter(d=>d.de_nghi).length||null},{key:'mohinh',label:'Mô hình',count:(a.mo_hinh||[]).length||null},{key:'khoa',label:'🔑 Khoá API',count:(db.khoa_api||[]).filter(t=>!t.co).length||null},{key:'hoc',label:'Huấn luyện',count:(a.phien_ban||[]).filter(x=>x.trang_thai==='CHO_DUYET').length||null},{key:'lophoc',label:'🎓 Lớp học (đơn giản)',count:(a.ky_nang||[]).filter(k=>k.trang_thai==='MOI').length||null},{key:'chiphi',label:'Chi phí theo mô hình'}]}/>
+    {tab==='dinhtuyen'&&<DinhTuyenAI a={a}/>}{tab==='mohinh'&&<MoHinhAI a={a}/>}{tab==='hoc'&&<HuanLuyenAI a={a}/>}{tab==='lophoc'&&<LopHoc a={a}/>}{tab==='chiphi'&&<ChiPhiMoHinh a={a}/>}{tab==='khoa'&&<KhoaAPI/>}
   </div>;
 }
 // Khoá API dán ngay trên app (chủ 24/09) — Admin; thử với nhà cung cấp trước khi lưu; không bao giờ hiện lại giá trị
@@ -183,7 +183,7 @@ function LopHoc({a}){
     <KyNang a={a} duoc={duoc} db={db}/>
     <NhatKyHoc a={a}/>
     <KhoMau a={a} duoc={duoc} dongs={a.dong_san_pham||[]}/>
-    <details className="rounded-2xl border border-line bg-white p-3"><summary className="cursor-pointer text-sm font-semibold text-ink-muted">Chi tiết kỹ thuật (mức API / bóng / mở, phạm vi, phiên bản, lệnh máy) — ai cần mới mở</summary><div className="mt-3"><HuanLuyenAI a={a}/></div></details>
+    <div className="text-[11px] text-ink-muted">Chi tiết kỹ thuật (mức API / bóng / mở, phạm vi, phiên bản, lệnh máy) ở tab <b>Huấn luyện</b>.</div>
   </div>;
 }
 function NapMotO({a, duoc}){
