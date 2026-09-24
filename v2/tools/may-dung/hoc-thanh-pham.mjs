@@ -40,9 +40,9 @@ export default async function hoc({ app, goiApp, lenh, dir, log, script }) {
   let video = [], goc = [], thuMuc = "", meta = {};
   if (nguon === "DRIVE") {
     const ND = await script("nap-drive"); const fid = String(ts.folder_id || ""); if (!fid) return { ok: false, msg: "lệnh thiếu folder_id" }; thuMuc = "drive:" + fid;
-    const ds = await ND.docThuMuc(fid); const con = ds.filter((x) => x.la_thu_muc);
-    for (const c of con.slice(0, 12)) { const trong = (await ND.docThuMuc(c.id).catch(() => [])).filter((x) => !x.la_thu_muc && LA_VIDEO.test(x.ten)); if (LA_GOC.test(c.ten)) goc.push(...trong.map((x) => ({ ...x, drive: true }))); else video.push(...trong.map((x) => ({ ...x, drive: true, nhom: c.ten }))); }
-    video.unshift(...ds.filter((x) => !x.la_thu_muc && LA_VIDEO.test(x.ten)).map((x) => ({ ...x, drive: true })));
+    // đi sâu tối đa 3 tầng thư mục (đo 24/09: kho của chủ là gốc → BÁN HÀNG → DOUYIN_20V/FINEX/TERRAZY → video); thư mục tên goc/source ở tầng nào cũng là clip gốc
+    const duyet = async (id, duong, tang) => { const ds = await ND.docThuMuc(id).catch(() => []); for (const x of ds) { if (x.la_thu_muc) { if (tang < 3) await duyet(x.id, duong ? duong + "/" + x.ten : x.ten, tang + 1); } else if (LA_VIDEO.test(x.ten)) { if (LA_GOC.test((duong || "").split("/").pop() || "")) goc.push({ ...x, drive: true }); else video.push({ ...x, drive: true, nhom: duong || "" }); } } };
+    await duyet(fid, "", 0); log("  Drive:", video.length, "video ·", goc.length, "clip gốc");
   } else {
     thuMuc = String(ts.duong_dan || ""); if (!thuMuc || !existsSync(thuMuc)) return { ok: false, msg: "máy dựng không thấy thư mục " + (thuMuc || "(trống)") + (nguon === "TIKTOK" || nguon === "KALODATA" ? " — Trạm tải TikTok về máy khác? Đặt Trạm và máy dựng cùng máy, hoặc chép thư mục sang" : "") };
     meta = docMeta(thuMuc); const ls = (th) => readdirSync(th).map((n) => ({ n, f: join(th, n), st: statSync(join(th, n)) }));
