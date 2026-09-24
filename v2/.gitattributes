@@ -1,0 +1,2 @@
+# File .bat phai xuong dong kieu Windows (CRLF): cmd doc sai nhan goto / khoi lenh khi file chi co LF.
+tools/**/*.bat text eol=crlf
