@@ -44,3 +44,24 @@ test('kỹ năng: 4 thẻ với trạng thái; tự học tạo lệnh huấn lu
   r = await api('/lop-hoc/tat', 'POST', { tinh_nang: 'chon_canh' }); assert.equal(r.s, 200); assert.equal(r.j.db.ai_nao.ky_nang.find(x => x.id === 'chon_canh').muc, 'API');
   assert.ok(r.j.db.ai_nao.nhat_ky_hoc.some(x => x.hanh_dong === 'máy tự học')); assert.ok(r.j.db.ai_nao.nhat_ky_hoc.some(x => x.hanh_dong === 'bật máy nhà'));
 });
+test('gom về một máy (24/09): máy mạnh nhất đang bật nhận dựng + học; máy yếu chỉ khi máy mạnh im; video Trạm đẩy lên kho app → lệnh học mang danh sách, giao máy mạnh', async () => {
+  const yeu = giai((await api('/may-ghep', 'POST', { ten: 'Ngoc-Han' })).j.ma_ghep).khoa; const manh = giai((await api('/may-ghep', 'POST', { ten: 'Q2' })).j.ma_ghep).khoa;
+  const hubK = (k) => async (p, method = 'GET', body) => { const r = await worker.fetch(new Request('https://x/api' + p, { method, headers: { 'Content-Type': 'application/json', 'X-Hub-Key': k }, body: body ? JSON.stringify(body) : undefined }), env, { waitUntil() {} }); return { s: r.status, j: await r.json().catch(() => ({})) }; };
+  DB.raw.prepare(`UPDATE may_ghep SET active=0 WHERE ten='Máy 013'`).run();
+  await hubK(yeu)('/hub/trang_thai', 'POST', { may: 'NGOC-HAN', ban: '1.2', ffmpeg: true, gpu: 'NVIDIA GeForce GTX 1650, 4096 MiB', kha_nang: ['dung_video', 'mo_hinh', 'huan_luyen'] });
+  await hubK(manh)('/hub/trang_thai', 'POST', { may: 'DESKTOP-Q2', ban: '1.3', ffmpeg: true, ollama: true, gpu: 'NVIDIA GeForce RTX 3070 Ti, 8192 MiB', kha_nang: ['dung_video', 'mo_hinh', 'huan_luyen'] });
+  const idManh = DB.raw.prepare(`SELECT id FROM may_ghep WHERE ten='Q2'`).get().id, idYeu = DB.raw.prepare(`SELECT id FROM may_ghep WHERE ten='Ngoc-Han'`).get().id;
+  let r = await api('/lop-hoc/nap', 'POST', { nap: 'https://drive.google.com/drive/folders/1zzzzzzzzzzzzzzzzz' }); assert.equal(r.s, 200);
+  assert.equal(DB.raw.prepare(`SELECT may_id FROM tram_lenh WHERE viec='hoc_thanh_pham' ORDER BY created_at DESC LIMIT 1`).get().may_id, idManh, 'máy mạnh nhận');
+  // máy mạnh im → máy yếu dự phòng
+  DB.raw.prepare(`UPDATE may_ghep SET nhan_luc='2020-01-01T00:00:00Z' WHERE id=?`).run(idManh);
+  r = await api('/lop-hoc/nap', 'POST', { nap: 'https://drive.google.com/drive/folders/1yyyyyyyyyyyyyyyyy' }); assert.equal(r.s, 200);
+  assert.equal(DB.raw.prepare(`SELECT may_id FROM tram_lenh WHERE viec='hoc_thanh_pham' ORDER BY created_at DESC LIMIT 1`).get().may_id, idYeu, 'máy yếu dự phòng');
+  await hubK(manh)('/hub/trang_thai', 'POST', { may: 'DESKTOP-Q2', ban: '1.3', ffmpeg: true, ollama: true, gpu: 'NVIDIA GeForce RTX 3070 Ti, 8192 MiB', kha_nang: ['dung_video', 'mo_hinh', 'huan_luyen'] });
+  // Trạm báo tải xong kèm danh sách video trên kho app
+  const khoaTram = giai((await api('/tram/khoa', 'POST')).j.ma_ghep).khoa; await hubK(khoaTram)('/hub/trang_thai', 'POST', { may: 'NGOC-HAN', ban: '9.166' });
+  r = await hubK(khoaTram)('/hub/tiktok-da-tai', 'POST', { kenh: 'kalodata:vat-tu', thu_muc: 'D:/x', so: 2, nguon: 'KALODATA', video: [{ ten: '1.mp4', url: '/media/media/v1.mp4', meta: { doanh_thu: 3e8 } }, { ten: '2.mp4', url: 'https://ngoai.com/x.mp4' }] });
+  assert.equal(r.j.giao, true);
+  const l = DB.raw.prepare(`SELECT may_id, tham_so FROM tram_lenh WHERE viec='hoc_thanh_pham' ORDER BY created_at DESC LIMIT 1`).get(); const ts = JSON.parse(l.tham_so);
+  assert.equal(l.may_id, idManh, 'video đã lên kho app → học ở máy mạnh, không cần chung ổ với Trạm'); assert.equal(ts.video.length, 1, 'link ngoài kho app bị bỏ'); assert.equal(ts.video[0].meta.doanh_thu, 3e8); assert.equal(ts.duong_dan, null);
+});

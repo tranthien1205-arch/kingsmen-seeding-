@@ -43,6 +43,9 @@ export default async function hoc({ app, goiApp, lenh, dir, log, script }) {
     // đi sâu tối đa 3 tầng thư mục (đo 24/09: kho của chủ là gốc → BÁN HÀNG → DOUYIN_20V/FINEX/TERRAZY → video); thư mục tên goc/source ở tầng nào cũng là clip gốc
     const duyet = async (id, duong, tang) => { const ds = await ND.docThuMuc(id).catch(() => []); for (const x of ds) { if (x.la_thu_muc) { if (tang < 3) await duyet(x.id, duong ? duong + "/" + x.ten : x.ten, tang + 1); } else if (LA_VIDEO.test(x.ten)) { if (LA_GOC.test((duong || "").split("/").pop() || "")) goc.push({ ...x, drive: true }); else video.push({ ...x, drive: true, nhom: duong || "" }); } } };
     await duyet(fid, "", 0); log("  Drive:", video.length, "video ·", goc.length, "clip gốc");
+  } else if (Array.isArray(ts.video) && ts.video.length) {
+    // 24/09 (gom về một máy): Trạm tải xong đẩy video lên kho app → máy học lấy về từ app, không cần chung ổ với Trạm
+    thuMuc = "app:" + (ts.kenh || nguon); for (const x of ts.video) { video.push({ id: x.ten, ten: x.ten, url: x.url }); meta[x.ten] = x.meta || {}; }
   } else {
     thuMuc = String(ts.duong_dan || ""); if (!thuMuc || !existsSync(thuMuc)) return { ok: false, msg: "máy dựng không thấy thư mục " + (thuMuc || "(trống)") + (nguon === "TIKTOK" || nguon === "KALODATA" ? " — Trạm tải TikTok về máy khác? Đặt Trạm và máy dựng cùng máy, hoặc chép thư mục sang" : "") };
     meta = docMeta(thuMuc); const ls = (th) => readdirSync(th).map((n) => ({ n, f: join(th, n), st: statSync(join(th, n)) }));
@@ -61,7 +64,8 @@ export default async function hoc({ app, goiApp, lenh, dir, log, script }) {
   let xong = 0, mau = 0; const loi = [];
   for (const v of video) {
     try {
-      const f = v.drive ? await taiDrive(v, join(TH, "tp_" + basename(v.ten).replace(/[^a-z0-9_.-]/gi, "_"))) : v.f; const dai = thoiLuong(f); if (!dai) throw new Error("không đọc được thời lượng");
+      const taiApp = async (x, f) => { if (existsSync(f) && statSync(f).size > 1000) return f; const u = /^https?:/.test(x.url) ? x.url : app.url.replace(/\/api\/?$/, "").replace(/\/+$/, "") + x.url; const r = await fetch(u, { headers: { "X-Hub-Key": app.khoa } }); if (!r.ok) throw new Error("tải từ kho app HTTP " + r.status); writeFileSync(f, Buffer.from(await r.arrayBuffer())); return f; };
+      const f = v.drive ? await taiDrive(v, join(TH, "tp_" + basename(v.ten).replace(/[^a-z0-9_.-]/gi, "_"))) : v.url ? await taiApp(v, join(TH, "tp_" + basename(v.ten).replace(/[^a-z0-9_.-]/gi, "_"))) : v.f; const dai = thoiLuong(f); if (!dai) throw new Error("không đọc được thời lượng");
       const shots = catShot(f, dai); if (shots.length < 2) { log("  ✗", v.ten, "chỉ 1 shot — bỏ (video một cảnh không dạy được cách ghép)"); loi.push(v.ten + ": 1 shot"); continue; }
       const KD = join(TH, "k_" + xong); mkdirSync(KD, { recursive: true });
       for (let i = 0; i < shots.length; i++) {
@@ -76,7 +80,7 @@ export default async function hoc({ app, goiApp, lenh, dir, log, script }) {
       const r = await goiApp("/hub/thanh-pham", { method: "POST", body: JSON.stringify({ ten: v.ten, nguon_id: v.drive ? v.id : v.ten, nguon, thu_muc: thuMuc.slice(0, 200), dai: +dai.toFixed(2), shots, luot_xem: mt.luot_xem ?? null, luot_thich: mt.luot_thich ?? null, ngay_dang: mt.ngay_dang || null, link: mt.link || null, kenh: mt.kenh || ts.kenh || null, dong: ts.dong || null, muc_dich: ts.muc_dich || null, doanh_thu: mt.doanh_thu ?? null, luot_ban: mt.luot_ban ?? null, san_pham: mt.san_pham || null, kich_ban: kichBan || null }) });
       if (!r.ok) throw new Error("app " + r.status + " " + ((r.d && r.d.error) || ""));
       xong++; mau += (r.d && r.d.so_mau) || 0; log("  ✓", v.ten, "·", shots.length, "shot ·", shots.filter((s) => s.goc).length, "khớp gốc ·", (r.d && r.d.so_mau) || 0, "mẫu", mt.luot_xem != null ? "· " + mt.luot_xem + " xem" : "");
-      rmSync(KD, { recursive: true, force: true }); if (v.drive) rmSync(f, { force: true });
+      rmSync(KD, { recursive: true, force: true }); if (v.drive || v.url) rmSync(f, { force: true });
     } catch (e) { loi.push(v.ten + ": " + String(e.message || e).slice(0, 80)); log("  ✗", v.ten, String(e.message || e).slice(0, 100)); }
   }
   return { ok: xong > 0, msg: "học " + xong + "/" + video.length + " video thành phẩm · " + mau + " mẫu" + (gocKy.length ? " · " + gocKy.length + " clip gốc" : "") + (loi.length ? " · lỗi: " + loi.slice(0, 2).join(" · ") : "") };
