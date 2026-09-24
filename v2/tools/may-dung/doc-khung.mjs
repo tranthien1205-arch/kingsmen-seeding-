@@ -87,7 +87,7 @@ export async function docKhung(file, ctx = {}) {
     d.khung_url = d._url[Math.min(d._url.length - 1, chon.length > 1 ? 1 : 0)] || null; }
   for (const d of doan) { d.mo = { nhom: d.nhom, buoc: d.buoc, bai_test: d.bai_test, chac: d.tu_tin, model: MO_HINH_VL }; d.nguon_nhan = "MO"; }
   // ADR-016b THẦY: Claude (qua app, khoá nằm ở app) đọc cùng đoạn theo cùng tập nhãn. Khớp mô hình mở → nhãn bạc dùng để dạy; bất đồng → người gán.
-  let soThay = 0, soKhop = 0, loiThay = null;
+  let soThay = 0, soKhop = 0, loiThay = null; const tThay0 = Date.now();
   if (ctx.thay && doan.some((d) => d._url && d._url.length)) {
     for (let b = 0; b < doan.length; b += 30) { const lo = doan.slice(b, b + 30); let kq = [];
       try { kq = await ctx.thay(lo.map((d) => ({ anh: d._url || [] })), { quy_trinh: dsBuoc, bai_test: dsTest, san_pham: ctx.san_pham || "", ngu_canh: ctx.ngu_canh || "" }); } catch (e) { loiThay = String(e.message || e).slice(0, 100); break; }
@@ -99,7 +99,7 @@ export async function docKhung(file, ctx = {}) {
     log("  thầy đọc", soThay + "/" + doan.length, "đoạn · khớp mô hình mở", soKhop + (loiThay ? " · " + loiThay : "")); }
   for (const d of doan) { delete d._anh; delete d._url; }
   rmSync(thu, { recursive: true, force: true });
-  return { timeline: doan, tong_quan: tq, so_khung: ds.length * 3, so_dai: ds.length, ms_dai: msDai, so_thay: soThay, so_khop: soKhop, loi_thay: loiThay };
+  return { timeline: doan, tong_quan: tq, so_khung: ds.length * 3, so_dai: ds.length, ms_dai: msDai, so_thay: soThay, so_khop: soKhop, loi_thay: loiThay, ms_thay: soThay ? Date.now() - tThay0 : 0 };
 }
 
 // lệnh phan_tich_footage {doc_khung:true, muc_id?, tai_san_id?, lai?} (phan-tich.mjs chuyển sang đây)

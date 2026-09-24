@@ -79,9 +79,12 @@ const CONFIG_MAC_DINH = {
   may:   { nguong_san_sang:80, min_mau:30, gio_chay:6, nguong_ha:60, ngay_gan:14, mau_ha:5 },
   // Chi phí AI: gia = USD / 1 triệu token. ngan_sach_thang_usd=0 → không giới hạn. ngan_sach_hoc_pct: phần dành cho bản nháp bóng (chế độ học)
   // cho_may_phut: mô hình mở (máy ghép) không trả kết quả trong N phút → coi trễ, rơi về API dự phòng (ADR-009c)
-  ai:    { ngan_sach_thang_usd:0, ngan_sach_hoc_pct:20, canh_bao_pct:80, chan_khi_vuot:true, ty_gia_vnd:26000, cho_may_phut:10,
+  // ngan_sach_thay_usd: trần riêng cho Claude làm thầy gán nhãn hình khi học (ADR-016b/017), 0 = không giới hạn
+  ai:    { ngan_sach_thay_usd:20, thay_nhin:true, ngan_sach_thang_usd:0, ngan_sach_hoc_pct:20, canh_bao_pct:80, chan_khi_vuot:true, ty_gia_vnd:26000, cho_may_phut:10,
            gia:{ 'claude-sonnet-4-5':{vao:3,ra:15}, 'claude-haiku-4-5-20251001':{vao:1,ra:5}, 'claude-opus-4-1':{vao:15,ra:75} } },
   duyet: { chan_tu_duyet:true },
+  // ADR-017: bàn huấn luyện. tran_phut_ngay: hộp việc của người đóng khi đã làm đủ N phút trong ngày (bấm "làm thêm" vẫn được)
+  huan_luyen:{ tran_phut_ngay:20, k1_gom_chung:300, k1_gom_dong:100, k1_vang_chung:200, k1_vang_dong:60 },
   // ADR-002: gom trend/ý tưởng. tu_khoa_nganh rỗng = nhận tất cả (dễ ngập rác — người trong nghề tự khai);
   // nguong_tu_duyet: điểm máy ≥ ngưỡng và không rủi ro claim thì tự duyệt KHI B1 ở mức AI_TU_LAM
   trend:   { tu_khoa_nganh:[], chong_trung_ngay:30, nguong_tu_duyet:70 },
@@ -1302,6 +1305,7 @@ const TEN_NHOM_CANH={ BOI_CANH:'bối cảnh chung: công trình, không gian, n
 async function thayDocDoan(env, x){ const key=env.ANTHROPIC_API_KEY; if(!key) return {ok:false, loi:'chưa có ANTHROPIC_API_KEY'};
   const ns=await kiemNganSachAI(env,{hoc:true}); if(!ns.ok) return {ok:false, loi:ns.loi, vuot_ngan_sach:true};
   const cfg=(await docCauHinh(env)).ai||{}; const model=chuoi(cfg.thay_nhin_model,60)||AI_MODEL_MAC_DINH;
+  if(so(cfg.ngan_sach_thay_usd)>0){ const da=await env.DB.prepare(`SELECT COALESCE(SUM(chi_phi_usd),0) usd FROM ai_usage WHERE thang=? AND tinh_nang='hoc_nhan_khung'`).bind(thangHienTai()).first()||{}; if(so(da.usd)>=so(cfg.ngan_sach_thay_usd)) return {ok:false, vuot_ngan_sach:true, loi:'Hết ngân sách thầy tháng này ('+so(da.usd).toFixed(2)+'/'+so(cfg.ngan_sach_thay_usd)+' USD)'}; }
   const qt=(Array.isArray(x.quy_trinh)?x.quy_trinh:[]).map(v=>chuoi(v,80)).filter(Boolean).slice(0,20), bt=(Array.isArray(x.bai_test)?x.bai_test:[]).map(v=>chuoi(v,80)).filter(Boolean).slice(0,20);
   const anh=[]; for(const u of (Array.isArray(x.anh)?x.anh:[]).filter(u=>/^\/media\//.test(String(u||''))).slice(0,3)){ const obj=env.MEDIA&&await env.MEDIA.get(u.slice(7)); if(!obj) continue; const buf=new Uint8Array(await obj.arrayBuffer()); let bin=''; for(let i=0;i<buf.length;i+=0x8000) bin+=String.fromCharCode(...buf.subarray(i,i+0x8000)); anh.push({type:'image', source:{type:'base64', media_type:'image/jpeg', data:btoa(bin)}}); }
   if(!anh.length) return {ok:false, loi:'không thấy ảnh đoạn'};
@@ -1319,6 +1323,44 @@ async function thayDocDoan(env, x){ const key=env.ANTHROPIC_API_KEY; if(!key) re
   const o=docJSONAI(((j.content||[]).find(c=>c.type==='text')||{}).text)||{}; const nhom=NHOM_CANH.includes(o.nhom)?o.nhom:null; if(!nhom) return {ok:false, loi:'thầy trả nhãn lạ'};
   const buoc=nhom==='THI_CONG'&&qt.includes(o.buoc)?o.buoc:null; const test=nhom==='THU_NGHIEM'&&o.bai_test?(bt.length?(bt.includes(o.bai_test)?o.bai_test:null):chuoi(o.bai_test,80)):null;
   const tm=Number(o.tham_my); return {ok:true, model, nhan:{ nhom, buoc, bai_test:test, tham_my:Number.isFinite(tm)&&tm>=0?Math.min(10,tm):null, chac:Math.max(0,Math.min(1,so(o.chac))), mo_ta:chuoi(o.mo_ta,200), ly_do:chuoi(o.ly_do,120) }, vao, ra };
+}
+async function phutNguoiHomNay(env){ const tu=new Date(Date.parse(ngayVN()+'T00:00:00Z')-7*36e5).toISOString(); const ds=(await env.DB.prepare(`SELECT dau_vao FROM mau_hoc_ai WHERE tinh_nang='nhan_khung' AND created_at>=?`).bind(tu).all()).results; return ds.reduce((a,x)=>a+(so((docJSON(x.dau_vao,{})||{}).giay)||5),0)/60; }
+// ADR-017 — khuôn làn: 1 Gom · 2 Thầy gán · 3 Người xác nhận · 4 Đo · 5 Bóng · 6 Bật. Mỗi ô tính từ dữ liệu thật; làn chưa làm nói rõ đợt nào.
+const LAN_HOC=[
+  {k:'K1', ten:'Nhận diện khung', dot:'A'}, {k:'K2', ten:'Chất lượng source', dot:'B'}, {k:'K3', ten:'Thẩm mỹ', dot:'C', cho:['K1']},
+  {k:'K4', ten:'Đọc lời', dot:'B'}, {k:'K5', ten:'Ghép và nhịp', dot:'D', cho:['K1','K4']}, {k:'K6', ten:'Kiểm kỹ thuật', dot:'D', cho:['K1']} ];
+async function banHuanLuyen(env){ const cfg=await docCauHinh(env); const hl=cfg.huan_luyen||{}; const ai=cfg.ai||{};
+  const sp=(await env.DB.prepare(`SELECT DISTINCT dong FROM san_pham WHERE dong IS NOT NULL AND dong<>''`).all()).results.map(x=>x.dong);
+  const ft=(await env.DB.prepare(`SELECT t.phan_tich, sp.dong FROM tai_san t LEFT JOIN muc_noi_dung mu ON mu.id=t.muc_id LEFT JOIN san_pham sp ON sp.id=mu.san_pham_id WHERE t.phan_tich LIKE '%"timeline"%'`).all()).results;
+  const th=(await env.DB.prepare(`SELECT phan_tich, dong, created_at FROM kho_thanh_pham ORDER BY created_at DESC`).all()).results;
+  const dongs=[...new Set([...sp, ...th.map(x=>x.dong).filter(Boolean)])];
+  const doan=[]; for(const r of [...ft, ...th]){ const pt=docJSON(r.phan_tich,{})||{}; for(const d of (Array.isArray(pt.timeline)?pt.timeline:[])) doan.push({dong:r.dong||null, thay:!!d.thay, bat:!!(d.thay&&d.mo&&d.thay.nhom!==d.mo.nhom), nguoi:!!d.nguoi}); }
+  const vang=(await env.DB.prepare(`SELECT dau_vao, dau_ra, nhan, dong FROM mau_hoc_ai WHERE tinh_nang='nhan_khung'`).all()).results.map(x=>({v:docJSON(x.dau_vao,{})||{}, c:docJSON(x.dau_ra,{})||{}, n:docJSON(x.nhan,{})||{}, dong:x.dong}));
+  const loiSo=th.reduce((a,r)=>a+((docJSON(r.phan_tich,{})||{}).shots||[]).filter(x=>x.loi).length,0);
+  const pct=(a,b)=>b?Math.round(a/b*100):null;
+  const k1=(dong)=>{ const ds=doan.filter(x=>!dong||x.dong===dong), vg=vang.filter(x=>!dong||x.dong===dong); const gomCan=so(dong?hl.k1_gom_dong:hl.k1_gom_chung,dong?100:300), vangCan=so(dong?hl.k1_vang_dong:hl.k1_vang_chung,dong?60:200);
+    const nThay=ds.filter(x=>x.thay).length, nBat=ds.filter(x=>x.bat).length; const nn=vg.filter(x=>x.v.ngau_nhien);
+    const mo=vg.filter(x=>x.v.mo&&x.v.mo.nhom), tay=vg.filter(x=>x.v.thay&&x.v.thay.nhom);
+    const so_do={ doan:ds.length, thay:nThay, bat_dong_pct:pct(nBat,nThay), vang:vg.length, dung_ngau_nhien_pct:pct(nn.filter(x=>x.c.nhom===x.n.nhom).length,nn.length), mo_pct:pct(mo.filter(x=>x.v.mo.nhom===x.n.nhom).length,mo.length), thay_pct:pct(tay.filter(x=>x.v.thay.nhom===x.n.nhom).length,tay.length) };
+    let chang=1, thieu='cần '+gomCan+' đoạn đã đọc (có '+ds.length+')';
+    if(ds.length>=gomCan){ chang=2; thieu='thầy mới đọc '+nThay+'/'+ds.length+' đoạn'; if(nThay>=ds.length*0.8){ chang=3; thieu='cần '+vangCan+' nhãn vàng (có '+vg.length+')'; if(vg.length>=vangCan){ chang=4; thieu='Bóng cần đầu nhận diện học riêng (đợt sau đợt A)'; } } }
+    return { chang, thieu, so_do, tien_do:chang===1?pct(ds.length,gomCan):chang===2?pct(nThay,ds.length):chang===3?pct(vg.length,vangCan):null }; };
+  const k1Chung=k1(null);
+  const o={}; for(const l of LAN_HOC){ o[l.k]={ chung:null, dong:{} }; }
+  o.K1.chung=k1Chung; for(const d of dongs) o.K1.dong[d]=k1(d);
+  const chuaLam=(l, so_do, gom)=>({ chang:1, chua_lam:true, thieu:'làm ở đợt '+l.dot, so_do, gom });
+  o.K2.chung=chuaLam(LAN_HOC[1], {doan:doan.length}); o.K4.chung=chuaLam(LAN_HOC[3], {cau_co_loi:loiSo});
+  const choCua=(l)=>({ cho:l.cho, thieu:'chờ '+l.cho.join(' + ')+' tới Bóng' });
+  o.K3.chung=choCua(LAN_HOC[2]); o.K5.chung={...choCua(LAN_HOC[4]), so_do:{video_da_air:th.length}}; o.K6.chung={ cho:['K1'], thieu:'chờ K1 bật' };
+  const pbGhep=(await env.DB.prepare(`SELECT COUNT(*) n FROM mo_hinh_phien_ban WHERE tinh_nang='ghep_canh' AND trang_thai='CHO_DUYET'`).first().catch(()=>({n:0})))||{n:0}; if(so(pbGhep.n)) o.K5.chung.ghi_chu=so(pbGhep.n)+' phiên bản ghép cũ đang chờ duyệt ở tab Huấn luyện';
+  // nguồn lực
+  const may=(await env.DB.prepare(`SELECT id,ten,nhan_luc,than FROM may_ghep WHERE active=1`).all()).results.map(m=>{ const t=docJSON(m.than,{})||{}; return { ten:m.ten, song:Date.now()-Date.parse(m.nhan_luc||0)<5*60e3, dang_lam:t.dang_lam||'', gpu:t.gpu||'' }; });
+  const hang=(await env.DB.prepare(`SELECT m.ten, COUNT(*) n FROM tram_lenh l JOIN may_ghep m ON m.id=l.may_id WHERE l.trang_thai IN ('CHO','DA_GUI') GROUP BY m.ten`).all()).results;
+  for(const m of may) m.hang=so((hang.find(h=>h.ten===m.ten)||{}).n);
+  const tg=th.map(r=>(docJSON(r.phan_tich,{})||{}).thoi_gian).filter(Boolean).slice(0,10); const tb={}; for(const x of tg) for(const [k,v] of Object.entries(x)) tb[k]=(tb[k]||0)+so(v)/tg.length; Object.keys(tb).forEach(k=>tb[k]=+tb[k].toFixed(1));
+  const thayDa=(await env.DB.prepare(`SELECT COALESCE(SUM(chi_phi_usd),0) usd, COUNT(*) n FROM ai_usage WHERE thang=? AND tinh_nang='hoc_nhan_khung'`).bind(thangHienTai()).first())||{};
+  const cho=doan.filter(x=>!x.nguoi).length;
+  return { lan:LAN_HOC, dongs, o, nguon_luc:{ may, thoi_gian_tb:tg.length?{...tb, so_video:tg.length}:null, thay:{ usd:+so(thayDa.usd).toFixed(2), lan:so(thayDa.n), tran_usd:so(ai.ngan_sach_thay_usd), bat:ai.thay_nhin!==false }, nguoi:{ phut_hom_nay:+(await phutNguoiHomNay(env)).toFixed(1), tran_phut:so(hl.tran_phut_ngay), doan_chua_gan:cho } } };
 }
 const dsDongSP=(v)=>String(v||'').split(/\r?\n/).map(x=>x.trim()).filter(Boolean).slice(0,20);
 // ADR-010b: làm sạch phân tích máy con gửi (đoạn 0,5 giây: nét, động, sáng) + khung + cỡ cảnh
@@ -1618,7 +1660,7 @@ async function handleApi(request, env){
       if(shots.length<2) return json({error:'Cần ít nhất 2 shot'},400); const dai=so(body.dai)||shots[shots.length-1].t1; const coGoc=shots.filter(x=>x.goc).length;
       const canCo=shots.filter(x=>!x.co_canh&&x.khung_url).slice(0,12); for(let i=0;i<canCo.length;i+=3){ const nhom=canCo.slice(i,i+3); const mt=await moTaKhungHinh(env, nhom.map(x=>x.khung_url), ''); if(mt.co_canh){ for(const x of nhom) if(!x.co_canh) x.co_canh=mt.co_canh; } if(mt.loi) break; }
       const luotXem=body.luot_xem==null?null:Math.max(0,Math.round(so(body.luot_xem))), kenh=chuoi(body.kenh,80)||null; const doanhThu=body.doanh_thu==null?null:Math.max(0,+so(body.doanh_thu).toFixed(2)); const kichBan=chuoi(body.kich_ban,6000)||shots.map(x=>x.loi).filter(Boolean).join(' ').slice(0,6000)||null;
-      const id=uid('tp'); await env.DB.prepare(`INSERT INTO kho_thanh_pham (id,ten,nguon,nguon_id,thu_muc,dai,so_shot,nhip,co_goc,phan_tich,created_at,luot_xem,luot_thich,ngay_dang,link,kenh,doanh_thu,luot_ban,san_pham,kich_ban,dong,muc_dich) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).bind(id, ten, ['DRIVE','LOCAL','TIKTOK','REELS','KALODATA'].includes(chuoi(body.nguon,10))?chuoi(body.nguon,10):'DRIVE', nid, chuoi(body.thu_muc,200), +dai.toFixed(2), shots.length, +(dai/shots.length).toFixed(2), coGoc, JSON.stringify({shots:shots.map(x=>({...x, goc:x.goc?{...x.goc, doan:undefined}:null})), timeline:tlSach(body.timeline)}), nowISO(), luotXem, body.luot_thich==null?null:Math.round(so(body.luot_thich)), chuoi(body.ngay_dang,30)||null, chuoi(body.link,300)||null, kenh, doanhThu, body.luot_ban==null?null:Math.round(so(body.luot_ban)), chuoi(body.san_pham,200)||null, kichBan, chuoi(body.dong,80)||null, MUC_DICH.includes(chuoi(body.muc_dich,10))?chuoi(body.muc_dich,10):null).run();
+      const id=uid('tp'); await env.DB.prepare(`INSERT INTO kho_thanh_pham (id,ten,nguon,nguon_id,thu_muc,dai,so_shot,nhip,co_goc,phan_tich,created_at,luot_xem,luot_thich,ngay_dang,link,kenh,doanh_thu,luot_ban,san_pham,kich_ban,dong,muc_dich) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).bind(id, ten, ['DRIVE','LOCAL','TIKTOK','REELS','KALODATA'].includes(chuoi(body.nguon,10))?chuoi(body.nguon,10):'DRIVE', nid, chuoi(body.thu_muc,200), +dai.toFixed(2), shots.length, +(dai/shots.length).toFixed(2), coGoc, JSON.stringify({shots:shots.map(x=>({...x, goc:x.goc?{...x.goc, doan:undefined}:null})), timeline:tlSach(body.timeline), thoi_gian:(body.thoi_gian&&typeof body.thoi_gian==='object')?Object.fromEntries(Object.entries(body.thoi_gian).slice(0,10).map(([k,v])=>[chuoi(k,20),+so(v).toFixed(1)])):null, may:chuoi(xt&&xt.may&&xt.may.ten,60)||null}), nowISO(), luotXem, body.luot_thich==null?null:Math.round(so(body.luot_thich)), chuoi(body.ngay_dang,30)||null, chuoi(body.link,300)||null, kenh, doanhThu, body.luot_ban==null?null:Math.round(so(body.luot_ban)), chuoi(body.san_pham,200)||null, kichBan, chuoi(body.dong,80)||null, MUC_DICH.includes(chuoi(body.muc_dich,10))?chuoi(body.muc_dich,10):null).run();
       const soLieu={luot_xem:luotXem, kenh, ngay_dang:chuoi(body.ngay_dang,30)||null, doanh_thu:doanhThu};
       let n=0; await ghiMauAI(env,{tinh_nang:'ghep_canh', doi_tuong:'kho_thanh_pham', doi_tuong_id:id, dau_vao:{nguon:'THANH_PHAM', dai, ...soLieu}, dau_ra:null, nhan:{shots:shots.map(x=>({dai:+(x.t1-x.t0).toFixed(2), co_canh:x.co_canh, lap:0})), nguon:'THANH_PHAM'}}); n++;
       for(const x of shots.filter(y=>y.loi&&y.nhom&&String(y.loi).length>=8).slice(0,60)){ await ghiMauAI(env,{tinh_nang:'doc_loi', doi_tuong:'kho_thanh_pham', doi_tuong_id:id, dau_vao:{...soLieu, text:x.loi, dai:+(x.t1-x.t0).toFixed(2), vi_tri:+(x.t0/Math.max(1,dai)).toFixed(2)}, dau_ra:null, nhan:{nhom:x.nhom, buoc:x.buoc, bai_test:x.bai_test, tham_my:x.tham_my, tu_tin:x.tu_tin, nguon:'THANH_PHAM_VL'}}); n++; }   // ADR-015 M2
@@ -2223,10 +2265,12 @@ async function handleApi(request, env){
     tl[i]={ ...d, ...moi, tu_tin:1, can_xac_nhan:false, khong_ro:false, nguoi:me.ho_ten, nguoi_luc:nowISO(), may:d.may||(daGan?null:cu) }; pt.timeline=tl; await env.DB.prepare(`UPDATE ${bang} SET phan_tich=? WHERE id=?`).bind(JSON.stringify(pt), t.id).run();
     if(daGan) await env.DB.prepare(`DELETE FROM mau_hoc_ai WHERE tinh_nang='nhan_khung' AND doi_tuong=? AND doi_tuong_id=? AND dau_vao LIKE ?`).bind(bang, t.id, '{"i":'+i+',%').run();
     const cuMay=d.may||cu;
-    await ghiMauAI(env,{tinh_nang:'nhan_khung', doi_tuong:bang, doi_tuong_id:t.id, dau_vao:{i, tu:d.tu, den:d.den, mo_ta:d.mo_ta, hanh_dong:d.hanh_dong, cu:cuMay, tu_tin_may:d.may?null:d.tu_tin, can_xac_nhan_may:!!d.can_xac_nhan, ngau_nhien:!!body.ngau_nhien, khung_url:d.khung_url||null, nguon:tp?'THANH_PHAM':'FOOTAGE', mo:d.mo||null, thay:d.thay||null, nguon_nhan:d.nguon_nhan||null}, dau_ra:cuMay, nhan:moi, pham_vi:{dong:t.dong||null, muc_dich:null}});
+    await ghiMauAI(env,{tinh_nang:'nhan_khung', doi_tuong:bang, doi_tuong_id:t.id, dau_vao:{i, tu:d.tu, den:d.den, mo_ta:d.mo_ta, hanh_dong:d.hanh_dong, cu:cuMay, tu_tin_may:d.may?null:d.tu_tin, can_xac_nhan_may:!!d.can_xac_nhan, ngau_nhien:!!body.ngau_nhien, giay:Math.max(0,Math.min(120,so(body.giay)))||null, khung_url:d.khung_url||null, nguon:tp?'THANH_PHAM':'FOOTAGE', mo:d.mo||null, thay:d.thay||null, nguon_nhan:d.nguon_nhan||null}, dau_ra:cuMay, nhan:moi, pham_vi:{dong:t.dong||null, muc_dich:null}});
     const dung=cuMay.nhom===moi.nhom&&(cuMay.buoc||null)===(moi.buoc||null)&&(cuMay.bai_test||null)===(moi.bai_test||null); await logAudit(env,me,dung?'xác nhận nhãn hình':'sửa nhãn hình',bang,t.id,'đoạn '+i+': '+(dung?'':(cuMay.nhom+'/'+(cuMay.buoc||'')+' → '))+moi.nhom+'/'+(moi.buoc||moi.bai_test||''));
     if(body.nhe) return json({ ok:true, dung });   // màn gán nhãn nhanh: không tải lại cả db mỗi phím
     return json({ db: await bootstrap(env,me), dung }); }
+  // ADR-017 — Bàn huấn luyện: sáu làn × dòng sản phẩm, mỗi ô có chặng + số đo + điều còn thiếu; nguồn lực (máy, thầy, người)
+  if(path==='/ban-huan-luyen' && method==='GET'){ if(!isStaff(me)) return json({error:'Không có quyền'},403); return json(await banHuanLuyen(env)); }
   // ADR-016 — hàng đợi gán nhãn vàng: đoạn máy chưa chắc trước, xen 1/4 đoạn ngẫu nhiên máy "chắc" (để đo độ chính xác không lệch)
   if(path==='/nhan-hinh/hang' && method==='GET'){ if(!isStaff(me)) return json({error:'Không có quyền'},403);
     const locDong=chuoi(url.searchParams.get('dong'),80); const n=Math.max(5,Math.min(60,so(url.searchParams.get('n'))||30)); const bo=new Set(String(url.searchParams.get('bo')||'').split(',').filter(Boolean));
@@ -2243,7 +2287,8 @@ async function handleApi(request, env){
     const khong=coAnh.filter(x=>x.can_xac_nhan).sort((a,b)=>so(a.tu_tin)-so(b.tu_tin)); const chac=coAnh.filter(x=>!x.can_xac_nhan);
     for(let j=chac.length-1;j>0;j--){ const q=Math.floor(Math.random()*(j+1)); [chac[j],chac[q]]=[chac[q],chac[j]]; }
     const ra=[]; while(ra.length<n&&(khong.length||chac.length)){ if(chac.length&&(ra.length%4===3||!khong.length)) ra.push({...chac.shift(), ngau_nhien:true}); else ra.push(khong.shift()); }
-    return json({ hang:ra, con_lai:coAnh.length, can_xac_nhan:coAnh.filter(x=>x.can_xac_nhan).length, khong_anh:ds.length-coAnh.length, tong_doan:tong, da_gan:daGan, nhom:NHOM_CANH }); }
+    const hl=(await docCauHinh(env)).huan_luyen||{}; const phut=await phutNguoiHomNay(env); const het=so(hl.tran_phut_ngay)>0&&phut>=so(hl.tran_phut_ngay)&&url.searchParams.get('them')!=='1';
+    return json({ hang:het?[]:ra, het_tran:het, phut_hom_nay:+phut.toFixed(1), tran_phut:so(hl.tran_phut_ngay), con_lai:coAnh.length, can_xac_nhan:coAnh.filter(x=>x.can_xac_nhan).length, khong_anh:ds.length-coAnh.length, tong_doan:tong, da_gan:daGan, nhom:NHOM_CANH }); }
   if((m=path.match(/^\/muc\/([^/]+)\/doc-khung$/)) && method==='POST'){ if(!isStaff(me)) return json({error:'Không có quyền'},403); const muc=await env.DB.prepare(`SELECT id FROM muc_noi_dung WHERE id=?`).bind(m[1]).first(); if(!muc) return json({error:'Không tìm thấy mục'},404);
     const mayId=await mayManhNhat(env,'mo_hinh'); if(!mayId) return json({error:'Chưa ghép máy có mô hình (Ollama + qwen2.5vl)'},409); const r=await taoLenhTram(env,'phan_tich_footage',{doc_khung:true, muc_id:muc.id, lai:!!body.lai}, me, mayId);
     await logAudit(env,me,'đọc từng giây footage','muc_noi_dung',muc.id,''); return json({ db: await bootstrap(env,me), lenh_id:r.id, trung:!!r.trung }); }

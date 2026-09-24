@@ -367,7 +367,25 @@ Quyết định: (1) THỨ TỰ: nhận diện nội dung (nhóm cảnh → bư�
 Người duyệt: Thiện · Trạng thái: ĐÃ DUYỆT (2026-09-24, "tiếp tục" sau đề xuất làm màn gán nhãn + bảng đo) · ĐÃ LÀM phần 1
 ```
 
+```
+ADR-017 · 2026-09-24 · TRIỂN KHAI HUẤN LUYỆN SONG SONG VÀ CUỐN CHIẾU — khuôn làn sáu chặng, Bàn huấn luyện
+Bối cảnh : Thiện: "thiết kế kiến trúc và ui để có thể triển khai song song và cuốn chiếu". Bản vẽ docs/kien-truc-trien-khai.html.
+Quyết định: (1) Sáu làn K1 nhận diện · K2 source · K3 thẩm mỹ · K4 đọc lời · K5 ghép và nhịp · K6 kiểm kỹ thuật, cùng khuôn
+            Gom → Thầy gán → Người → Đo → Bóng → Bật; cổng bằng số, cổng Bật do người duyệt. (2) Làn sau mở khi làn trước tới Bóng.
+            (3) Mỗi làn tính riêng từng dòng sản phẩm (bản chung + bản riêng). (4) Một hộp việc cho người, trần phút/ngày (mặc định 20).
+            (5) Trần riêng cho thầy Claude (ai.ngan_sach_thay_usd, mặc định 20 USD/tháng). (6) CHƯA tách việc học sang Ngoc-Han:
+            đo thời gian từng chặng trước (Trạm chạy trên Ngoc-Han, tách có rủi ro); chỉ tách khi tải/cắt/nghe chiếm phần lớn.
+            (7) Huấn luyện chỉ trên Q2; mô hình một nguồn, có phiên bản trong kho app.
+Người duyệt: Thiện · Trạng thái: ĐÃ DUYỆT (2026-09-24, "ok bạn quyết đi") · ĐÃ LÀM đợt A
+```
+
 ## Changelog
+
+### 2026-09-24 · ADR-017 đợt A — Bàn huấn luyện
+- **Worker**: `GET /ban-huan-luyen` (`banHuanLuyen()`, `LAN_HOC`), trần thầy `ai.ngan_sach_thay_usd`, cấu hình `huan_luyen` (trần phút, ngưỡng K1), `/nhan-hinh/hang` báo `het_tran` (`them=1` để làm thêm), mẫu nhãn ghi `giay`, video thành phẩm lưu `thoi_gian` từng chặng + máy.
+- **Máy con**: `hoc-thanh-pham.mjs` đo tải/cắt/nghe/ảnh/nhìn/thầy; `doc-khung.mjs` trả `ms_thay`.
+- **Giao diện**: tab mặc định 🎯 Bàn huấn luyện (làn × dòng, số đo từng ô, thời gian máy học, hộp việc).
+- **Test** `tests/adr017.test.mjs`.
 
 ### 2026-09-24 · ADR-016b — Claude làm thầy gán nhãn hình khi học
 - Chủ 24/09: "khi học có thể dùng gọi api hoặc claude nhận diện gán nhãn để dạy cho mô hình mở, khung hình nào không chắc thì tôi sẽ tham gia gán nhãn".

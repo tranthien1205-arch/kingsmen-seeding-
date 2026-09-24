@@ -53,15 +53,16 @@ function BangDoHinh({ d }) {
 function GanNhanNhanh({ dong, setDong, dongs }) {
   const { goi, notify, refresh } = useApp();
   const [hang, setHang] = useState([]); const [tt, setTt] = useState(null); const [dangTai, setDangTai] = useState(false);
-  const [buoc2, setBuoc2] = useState(null); const [phien, setPhien] = useState({ gan: 0, trung: 0 }); const daXem = useRef(new Set()); const dangGui = useRef(false);
-  const tai = async (reset) => { setDangTai(true); const r = await goi('/nhan-hinh/hang?n=30&dong=' + encodeURIComponent(dong) + '&bo=' + encodeURIComponent(reset ? '' : [...daXem.current].slice(-300).join(','))); setDangTai(false);
+  const [buoc2, setBuoc2] = useState(null); const [phien, setPhien] = useState({ gan: 0, trung: 0 }); const daXem = useRef(new Set()); const dangGui = useRef(false); const batDau = useRef(Date.now()); const [them, setThem] = useState(false);
+  const tai = async (reset) => { setDangTai(true); const r = await goi('/nhan-hinh/hang?n=30' + (them ? '&them=1' : '') + '&dong=' + encodeURIComponent(dong) + '&bo=' + encodeURIComponent(reset ? '' : [...daXem.current].slice(-300).join(','))); setDangTai(false);
     if (!r.ok) return notify(r.msg, 'err'); setTt(r); setHang(h => { const moi = (r.hang || []).filter(x => !daXem.current.has(x.k) && !(reset ? [] : h).some(y => y.k === x.k)); return reset ? moi : [...h, ...moi]; }); };
-  useEffect(() => { daXem.current = new Set(); setHang([]); tai(true); }, [dong]);
+  useEffect(() => { daXem.current = new Set(); setHang([]); tai(true); }, [dong, them]);
+  useEffect(() => { batDau.current = Date.now(); }, [hang[0] && hang[0].k]);   // giây người bỏ ra cho mỗi thẻ → trần phút/ngày
   const x = hang[0];
   const qua = () => { if (x) daXem.current.add(x.k); setBuoc2(null); setHang(h => { const c = h.slice(1); if (c.length < 5 && !dangTai) setTimeout(() => tai(false), 0); return c; }); };
   const gui = async (body) => { if (!x || dangGui.current) return; dangGui.current = true;
     const duong = (x.nguon === 'THANH_PHAM' ? '/kho-thanh-pham/' : '/tai-san/') + x.id + '/doan/' + x.i;
-    const r = await goi(duong, { method: 'POST', body: { ...body, ngau_nhien: !!x.ngau_nhien, nhe: true } }); dangGui.current = false;
+    const r = await goi(duong, { method: 'POST', body: { ...body, ngau_nhien: !!x.ngau_nhien, giay: Math.round((Date.now() - batDau.current) / 1000), nhe: true } }); dangGui.current = false;
     if (!r.ok) return notify(r.msg, 'err');
     if (!body.khong_ro) setPhien(p => ({ gan: p.gan + 1, trung: p.trung + (r.dung ? 1 : 0) }));
     qua(); };
@@ -79,7 +80,7 @@ function GanNhanNhanh({ dong, setDong, dongs }) {
       {tt && <span className="text-[11px] text-ink-muted">còn {tt.con_lai} đoạn chưa gán ({tt.can_xac_nhan} máy chưa chắc) · đã gán {tt.da_gan}/{tt.tong_doan}{tt.khong_anh ? ' · ' + tt.khong_anh + ' đoạn chưa có ảnh' : ''}</span>}
       <span className="ml-auto text-[11px] text-ink-muted">phiên này: {phien.gan} nhãn · máy đúng {phanTram(phien.trung, phien.gan)}</span>
       <Btn variant="ghost" className="!py-1 !px-2 text-[11px]" onClick={() => { refresh(); tai(true); }}>Tải lại + cập nhật bảng đo</Btn></div>
-    {!x ? <Empty>{dangTai ? 'Đang lấy đoạn…' : 'Không còn đoạn nào cần gán. Máy đọc thêm footage/video thành phẩm thì đoạn mới sẽ hiện ở đây.'}</Empty> :
+    {!x && tt && tt.het_tran ? <div className="text-center py-8 text-sm text-ink-muted">Đã đủ {tt.tran_phut} phút hôm nay ({tt.phut_hom_nay} phút), máy không dồn thêm thẻ. <Btn variant="ghost" className="ml-2 !py-1 !px-2 text-[11px]" onClick={() => setThem(true)}>Làm thêm</Btn></div> : !x ? <Empty>{dangTai ? 'Đang lấy đoạn…' : 'Không còn đoạn nào cần gán. Máy đọc thêm footage/video thành phẩm thì đoạn mới sẽ hiện ở đây.'}</Empty> :
       <div className="grid lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)] gap-3">
         <div>
           <div className="rounded-xl overflow-hidden bg-slate-900 aspect-video flex items-center justify-center">
