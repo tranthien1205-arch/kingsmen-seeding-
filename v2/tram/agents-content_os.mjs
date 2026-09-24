@@ -32,3 +32,12 @@ export const AGENT_CONTENT_OS = {
       mo_ta: "hỏi /hub/viec/seeding_nuoi → mở nhóm bằng hồ sơ tài khoản → cuộn xem vài phút, thả tim vài bài → content_os.seeding_nuoi_ket_qua" },
   ],
 };
+// ADR-007b — TÀI KHOẢN SEEDING THÊM (facebook-2 … facebook-5): mỗi tài khoản một agent chỉ có bước ĐĂNG NHẬP (dang-nhap-chung),
+// tạo hồ sơ trình duyệt <id>-profile mà content_os dùng để đăng/bình luận/nuôi. Chép vào AGENTS của masfico-insight cùng AGENT_CONTENT_OS.
+export const TAI_KHOAN_SEEDING_AGENTS = [2, 3, 4, 5].map((k) => ({
+  id: "facebook-" + k, ten: "Facebook tài khoản seeding " + k, icon: "👤", nhom: "noi_dung", san_sang: true, uu_tien: false,
+  gioi_thieu: "Tài khoản Facebook thứ " + k + " của phòng MKT dùng cho seeding hội nhóm (Content OS gọi tram_id facebook-" + k + "). Chỉ cần đăng nhập một lần; đăng/bình luận/nuôi do agent content_os làm.",
+  phien: "facebook-" + k + "-phien.json",
+  dang_nhap: { kieu: "trinh_duyet", script: "dang-nhap-chung.mjs", tham_so: ["--ten=facebook-" + k, "--phien=facebook-" + k + "-phien.json", "--url=https://www.facebook.com/", "--dau_hieu=[aria-label*=\"Tài khoản của bạn\" i],[aria-label*=\"Your profile\" i]"], huong_dan: "Đăng nhập tài khoản Facebook seeding số " + k + " trong cửa sổ vừa mở (đúng tài khoản đã khai ở Content OS › Seeding › Tài khoản MKT). Trạm không giữ mật khẩu." },
+  viec: [],
+}));
