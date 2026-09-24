@@ -43,6 +43,12 @@ export default async function hoc({ app, goiApp, lenh, dir, log, script }) {
     // đi sâu tối đa 3 tầng thư mục (đo 24/09: kho của chủ là gốc → BÁN HÀNG → DOUYIN_20V/FINEX/TERRAZY → video); thư mục tên goc/source ở tầng nào cũng là clip gốc
     const duyet = async (id, duong, tang) => { const ds = await ND.docThuMuc(id).catch(() => []); for (const x of ds) { if (x.la_thu_muc) { if (tang < 3) await duyet(x.id, duong ? duong + "/" + x.ten : x.ten, tang + 1); } else if (LA_VIDEO.test(x.ten)) { if (LA_GOC.test((duong || "").split("/").pop() || "")) goc.push({ ...x, drive: true }); else video.push({ ...x, drive: true, nhom: duong || "" }); } } };
     await duyet(fid, "", 0); log("  Drive:", video.length, "video ·", goc.length, "clip gốc");
+  } else if (Array.isArray(ts.links) && ts.links.length) {
+    // 24/09 tối (chủ: "tải về máy Q2 luôn để huấn luyện"): máy học tự tải thẳng từ TikTok về ổ của nó, giữ lại để học lại lần sau
+    const slug = String(ts.kenh || nguon).replace(/^kalodata:/, "").replace(/^@/, "").replace(/[^a-z0-9_.-]/gi, "_").slice(0, 60) || "khac";
+    thuMuc = join(dir, "thanh-pham", nguon.toLowerCase(), slug); mkdirSync(thuMuc, { recursive: true });
+    for (const x of ts.links) { const id = (String(x.link).match(/\/video\/(\d+)/) || [])[1]; if (!id) continue; const ten = id + ".mp4"; video.push({ id: ten, ten, link: x.link, f: join(thuMuc, ten) }); meta[ten] = { ...(x.meta || {}), link: x.link }; }
+    try { writeFileSync(join(thuMuc, "_meta.json"), JSON.stringify(meta, null, 1)); } catch {}
   } else if (Array.isArray(ts.video) && ts.video.length) {
     // 24/09 (gom về một máy): Trạm tải xong đẩy video lên kho app → máy học lấy về từ app, không cần chung ổ với Trạm
     thuMuc = "app:" + (ts.kenh || nguon); for (const x of ts.video) { video.push({ id: x.ten, ten: x.ten, url: x.url }); meta[x.ten] = x.meta || {}; }
@@ -64,8 +70,16 @@ export default async function hoc({ app, goiApp, lenh, dir, log, script }) {
   let xong = 0, mau = 0; const loi = [];
   for (const v of video) {
     try {
+      // tải một video TikTok thẳng về máy: yt-dlp nếu máy có Python + yt-dlp, không thì tikwm.com (chỉ gửi link công khai, không cookie)
+      const taiTikTok = async (x, f) => { if (existsSync(f) && statSync(f).size > 50000) return f;
+        const py = spawnSync("python", ["-m", "yt_dlp", "-q", "--no-playlist", "--no-warnings", "-f", "mp4/best", "-o", f, x.link], { encoding: "utf8", timeout: 240000, windowsHide: true });
+        if (py.status === 0 && existsSync(f) && statSync(f).size > 50000) return f;
+        for (let k = 0; k < 3; k++) { await new Promise((r) => setTimeout(r, 1500 * (k + 1))); const r = await fetch("https://www.tikwm.com/api/?url=" + encodeURIComponent(x.link) + "&hd=1", { headers: { "user-agent": "Mozilla/5.0" } }).catch(() => null); const j = r ? await r.json().catch(() => null) : null; const u = j && j.data && (j.data.hdplay || j.data.play);
+          if (u) { const v = await fetch(/^https?:/.test(u) ? u : "https://www.tikwm.com" + u, { headers: { "user-agent": "Mozilla/5.0" } }); if (!v.ok) throw new Error("tikwm tải HTTP " + v.status); writeFileSync(f, Buffer.from(await v.arrayBuffer())); if (statSync(f).size > 50000) return f; }
+          if (j && j.code === -1 && !/limit/i.test(j.msg || "")) break; }
+        throw new Error("không tải được video (yt-dlp và tikwm đều không trả mp4)"); };
       const taiApp = async (x, f) => { if (existsSync(f) && statSync(f).size > 1000) return f; const u = /^https?:/.test(x.url) ? x.url : app.url.replace(/\/api\/?$/, "").replace(/\/+$/, "") + x.url; const r = await fetch(u, { headers: { "X-Hub-Key": app.khoa } }); if (!r.ok) throw new Error("tải từ kho app HTTP " + r.status); writeFileSync(f, Buffer.from(await r.arrayBuffer())); return f; };
-      const f = v.drive ? await taiDrive(v, join(TH, "tp_" + basename(v.ten).replace(/[^a-z0-9_.-]/gi, "_"))) : v.url ? await taiApp(v, join(TH, "tp_" + basename(v.ten).replace(/[^a-z0-9_.-]/gi, "_"))) : v.f; const dai = thoiLuong(f); if (!dai) throw new Error("không đọc được thời lượng");
+      const f = v.link ? await taiTikTok(v, v.f) : v.drive ? await taiDrive(v, join(TH, "tp_" + basename(v.ten).replace(/[^a-z0-9_.-]/gi, "_"))) : v.url ? await taiApp(v, join(TH, "tp_" + basename(v.ten).replace(/[^a-z0-9_.-]/gi, "_"))) : v.f; const dai = thoiLuong(f); if (!dai) throw new Error("không đọc được thời lượng");
       const shots = catShot(f, dai); if (shots.length < 2) { log("  ✗", v.ten, "chỉ 1 shot — bỏ (video một cảnh không dạy được cách ghép)"); loi.push(v.ten + ": 1 shot"); continue; }
       const KD = join(TH, "k_" + xong); mkdirSync(KD, { recursive: true });
       for (let i = 0; i < shots.length; i++) {
