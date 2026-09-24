@@ -7,7 +7,7 @@
 //   4. Chạy test, build, `wrangler deploy --message "<commit> · <máy>"`, ghi sổ, nhả khoá (kể cả khi lỗi).
 // Cờ: --khong-test (bỏ chạy test) · --bo-qua-so (chấp nhận bản trên Cloudflare lạ — chỉ khi đã kiểm tay) · --thu (dry-run, không deploy).
 import { spawnSync } from "node:child_process";
-import { writeFileSync, mkdtempSync, rmSync } from "node:fs";
+import { writeFileSync, mkdtempSync, rmSync, existsSync, readdirSync, statSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { tmpdir, hostname } from "node:os";
 import { fileURLToPath } from "node:url";
@@ -17,10 +17,17 @@ const V2 = dirname(fileURLToPath(import.meta.url)); const ROOT = join(V2, "..");
 const CO = (t) => process.argv.includes("--" + t);
 const MAY = hostname(); const THE = randomUUID().slice(0, 8); const DB = "kingsmen-content-os-db";
 const bao = (m) => console.log("· " + m); const dung = (m) => { console.error("✗ " + m); process.exitCode = 1; };
-const chay = (cmd, args, opt = {}) => { const r = spawnSync(cmd, args, { cwd: opt.cwd || V2, encoding: "utf8", shell: process.platform === "win32", maxBuffer: 64 * 1024 * 1024, stdio: opt.hien ? "inherit" : "pipe" }); return { ok: r.status === 0, out: String(r.stdout || ""), err: String(r.stderr || "") }; };
+const chay = (cmd, args, opt = {}) => { const r = spawnSync(cmd, args, { cwd: opt.cwd || V2, encoding: "utf8", shell: false, maxBuffer: 64 * 1024 * 1024, stdio: opt.hien ? "inherit" : "pipe" }); return { ok: r.status === 0, out: String(r.stdout || ""), err: String(r.stderr || "") + (r.error ? String(r.error.message) : "") }; };
+// wrangler chạy thẳng bằng Node (không qua shell → câu SQL truyền nguyên vẹn): node_modules của repo, rồi bản npx đã cache, mới nhất trước
+const WJS = (() => { for (const p of [join(V2, "node_modules", "wrangler", "bin", "wrangler.js"), join(ROOT, "node_modules", "wrangler", "bin", "wrangler.js")]) if (existsSync(p)) return p;
+  const npxDir = join(process.env.LOCALAPPDATA || join(process.env.HOME || "", ".npm"), process.env.LOCALAPPDATA ? "npm-cache/_npx" : "_npx"); let tot = null, t0 = 0;
+  try { for (const d of readdirSync(npxDir)) { const p = join(npxDir, d, "node_modules", "wrangler", "bin", "wrangler.js"); if (existsSync(p)) { const t = statSync(p).mtimeMs; if (t > t0) { t0 = t; tot = p; } } } } catch {}
+  return tot; })();
+if (!WJS) { console.error("✗ không tìm thấy wrangler — chạy `npx wrangler --version` một lần rồi chạy lại"); process.exit(1); }
+const wr = (args, opt) => chay(process.execPath, [WJS, ...args], opt);
 const git = (...a) => chay("git", a, { cwd: ROOT });
 const TMP = mkdtempSync(join(tmpdir(), "kcos-deploy-"));
-function sql(q) { const f = join(TMP, "q" + Date.now() + ".sql"); writeFileSync(f, q); const r = chay("npx", ["wrangler", "d1", "execute", DB, "--remote", "--json", "--file", f]); if (!r.ok) throw new Error("D1 lỗi: " + (r.err || r.out).slice(-300)); const i = r.out.indexOf("["); const j = JSON.parse(r.out.slice(i)); return (j[0] && j[0].results) || []; }
+function sql(q) { const r = wr(["d1", "execute", DB, "--remote", "--json", "--command", q]); if (!r.ok) throw new Error("D1 lỗi: " + (r.err || r.out).slice(-300)); const i = r.out.indexOf("["); const j = JSON.parse(r.out.slice(i)); return (j[0] && j[0].results) || []; }
 const esc = (s) => String(s).replace(/'/g, "''");
 const bayGio = () => new Date().toISOString();
 
@@ -41,7 +48,7 @@ try {
   giuKhoa = true; bao("đã giữ khoá deploy tới " + hetHan.slice(11, 19) + " UTC");
   // 3. sổ deploy: không lùi, không đè bản lạ
   const so = JSON.parse((sql(`SELECT cau_hinh FROM module_config WHERE id='deploy_so'`)[0] || {}).cau_hinh || "{}");
-  const dsCf = (() => { const r = chay("npx", ["wrangler", "deployments", "list", "--json"]); try { return JSON.parse(r.out.slice(r.out.indexOf("["))); } catch { return []; } })();
+  const dsCf = (() => { const r = wr(["deployments", "list", "--json"]); try { return JSON.parse(r.out.slice(r.out.indexOf("["))); } catch { return []; } })();
   const moiNhat = dsCf.slice().sort((a, b) => String(b.created_on).localeCompare(String(a.created_on)))[0];
   if (so.commit) {
     if (!git("cat-file", "-e", so.commit + "^{commit}").ok || !git("merge-base", "--is-ancestor", so.commit, "HEAD").ok) throw new Error("bản đang chạy do máy " + so.may + " deploy từ commit " + so.commit.slice(0, 7) + " — commit đó không có trong lịch sử máy này. Pull về rồi chạy lại");
@@ -51,10 +58,10 @@ try {
   // 4. test · build · deploy
   if (!CO("khong-test")) { bao("chạy test…"); const t = chay("node", ["--test", "--no-warnings", "tests/*.test.mjs"]); const m = t.out.match(/ℹ fail (\d+)/); if (!t.ok || (m && m[1] !== "0")) throw new Error("test hỏng — không deploy:\n" + (t.out.split("\n").filter((l) => /^✖|ℹ (pass|fail)/.test(l)).slice(0, 12).join("\n"))); bao("test: " + ((t.out.match(/ℹ pass (\d+)/) || [])[1] || "?") + " qua"); }
   const b = chay("node", ["build.mjs"]); if (!b.ok) throw new Error("build lỗi:\n" + (b.err || b.out).slice(-600)); bao("build xong");
-  if (CO("thu")) { const d = chay("npx", ["wrangler", "deploy", "--dry-run"]); bao("dry-run " + (d.ok ? "ổn" : "LỖI")); }
+  if (CO("thu")) { const d = wr(["deploy", "--dry-run"]); bao("dry-run " + (d.ok ? "ổn" : "LỖI")); }
   else {
-    const d = chay("npx", ["wrangler", "deploy", "--message", `"${head.slice(0, 7)} · ${MAY}"`], { hien: true }); if (!d.ok) throw new Error("wrangler deploy lỗi");
-    const sau = (() => { const r = chay("npx", ["wrangler", "deployments", "list", "--json"]); try { return JSON.parse(r.out.slice(r.out.indexOf("["))).sort((a, x) => String(x.created_on).localeCompare(String(a.created_on)))[0]; } catch { return null; } })();
+    const d = wr(["deploy", "--message", head.slice(0, 7) + " · " + MAY], { hien: true }); if (!d.ok) throw new Error("wrangler deploy lỗi");
+    const sau = (() => { const r = wr(["deployments", "list", "--json"]); try { return JSON.parse(r.out.slice(r.out.indexOf("["))).sort((a, x) => String(x.created_on).localeCompare(String(a.created_on)))[0]; } catch { return null; } })();
     sql(`INSERT INTO module_config (id,cau_hinh,updated_at,updated_by_name) VALUES ('deploy_so','${esc(JSON.stringify({ commit: head, may: MAY, luc: bayGio(), deploy_id: sau ? sau.id : null }))}','${bayGio()}','${esc(MAY)}') ON CONFLICT(id) DO UPDATE SET cau_hinh=excluded.cau_hinh, updated_at=excluded.updated_at, updated_by_name=excluded.updated_by_name;`);
     bao("ĐÃ DEPLOY " + head.slice(0, 7) + " từ " + MAY + (sau ? " · deployment " + sau.id : ""));
   }
