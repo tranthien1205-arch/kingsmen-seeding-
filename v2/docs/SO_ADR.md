@@ -251,6 +251,30 @@ Quyết định: (1) TÀI KHOẢN `kalodata` trên Trạm (masfico-insight v9.16
 Người duyệt: Thiện · Trạng thái: ĐÃ DUYỆT (2026-09-24, "Duyệt, làm cả 4 phần") · ĐÃ LÀM (chưa quét thật — chờ đăng nhập Kalodata trên Trạm)
 ```
 
+```
+ADR-012 · 2026-09-24 · KIẾN TRÚC HUẤN LUYỆN — mẫu có nhãn dòng sản phẩm / mục đích, bản chung + bản riêng theo phạm vi, màn Huấn luyện 5 khối
+Bối cảnh : Sau ADR-010/011 có 7 đầu học nhưng màn Huấn luyện "quá cơ bản" (Thiện), nạp ngành Kalodata xong không thấy tiến trình, và câu hỏi
+            "có 2 dòng sản phẩm thì có nên huấn luyện chuyên sâu cho mỗi dòng, hoặc cho từng mục đích không". Mô phỏng
+            docs/huan-luyen-mo-phong.html (artifact 82ScBu38fYWWEJ7Nv3HcQ4) duyệt 24/09 "Duyệt cả màn lẫn kiến trúc".
+Quyết định: (1) NHÃN MẪU: mau_hoc_ai + dong (san_pham.dong) + muc_dich (BAN_HANG|BRAND). Mẫu sinh từ bài tự suy nhãn: bài → mục kế hoạch →
+            sản phẩm.dong + muc_tieu (phamViCua); mẫu từ kho thành phẩm lấy nhãn người nạp (kho_thanh_pham + dong, muc_dich; mọi cửa nạp
+            Drive / máy / TikTok / Kalodata hỏi nhãn; gắn lại nhãn → mẫu đổi theo; loại video → xoá mẫu). (2) PHẠM VI: 'chung' |
+            'dong:<dòng>' | 'muc_dich:<mục đích>'. Mỗi tính năng luôn có bản chung. /ai/huan-luyen {tinh_nang, pham_vi} đếm mẫu trong
+            phạm vi (≥ 10), lệnh huan_luyen mang pham_vi, máy lọc /hub/tap-mau?pham_vi, phiên bản gửi lên mang pham_vi. Duyệt bản riêng
+            KHÔNG đè checkpoint bản chung. Máy dựng tra /hub/mo-hinh/:tn?dong=&muc_dich= (việc dựng mang pham_vi của bài): bản riêng
+            chỉ dùng khi điểm kiểm ≥ điểm bản chung đã duyệt + 3; không thì bản chung. (3) LOẠI ĐẦU HỌC: nhìn (chọn cảnh, lọc clip, chọn
+            đoạn, ghép) = CLIP đóng băng + đầu nhỏ, tách theo dòng rẻ → làm ngay; ngôn ngữ (soạn kịch bản, chấm ý tưởng) = LoRA Qwen 7B
+            trên GPU thuê, một nền + adapter theo phạm vi khi ≥ 60 mẫu (xuất tập mẫu ?pham_vi; kịch bản bán tốt nằm sẵn trong tập),
+            trước đó điều kiện hoá bằng lời dặn; nghe/đọc (Whisper, Piper) không huấn luyện. (4) MÀN HUẤN LUYỆN 5 khối: mô hình đang học
+            (mức, mẫu có/cần theo phạm vi, điểm, bản riêng đã duyệt, chọn phạm vi rồi 🎓), bốn cửa nạp có nhãn, tiến trình (tram_lenh
+            huan_luyen/hoc_thanh_pham/phan_tich_footage/nap_drive + chay_agent tai_tiktok/kalodata_video, kết quả nguyên văn), kho mẫu
+            (lọc nguồn/dòng/lời thoại, gắn nhãn, loại), phiên bản chờ duyệt có nhãn phạm vi.
+Đánh đổi  : mo_hinh.diem vẫn bị tinhDinhTuyen tính lại theo bóng → so sánh bản riêng dùng điểm kiểm của phiên bản chung đã duyệt; nhãn
+            mục đích chỉ có khi mục kế hoạch đặt mục tiêu; adapter ngôn ngữ theo dòng là lộ trình (chưa đủ mẫu).
+Người duyệt: Thiện · Trạng thái: ĐÃ DUYỆT (2026-09-24) · ĐÃ LÀM (bản riêng chưa có phiên bản thật — kho mới có 0 video)
+```
+
+
 
 
 ```
@@ -272,6 +296,13 @@ Người duyệt: Thiện · Trạng thái: ĐÃ DUYỆT (2026-09-24, "tiếp t�
 ```
 
 ## Changelog
+
+### 2026-09-24 · ADR-012 — nhãn mẫu, bản chung / bản riêng theo phạm vi, màn Huấn luyện 5 khối
+- **Worker**: `mau_hoc_ai` +dong, muc_dich (tự suy qua `phamViCua`; `ganMauAI` bổ sung); `kho_thanh_pham` +dong, muc_dich; `mo_hinh_phien_ban` +pham_vi. `/kho-thanh-pham/nap`, hàng đợi TikTok, cấu hình Kalodata mang nhãn → lệnh `hoc_thanh_pham` mang nhãn. `PATCH/DELETE /kho-thanh-pham/:id`. `/ai/huan-luyen {pham_vi}`; `/hub/tap-mau`, `/hub/tap-mau-ngon-ngu` lọc `?pham_vi`; `/hub/mo-hinh/phien-ban` nhận pham_vi; duyệt bản riêng không đè bản chung; `/hub/mo-hinh/:tn?dong=&muc_dich=` chọn bản riêng khi ≥ bản chung + 3 (so với điểm kiểm phiên bản chung đã duyệt); `/hub/viec/dung_video` trả `pham_vi`. Bootstrap: `dong_san_pham`, `pham_vi_thong_ke`, `tien_trinh`.
+- **Máy dựng**: `huan-luyen.mjs` nhận `pham_vi` (tập mẫu lọc, phiên bản gửi lên có nhãn); `dung-video.mjs` tra checkpoint chọn cảnh / chọn đoạn / ghép theo phạm vi của bài; `hoc-thanh-pham.mjs` gửi nhãn.
+- **Giao diện** Máy › Bộ não AI › Huấn luyện viết lại theo mô phỏng: 1 mô hình đang học · 2 bốn cửa nạp (Drive, máy dựng, TikTok, Kalodata) có nhãn · 3 việc đang chạy · 4 kho mẫu (lọc, gắn nhãn, loại) · 5 phiên bản.
+- **Trạm** v9.165: nhân viên `content_os:hoc` sở hữu `tai_tiktok` + `kalodata_video` (trước đó hai việc không thuộc ai → Trạm không hiện, từ chối tài khoản); dấu hiệu đăng nhập Kalodata rộng hơn.
+- **Test** `tests/adr012.test.mjs` (3 bài).
 
 ### 2026-09-24 · ADR-011 — Kalodata: video bán chạy → kho thành phẩm theo doanh thu → kịch bản bán hàng
 - **Worker**: `kho_thanh_pham` +doanh_thu, luot_ban, san_pham, kich_ban; `PUT /kalodata` (ngành hàng, top N, tự quét tuần), `POST /kalodata/quet` (cần Trạm sống → `chay_agent content_os/kalodata_video`); hub `GET /hub/viec/kalodata` (đến hạn?), `POST /hub/kalodata` (bảng video → hàng đợi `tai_tiktok` nguồn KALODATA với link + meta → lệnh Trạm tải), `/hub/tiktok-da-tai` nhận `nguon`; `/hub/thanh-pham` nhận doanh thu/sản phẩm/kịch bản (lời shot ghép lại); `angleFootage` kèm 3 kịch bản bán tốt; `/hub/tap-mau-ngon-ngu` thêm mẫu từ kho; bootstrap `ai_nao.kalodata`.

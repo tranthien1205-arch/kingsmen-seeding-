@@ -6,9 +6,10 @@ import { writeFileSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 export default async function huanLuyen({ app, goiApp, lenh, dir, log, script, may }) {
-  const tn = String((lenh.tham_so || {}).tinh_nang || "chon_canh"); const moId = String((lenh.tham_so || {}).mo_hinh_id || "clip-vit-b16");
-  if (tn === "chon_doan" || tn === "ghep_canh") return hocGhep({ app, goiApp, tn, moId, dir, log, may });   // ADR-010c
-  const r = await goiApp("/hub/tap-mau?tinh_nang=" + encodeURIComponent(tn)); if (!r.ok) return { ok: false, msg: "không lấy được tập mẫu (HTTP " + r.status + ")" };
+  const tn = String((lenh.tham_so || {}).tinh_nang || "chon_canh"); const moId = String((lenh.tham_so || {}).mo_hinh_id || "clip-vit-b16"); const phamVi = String((lenh.tham_so || {}).pham_vi || "chung");   // ADR-012: chung | dong:<dòng> | muc_dich:<mục đích>
+  if (tn === "chon_doan" || tn === "ghep_canh") return hocGhep({ app, goiApp, tn, moId, dir, log, may, phamVi });   // ADR-010c
+  log("  phạm vi:", phamVi);
+  const r = await goiApp("/hub/tap-mau?tinh_nang=" + encodeURIComponent(tn) + "&pham_vi=" + encodeURIComponent(phamVi)); if (!r.ok) return { ok: false, msg: "không lấy được tập mẫu (HTTP " + r.status + ")" };
   const mau = ((r.d && r.d.mau) || []).filter((m) => m.nhan && m.nhan.tai_san_id && (m.ung_vien || []).length >= 2); if (mau.length < 8) return { ok: false, msg: "tập mẫu quá nhỏ (" + mau.length + " cảnh có ≥ 2 ứng viên) — cần người chấm thêm" };
   const mh = await goiApp("/hub/mo-hinh/" + tn); const modelId = (mh.d && mh.d.mo_hinh_mo && mh.d.mo_hinh_mo.model_id) || "Xenova/clip-vit-base-patch16";
   const N = await (await script("nhin")).taoNhin({ model_id: modelId, log });
@@ -35,7 +36,7 @@ export default async function huanLuyen({ app, goiApp, lenh, dir, log, script, m
   // ---- checkpoint → app
   const f = join(TH, "dau-" + Date.now() + ".json"); writeFileSync(f, JSON.stringify({ ...dau, danh_gia: { diem, diem_truoc: diemTruoc, n_hoc: hoc.length, n_kiem: tapKiem.length, luc: new Date().toISOString(), may } }));
   const buf = readFileSync(f); const up = await fetch(app.url.replace(/\/+$/, "") + "/hub/upload?type=application/json", { method: "POST", headers: { "X-Hub-Key": app.khoa, "Content-Type": "application/json", "Content-Length": String(buf.length) }, body: buf }); const uj = await up.json().catch(() => ({})); if (!up.ok) return { ok: false, msg: "không tải checkpoint lên (" + up.status + " " + (uj.error || "") + ")" };
-  const pb = await goiApp("/hub/mo-hinh/phien-ban", { method: "POST", body: JSON.stringify({ mo_hinh_id: moId, tinh_nang: tn, checkpoint_url: uj.media_url, may, danh_gia: { diem, diem_truoc: diemTruoc, n_hoc: hoc.length, n_kiem: tapKiem.length, ghi_chu: "tập học " + diemHoc + "/100 · " + pairs.length + " cặp" } }) });
+  const pb = await goiApp("/hub/mo-hinh/phien-ban", { method: "POST", body: JSON.stringify({ mo_hinh_id: moId, tinh_nang: tn, pham_vi: phamVi, checkpoint_url: uj.media_url, may, danh_gia: { diem, diem_truoc: diemTruoc, n_hoc: hoc.length, n_kiem: tapKiem.length, ghi_chu: "tập học " + diemHoc + "/100 · " + pairs.length + " cặp" } }) });
   if (!pb.ok) return { ok: false, msg: "app không nhận phiên bản (HTTP " + pb.status + ")" };
   return { ok: true, msg: "đầu " + tn + " " + (pb.d && pb.d.phien_ban) + ": " + diem + "/100 trên " + tapKiem.length + " cảnh kiểm (cos thuần " + diemTruoc + ") — chờ Trưởng MKT duyệt" };
 }
@@ -56,8 +57,8 @@ export function cuaSo(doan, dai, can, buoc = 0.5) { const ra = []; if (!doan || 
 export const diemCuaSo = (dau, f) => { let z = dau.b || 0; for (let k = 0; k < f.length; k++) z += (dau.w[k] || 0) * f[k]; return z; };
 const iou = (a, b) => { const g = Math.max(0, Math.min(a.den, b.den) - Math.max(a.tu, b.tu)); const h = Math.max(a.den, b.den) - Math.min(a.tu, b.tu); return h > 0 ? g / h : 0; };
 
-async function hocGhep({ app, goiApp, tn, moId, dir, log, may }) {
-  const r = await goiApp("/hub/tap-mau?tinh_nang=" + tn); if (!r.ok) return { ok: false, msg: "không lấy được tập mẫu (HTTP " + r.status + ")" };
+async function hocGhep({ app, goiApp, tn, moId, dir, log, may, phamVi = "chung" }) {
+  const r = await goiApp("/hub/tap-mau?tinh_nang=" + tn + "&pham_vi=" + encodeURIComponent(phamVi)); if (!r.ok) return { ok: false, msg: "không lấy được tập mẫu (HTTP " + r.status + ")" };
   const mau = (r.d && r.d.mau) || []; const tso = trongSoLuotXem(mau);
   let dau, diem, diemTruoc, nHoc, nKiem, ghiChu;
   if (tn === "chon_doan") {
@@ -82,7 +83,7 @@ async function hocGhep({ app, goiApp, tn, moId, dir, log, may }) {
   log("  " + tn + ": " + diem + "/100 trên " + nKiem + " mẫu kiểm (luật cũ " + diemTruoc + ")");
   const TH = join(dir, "hoc", tn); mkdirSync(TH, { recursive: true }); const f = join(TH, "dau-" + Date.now() + ".json"); writeFileSync(f, JSON.stringify({ ...dau, danh_gia: { diem, diem_truoc: diemTruoc, n_hoc: nHoc, n_kiem: nKiem, luc: new Date().toISOString(), may } }));
   const buf = readFileSync(f); const up = await fetch(app.url.replace(/\/+$/, "") + "/hub/upload?type=application/json", { method: "POST", headers: { "X-Hub-Key": app.khoa, "Content-Type": "application/json", "Content-Length": String(buf.length) }, body: buf }); const uj = await up.json().catch(() => ({})); if (!up.ok) return { ok: false, msg: "tải checkpoint lỗi " + up.status };
-  const pb = await goiApp("/hub/mo-hinh/phien-ban", { method: "POST", body: JSON.stringify({ mo_hinh_id: moId, tinh_nang: tn, checkpoint_url: uj.media_url, may, danh_gia: { diem, diem_truoc: diemTruoc, n_hoc: nHoc, n_kiem: nKiem, ghi_chu: ghiChu } }) });
+  const pb = await goiApp("/hub/mo-hinh/phien-ban", { method: "POST", body: JSON.stringify({ mo_hinh_id: moId, tinh_nang: tn, pham_vi: phamVi, checkpoint_url: uj.media_url, may, danh_gia: { diem, diem_truoc: diemTruoc, n_hoc: nHoc, n_kiem: nKiem, ghi_chu: ghiChu + (phamVi !== "chung" ? " · phạm vi " + phamVi : "") } }) });
   if (!pb.ok) return { ok: false, msg: "app không nhận phiên bản (HTTP " + pb.status + ")" };
   return { ok: true, msg: tn + " " + (pb.d && pb.d.phien_ban) + ": " + diem + "/100 (luật cũ " + diemTruoc + ") — chờ Trưởng MKT duyệt" };
 }

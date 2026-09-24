@@ -1,0 +1,131 @@
+<title>Huấn luyện Content OS</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600;8..60,700&display=swap">
+<style>
+:root{--paper:#F2F5F3;--card:#FFFFFF;--ink:#141E1B;--ink-2:#3D4E49;--muted:#68807A;--line:#D8E0DC;--line-2:#E9EEEC;--teal:#0C7B6F;--teal-soft:#E3F0ED;--gold:#B08D2E;--gold-soft:#F6EDD6;--leak:#A3372B;--leak-soft:#F7E5E1;--shadow:0 1px 2px rgba(20,30,27,.05),0 8px 24px -16px rgba(20,30,27,.35)}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){color-scheme:dark;--paper:#121917;--card:#1A2320;--ink:#EEF3F1;--ink-2:#C5D1CC;--muted:#8FA39C;--line:#2C3935;--line-2:#233029;--teal:#4FB8A9;--teal-soft:#183630;--gold:#D6B45C;--gold-soft:#3A2F14;--leak:#E07A6C;--leak-soft:#3D1F1A}}
+:root[data-theme="dark"]{color-scheme:dark;--paper:#121917;--card:#1A2320;--ink:#EEF3F1;--ink-2:#C5D1CC;--muted:#8FA39C;--line:#2C3935;--line-2:#233029;--teal:#4FB8A9;--teal-soft:#183630;--gold:#D6B45C;--gold-soft:#3A2F14;--leak:#E07A6C;--leak-soft:#3D1F1A}
+*{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--ink);font:15px/1.6 "Be Vietnam Pro",system-ui,sans-serif}
+.wrap{max-width:1180px;margin:0 auto;padding-block:32px 96px;padding-inline:20px;display:flex;flex-direction:column;gap:34px}
+h1,h2,h3{font-family:"Source Serif 4",Georgia,serif;letter-spacing:-.015em;text-wrap:balance;margin:0}
+h1{font-size:clamp(28px,4vw,38px);line-height:1.15}h2{font-size:22px;line-height:1.25}h3{font-size:17px}
+.eyebrow{font-size:11.5px;letter-spacing:.14em;text-transform:uppercase;font-weight:600;color:var(--teal)}
+.lead{font-size:17px;color:var(--ink-2);max-width:68ch}.note{font-size:13.5px;color:var(--muted);max-width:75ch}
+.card{background:var(--card);border:1px solid var(--line);border-radius:4px;box-shadow:var(--shadow);padding:18px 20px;display:flex;flex-direction:column;gap:14px}
+.grid{display:grid;gap:14px}.g4{grid-template-columns:repeat(auto-fit,minmax(230px,1fr))}.g2{grid-template-columns:repeat(auto-fit,minmax(340px,1fr))}
+.kpi{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:14px}.kpi .card{gap:2px;padding:14px 16px}
+.kpi b{font-family:"Source Serif 4",serif;font-size:34px;font-weight:700;line-height:1.1}.kpi .good{color:var(--teal)}.kpi .bad{color:var(--leak)}.kpi span{font-size:13px;color:var(--muted)}
+.tbl-wrap{overflow-x:auto}table{border-collapse:collapse;width:100%;min-width:640px;font-size:13.5px}th{background:var(--line-2);color:var(--muted);font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;text-align:left;padding:8px 10px;font-weight:600}
+td{padding:9px 10px;border-top:1px solid var(--line-2);vertical-align:top}td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
+.pill{display:inline-block;padding:1px 8px;border-radius:999px;font-size:11.5px;font-weight:600;border:1px solid transparent}
+.p-teal{background:var(--teal-soft);color:var(--teal)}.p-gold{background:var(--gold-soft);color:var(--gold)}.p-leak{background:var(--leak-soft);color:var(--leak)}.p-line{background:var(--line-2);color:var(--ink-2)}
+.tag{display:inline-block;font-size:11.5px;padding:1px 7px;border:1px solid var(--line);border-radius:3px;color:var(--ink-2);margin-right:4px}
+.btn{display:inline-block;padding:7px 12px;border-radius:4px;border:1px solid var(--line);background:var(--card);color:var(--ink);font-size:13px;font-weight:600;cursor:pointer}
+.btn.pri{background:var(--teal);border-color:var(--teal);color:#fff}.btn.sm{padding:3px 8px;font-size:12px}
+.field{display:flex;flex-direction:column;gap:4px;font-size:12.5px;color:var(--muted)}.field input,.field select{font:inherit;color:var(--ink);background:var(--paper);border:1px solid var(--line);border-radius:4px;padding:7px 9px}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:end}
+.src{border-top:3px solid var(--teal)}.src h3{display:flex;align-items:center;gap:8px}
+.steps{display:flex;flex-direction:column;gap:8px}.step{display:grid;grid-template-columns:110px 1fr auto;gap:10px;align-items:start;font-size:13.5px;padding:8px 10px;border:1px solid var(--line-2);border-radius:4px}
+.step .t{color:var(--muted);font-variant-numeric:tabular-nums;font-size:12.5px}.step .who{color:var(--ink-2);font-weight:600}
+.bar{height:8px;background:var(--line-2);border-radius:999px;overflow:hidden}.bar i{display:block;height:100%;background:var(--teal)}
+.thumb{width:54px;height:96px;background:linear-gradient(160deg,var(--teal-soft),var(--line));border-radius:3px;flex:none}
+.vid{display:flex;gap:12px;padding:10px 0;border-top:1px solid var(--line-2)}.vid:first-child{border-top:0}.vid .meta{font-size:12.5px;color:var(--muted)}.vid .q{font-size:13px;color:var(--ink-2);font-style:italic}
+.diag{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}.box{border:1px solid var(--line);border-radius:4px;padding:10px 12px;font-size:13px}.box b{display:block;font-size:13.5px;margin-bottom:4px}
+.box.chung{border-color:var(--teal)}.box.dong{border-color:var(--gold)}
+.hot{color:var(--leak);font-weight:600}.cool{color:var(--teal);font-weight:600}
+@media (max-width:640px){.step{grid-template-columns:1fr}.kpi b{font-size:28px}}
+</style>
+<div class="wrap">
+  <header style="display:flex;flex-direction:column;gap:8px">
+    <div class="eyebrow">Máy › Bộ não AI › Huấn luyện · mô phỏng 1.0 · 24/09/2026</div>
+    <h1>Máy học từ video bán chạy, kịch bản đã duyệt và mỗi lần người sửa</h1>
+    <p class="lead">Một màn trả lời bốn câu: mô hình nào đang học đến đâu, nạp thêm dữ liệu từ đâu, việc đang chạy tới bước nào, và mẫu trong kho là gì. Mọi mẫu mang nhãn <b>dòng sản phẩm</b> và <b>mục đích</b>, nên máy có thể huấn luyện chung hoặc chuyên sâu từng dòng khi đủ mẫu.</p>
+    <p class="note">Số trong mô phỏng là ví dụ để thấy bố cục, không phải số thật của kho hôm nay (kho thật: 0 video thành phẩm, 15 footage đã phân tích, 1 kịch bản đã duyệt).</p>
+  </header>
+
+  <section class="card" style="gap:16px">
+    <div><div class="eyebrow">1 · Mô hình đang học</div><h2>Bảy đầu học, mỗi đầu biết mình cần bao nhiêu mẫu và đang ở mức nào</h2>
+    <p class="note">Mức API = thuê AI ngoài · BÓNG = mô hình mở chạy song song để so · MỞ = mô hình mở tự làm, API dự phòng. Phạm vi "chung" dùng cho mọi dòng; khi một dòng sản phẩm đủ mẫu, máy tách bản chuyên sâu cho dòng đó và chỉ bật khi điểm kiểm cao hơn bản chung.</p></div>
+    <div class="kpi">
+      <div class="card"><b class="good">2</b><span>đầu đã MỞ (giọng đọc, chọn cảnh)</span></div>
+      <div class="card"><b>3</b><span>đầu đang BÓNG</span></div>
+      <div class="card"><b class="bad">2</b><span>đầu thiếu mẫu (ghép shot, chọn đoạn)</span></div>
+      <div class="card"><b>1</b><span>phiên bản chờ Trưởng MKT duyệt</span></div>
+    </div>
+    <div class="tbl-wrap"><table>
+      <tr><th>Tính năng</th><th>Mô hình mở</th><th>Mức</th><th class="n">Mẫu có / cần</th><th class="n">Điểm kiểm</th><th>Phạm vi có bản riêng</th><th>Việc</th></tr>
+      <tr><td><b>Soạn kịch bản (B4)</b><br><span class="note">ngôn ngữ · LoRA Qwen 7B</span></td><td>kingsmen-qwen:v2</td><td><span class="pill p-gold">BÓNG</span></td><td class="n">86 / 100</td><td class="n">71</td><td><span class="tag">chung</span><span class="tag">Keo chít mạch · 34 mẫu</span></td><td><span class="btn sm">Xuất tập mẫu</span></td></tr>
+      <tr><td><b>Chọn footage cho cảnh</b><br><span class="note">nhìn · CLIP + đầu logistic</span></td><td>clip-vit-b16 v3</td><td><span class="pill p-teal">MỞ</span></td><td class="n">212 / 30</td><td class="n cool">88</td><td><span class="tag">chung</span><span class="tag">Keo chít mạch v2 · 91</span><span class="tag">Sơn chống thấm · thiếu 12</span></td><td><span class="btn sm pri">Huấn luyện</span></td></tr>
+      <tr><td><b>Chọn đoạn đẹp trong clip</b><br><span class="note">nhìn · logistic trên nét/động/sáng</span></td><td>doan-tuyen-tinh</td><td><span class="pill p-line">API (luật)</span></td><td class="n hot">6 / 40</td><td class="n">—</td><td><span class="tag">chung</span></td><td><span class="note">cần 34 mẫu: chỉnh ghép hoặc Drive có thư mục gốc</span></td></tr>
+      <tr><td><b>Ghép shot: độ dài, nhịp</b><br><span class="note">nhìn · thống kê có trọng số</span></td><td>ghep-thong-ke</td><td><span class="pill p-line">API (luật 2,8 s)</span></td><td class="n hot">3 / 20</td><td class="n">—</td><td><span class="tag">chung</span></td><td><span class="note">cần 17 video thành phẩm</span></td></tr>
+      <tr><td><b>Lọc clip chuẩn</b><br><span class="note">nhìn + nghe · CLIP + Whisper</span></td><td>whisper-base</td><td><span class="pill p-gold">BÓNG</span></td><td class="n">41 / 30</td><td class="n">63</td><td><span class="tag">chung</span></td><td><span class="btn sm pri">Huấn luyện</span></td></tr>
+      <tr><td><b>Giọng đọc</b><br><span class="note">TTS · Piper</span></td><td>piper-vi</td><td><span class="pill p-teal">MỞ</span></td><td class="n">58 / 30</td><td class="n cool">82</td><td><span class="tag">chung</span></td><td><span class="note">Google dự phòng</span></td></tr>
+      <tr><td><b>Chấm ý tưởng (B1)</b><br><span class="note">ngôn ngữ</span></td><td>qwen2.5:7b</td><td><span class="pill p-gold">BÓNG</span></td><td class="n">27 / 50</td><td class="n">54</td><td><span class="tag">chung</span></td><td></td></tr>
+    </table></div>
+  </section>
+
+  <section style="display:flex;flex-direction:column;gap:14px">
+    <div><div class="eyebrow">2 · Nạp dữ liệu học</div><h2>Bốn cửa nạp, mỗi cửa hỏi đúng ba điều: ở đâu, thuộc dòng nào, để làm gì</h2>
+    <p class="note">Nhãn dòng sản phẩm và mục đích đi theo từng video vào kho, không phải cấu hình toàn cục. Nhãn để trống = "chung".</p></div>
+    <div class="grid g4">
+      <div class="card src"><h3>📁 Drive</h3><p class="note">Video đã dựng tay. Thư mục con <code>goc</code> chứa clip quay gốc → máy học thêm <i>chọn đoạn</i>.</p>
+        <div class="field"><span>Link thư mục</span><input id="d1" value="drive.google.com/drive/folders/1wvkEsb…"></div>
+        <div class="row"><div class="field"><span>Dòng sản phẩm</span><select id="d2"><option>Keo chít mạch</option><option>Sơn chống thấm</option><option>Chung</option></select></div><div class="field"><span>Mục đích</span><select id="d3"><option>Bán hàng</option><option>Brand</option></select></div></div>
+        <div><span class="btn pri">Nạp & học</span></div>
+        <p class="note">Lần cuối: 12 video · 9 khớp gốc · 23/09</p></div>
+      <div class="card src"><h3>💻 Thư mục máy dựng</h3><p class="note">Đường dẫn trên máy Ngoc-Han (máy dựng). Cùng luật thư mục <code>goc</code>.</p>
+        <div class="field"><span>Đường dẫn</span><input id="l1" value="D:\Video da dung\2026-09"></div>
+        <div class="row"><div class="field"><span>Dòng sản phẩm</span><select id="l2"><option>Keo chít mạch</option><option>Chung</option></select></div><div class="field"><span>Mục đích</span><select id="l3"><option>Bán hàng</option></select></div></div>
+        <div><span class="btn pri">Nạp & học</span></div><p class="note">Chưa nạp lần nào</p></div>
+      <div class="card src"><h3>🎵 Kênh TikTok</h3><p class="note">Trạm tải video kèm lượt xem bằng tài khoản đã đăng nhập. Xem cao hơn trung vị kênh → mẫu nặng hơn.</p>
+        <div class="field"><span>Kênh</span><input id="t1" value="@kingsmen.vn"></div>
+        <div class="row"><div class="field"><span>Tối đa</span><input id="t2" value="20" style="width:70px"></div><div class="field"><span>Dòng sản phẩm</span><select id="t3"><option>Chung</option><option>Keo chít mạch</option></select></div></div>
+        <div><span class="btn pri">Xin Trạm tải</span></div><p class="note">Lần cuối: @kingsmen.vn · 18 video · 24/09 · 3 lỗi (video riêng tư)</p></div>
+      <div class="card src" style="border-top-color:var(--gold)"><h3>📈 Kalodata</h3><p class="note">Bảng video TikTok Shop bán chạy theo ngành. Doanh thu thay lượt xem làm trọng số; lời thoại thành kịch bản tham chiếu.</p>
+        <div class="field"><span>Ngành hàng (Kalodata)</span><input id="k1" value="Vật liệu xây dựng; Keo & chất kết dính"></div>
+        <div class="row"><div class="field"><span>Top</span><input id="k2" value="10" style="width:70px"></div><div class="field"><span>Gán vào dòng</span><select id="k3"><option>Keo chít mạch</option><option>Chung</option></select></div><div class="field"><span>Lịch</span><select id="k4"><option>Mỗi tuần</option><option>Tắt</option></select></div></div>
+        <div class="row"><span class="btn">Lưu</span><span class="btn pri">Quét ngay</span></div>
+        <p class="note">Tài khoản Kalodata trên Trạm: <span class="pill p-teal">đã đăng nhập 14:36</span> · lần cuối: 24/09 → 8 video</p></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <div><div class="eyebrow">3 · Việc đang chạy</div><h2>Mỗi lệnh nạp là một chuỗi bốn bước, nhìn thấy bước nào đang kẹt</h2>
+    <p class="note">Trạm quét/tải → máy dựng cắt shot, nghe lời, xếp cỡ cảnh → app ghi mẫu → sẵn sàng huấn luyện. Lỗi ghi nguyên văn từ máy, không tô hồng.</p></div>
+    <div class="steps">
+      <div class="step"><span class="t">24/09 14:52</span><div><span class="who">Kalodata · Vật liệu xây dựng</span> — Trạm quét xong <b>8 video</b> (doanh thu $310–$2.940) · Trạm đang tải <b>5/8</b> bằng @tiktok_cn<div class="bar" style="margin-top:6px;width:260px"><i style="width:62%"></i></div></div><span class="pill p-gold">đang tải</span></div>
+      <div class="step"><span class="t">24/09 14:40</span><div><span class="who">Kalodata · Vật liệu xây dựng</span> — Trạm từ chối: <span class="hot">tài khoản kalodata chưa được cấp cho nhân viên Học</span> → đã sửa v9.165</div><span class="pill p-leak">lỗi</span></div>
+      <div class="step"><span class="t">24/09 14:19</span><div><span class="who">Dựng lại · Keo chít mạch chống mốc</span> — máy Ngoc-Han: 5 cảnh / 10 shot, 10 clip khác nhau → 1 mẫu ghép, 5 mẫu chọn cảnh</div><span class="pill p-teal">xong</span></div>
+      <div class="step"><span class="t">24/09 14:14</span><div><span class="who">Phân tích footage · Keo chít mạch</span> — 15/15 clip · cỡ cảnh: 11 SAN_PHAM, 2 RONG, 1 THAO_TAC, 1 CAN</div><span class="pill p-teal">xong</span></div>
+      <div class="step"><span class="t">23/09 21:05</span><div><span class="who">Drive · Keo chít mạch</span> — máy dựng học 12/12 video · 9 khớp clip gốc · Whisper 12 lời thoại → 12 mẫu ghép, 31 mẫu chọn cảnh, 9 mẫu chọn đoạn</div><span class="pill p-teal">xong</span></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <div><div class="eyebrow">4 · Kho mẫu</div><h2>Video thành phẩm là mẫu; xem được, gắn lại nhãn được, loại được</h2>
+    <p class="note">Lọc theo nguồn · dòng sản phẩm · mục đích · có lời thoại. Bảng chi tiết từng shot mở trong kho, không bày trần ở đây.</p></div>
+    <div class="row"><span class="tag">Tất cả 38</span><span class="tag">Kalodata 8</span><span class="tag">TikTok 18</span><span class="tag">Drive 12</span><span class="tag">Keo chít mạch 21</span><span class="tag">Có lời thoại 29</span></div>
+    <div>
+      <div class="vid"><div class="thumb"></div><div style="flex:1;min-width:0"><div><b>@shopkeovn · Ron mốc? Đừng cạo nữa</b> <span class="pill p-gold">Kalodata</span> <span class="tag">Keo chít mạch</span><span class="tag">Bán hàng</span></div><div class="meta">doanh thu <b>$2.940</b> · 1.240 lượt bán · 312K xem · 31 s · 14 shot · nhịp 2,2 s · đăng 02/09</div><div class="q">"Ron gạch nhà bạn mốc đen chưa? Keo hai thành phần này bóp một đường là phủ kín ron cũ…"</div></div><div class="row" style="align-items:start"><span class="btn sm">Xem shot</span><span class="btn sm">Gắn nhãn</span><span class="btn sm">Loại</span></div></div>
+      <div class="vid"><div class="thumb"></div><div style="flex:1;min-width:0"><div><b>@kingsmen.vn · Test keo 24 giờ dưới nước</b> <span class="pill p-teal">TikTok</span> <span class="tag">Keo chít mạch</span><span class="tag">Brand</span></div><div class="meta">48K xem (trung vị kênh 9K → trọng số 1,6) · 27 s · 9 shot · nhịp 3,0 s</div><div class="q">"Ngâm 24 tiếng, kéo ra vẫn dính chặt…"</div></div><div class="row" style="align-items:start"><span class="btn sm">Xem shot</span><span class="btn sm">Gắn nhãn</span><span class="btn sm">Loại</span></div></div>
+      <div class="vid"><div class="thumb"></div><div style="flex:1;min-width:0"><div><b>Drive · keo-chit-mach-3.mp4</b> <span class="pill p-line">Drive</span> <span class="tag">Keo chít mạch</span><span class="tag">Bán hàng</span></div><div class="meta">không có số xem · 34 s · 11 shot · 8 shot khớp clip gốc (DJI_0441, 0452, 0464…) → 8 mẫu chọn đoạn</div><div class="q">"Một năm rồi vẫn trắng, nhà mình làm từ tháng…"</div></div><div class="row" style="align-items:start"><span class="btn sm">Xem shot</span><span class="btn sm">Gắn nhãn</span><span class="btn sm">Loại</span></div></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <div><div class="eyebrow">5 · Kiến trúc huấn luyện (ADR-012)</div><h2>Một bộ não chung, tách bản chuyên sâu theo dòng sản phẩm khi đủ mẫu</h2>
+    <p class="note">Mỗi tính năng có bản <b>chung</b>. Với mỗi <b>phạm vi</b> (dòng sản phẩm, hoặc mục đích bán hàng/brand) có ≥ số mẫu tối thiểu, máy huấn luyện thêm bản riêng. Khi dựng/viết, máy chọn bản riêng nếu điểm kiểm của nó cao hơn bản chung ít nhất 3 điểm; không thì dùng chung. Người vẫn duyệt từng phiên bản (G4).</p></div>
+    <div class="diag">
+      <div class="box chung"><b>Bản chung</b>mọi mẫu · luôn có · là mức sàn</div>
+      <div class="box dong"><b>Keo chít mạch</b>34 mẫu ghép · 91 mẫu chọn cảnh → bản riêng chọn cảnh v2 (91 điểm, hơn chung 3)</div>
+      <div class="box dong"><b>Sơn chống thấm</b>18 mẫu · thiếu 12 → dùng bản chung, hiện "còn thiếu"</div>
+      <div class="box"><b>Mục đích: bán hàng</b>kịch bản Kalodata + bài BÁN HÀNG đã duyệt → LoRA riêng cho B4 khi ≥ 60 mẫu</div>
+    </div>
+    <div class="tbl-wrap"><table>
+      <tr><th>Loại đầu học</th><th>Cách huấn luyện</th><th>Chạy ở đâu</th><th>Tách theo dòng?</th></tr>
+      <tr><td>Nhìn: chọn cảnh, lọc clip</td><td>CLIP đóng băng + đầu logistic (vài giây CPU)</td><td>máy dựng</td><td>Có — mỗi dòng một đầu nhỏ, rẻ</td></tr>
+      <tr><td>Nhìn: chọn đoạn, ghép shot</td><td>logistic / thống kê có trọng số doanh thu &gt; lượt xem</td><td>máy dựng</td><td>Có — ghép theo dòng vì nhịp keo khác nhịp sơn</td></tr>
+      <tr><td>Ngôn ngữ: soạn kịch bản, chấm ý tưởng</td><td>LoRA trên Qwen 7B, tập mẫu = bài đã duyệt + kịch bản bán tốt (nhãn doanh thu)</td><td>GPU thuê, vài giờ</td><td>Một nền + adapter theo dòng/mục đích; chưa đủ mẫu thì gợi ý bằng lời dặn</td></tr>
+      <tr><td>Nghe / đọc: Whisper, Piper</td><td>không huấn luyện, chỉ chọn bản</td><td>máy dựng</td><td>Không</td></tr>
+    </table></div>
+  </section>
+</div>

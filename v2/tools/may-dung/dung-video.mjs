@@ -46,7 +46,7 @@ export default async function dung({ app, goiApp, lenh, dir, log, may, script })
     c.chon_tu_khoa = c.ts; truoc = c.ts;
   }
   let cachChon = "TU_KHOA";
-  try { const mh = await goiApp("/hub/mo-hinh/chon_canh"); const dt = mh.ok ? mh.d : null;
+  try { const mh = await goiApp("/hub/mo-hinh/chon_canh" + (v.pham_vi ? "?dong=" + encodeURIComponent(v.pham_vi.dong || "") + "&muc_dich=" + encodeURIComponent(v.pham_vi.muc_dich || "") : "")); const dt = mh.ok ? mh.d : null; if (dt && dt.pham_vi && dt.pham_vi !== "chung") log("  chọn cảnh: dùng bản riêng " + dt.pham_vi);
     if (dt && ["BONG", "MO"].includes(dt.muc) && dt.mo_hinh_mo && script) { const nhin = await script("nhin"); const N = await nhin.taoNhin({ model_id: dt.mo_hinh_mo.model_id, log });
       let dau = null; if (dt.mo_hinh_mo.checkpoint_url) { try { const x = await fetch(dt.mo_hinh_mo.checkpoint_url, { headers: /\/media\//.test(dt.mo_hinh_mo.checkpoint_url) ? { "X-Hub-Key": app.khoa } : {} }); if (x.ok) dau = await x.json(); } catch (e) { log("  không tải được đầu học:", e.message); } }
       const emb = {}; for (const t of nguon) { try { const src = await taiVe(t.media_url, "ts_" + t.id + (t.media_type === "IMAGE" ? ".jpg" : ".mp4")); emb[t.id] = await N.embImage(nhin.khungHinh(src, join(TH, "khung"), t.id)); } catch (e) { log("  bỏ nhìn", t.ten, e.message.slice(0, 60)); } }
@@ -72,7 +72,8 @@ export default async function dung({ app, goiApp, lenh, dir, log, may, script })
   // ---- ADR-010: KẾ HOẠCH GHÉP — mỗi cảnh = chuỗi shot {clip, giây vào, giây ra}. Có kế hoạch NGƯỜI (màn Chỉnh ghép) thì làm đúng;
   //      không thì máy lập: shot đầu = clip đã chọn cho cảnh, shot sau = clip khớp tiếp theo CHƯA DÙNG; độ dài shot theo mô hình ghép
   //      (thống kê từ video thành phẩm, có trọng số lượt xem); đoạn trong clip theo mô hình chọn đoạn (nét/động/sáng) — MỞ mới dùng, BÓNG/API dùng luật.
-  const layDau = async (tn) => { try { const x = await goiApp("/hub/mo-hinh/" + tn); if (!x.ok) return { muc: "API" }; const d = x.d || {}; let dau = null;
+  const pvQ = v.pham_vi ? "?dong=" + encodeURIComponent(v.pham_vi.dong || "") + "&muc_dich=" + encodeURIComponent(v.pham_vi.muc_dich || "") : "";   // ADR-012: bản riêng theo dòng sản phẩm nếu đã duyệt và tốt hơn
+  const layDau = async (tn) => { try { const x = await goiApp("/hub/mo-hinh/" + tn + pvQ); if (!x.ok) return { muc: "API" }; if (x.d && x.d.pham_vi && x.d.pham_vi !== "chung") log("  " + tn + ": dùng bản riêng " + x.d.pham_vi); const d = x.d || {}; let dau = null;
       if (["BONG", "MO"].includes(d.muc) && d.mo_hinh_mo && d.mo_hinh_mo.checkpoint_url) { const y = await fetch(d.mo_hinh_mo.checkpoint_url, { headers: /\/media\//.test(d.mo_hinh_mo.checkpoint_url) ? { "X-Hub-Key": app.khoa } : {} }); if (y.ok) { const j = await y.json().catch(() => null); if (j && j.tinh_nang === tn) dau = j; } }
       return { muc: d.muc || "API", dau }; } catch { return { muc: "API" }; } };
   const dDoan = await layDau("chon_doan"), dGhep = await layDau("ghep_canh");

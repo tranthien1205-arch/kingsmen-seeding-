@@ -73,7 +73,7 @@ export default async function hoc({ app, goiApp, lenh, dir, log, script }) {
       }
       const mt = meta[v.ten] || {};
       const kichBan = shots.map((x) => x.loi).filter(Boolean).join(" ").trim();   // ADR-011: lời thoại nghe được = kịch bản mẫu bán hàng
-      const r = await goiApp("/hub/thanh-pham", { method: "POST", body: JSON.stringify({ ten: v.ten, nguon_id: v.drive ? v.id : v.ten, nguon, thu_muc: thuMuc.slice(0, 200), dai: +dai.toFixed(2), shots, luot_xem: mt.luot_xem ?? null, luot_thich: mt.luot_thich ?? null, ngay_dang: mt.ngay_dang || null, link: mt.link || null, kenh: mt.kenh || ts.kenh || null, doanh_thu: mt.doanh_thu ?? null, luot_ban: mt.luot_ban ?? null, san_pham: mt.san_pham || null, kich_ban: kichBan || null }) });
+      const r = await goiApp("/hub/thanh-pham", { method: "POST", body: JSON.stringify({ ten: v.ten, nguon_id: v.drive ? v.id : v.ten, nguon, thu_muc: thuMuc.slice(0, 200), dai: +dai.toFixed(2), shots, luot_xem: mt.luot_xem ?? null, luot_thich: mt.luot_thich ?? null, ngay_dang: mt.ngay_dang || null, link: mt.link || null, kenh: mt.kenh || ts.kenh || null, dong: ts.dong || null, muc_dich: ts.muc_dich || null, doanh_thu: mt.doanh_thu ?? null, luot_ban: mt.luot_ban ?? null, san_pham: mt.san_pham || null, kich_ban: kichBan || null }) });
       if (!r.ok) throw new Error("app " + r.status + " " + ((r.d && r.d.error) || ""));
       xong++; mau += (r.d && r.d.so_mau) || 0; log("  ✓", v.ten, "·", shots.length, "shot ·", shots.filter((s) => s.goc).length, "khớp gốc ·", (r.d && r.d.so_mau) || 0, "mẫu", mt.luot_xem != null ? "· " + mt.luot_xem + " xem" : "");
       rmSync(KD, { recursive: true, force: true }); if (v.drive) rmSync(f, { force: true });
