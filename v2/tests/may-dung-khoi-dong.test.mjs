@@ -57,3 +57,21 @@ test('huan-luyen-ngon-ngu.py: chạy được card 8 GB (trả cache VRAM mỗi 
   assert.match(PY, /os\.walk\(a\.out\)/);
   assert.match(PY, /--khong-gguf/);
 });
+
+test('may-dung.mjs 1.4: nhớ lệnh đang làm (dang-lam.json), khởi động lại thì làm tiếp — tối đa 3 lần, chờ Ollama; log tham số cắt 300 ký tự', () => {
+  assert.match(MAY, /const BAN = "1\.[4-9]"/);
+  assert.match(MAY, /const DANG_LAM_F = join\(DIR, "dang-lam\.json"\)/);
+  assert.match(MAY, /writeFileSync\(DANG_LAM_F,/);
+  assert.match(MAY, /rmSync\(DANG_LAM_F, \{ force: true \}\)/);
+  assert.match(MAY, /const LAN_TOI_DA = 3/);
+  assert.match(MAY, /await nhipTim\(\);\s*\r?\nawait lamTiepLenhDo\(\);/);
+  assert.match(MAY, /ts\.length > 300 \? ts\.slice\(0, 300\)/);
+});
+
+test('khởi động lại hằng ngày: chờ lệnh dở (dang-lam.json) rồi shutdown /r; bộ cài tạo tác vụ Interactive (không S4U) và nhắc bật tự đăng nhập', () => {
+  const KD = fs.readFileSync(new URL('../tools/may-dung/khoi-dong-lai.ps1', import.meta.url), 'utf8');
+  assert.match(KD, /Test-Path \$DANG/); assert.match(KD, /shutdown\.exe \/r/);
+  const CAI = fs.readFileSync(new URL('../tools/may-dung/cai-khoi-dong-lai.ps1', import.meta.url), 'utf8');
+  assert.match(CAI, /-LogonType Interactive/); assert.ok(!/S4U/.test(CAI.split(/\r?\n/).filter((d) => !/^\s*#/.test(d)).join('\n')), 'không dùng S4U');
+  assert.match(CAI, /AutoAdminLogon/);
+});

@@ -3,7 +3,7 @@
 //   Chạy:   node may-dung.mjs                       (hoặc BAT-DAU.bat) — nhịp tim 2 phút, hỏi lệnh 30 giây/lần
 //   Thử:    node may-dung.mjs --mot-lan              (lấy lệnh một lượt rồi thoát)
 // Mã dựng KHÔNG nằm ở máy này: mỗi lệnh, máy hỏi app /hub/script/dung-video, kiểm hash, rồi mới chạy → sửa ở app là mọi máy dùng bản mới.
-import { existsSync, readFileSync, writeFileSync, mkdirSync, appendFileSync, statSync, renameSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync, mkdirSync, appendFileSync, statSync, renameSync, rmSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { createHash } from "node:crypto";
@@ -11,7 +11,7 @@ import { spawnSync } from "node:child_process";
 import os from "node:os";
 
 export const DIR = dirname(fileURLToPath(import.meta.url));
-const BAN = "1.3";
+const BAN = "1.4";
 // việc app giao → script phát từ app (ADR-008/009): máy chỉ chạy script đúng hash app xác nhận
 const VIEC_SCRIPT = { dung_video: "dung-video", mo_hinh_bong: "mo-hinh", mo_hinh_chay: "mo-hinh", huan_luyen: "huan-luyen", loc_footage: "loc-footage", nap_drive: "nap-drive", phan_tich_footage: "phan-tich", hoc_thanh_pham: "hoc-thanh-pham" };   // nap_drive: nạp footage từ thư mục Drive (24/09) · phan_tich_footage / hoc_thanh_pham: ADR-010
 const coTransformers = existsSync(join(DIR, "node_modules", "@huggingface", "transformers"));
@@ -58,8 +58,14 @@ async function layScript(ten) {
   const th = join(DIR, "cache"); mkdirSync(th, { recursive: true }); const f = join(th, ten + "." + hash.slice(0, 12) + ".mjs");
   if (!existsSync(f)) writeFileSync(f, r.d.script); return { f, ban: hash.slice(0, 12) };
 }
-async function chayLenh(l) {
-  dangLam = l.viec + " " + (l.tham_so && l.tham_so.noi_dung_id || ""); log("▶ lệnh", l.id, l.viec, JSON.stringify(l.tham_so));
+// Lệnh đang làm ghi ra dang-lam.json: máy tắt/khởi động lại giữa chừng (Windows Update, khởi động lại hằng ngày) thì lần
+// chạy sau làm tiếp đúng lệnh đó. Script việc tự bỏ phần đã xong (video đã học, file đã tải) nên chạy lại = làm tiếp.
+const DANG_LAM_F = join(DIR, "dang-lam.json");
+const LAN_TOI_DA = 3;   // chính lệnh làm sập máy con thì thôi sau 3 lần, báo hỏng
+async function chayLenh(l, lan = 1) {
+  dangLam = l.viec + " " + (l.tham_so && l.tham_so.noi_dung_id || ""); const ts = JSON.stringify(l.tham_so || {});
+  log("▶ lệnh", l.id, l.viec, ts.length > 300 ? ts.slice(0, 300) + "… (" + ts.length + " ký tự)" : ts, lan > 1 ? "· làm tiếp lần " + lan : "");
+  try { writeFileSync(DANG_LAM_F, JSON.stringify({ id: l.id, viec: l.viec, tham_so: l.tham_so || {}, lan, bat_dau: new Date().toISOString() })); } catch {}
   let ok = false, msg = "";
   try {
     const ten = VIEC_SCRIPT[l.viec]; if (!ten) throw new Error("máy con không nhận lệnh " + l.viec);
@@ -71,8 +77,23 @@ async function chayLenh(l) {
     ok = !!(kq && kq.ok); msg = (kq && kq.msg) || "";
   } catch (e) { ok = false; msg = String(e.message || e).slice(0, 380); log("  ✗", msg); }
   dangLam = "";
-  await goiApp("/hub/lenh_xong", { method: "POST", body: JSON.stringify({ id: l.id, ok, msg }) }).catch(() => {});
+  await goiApp("/hub/lenh_xong", { method: "POST", body: JSON.stringify({ id: l.id, ok, msg: (lan > 1 ? "(làm tiếp sau khởi động lại) " : "") + msg }) }).catch(() => {});
+  try { rmSync(DANG_LAM_F, { force: true }); } catch {}
   log(ok ? "  ✓ xong" : "  ✗ hỏng", msg);
+}
+async function lamTiepLenhDo() {
+  if (!existsSync(DANG_LAM_F)) return;
+  let d = null; try { d = JSON.parse(readFileSync(DANG_LAM_F, "utf8")); } catch {}
+  if (!d || !d.id || !d.viec) { try { rmSync(DANG_LAM_F, { force: true }); } catch {} return; }
+  if ((d.lan || 1) >= LAN_TOI_DA) {
+    loi("Lệnh", d.id, d.viec, "đã dở dang", d.lan, "lần — thôi làm tiếp, báo hỏng");
+    await goiApp("/hub/lenh_xong", { method: "POST", body: JSON.stringify({ id: d.id, ok: false, msg: "máy con dừng giữa chừng " + d.lan + " lần khi làm lệnh này" }) }).catch(() => {});
+    try { rmSync(DANG_LAM_F, { force: true }); } catch {} return;
+  }
+  // vừa khởi động lại: Ollama (mô hình nhìn/ngôn ngữ) có thể chưa lên — chờ tối đa 3 phút cho lệnh cần nó
+  for (let i = 0; i < 36 && !(await coOllama()); i++) { if (i === 0) log("  chờ Ollama lên trước khi làm tiếp…"); await new Promise((x) => setTimeout(x, 5000)); }
+  log("Làm tiếp lệnh dở dang từ " + (d.bat_dau || "?") + " (máy tắt/khởi động lại giữa chừng)");
+  await chayLenh({ id: d.id, viec: d.viec, tham_so: d.tham_so }, (d.lan || 1) + 1);
 }
 async function motLuot() { const r = await goiApp("/hub/lenh"); if (!r.ok) { log("hỏi lệnh lỗi HTTP", r.status, r.d && r.d.error); return 0; } const ds = (r.d && r.d.lenh) || []; for (const l of ds) await chayLenh(l); return ds.length; }
 
@@ -86,6 +107,7 @@ if (args[0] === "xuat-tap-mau" || args[0] === "phien-ban") {
 let ping = await goiApp("/hub/ping"); while (!ping.ok) { log("Chưa nối được app (" + (ping.status || "mạng") + "): " + ((ping.d && ping.d.error) || "") + " — thử lại sau 30 giây"); await new Promise((x) => setTimeout(x, 30000)); ping = await goiApp("/hub/ping"); }
 log("Máy dựng '" + APP.may_ten + "' (" + os.hostname() + ") đã nối " + APP.url + " · app v" + ping.d.ban + " · ffmpeg " + (ffmpegOk ? "có" : "KHÔNG") + " · AI nhìn " + (coTransformers ? "có" : "chưa (npm install)") + (gpu ? " · GPU " + gpu : ""));
 await nhipTim();
+await lamTiepLenhDo();
 if (args.includes("--mot-lan")) { const n = await motLuot(); log("xong", n, "lệnh"); process.exit(0); }
 setInterval(nhipTim, 120000);
 for (;;) { try { await motLuot(); } catch (e) { log("lỗi vòng lặp:", e.message); } await new Promise((x) => setTimeout(x, 30000)); }
