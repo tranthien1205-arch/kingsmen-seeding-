@@ -1,0 +1,87 @@
+<title>Kiến trúc học video thi công</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&family=Source+Serif+4:opsz,wght@8..60,600;8..60,700&display=swap">
+<style>
+:root{--paper:#F2F5F3;--card:#FFFFFF;--ink:#141E1B;--ink-2:#3D4E49;--muted:#68807A;--line:#D8E0DC;--line-2:#E9EEEC;--teal:#0C7B6F;--teal-soft:#E3F0ED;--gold:#B08D2E;--gold-soft:#F6EDD6;--leak:#A3372B;--leak-soft:#F7E5E1;--shadow:0 1px 2px rgba(20,30,27,.05),0 8px 24px -16px rgba(20,30,27,.35)}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){color-scheme:dark;--paper:#121917;--card:#1A2320;--ink:#EEF3F1;--ink-2:#C5D1CC;--muted:#8FA39C;--line:#2C3935;--line-2:#233029;--teal:#4FB8A9;--teal-soft:#183630;--gold:#D6B45C;--gold-soft:#3A2F14;--leak:#E07A6C;--leak-soft:#3D1F1A}}
+:root[data-theme="dark"]{color-scheme:dark;--paper:#121917;--card:#1A2320;--ink:#EEF3F1;--ink-2:#C5D1CC;--muted:#8FA39C;--line:#2C3935;--line-2:#233029;--teal:#4FB8A9;--teal-soft:#183630;--gold:#D6B45C;--gold-soft:#3A2F14;--leak:#E07A6C;--leak-soft:#3D1F1A}
+*{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--ink);font:16px/1.62 "Be Vietnam Pro",system-ui,sans-serif}
+.wrap{max-width:1000px;margin:0 auto;padding-block:48px 96px;padding-inline:20px;display:flex;flex-direction:column;gap:42px}
+h1,h2,h3{font-family:"Source Serif 4",Georgia,serif;letter-spacing:-.015em;text-wrap:balance;margin:0}h1{font-size:clamp(30px,4.6vw,44px);line-height:1.12}h2{font-size:clamp(22px,3vw,28px);line-height:1.25}h3{font-size:18px}
+.eyebrow{font-size:11.5px;letter-spacing:.14em;text-transform:uppercase;font-weight:600;color:var(--teal)}.lead{font-size:19px;color:var(--ink-2);max-width:68ch}.note{font-size:13.5px;color:var(--muted)}.col{max-width:68ch}
+section{display:flex;flex-direction:column;gap:16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:4px;box-shadow:var(--shadow);padding:16px 18px}
+.tbl-wrap{overflow-x:auto}table{border-collapse:collapse;width:100%;min-width:640px;font-size:14px}th{background:var(--line-2);color:var(--muted);font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;text-align:left;padding:8px 10px;font-weight:600}td{padding:10px;border-top:1px solid var(--line-2);vertical-align:top}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px}.grid .card b{display:block;font-family:"Source Serif 4",serif;font-size:17px;margin-bottom:4px}
+figure{margin:0}.fig-box{background:var(--card);border:1px solid var(--line);border-radius:4px;padding:14px;overflow-x:auto}figcaption{font-size:13.5px;color:var(--muted);margin-top:8px}
+svg{width:100%;min-width:720px;height:auto}svg text{font-family:"Be Vietnam Pro",sans-serif;font-size:12px;fill:var(--ink)}svg .sub{font-size:10.5px;fill:var(--muted)}svg .box{fill:var(--card);stroke:var(--line)}svg .box.m{stroke:var(--teal);stroke-width:1.5}svg .box.k{stroke:var(--leak);stroke-width:1.5}svg .box.d{fill:var(--gold-soft);stroke:var(--gold)}svg .ar{stroke:var(--muted);fill:none;stroke-width:1.3}svg .back{stroke:var(--teal);fill:none;stroke-dasharray:5 4;stroke-width:1.3}
+.tag{display:inline-block;font-size:12px;padding:1px 8px;border-radius:999px;background:var(--teal-soft);color:var(--teal);font-weight:600;margin:2px 2px 0 0}
+.final{border-left:3px solid var(--teal)}
+</style>
+<div class="wrap">
+  <header style="display:flex;flex-direction:column;gap:12px"><div class="eyebrow">Kingsmen Content OS · kiến trúc học · đề xuất ADR-015 · 24/09/2026</div>
+    <h1>Máy học cách dựng video thi công đúng kỹ thuật và đẹp, từ chính những video Kingsmen đã dựng tay</h1>
+    <p class="lead">Video vật liệu khác video bán hàng thường ở hai chỗ: hình phải đúng trình tự thi công, và cảnh kết quả phải đẹp. Kiến trúc dưới đây tách bài toán thành năm phần nhỏ, mỗi phần học được và đo được, với video dựng tay đã air làm chuẩn vàng.</p>
+    <p class="note">Nền đã có: 15 video Drive đã học, 6 video Kalodata, qwen2.5vl:7b và qwen2.5:7b chạy trên máy Q2, ADR-014a đang đọc thử 15 clip Keo chít mạch. Các con số tốc độ và độ chính xác trong trang là mục tiêu, chưa đo.</p></header>
+
+  <section><h2>"Đúng chuẩn" và "đẹp" phải thành con số máy chấm được</h2>
+    <p class="col">Không đo được thì máy không học được, và anh không biết bản mới tốt hơn hay tệ hơn. Năm chỉ số dưới đây dùng cho mọi lần huấn luyện, mọi video dựng ra.</p>
+    <div class="tbl-wrap"><table>
+      <tr><th>Chỉ số</th><th>Đo cái gì</th><th>Chuẩn ban đầu</th></tr>
+      <tr><td><b>Đúng trình tự</b></td><td>Các bước thi công xuất hiện theo đúng thứ tự quy trình chuẩn của sản phẩm, không đảo, không thiếu bước bắt buộc khi kịch bản là hướng dẫn cách làm</td><td>100% (luật cứng, sai là chặn)</td></tr>
+      <tr><td><b>Khớp lời</b></td><td>Câu lời thoại nói bước nào thì hình đang chiếu đúng bước đó</td><td>≥ 85% số câu</td></tr>
+      <tr><td><b>Thẩm mỹ cảnh chốt</b></td><td>Cảnh kết quả và kêu gọi dùng đoạn có điểm thẩm mỹ cao nhất trong kho (mạch đều, bề mặt sạch, đủ sáng)</td><td>≥ 8/10</td></tr>
+      <tr><td><b>Nét và nhịp</b></td><td>Không dùng đoạn mờ; độ dài shot theo nhịp học từ video Kingsmen cùng dòng</td><td>nét ≥ 6/10, lệch nhịp ≤ 20%</td></tr>
+      <tr><td><b>Tái dựng</b></td><td>Lấy kịch bản của một video đã air, cho máy dựng lại từ đúng footage gốc, so từng shot với bản người dựng</td><td>chỉ số tổng hợp, dùng để so bản mới với bản cũ</td></tr>
+    </table></div></section>
+
+  <section><h2>Bốn tầng dữ liệu, video đã air là tầng vàng</h2>
+    <div class="grid">
+      <div class="card"><b>Vàng: video Kingsmen đã air</b>Kèm clip gốc (thư mục <code>goc</code>) và số liệu hiệu quả. Mỗi shot cho ba thứ cùng lúc: câu đang nói, bước đang chiếu, người chọn đoạn nào trong clip gốc. Nguồn học chính.</div>
+      <div class="card"><b>Bạc: footage gốc đã đọc</b>Mỗi clip có dòng thời gian từng giây: bước, hành động, vật liệu, cỡ cảnh, thẩm mỹ, độ nét. Là kho để máy chọn khi dựng.</div>
+      <div class="card"><b>Đồng: video bán chạy ngoài</b>Kalodata, kênh TikTok khác. Học cấu trúc bán hàng và nhịp, không học kỹ thuật thi công. Trọng số thấp, tách theo mục đích Bán hàng.</div>
+      <div class="card"><b>Sửa của người</b>Mỗi lần anh chỉnh ghép, đổi đoạn, sửa nhãn bước sai. Ít nhưng giá trị nhất vì chỉ đúng chỗ máy sai.</div>
+    </div></section>
+
+  <section><h2>Năm phần máy, mỗi phần một việc</h2>
+    <figure><div class="fig-box"><svg viewBox="0 0 900 330" role="img" aria-label="Luồng dựng: kịch bản qua Đọc lời, footage qua Đọc hình, cả hai vào Ghép câu với đoạn, rồi Nhịp và trình tự, rồi Kiểm định, ra video; lần sửa của người quay về học">
+      <defs><marker id="m" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--muted)"/></marker><marker id="mb" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--teal)"/></marker></defs>
+      <rect class="box d" x="10" y="40" width="130" height="54" rx="3"/><text x="22" y="63">Kịch bản</text><text class="sub" x="22" y="81">câu lời thoại</text>
+      <rect class="box d" x="10" y="200" width="130" height="54" rx="3"/><text x="22" y="223">Footage gốc</text><text class="sub" x="22" y="241">clip quay</text>
+      <rect class="box m" x="180" y="30" width="170" height="74" rx="3"/><text x="192" y="54">M2 · Đọc lời</text><text class="sub" x="192" y="72">qwen2.5 7B</text><text class="sub" x="192" y="88">câu → ý + bước được nhắc</text>
+      <rect class="box m" x="180" y="190" width="170" height="74" rx="3"/><text x="192" y="214">M1 · Đọc hình</text><text class="sub" x="192" y="232">qwen2.5vl 7B · từng giây</text><text class="sub" x="192" y="248">bước, thẩm mỹ, nét, cỡ cảnh</text>
+      <rect class="box m" x="395" y="110" width="160" height="74" rx="3"/><text x="407" y="134">M3 · Ghép câu–đoạn</text><text class="sub" x="407" y="152">xếp hạng đoạn cho câu</text><text class="sub" x="407" y="168">trọng số học được</text>
+      <rect class="box m" x="590" y="110" width="140" height="74" rx="3"/><text x="602" y="134">M4 · Nhịp</text><text class="sub" x="602" y="152">độ dài shot, thứ tự,</text><text class="sub" x="602" y="168">chuyển cỡ cảnh</text>
+      <rect class="box k" x="760" y="110" width="130" height="74" rx="3"/><text x="772" y="134">M5 · Kiểm định</text><text class="sub" x="772" y="152">luật cứng, không học</text><text class="sub" x="772" y="168">sai là chặn</text>
+      <path class="ar" d="M140,67 L178,67" marker-end="url(#m)"/><path class="ar" d="M140,227 L178,227" marker-end="url(#m)"/>
+      <path class="ar" d="M350,67 C375,67 375,140 393,140" marker-end="url(#m)"/><path class="ar" d="M350,227 C375,227 375,160 393,160" marker-end="url(#m)"/>
+      <path class="ar" d="M555,147 L588,147" marker-end="url(#m)"/><path class="ar" d="M730,147 L758,147" marker-end="url(#m)"/>
+      <path class="ar" d="M825,184 L825,230" marker-end="url(#m)"/><rect class="box" x="760" y="232" width="130" height="44" rx="3"/><text x="772" y="252">Video + lý do</text><text class="sub" x="772" y="268">từng shot</text>
+      <path class="back" d="M760,262 C600,310 420,310 420,188" marker-end="url(#mb)"/><text class="sub" x="520" y="318">người sửa → ví dụ học cho M1, M2, M3</text>
+    </svg></div><figcaption>Kịch bản và footage được đọc riêng thành cùng một ngôn ngữ (bước thi công, ý của câu), rồi mới ghép. Kiểm định là luật cứng đứng cuối, nên máy học sai cũng không lọt video sai kỹ thuật.</figcaption></figure>
+    <div class="tbl-wrap"><table>
+      <tr><th>Phần</th><th>Làm gì</th><th>Học từ đâu</th><th>Cách học</th></tr>
+      <tr><td><b>M1 Đọc hình</b></td><td>Mỗi giây footage: bước thi công (trong quy trình chuẩn), hành động, vật liệu, cỡ cảnh, thẩm mỹ, độ nét</td><td>Lần anh sửa nhãn bước; shot video đã air có lời nói rõ bước</td><td>Trước: đưa ví dụ đã sửa vào lời nhắc. Khi có ≥ 300 nhãn sửa: tinh chỉnh qwen2.5vl trên Q2</td></tr>
+      <tr><td><b>M2 Đọc lời</b></td><td>Mỗi câu: ý (vấn đề, chứng minh, cách làm, kết quả, kêu gọi) và bước được nhắc</td><td>Video đã air: câu nói lúc shot đang chiếu bước nào</td><td>Phân loại trong tập đóng (các bước của quy trình) bằng qwen2.5 7B, sau tinh chỉnh chung LoRA ngôn ngữ</td></tr>
+      <tr><td><b>M3 Ghép câu–đoạn</b></td><td>Chấm mọi đoạn trong kho cho từng câu: khớp bước, khớp ý, thẩm mỹ, nét, độ dài, chưa dùng</td><td>Video đã air có clip gốc: đoạn người chọn là đúng, đoạn khác cùng kho là sai; lần anh đổi đoạn trong Chỉnh ghép</td><td>Hồi quy xếp hạng trên sáu đặc trưng, chạy CPU vài giây; bản riêng theo dòng khi đủ mẫu</td></tr>
+      <tr><td><b>M4 Nhịp</b></td><td>Độ dài shot theo ý và bước; thứ tự bước; chuyển cỡ cảnh (toàn → cận → sản phẩm)</td><td>Video đã air cùng dòng, trọng số theo hiệu quả</td><td>Thống kê có trọng số (đã có, 60 so với luật 53); mở rộng theo ý và bước</td></tr>
+      <tr><td><b>M5 Kiểm định</b></td><td>Chặn: đảo bước, thiếu bước bắt buộc, đoạn mờ, cảnh kết quả xấu, lặp clip, lời hứa cấm</td><td>Quy trình chuẩn anh khai; danh sách cụm từ cấm sẵn có</td><td>Không học. Sai thì báo lý do, người quyết</td></tr>
+    </table></div></section>
+
+  <section><h2>Chuẩn vàng: máy dựng lại video anh đã air, rồi so từng shot</h2>
+    <p class="col">Giữ riêng 20% video đã air có clip gốc làm bộ đề thi. Mỗi lần huấn luyện, máy lấy kịch bản của từng video trong bộ đề, dựng lại từ đúng clip gốc của nó, rồi so với bản người dựng: shot nào chọn cùng bước, cùng đoạn, dài xấp xỉ, cảnh chốt đẹp bằng. Bản mới chỉ được đề nghị bật khi điểm tái dựng cao hơn bản đang dùng. Đây là thước đo gần nhất với câu hỏi "máy có dựng được như người Kingsmen không".</p></section>
+
+  <section><h2>Cần bao nhiêu dữ liệu, và dữ liệu đó ở đâu</h2>
+    <div class="tbl-wrap"><table>
+      <tr><th>Để làm được</th><th>Cần</th><th>Đang có</th></tr>
+      <tr><td>M1 đọc đúng bước của một sản phẩm</td><td>Quy trình chuẩn anh khai + khoảng 50 lần sửa nhãn</td><td>chưa khai quy trình; đang đọc thử 15 clip</td></tr>
+      <tr><td>M2 hiểu câu nói bước nào</td><td>≈ 30 video đã air có lời thoại, cùng dòng</td><td>15 video Drive (chưa gắn dòng)</td></tr>
+      <tr><td>M3 chọn đoạn như người</td><td>≈ 30 video đã air <b>kèm clip gốc</b>, cùng dòng</td><td>0 video có clip gốc</td></tr>
+      <tr><td>M4 nhịp theo dòng</td><td>≈ 20 video đã air cùng dòng</td><td>15 chung</td></tr>
+      <tr><td>Bộ đề tái dựng</td><td>≈ 6 video đã air kèm clip gốc, giữ riêng</td><td>0</td></tr>
+    </table></div>
+    <p class="col note">Điểm nghẽn là clip gốc. Video đã air thường còn giữ thư mục quay trên Drive hoặc ổ cứng dựng. Chỉ cần đặt video thành phẩm cạnh thư mục con tên <code>goc</code> chứa các clip quay của nó, máy tự dò shot nào lấy từ clip nào, giây nào.</p></section>
+
+  <section class="card final"><h2>Đề xuất</h2>
+    <div class="col">Duyệt ADR-015 theo thứ tự: <span class="tag">1 · M5 kiểm định</span><span class="tag">2 · M2 đọc lời</span><span class="tag">3 · M3 ghép câu–đoạn</span><span class="tag">4 · bộ đề tái dựng</span><span class="tag">5 · tinh chỉnh M1</span>. M1 và M4 đã chạy ở ADR-014a và ADR-010.
+    <p>Việc của anh, cũng theo thứ tự: khai quy trình chuẩn cho từng dòng sản phẩm ở Danh mục; gom 30 video đã air của một dòng (nên bắt đầu Keo chít mạch) kèm thư mục clip gốc; nạp vào Lớp học và gắn dòng.</p></div></section>
+</div>

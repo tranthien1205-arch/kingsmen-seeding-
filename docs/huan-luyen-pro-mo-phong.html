@@ -1,0 +1,115 @@
+<title>Trung tâm huấn luyện</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&family=Source+Serif+4:opsz,wght@8..60,600;8..60,700&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+:root{--paper:#F2F5F3;--card:#FFFFFF;--ink:#141E1B;--ink-2:#3D4E49;--muted:#68807A;--line:#D8E0DC;--line-2:#E9EEEC;--teal:#0C7B6F;--teal-soft:#E3F0ED;--gold:#B08D2E;--gold-soft:#F6EDD6;--leak:#A3372B;--leak-soft:#F7E5E1;--shadow:0 1px 2px rgba(20,30,27,.05),0 8px 24px -16px rgba(20,30,27,.35)}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){color-scheme:dark;--paper:#121917;--card:#1A2320;--ink:#EEF3F1;--ink-2:#C5D1CC;--muted:#8FA39C;--line:#2C3935;--line-2:#233029;--teal:#4FB8A9;--teal-soft:#183630;--gold:#D6B45C;--gold-soft:#3A2F14;--leak:#E07A6C;--leak-soft:#3D1F1A}}
+:root[data-theme="dark"]{color-scheme:dark;--paper:#121917;--card:#1A2320;--ink:#EEF3F1;--ink-2:#C5D1CC;--muted:#8FA39C;--line:#2C3935;--line-2:#233029;--teal:#4FB8A9;--teal-soft:#183630;--gold:#D6B45C;--gold-soft:#3A2F14;--leak:#E07A6C;--leak-soft:#3D1F1A}
+*{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--ink);font:14px/1.55 "Be Vietnam Pro",system-ui,sans-serif}
+.wrap{max-width:1240px;margin:0 auto;padding-block:28px 90px;padding-inline:18px;display:flex;flex-direction:column;gap:22px}
+h1,h2,h3{font-family:"Source Serif 4",Georgia,serif;letter-spacing:-.015em;text-wrap:balance;margin:0}h1{font-size:clamp(26px,3.6vw,34px);line-height:1.15}h2{font-size:19px}h3{font-size:15.5px}
+.eyebrow{font-size:11px;letter-spacing:.14em;text-transform:uppercase;font-weight:600;color:var(--teal)}.lead{font-size:15.5px;color:var(--ink-2);max-width:78ch}.note{font-size:12.5px;color:var(--muted)}
+.mono{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:12px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:4px;box-shadow:var(--shadow);padding:14px 16px;display:flex;flex-direction:column;gap:10px}
+.kpi{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px}.kpi .card{gap:2px;padding:12px 14px}.kpi b{font-family:"Source Serif 4",serif;font-size:28px;line-height:1.1}.kpi span{font-size:12px;color:var(--muted)}
+.good{color:var(--teal)}.bad{color:var(--leak)}.warn{color:var(--gold)}
+.tbl-wrap{overflow-x:auto}table{border-collapse:collapse;width:100%;min-width:760px;font-size:13px}th{background:var(--line-2);color:var(--muted);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;text-align:left;padding:7px 9px;font-weight:600;white-space:nowrap}td{padding:8px 9px;border-top:1px solid var(--line-2);vertical-align:middle}td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
+tr.sel td{background:var(--teal-soft)}
+.pill{display:inline-block;padding:1px 8px;border-radius:999px;font-size:11px;font-weight:600;white-space:nowrap}.p-teal{background:var(--teal-soft);color:var(--teal)}.p-gold{background:var(--gold-soft);color:var(--gold)}.p-leak{background:var(--leak-soft);color:var(--leak)}.p-line{background:var(--line-2);color:var(--ink-2)}.p-solid{background:var(--teal);color:#fff}
+.btn{display:inline-block;padding:5px 10px;border-radius:4px;border:1px solid var(--line);background:var(--card);color:var(--ink);font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap}.btn.pri{background:var(--teal);border-color:var(--teal);color:#fff}
+.grid2{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);gap:14px}@media (max-width:980px){.grid2{grid-template-columns:1fr}}
+.bar{display:flex;height:10px;border-radius:999px;overflow:hidden;background:var(--line-2)}.bar i{display:block;height:100%}
+.leg{display:flex;gap:12px;flex-wrap:wrap;font-size:11.5px;color:var(--muted)}.leg i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:4px;vertical-align:-1px}
+.heat td.c{text-align:center;font-variant-numeric:tabular-nums;font-size:12px}.h0{color:var(--muted)}.h1{background:var(--gold-soft)}.h2{background:var(--teal-soft)}.h3{background:var(--teal);color:#fff}
+.step{display:grid;grid-template-columns:22px 1fr auto;gap:8px;align-items:start;font-size:13px;padding:6px 0;border-top:1px solid var(--line-2)}.step:first-child{border-top:0}.dot{width:14px;height:14px;border-radius:50%;margin-top:3px;border:2px solid var(--line)}.dot.ok{background:var(--teal);border-color:var(--teal)}.dot.run{border-color:var(--gold);background:var(--gold-soft)}
+svg text{font-family:"Be Vietnam Pro",sans-serif;font-size:10.5px;fill:var(--muted)}svg .ax{stroke:var(--line)}svg .luat{stroke:var(--gold);stroke-dasharray:4 3;fill:none}svg .moi{stroke:var(--teal);fill:none;stroke-width:2}svg .pt{fill:var(--teal)}svg .pt-x{fill:var(--leak)}svg .nguong{stroke:var(--leak);stroke-dasharray:2 3;opacity:.6}
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);flex-wrap:wrap}.tabs span{padding:6px 12px;font-size:13px;font-weight:600;color:var(--muted);border-bottom:2px solid transparent;cursor:pointer}.tabs span.on{color:var(--teal);border-color:var(--teal)}
+</style>
+<div class="wrap">
+  <header style="display:flex;flex-direction:column;gap:6px"><div class="eyebrow">Máy › Bộ não AI › Huấn luyện · mô phỏng bản chuyên sâu · số thật 24/09/2026 20:35</div>
+    <h1>Trung tâm huấn luyện: dữ liệu, phiên bản, máy học trên một màn</h1>
+    <p class="lead">Dành cho người vận hành AI: nhìn được mỗi đầu học đang đứng ở đâu, học từ dữ liệu gì, phiên bản nào tốt lên hay xấu đi, máy nào đang chạy, và vì sao một bản bị loại. Tab "Lớp học (đơn giản)" giữ nguyên cho người dùng thường.</p></header>
+
+  <section class="kpi">
+    <div class="card"><b class="good">Q2</b><span>máy học chính · RTX 3070 Ti · VRAM 1,2/8 GB · rảnh</span></div>
+    <div class="card"><b>21</b><span>mẫu có nhãn dùng được (ghép 21) · 74 mẫu chọn cảnh chờ người chấm</span></div>
+    <div class="card"><b class="warn">1</b><span>phiên bản chờ quyết: Cắt ghép 60 vs luật 53</span></div>
+    <div class="card"><b class="bad">1</b><span>phiên bản máy tự loại hôm nay: Chọn cảnh 4 vs 12 (nhãn nhiễu)</span></div>
+    <div class="card"><b>2</b><span>mô hình ngôn ngữ trên Q2: qwen2.5:7b, qwen2.5vl:7b</span></div>
+  </section>
+
+  <section class="card"><div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap"><h2>Bảng đầu học</h2><span class="note">bấm một dòng để mở chi tiết bên dưới · cột "Mẫu" tách HỌC / KIỂM và người / tự động</span></div>
+    <div class="tbl-wrap"><table>
+      <tr><th>Đầu học</th><th>Mô hình mở</th><th>Mức</th><th class="n">Mẫu người</th><th class="n">Mẫu tự động</th><th class="n">Học / Kiểm</th><th class="n">Bản dùng</th><th class="n">Bản mới</th><th class="n">Luật cũ</th><th>Xu hướng</th><th>Việc</th></tr>
+      <tr><td><b>Chọn cảnh</b><div class="note">nhìn · CLIP ViT-B/16 + logistic</div></td><td class="mono">clip-vit-b16</td><td><span class="pill p-line">API</span></td><td class="n bad">0</td><td class="n">74</td><td class="n">56 / 18</td><td class="n">—</td><td class="n bad">4 · loại</td><td class="n">12</td><td><svg width="70" height="20" viewBox="0 0 70 20"><polyline class="moi" points="5,17 65,17"/><circle class="pt-x" cx="65" cy="17" r="3"/></svg></td><td><span class="btn">Mở dữ liệu</span></td></tr>
+      <tr class="sel"><td><b>Cắt ghép</b><div class="note">nhìn · thống kê độ dài shot</div></td><td class="mono">ghep-thong-ke</td><td><span class="pill p-line">API</span></td><td class="n">0</td><td class="n good">21</td><td class="n">15 / 6</td><td class="n">—</td><td class="n good">60</td><td class="n">53</td><td><svg width="70" height="20" viewBox="0 0 70 20"><polyline class="moi" points="5,10 65,6"/><circle class="pt" cx="65" cy="6" r="3"/></svg></td><td><span class="btn pri">Bật 60</span></td></tr>
+      <tr><td><b>Chọn đoạn</b><div class="note">nhìn · logistic trên nét/động/sáng</div></td><td class="mono">doan-tuyen-tinh</td><td><span class="pill p-line">API</span></td><td class="n bad">0</td><td class="n">0</td><td class="n">0 / 0</td><td class="n">—</td><td class="n">—</td><td class="n">—</td><td class="note">cần thư mục goc</td><td><span class="btn">Hướng dẫn</span></td></tr>
+      <tr><td><b>Soạn kịch bản</b><div class="note">ngôn ngữ · LoRA trên Qwen 7B</div></td><td class="mono">qwen2.5:7b</td><td><span class="pill p-line">API</span></td><td class="n">2</td><td class="n">21 kịch bản</td><td class="n">—</td><td class="n">—</td><td class="n">—</td><td class="n">—</td><td class="note">cần 60</td><td><span class="btn">Xuất tập mẫu</span></td></tr>
+      <tr><td><b>Chấm ý tưởng</b><div class="note">ngôn ngữ</div></td><td class="mono">qwen2.5:7b</td><td><span class="pill p-line">API</span></td><td class="n">0</td><td class="n">4</td><td class="n">3 / 1</td><td class="n">—</td><td class="n">—</td><td class="n">—</td><td class="note">—</td><td></td></tr>
+      <tr><td><b>Giọng đọc</b><div class="note">Piper tiếng Việt · không huấn luyện</div></td><td class="mono">piper-vi</td><td><span class="pill p-gold">BÓNG</span></td><td class="n">1</td><td class="n">7</td><td class="n">—</td><td class="n">—</td><td class="n">—</td><td class="n">—</td><td class="note">chấm tai nghe</td><td><span class="btn">Nghe 8 mẫu</span></td></tr>
+      <tr><td><b>Mô tả khung hình</b><div class="note">nhìn-ngôn ngữ · đang dùng Claude Haiku</div></td><td class="mono">qwen2.5vl:7b</td><td><span class="pill p-line">chưa gắn</span></td><td class="n">—</td><td class="n">—</td><td class="n">—</td><td class="n">—</td><td class="n">—</td><td class="n">—</td><td class="note">Q2 đã có sẵn</td><td><span class="btn">Chạy bóng</span></td></tr>
+    </table></div></section>
+
+  <div class="tabs"><span class="on">Cắt ghép · chi tiết</span><span>Dữ liệu</span><span>Lượt huấn luyện</span><span>Máy học</span><span>Phủ theo sản phẩm</span><span>Ngôn ngữ (LoRA)</span></div>
+
+  <section class="grid2">
+    <div class="card"><h3>Điểm qua các phiên bản so với luật cũ</h3>
+      <svg viewBox="0 0 520 190" width="100%" role="img" aria-label="Phiên bản v20260924-rpkz đạt 60 điểm, luật cũ 53, ngưỡng bật 75">
+        <line class="ax" x1="40" y1="20" x2="40" y2="160"/><line class="ax" x1="40" y1="160" x2="500" y2="160"/>
+        <text x="8" y="164">0</text><text x="4" y="94">50</text><text x="0" y="24">100</text><line class="ax" x1="40" y1="90" x2="500" y2="90" opacity=".35"/>
+        <line class="nguong" x1="40" y1="55" x2="500" y2="55"/><text x="444" y="50">ngưỡng 75</text>
+        <line class="luat" x1="40" y1="86" x2="500" y2="86"/><text x="444" y="81">luật 53</text>
+        <circle class="pt" cx="140" cy="76" r="5"/><text x="118" y="68">60 · rpkz</text><text x="108" y="176">24/09 18:15 · Ngoc-Han</text>
+        <circle cx="300" cy="72" r="5" fill="none" stroke="var(--muted)" stroke-dasharray="2 2"/><text x="262" y="176">lượt tới · Q2 · ≥ 31 mẫu</text>
+      </svg>
+      <div class="note">Thước đo: độ lệch độ dài shot trung vị so với video thành phẩm (100 = khớp hoàn toàn). Được bật khi đạt ngưỡng 75 hoặc hơn luật cũ ≥ 5 điểm (bản này hơn 7).</div></div>
+    <div class="card"><h3>Phiên bản v20260924-rpkz</h3>
+      <div class="tbl-wrap"><table style="min-width:0">
+        <tr><td>Trạng thái</td><td><span class="pill p-gold">chờ quyết</span></td></tr>
+        <tr><td>Học / kiểm</td><td class="mono">15 / 6 video thành phẩm</td></tr>
+        <tr><td>Kết quả học được</td><td class="mono">shot trung vị 2,6 s · 15% 1,4 s · 85% 4,1 s</td></tr>
+        <tr><td>Chuyển cỡ cảnh hay gặp</td><td class="mono">SAN_PHAM → THAO_TAC 0,41 · CAN → SAN_PHAM 0,33</td></tr>
+        <tr><td>Trọng số</td><td class="mono">lượt xem / doanh thu so trung vị cùng kênh, kẹp 0,4–2,5</td></tr>
+        <tr><td>Máy · thời gian</td><td class="mono">Ngoc-Han · 11 s</td></tr>
+        <tr><td>Checkpoint</td><td class="mono">/media/…/dau-…json</td></tr>
+      </table></div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap"><span class="btn pri">Bật bản này</span><span class="btn">So với luật cũ trên 3 video</span><span class="btn">Học lại trên Q2 (21 mẫu)</span><span class="btn">Loại</span></div></div>
+  </section>
+
+  <section class="grid2">
+    <div class="card"><h3>Dữ liệu của Cắt ghép theo nguồn</h3>
+      <div class="bar" role="img" aria-label="Drive 15 video, Kalodata 6 video"><i style="width:71%;background:var(--teal)"></i><i style="width:29%;background:var(--gold)"></i></div>
+      <div class="leg"><span><i style="background:var(--teal)"></i>Drive Kingsmen 15 · 273 shot · nhịp 2,8 s</span><span><i style="background:var(--gold)"></i>Kalodata 6 · 69 shot · nhịp 8,0 s · có doanh thu</span><span><i style="background:var(--line)"></i>Chỉnh ghép người 0</span></div>
+      <div class="note">Cảnh báo dữ liệu: nhịp Kalodata (8,0 s) khác xa video Kingsmen (2,8 s). Gộp chung kéo trung vị lên. Đề xuất: tách bản riêng theo mục đích Bán hàng, hoặc cho Kalodata trọng số thấp hơn đến khi có ≥ 20 video.</div>
+      <div class="tbl-wrap"><table style="min-width:520px"><tr><th>Video</th><th>Nguồn</th><th class="n">Shot</th><th class="n">Nhịp</th><th class="n">Trọng số</th><th>Tập</th><th></th></tr>
+        <tr><td>CÁCH LÀM MỚI SÀN NHÀ TẮM CŨ…</td><td>Drive</td><td class="n">31</td><td class="n">1,3</td><td class="n">1,00</td><td>HỌC</td><td><span class="btn">Xem shot</span></td></tr>
+        <tr><td>@xidaily28.02 · 7664455…</td><td>Kalodata</td><td class="n">35</td><td class="n">1,9</td><td class="n">1,41</td><td>KIỂM</td><td><span class="btn">Xem shot</span></td></tr>
+        <tr><td>@lexuantan0909 · 7683350…</td><td>Kalodata</td><td class="n">5</td><td class="n">14,2</td><td class="n">2,10</td><td>HỌC</td><td><span class="btn">Loại khỏi tập</span></td></tr></table></div></div>
+    <div class="card"><h3>Máy học</h3>
+      <div class="tbl-wrap"><table style="min-width:0">
+        <tr><th>Máy</th><th>GPU</th><th>Mô hình</th><th>Hàng đợi</th></tr>
+        <tr><td><b>Máy VP Q2</b> <span class="pill p-solid">chính</span><div class="note">1.3 · nhịp 20:35</div></td><td class="mono">3070 Ti 8 GB<br>dùng 1,2 GB</td><td class="mono">qwen2.5:7b · qwen2.5vl:7b · CLIP · Whisper · Piper</td><td class="n">0</td></tr>
+        <tr><td><b>Ngoc-Han</b> <span class="pill p-line">dự phòng</span><div class="note">1.2 · nhịp 20:35 · Trạm</div></td><td class="mono">1650 4 GB</td><td class="mono">CLIP · Whisper · Piper</td><td class="n">0</td></tr>
+      </table></div>
+      <div class="note">Q2 thiếu Python nên không có yt-dlp; video TikTok tải qua tikwm. Cài Python bằng một lệnh nếu muốn tải trực tiếp.</div>
+      <h3 style="margin-top:6px">Lượt huấn luyện gần đây</h3>
+      <div class="tbl-wrap"><table style="min-width:0"><tr><th>Lúc</th><th>Đầu học</th><th>Máy</th><th class="n">Điểm</th><th>Kết quả</th></tr>
+        <tr><td class="mono">18:15</td><td>Cắt ghép</td><td>Ngoc-Han</td><td class="n good">60</td><td><span class="pill p-gold">chờ quyết</span></td></tr>
+        <tr><td class="mono">18:14</td><td>Chọn cảnh</td><td>Ngoc-Han</td><td class="n bad">4</td><td><span class="pill p-leak">máy tự loại</span> nhãn tự động nhiễu</td></tr></table></div></div>
+  </section>
+
+  <section class="grid2">
+    <div class="card"><h3>Phủ dữ liệu theo sản phẩm</h3><span class="note">số mẫu có nhãn mỗi đầu học × dòng sản phẩm; ô đậm = đủ học bản riêng</span>
+      <div class="tbl-wrap heat"><table style="min-width:460px"><tr><th>Đầu học</th><th class="n">Chung</th><th class="n">Keo chít mạch</th><th class="n">Sàn nhà tắm</th><th class="n">Chưa gắn</th></tr>
+        <tr><td>Cắt ghép</td><td class="c h2">21</td><td class="c h0">0</td><td class="c h0">0</td><td class="c h1">21</td></tr>
+        <tr><td>Chọn cảnh</td><td class="c h0">0</td><td class="c h0">0</td><td class="c h0">0</td><td class="c h0">0</td></tr>
+        <tr><td>Soạn kịch bản</td><td class="c h1">23</td><td class="c h0">0</td><td class="c h0">0</td><td class="c h1">23</td></tr></table></div>
+      <div class="note">21 video chưa gắn sản phẩm. Gắn nhanh: chọn nhiều dòng trong Dữ liệu › Gắn nhãn hàng loạt.</div></div>
+    <div class="card"><h3>Ngôn ngữ: quy trình LoRA trên Q2</h3>
+      <div class="step"><span class="dot ok"></span><span>Mô hình nền qwen2.5:7b có trên Q2</span><span class="note">4,7 GB</span></div>
+      <div class="step"><span class="dot ok"></span><span>Bộ cài học ngôn ngữ tại chỗ (cai-hoc-ngon-ngu.ps1) có trong repo</span><span class="note">Python cần cài</span></div>
+      <div class="step"><span class="dot run"></span><span>Tập mẫu: 2 bài người duyệt + 21 kịch bản bán tốt</span><span class="note">cần 60</span></div>
+      <div class="step"><span class="dot"></span><span>Huấn luyện QLoRA 4-bit trên Q2 (1–3 giờ)</span><span class="btn">Bắt đầu</span></div>
+      <div class="step"><span class="dot"></span><span>Chấm trên tập kiểm so với Claude, tạo bản Ollama kingsmen-qwen</span><span></span></div>
+      <div class="step"><span class="dot"></span><span>Duyệt · bật chạy bóng · bật máy nhà</span><span></span></div></div>
+  </section>
+</div>

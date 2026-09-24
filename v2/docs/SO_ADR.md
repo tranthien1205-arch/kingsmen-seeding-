@@ -349,7 +349,32 @@ Quyết định: (1) BÌNH LUẬN DẪN DẮT: bài lên (có link) → máy lê
 Người duyệt: Thiện · Trạng thái: ĐÃ DUYỆT (2026-09-24, "tiếp tục 007b") · ĐÃ LÀM
 ```
 
+```
+ADR-016 · 2026-09-24 · NHẬN DIỆN KHUNG HÌNH ĐANG NÓI VỀ GÌ — nền cho mọi phần thông minh, đo trên nhãn người
+Bối cảnh : Thiện: "cần thiết kế kiến trúc để mô hình nhận diện chính xác khung hình đang nói về gì … đây là cơ sở cho mọi sự phát triển
+            thông minh hơn … ngoài nhận diện chính xác mới tới tiêu chuẩn thẩm mỹ và chất lượng source". Đo thật 24/09 (video
+            "ĐỊNH VỊ _GIÁ TRỊ CÔNG TRÌNH", 44 shot): qwen2.5vl gán gần hết THI_CONG với tự khai chắc 1,0 — sai cho video định vị;
+            whisper-base nghe tiếng Việt kém ("KISSMAN", "đeo chứt mặt"). Bản vẽ: docs/kien-truc-nhan-dien.html.
+Quyết định: (1) THỨ TỰ: nhận diện nội dung (nhóm cảnh → bước/bài test) trước; thẩm mỹ và chất lượng source chỉ sau khi nhận diện đạt.
+            (2) KHÔNG TIN SỐ TỰ KHAI: can_xac_nhan khi đoạn ngắn < 2 dải, bị Viterbi sửa, hoặc tu_tin < 0,6. (3) NHÃN VÀNG: màn Bộ não
+            AI › 👁 Nhãn hình — phím 1–8 nhóm, 1–9 bước/bài test, Enter đồng ý máy, 0 hình không rõ (không thành mẫu), → bỏ qua; hàng
+            đợi GET /nhan-hinh/hang lấy cả footage lẫn video thành phẩm, đoạn máy chưa chắc trước, cứ 4 đoạn xen 1 đoạn ngẫu nhiên.
+            (4) BẢNG ĐO: độ chính xác trên MẪU NGẪU NHIÊN là con số thật; kèm theo nhóm, cặp nhầm, mức tự khai, theo nguồn.
+            (5) CỔNG: chưa dùng nhãn máy để huấn luyện khi chưa có ~200 nhãn vàng và chưa đạt 80% đúng nhóm trên mẫu ngẫu nhiên.
+            (6) ĐẦU VÀO TỐT HƠN: dải 3 khung 448px (từ 320), ảnh giữa mỗi đoạn tải lên kho để người nhìn; video thành phẩm đọc kèm
+            mô tả bài đăng TikTok + lời thoại cả video làm ngữ cảnh; Whisper small (dự phòng base), nghe cả video một lần có mốc giờ.
+            (7) Học lại video thành phẩm giữ nhãn người (mẫu nhan_khung không bị xoá); gán lại một đoạn thay mẫu cũ, vẫn so với nhãn máy gốc.
+Người duyệt: Thiện · Trạng thái: ĐÃ DUYỆT (2026-09-24, "tiếp tục" sau đề xuất làm màn gán nhãn + bảng đo) · ĐÃ LÀM phần 1
+```
+
 ## Changelog
+
+### 2026-09-24 · ADR-016 — Nhãn vàng cho mô hình nhìn
+- **Worker**: `tlSach()` dùng chung; `/hub/thanh-pham` lưu `timeline`; `POST /(tai-san|kho-thanh-pham)/:id/doan/:i` (`khong_ro`, `nhe`, `ngau_nhien`);
+  `GET /nhan-hinh/hang`; bootstrap `ai_nao.do_chinh_xac_hinh` thêm `ngau_nhien`, `theo_nhom`, `nham`, `muc_tin`, `theo_nguon`.
+- **Máy con**: `doc-khung.mjs` 448px, `khung_url` mỗi đoạn, `ngu_canh`, cần xác nhận không dựa số tự khai; `hoc-thanh-pham.mjs` Whisper small + nghe cả video + ngữ cảnh.
+- **Giao diện**: tab 👁 Nhãn hình (bảng đo + gán nhãn nhanh); dải thời gian tô theo nhóm cảnh, viền đứt = chờ xác nhận; Danh mục sản phẩm có ô Bài test.
+- **Test** `tests/adr016.test.mjs`.
 
 ### 2026-09-24 · ADR-013 — Lớp học của máy (thay màn Huấn luyện)
 - **Worker**: `POST /lop-hoc/nap` (một ô, tự nhận loại, `chi_nhan`), `POST /lop-hoc/bat|tat`, `POST /lop-hoc/tu-hoc`; `tuHoc()` theo cron; `tomTatKyNang()` → bootstrap `ai_nao.ky_nang`, `nhat_ky_hoc`; phiên bản lưu `danh_gia.vi_du`.

@@ -1,0 +1,86 @@
+<title>Kiến trúc nhận diện hình</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&family=Source+Serif+4:opsz,wght@8..60,600;8..60,700&display=swap">
+<style>
+:root{--paper:#F2F5F3;--card:#FFFFFF;--ink:#141E1B;--ink-2:#3D4E49;--muted:#68807A;--line:#D8E0DC;--line-2:#E9EEEC;--teal:#0C7B6F;--teal-soft:#E3F0ED;--gold:#B08D2E;--gold-soft:#F6EDD6;--leak:#A3372B;--leak-soft:#F7E5E1;--shadow:0 1px 2px rgba(20,30,27,.05),0 8px 24px -16px rgba(20,30,27,.35)}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){color-scheme:dark;--paper:#121917;--card:#1A2320;--ink:#EEF3F1;--ink-2:#C5D1CC;--muted:#8FA39C;--line:#2C3935;--line-2:#233029;--teal:#4FB8A9;--teal-soft:#183630;--gold:#D6B45C;--gold-soft:#3A2F14;--leak:#E07A6C;--leak-soft:#3D1F1A}}
+:root[data-theme="dark"]{color-scheme:dark;--paper:#121917;--card:#1A2320;--ink:#EEF3F1;--ink-2:#C5D1CC;--muted:#8FA39C;--line:#2C3935;--line-2:#233029;--teal:#4FB8A9;--teal-soft:#183630;--gold:#D6B45C;--gold-soft:#3A2F14;--leak:#E07A6C;--leak-soft:#3D1F1A}
+*{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--ink);font:16px/1.62 "Be Vietnam Pro",system-ui,sans-serif}
+.wrap{max-width:1000px;margin:0 auto;padding-block:48px 96px;padding-inline:20px;display:flex;flex-direction:column;gap:42px}
+h1,h2,h3{font-family:"Source Serif 4",Georgia,serif;letter-spacing:-.015em;text-wrap:balance;margin:0}h1{font-size:clamp(30px,4.6vw,44px);line-height:1.12}h2{font-size:clamp(22px,3vw,28px);line-height:1.25}h3{font-size:18px}
+.eyebrow{font-size:11.5px;letter-spacing:.14em;text-transform:uppercase;font-weight:600;color:var(--teal)}.lead{font-size:19px;color:var(--ink-2);max-width:68ch}.note{font-size:13.5px;color:var(--muted)}.col{max-width:68ch}
+section{display:flex;flex-direction:column;gap:16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:4px;box-shadow:var(--shadow);padding:16px 18px}
+.tbl-wrap{overflow-x:auto}table{border-collapse:collapse;width:100%;min-width:640px;font-size:14px}th{background:var(--line-2);color:var(--muted);font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;text-align:left;padding:8px 10px;font-weight:600}td{padding:10px;border-top:1px solid var(--line-2);vertical-align:top}td.n{text-align:right;font-variant-numeric:tabular-nums}
+.hot{color:var(--leak);font-weight:600}.cool{color:var(--teal);font-weight:600}
+figure{margin:0}.fig-box{background:var(--card);border:1px solid var(--line);border-radius:4px;padding:14px;overflow-x:auto}figcaption{font-size:13.5px;color:var(--muted);margin-top:8px}
+svg{width:100%;min-width:720px;height:auto}svg text{font-family:"Be Vietnam Pro",sans-serif;font-size:12px;fill:var(--ink)}svg .sub{font-size:10.5px;fill:var(--muted)}svg .t1{fill:var(--teal-soft);stroke:var(--teal)}svg .t2{fill:var(--gold-soft);stroke:var(--gold)}svg .t3{fill:var(--leak-soft);stroke:var(--leak)}svg .box{fill:var(--card);stroke:var(--line)}svg .ar{stroke:var(--muted);fill:none;stroke-width:1.3}
+.final{border-left:3px solid var(--teal)}
+</style>
+<div class="wrap">
+  <header style="display:flex;flex-direction:column;gap:12px"><div class="eyebrow">Kingsmen Content OS · đề xuất ADR-016 · nhận diện hình · 24/09/2026</div>
+    <h1>Máy phải biết khung hình đang nói gì trước, rồi mới tới đẹp và đạt chuẩn</h1>
+    <p class="lead">Ba tầng, làm theo thứ tự: nội dung, chất lượng source, thẩm mỹ. Tầng nội dung là nền của mọi phần thông minh phía sau, nên nó có bộ nhãn riêng của Kingsmen, bộ đề chấm cố định, và lộ trình học bốn bước từ rẻ đến đắt.</p>
+    <p class="note">Số đo thật ngày 24/09 trên 14 clip Keo chít mạch (lần đọc đầu, chưa có quy trình chuẩn): nhãn bước viết 5 kiểu khác nhau; thẩm mỹ gần như luôn 8; clip có chuyển động nhảy nhãn giữa "pha trộn" và "thi công". Các chỉ tiêu trong trang là mục tiêu, chưa đo.</p></header>
+
+  <section><h2>Ba tầng, tầng dưới phải đúng thì tầng trên mới có nghĩa</h2>
+    <figure><div class="fig-box"><svg viewBox="0 0 900 250" role="img" aria-label="Tầng 1 nội dung là nền, tầng 2 chất lượng source đo khách quan, tầng 3 thẩm mỹ học từ người; cả ba cùng cho ra hồ sơ từng đoạn footage">
+      <rect class="t1" x="20" y="150" width="560" height="74" rx="3"/><text x="36" y="176" style="font-weight:600">Tầng 1 · Nội dung: khung đang diễn tả gì</text><text class="sub" x="36" y="196">nhóm cảnh → bước thi công / bài test / loại vấn đề → vật liệu, dụng cụ, hành động</text><text class="sub" x="36" y="212">HỌC từ nhãn người · mô hình nhìn-hiểu + đầu học nhanh</text>
+      <rect class="t2" x="20" y="85" width="560" height="56" rx="3"/><text x="36" y="108" style="font-weight:600">Tầng 2 · Chất lượng source</text><text class="sub" x="36" y="126">nét · rung · phơi sáng · độ phân giải · che khuất — ĐO bằng số, không học</text>
+      <rect class="t3" x="20" y="20" width="560" height="56" rx="3"/><text x="36" y="43" style="font-weight:600">Tầng 3 · Thẩm mỹ</text><text class="sub" x="36" y="61">thước có mốc → so cặp của người → cảnh chốt trong video đã air</text>
+      <rect class="box" x="650" y="85" width="230" height="74" rx="3"/><text x="664" y="110" style="font-weight:600">Hồ sơ từng đoạn footage</text><text class="sub" x="664" y="128">nội dung + đạt chuẩn source</text><text class="sub" x="664" y="144">+ điểm đẹp → cho M3 chọn cắt</text>
+      <path class="ar" d="M580,187 C620,187 620,130 648,125"/><path class="ar" d="M580,113 L648,118"/><path class="ar" d="M580,48 C620,48 620,105 648,110"/>
+    </svg></div><figcaption>Chọn đoạn (M3) đọc cả ba tầng, nhưng lọc theo thứ tự: sai nội dung thì loại trước, không đạt chuẩn source thì loại sau, trong số còn lại mới xếp theo đẹp.</figcaption></figure></section>
+
+  <section><h2>Tầng 1: bộ nhãn là của Kingsmen, có phiên bản</h2>
+    <p class="col">Máy chỉ được chọn trong danh sách đóng, không tự đặt tên. Danh sách có hai phần: phần chung cho mọi sản phẩm, và phần riêng anh khai cho từng sản phẩm ở Danh mục. Mỗi lần đổi danh sách là một phiên bản mới; nhãn cũ được ánh xạ sang, không mất.</p>
+    <div class="tbl-wrap"><table>
+      <tr><th>Nhóm cảnh (chung)</th><th>Chi tiết (riêng từng sản phẩm)</th><th>Ví dụ Keo chít mạch</th></tr>
+      <tr><td>Bối cảnh chung</td><td>loại không gian</td><td>nhà tắm, bếp, sân thượng</td></tr>
+      <tr><td>Vấn đề</td><td>loại hư hỏng điển hình</td><td>ron mốc đen, ron bong, thấm mạch</td></tr>
+      <tr><td>Giải pháp</td><td>sản phẩm, bao bì, thành phần</td><td>bộ A+B, màu keo</td></tr>
+      <tr><td>Thi công</td><td>bước trong quy trình chuẩn, đúng thứ tự</td><td>vệ sinh ron → trộn A+B → bơm → gạt → lau</td></tr>
+      <tr><td>Bài test</td><td>bài test của sản phẩm</td><td>đổ nước, chà bàn chải, cào dao</td></tr>
+      <tr><td>Hoàn thiện</td><td>kiểu kết quả</td><td>cận mạch, toàn cảnh, trước-sau</td></tr>
+      <tr><td>Người nói · Khác</td><td>—</td><td>—</td></tr>
+    </table></div></section>
+
+  <section><h2>Tầng 1: học theo bốn bước, bước sau chỉ làm khi bước trước chạm trần</h2>
+    <div class="tbl-wrap"><table>
+      <tr><th>Bước</th><th>Làm gì</th><th>Cần</th><th>Trạng thái</th></tr>
+      <tr><td><b>0 · Đọc không học</b></td><td>qwen2.5vl trên Q2, danh sách đóng, đọc dải 3 khung liên tiếp để thấy chuyển động, tóm tắt cả clip làm ngữ cảnh, làm mượt theo thời gian (không cho lùi bước thi công), tự khai độ chắc chắn</td><td>quy trình + bài test khai ở Danh mục</td><td class="cool">đã code, chờ đọc lại</td></tr>
+      <tr><td><b>1 · Bộ đề vàng</b></td><td>Người gán nhãn đúng cho khoảng 300 dải 1,5 giây, rải đều các nhóm và sản phẩm. Bộ đề đóng băng, chỉ để chấm, không dùng để học</td><td>≈ 10–15 phút/ngày trong 2 tuần</td><td>màn gán nhãn cần làm</td></tr>
+      <tr><td><b>2 · Ví dụ gần nhất</b></td><td>Mỗi dải người đã xác nhận được lưu kèm dấu vân hình. Khi đọc dải mới, máy tìm 3 dải đã xác nhận giống nhất cùng sản phẩm, đưa cả ảnh lẫn nhãn vào lời nhắc. Không huấn luyện, cải thiện ngay</td><td>≥ 50 dải đã xác nhận</td><td>chưa làm</td></tr>
+      <tr><td><b>3 · Đầu học nhanh</b></td><td>Một đầu nhỏ học trên dấu vân hình của dải (vài giây trên Q2), đoán nhóm và chi tiết. Chạy song song với mô hình nhìn-hiểu; hai bên lệch nhau thì hạ độ chắc chắn và đưa cho người xem</td><td>≥ 300 dải đã xác nhận</td><td>chưa làm</td></tr>
+      <tr><td><b>4 · Tinh chỉnh mô hình nhìn</b></td><td>LoRA trên qwen2.5vl (bản 3B nếu 7B không vừa 8 GB), học đúng bộ nhãn Kingsmen</td><td>≥ 1.000 dải đã xác nhận</td><td>sau cùng</td></tr>
+    </table></div>
+    <p class="col note">Nguồn nhãn: người xác nhận hoặc sửa ở màn footage (đã có đường ghi), ưu tiên dải máy ít chắc nhất; và video đã air, nơi lời thoại nói thẳng tên bước lúc shot đang chiếu (nhãn gợi ý, người xác nhận một chạm).</p></section>
+
+  <section><h2>Chấm tầng 1 bằng bộ đề vàng, có ngưỡng mới được dùng tự động</h2>
+    <div class="tbl-wrap"><table>
+      <tr><th>Chỉ số</th><th>Ý nghĩa</th><th class="n">Ngưỡng dùng tự động</th></tr>
+      <tr><td>Đúng nhóm</td><td>tỉ lệ dải đoán đúng nhóm cảnh</td><td class="n">≥ 95%</td></tr>
+      <tr><td>Đúng chi tiết</td><td>đúng cả bước thi công / bài test</td><td class="n">≥ 85%</td></tr>
+      <tr><td>Nhầm lẫn từng cặp</td><td>bảng nhầm lẫn, ví dụ pha trộn ↔ bơm keo; không cặp nào lùi quá 5 điểm khi lên bản mới</td><td class="n">không lùi</td></tr>
+      <tr><td>Độ chắc chắn có thật</td><td>trong các dải máy tự khai "chắc ≥ 0,8", tỉ lệ đúng thật</td><td class="n">≥ 95%</td></tr>
+      <tr><td>Tỉ lệ tự nhận</td><td>phần dải máy chắc đủ để không cần người xem</td><td class="n">theo dõi, tăng dần</td></tr>
+    </table></div>
+    <p class="col">Trước khi đạt ngưỡng, video máy dựng vẫn ra được nhưng mọi đoạn "chưa chắc" hiện vàng ở màn Chỉnh ghép để người xem. Bản nhận diện mới chỉ được bật khi điểm trên bộ đề cao hơn bản đang dùng.</p></section>
+
+  <section><h2>Tầng 2: chuẩn source đo bằng số, không nhờ mô hình cảm</h2>
+    <div class="tbl-wrap"><table>
+      <tr><th>Tiêu chí</th><th>Đo thế nào</th><th>Chuẩn ban đầu (hiệu chỉnh theo người)</th></tr>
+      <tr><td>Nét</td><td>độ nhoè từng nửa giây (đã đo sẵn ở phân tích đoạn)</td><td>nét ≥ 0,6</td></tr>
+      <tr><td>Rung</td><td>độ dịch chuyển khung hình giữa hai khung liền nhau</td><td>không rung giật</td></tr>
+      <tr><td>Phơi sáng</td><td>độ sáng trung bình và phần điểm ảnh cháy trắng / đen kịt</td><td>không cháy &gt; 5% khung</td></tr>
+      <tr><td>Độ phân giải</td><td>thông tin file</td><td>≥ 1080 chiều dọc sau cắt</td></tr>
+      <tr><td>Che khuất</td><td>mô hình nhìn báo tay, dụng cụ che vùng chính</td><td>vùng chính rõ</td></tr>
+    </table></div>
+    <p class="col">Ngưỡng ban đầu là ước lượng. Mỗi lần anh loại một đoạn vì "không dùng được", app ghi số đo của đoạn đó; sau khoảng 50 lần, ngưỡng được chỉnh theo chính cách anh loại.</p></section>
+
+  <section><h2>Tầng 3: thẩm mỹ học từ người, làm sau cùng</h2>
+    <p class="col">Chấm tuyệt đối 0–10 dễ bị máy chấm đều tay (đã thấy: gần như luôn 8). Nên thẩm mỹ đi ba bước: thước có mốc mô tả rõ 0–3, 4–6, 7–8, 9–10 (đã đưa vào lời nhắc); rồi so cặp, màn hiện hai cảnh hoàn thiện, người bấm cảnh nào đẹp hơn để chốt, máy học thứ hạng từ các lần bấm; cuối cùng là cảnh chốt người dựng đã chọn trong video đã air, xem như đẹp nhất trong kho của video đó.</p></section>
+
+  <section class="card final"><h2>Đề xuất</h2>
+    <div class="col"><p>Duyệt ADR-016, làm theo thứ tự: màn gán nhãn nhanh và bộ đề vàng (tầng 1 bước 1), bảng chấm độ chính xác trong tab Huấn luyện, ví dụ gần nhất (bước 2), đo chuẩn source (tầng 2), rồi đầu học nhanh (bước 3). Thẩm mỹ so cặp và tinh chỉnh mô hình nhìn làm khi đủ dữ liệu.</p>
+    <p>Việc của anh trước tiên: khai quy trình thi công và bài test cho Keo chít mạch ở Danh mục; mỗi ngày dành 10–15 phút gán nhãn trong màn mới (bấm phím số, trung bình 3–4 giây một dải).</p></div></section>
+</div>
