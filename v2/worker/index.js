@@ -1474,11 +1474,14 @@ const KY_NANG=[ {id:'chon_canh', ten:'Chọn cảnh', icon:'🎞', tinh_nang:['c
   {id:'cat_ghep', ten:'Cắt ghép', icon:'✂️', tinh_nang:['ghep_canh','chon_doan'], mo_ta:'độ dài shot, nhịp, đoạn nào trong clip'},
   {id:'viet', ten:'Viết kịch bản', icon:'✍️', tinh_nang:['soan_nhap_agent','soan_noi_dung'], mo_ta:'kịch bản theo kế hoạch, học từ bài anh duyệt và kịch bản bán tốt'},
   {id:'giong', ten:'Giọng đọc', icon:'🔊', tinh_nang:['tts'], mo_ta:'giọng máy nhà thay Google'} ];
+// máy rảnh nhất có một trong các khả năng: ít lệnh CHỜ/ĐANG nhất, bằng nhau thì máy có Ollama + VRAM lớn hơn
+async function mayRanhNhat(env, khaNangs){ const ds=(await mayGhepSong(env)).filter(x=>x.song&&khaNangs.some(k=>x.kha_nang.includes(k))); if(!ds.length) return null; const cho={}; for(const l of (await env.DB.prepare(`SELECT may_id, COUNT(*) n FROM tram_lenh WHERE trang_thai IN ('CHO','DA_GUI') AND may_id IS NOT NULL GROUP BY may_id`).all()).results) cho[l.may_id]=so(l.n);
+  return ds.slice().sort((a,b)=>((cho[a.id]||0)-(cho[b.id]||0))||((((b.than||{}).ollama?1e6:0)+vramMay(b))-(((a.than||{}).ollama?1e6:0)+vramMay(a))))[0].id; }
 async function tuHoc(env){ const cfg=await docCauHinh(env); const lh=cfg.lop_hoc||{}; if(lh.tu_hoc===false) return {bo_qua:'tắt tự học'}; const da=lh.da_hoc||{}; const ra=[];
   const dts=(await env.DB.prepare(`SELECT * FROM dinh_tuyen WHERE loai='NHIN' AND mo_hinh_mo IS NOT NULL`).all()).results;
   for(const dt of dts){ const cho=await env.DB.prepare(`SELECT id FROM mo_hinh_phien_ban WHERE tinh_nang=? AND trang_thai='CHO_DUYET'`).bind(dt.tinh_nang).first(); if(cho) continue;
     const dangHoc=await env.DB.prepare(`SELECT id FROM tram_lenh WHERE viec='huan_luyen' AND trang_thai IN ('CHO','DA_GUI') AND tham_so LIKE ?`).bind('%"tinh_nang":"'+dt.tinh_nang+'"%').first(); if(dangHoc) continue;
-    const mayId=await mayChoViec(env,'huan_luyen')||(['chon_doan','ghep_canh'].includes(dt.tinh_nang)?await mayChoViec(env,'dung_video'):null); if(!mayId) continue;
+    const mayId=await mayRanhNhat(env, ['chon_doan','ghep_canh'].includes(dt.tinh_nang)?['huan_luyen','dung_video']:['huan_luyen']); if(!mayId) continue;   // song song: chia cho máy đang rảnh, máy mạnh trước
     const nhom=(await env.DB.prepare(`SELECT COALESCE(dong,'') dong, COUNT(*) n FROM mau_hoc_ai WHERE tinh_nang=? AND nhan IS NOT NULL GROUP BY dong`).bind(dt.tinh_nang).all()).results; const tong=nhom.reduce((a,x)=>a+x.n,0); const can=so(dt.min_mau,30);
     const pvs=[]; if(tong>=can) pvs.push({pv:'chung', n:tong}); for(const x of nhom) if(x.dong&&x.n>=can) pvs.push({pv:'dong:'+x.dong, n:x.n});
     for(const {pv,n} of pvs){ const k=dt.tinh_nang+'|'+pv; if(so((da[k]||{}).n)>=n-9) continue;   // chưa thêm ≥ 10 mẫu từ lần học trước
