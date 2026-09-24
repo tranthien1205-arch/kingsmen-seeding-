@@ -381,6 +381,12 @@ Người duyệt: Thiện · Trạng thái: ĐÃ DUYỆT (2026-09-24, "ok bạn 
 
 ## Changelog
 
+### 2026-09-25 · Sửa ba lỗi đo được qua đêm
+- Đo đêm 24–25/09: Drive 36/36 xong; TikTok @vatlieuchuyendung 9/30; hai kênh TikTok còn lại bị đánh hỏng oan. Thời gian một video TikTok: tải 1–4 giây, đọc hình (qwen) 226–354 giây, ảnh + nghe từng shot 53–126 giây, thầy 17–57 giây → đọc hình chiếm phần lớn: GIỮ Q2, không tách sang Ngoc-Han. Thầy nhìn: 137 lượt 1,72 USD.
+- Luật 30 phút chỉ còn cho lệnh Trạm; lệnh máy con chỉ hỏng khi máy mất nhịp tim > 15 phút hoặc quá 12 giờ (trước đây máy khác hỏi lệnh là đánh hỏng lệnh Q2 đang giữ chờ).
+- `amThanh16k` gọi thiếu mốc → `-ss undefined` → không nghe cả video được, rơi về nghe từng shot vụn. Sửa mặc định.
+- Video một cảnh không bỏ nữa: chia đoạn 5 giây, học nhìn + nghe, `mot_canh` → không ghi mẫu ghép. Test `tests/adr017c.test.mjs`.
+
 ### 2026-09-24 · Bộ nghe tiếng Việt: đo và chọn
 - Đo trên "Làm đúng ngay từ đầu.mp4" (74 giây, máy Ngoc-Han CPU): whisper-base 42 giây, không đọc được; whisper-small 61 giây, đọc hiểu gần hết, sai tên riêng; PhoWhisper-small (huuquyet ONNX) 45 giây, tương đương nhưng rơi một đoạn giữa. Giữ whisper-small.
 - `hoc-thanh-pham.mjs`: `suaThuatNgu()` sửa chỗ chắc chắn (Kingsmen, epoxy, keo chít mạch, đường/màu ron); video Drive giữ lại ở `thanh-pham/drive/<id>` trên máy học (học lại không tải lại ~180 MB/video).
