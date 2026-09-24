@@ -274,6 +274,28 @@ Quyết định: (1) NHÃN MẪU: mau_hoc_ai + dong (san_pham.dong) + muc_dich (
 Người duyệt: Thiện · Trạng thái: ĐÃ DUYỆT (2026-09-24) · ĐÃ LÀM (bản riêng chưa có phiên bản thật — kho mới có 0 video)
 ```
 
+```
+ADR-013 · 2026-09-24 · LỚP HỌC CỦA MÁY — một ô nạp, bốn kỹ năng nói tiếng người, máy tự học khi đủ mẫu, xem thử rồi bật
+Bối cảnh : Thiện: "quy trình và UI huấn luyện AI tôi thấy khó hiểu và không thuận tiện chưa tối ưu". Màn ADR-012 bắt người hiểu mức
+            API/BÓNG/MỞ, phạm vi, mẫu có/cần, phiên bản chờ duyệt, 7 tính năng, 4 cửa nạp × 3 ô. Mô phỏng docs/lop-hoc-mo-phong.html
+            (artifact BmkTz1uvALqJPUhn3n2qq9) duyệt 24/09.
+Quyết định: (1) NẠP MỘT Ô: POST /lop-hoc/nap {nap, dong?, muc_dich?, toi_da?} tự nhận loại (Drive / thư mục máy / @kênh TikTok / ngành
+            Kalodata) rồi chuyển nội bộ cho tuyến sẵn có; {chi_nhan:true} chỉ trả loại để màn hỏi "về sản phẩm nào" bằng nút bấm (bỏ qua
+            được). (2) BỐN KỸ NĂNG (KY_NANG): Chọn cảnh, Cắt ghép, Viết kịch bản, Giọng đọc; bootstrap ai_nao.ky_nang tóm tắt mỗi kỹ năng:
+            trạng thái GOM | DU_MAU | DANG_HOC | MOI | NHA, số mẫu/cần, bản mới (điểm, ví dụ), bản đang dùng, bản riêng theo dòng.
+            (3) MÁY TỰ HỌC: tuHoc(env) chạy theo cron (mỗi lượt điều phối) và nút "Học ngay": tính năng NHÌN có ≥ min_mau mẫu nhãn, không
+            có phiên bản chờ duyệt, không có lệnh đang học, đã thêm ≥ 10 mẫu từ lần trước → lệnh huan_luyen chung; mỗi dòng đủ min_mau →
+            bản riêng. Sổ lop_hoc.da_hoc ghi lần học gần nhất. (4) XEM THỬ: máy huấn luyện gửi danh_gia.vi_du (6 cảnh kiểm: người chọn /
+            bản mới / quy tắc cũ) → màn hiện ba ảnh cạnh nhau. (5) BẬT / TẮT: POST /lop-hoc/bat {tinh_nang, phien_ban_id?} = duyệt phiên bản
+            chờ (nếu có) + gạt MỞ, điều kiện điểm lấy từ phiên bản chung đã duyệt (≥ dinh_tuyen.nguong), không lấy mo_hinh.diem (bị tính
+            lại theo bóng); /lop-hoc/tat = về API. (6) MÀN: tab "🎓 Lớp học" = Nạp · Kỹ năng · Nhật ký (audit + lệnh) · Kho video; màn
+            ADR-012 gấp thành "Chi tiết kỹ thuật". Cổng G4 giữ nguyên: máy chỉ học và trình, người bật.
+Đánh đổi  : Kỹ năng "Viết kịch bản" và "Cắt ghép" gộp nhiều tính năng nội bộ → số mẫu hiện là số gần đúng (kịch bản: mẫu duyệt + kịch bản
+            bán tốt; cắt ghép: video thành phẩm); ngôn ngữ chưa tự học (LoRA cần GPU, làm tay theo hướng dẫn trong phần kỹ thuật).
+Người duyệt: Thiện · Trạng thái: ĐÃ DUYỆT (2026-09-24, "Duyệt, làm theo mô phỏng") · ĐÃ LÀM
+```
+
+
 
 
 
@@ -296,6 +318,12 @@ Người duyệt: Thiện · Trạng thái: ĐÃ DUYỆT (2026-09-24, "tiếp t�
 ```
 
 ## Changelog
+
+### 2026-09-24 · ADR-013 — Lớp học của máy (thay màn Huấn luyện)
+- **Worker**: `POST /lop-hoc/nap` (một ô, tự nhận loại, `chi_nhan`), `POST /lop-hoc/bat|tat`, `POST /lop-hoc/tu-hoc`; `tuHoc()` theo cron; `tomTatKyNang()` → bootstrap `ai_nao.ky_nang`, `nhat_ky_hoc`; phiên bản lưu `danh_gia.vi_du`.
+- **Máy dựng**: `huan-luyen.mjs` gửi 6 ví dụ cảnh kiểm (người / mới / cũ) theo phiên bản.
+- **Giao diện**: tab 🎓 Lớp học = Nạp (hỏi sản phẩm bằng nút) · 4 kỹ năng (Bật bản mới / Xem thử / Tắt) · Nhật ký · Kho video; màn ADR-012 nằm trong "Chi tiết kỹ thuật".
+- **Test** `tests/adr013.test.mjs` (2 bài).
 
 ### 2026-09-24 · ADR-012 — nhãn mẫu, bản chung / bản riêng theo phạm vi, màn Huấn luyện 5 khối
 - **Worker**: `mau_hoc_ai` +dong, muc_dich (tự suy qua `phamViCua`; `ganMauAI` bổ sung); `kho_thanh_pham` +dong, muc_dich; `mo_hinh_phien_ban` +pham_vi. `/kho-thanh-pham/nap`, hàng đợi TikTok, cấu hình Kalodata mang nhãn → lệnh `hoc_thanh_pham` mang nhãn. `PATCH/DELETE /kho-thanh-pham/:id`. `/ai/huan-luyen {pham_vi}`; `/hub/tap-mau`, `/hub/tap-mau-ngon-ngu` lọc `?pham_vi`; `/hub/mo-hinh/phien-ban` nhận pham_vi; duyệt bản riêng không đè bản chung; `/hub/mo-hinh/:tn?dong=&muc_dich=` chọn bản riêng khi ≥ bản chung + 3 (so với điểm kiểm phiên bản chung đã duyệt); `/hub/viec/dung_video` trả `pham_vi`. Bootstrap: `dong_san_pham`, `pham_vi_thong_ke`, `tien_trinh`.

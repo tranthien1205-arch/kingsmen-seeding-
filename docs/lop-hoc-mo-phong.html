@@ -1,0 +1,81 @@
+<title>Lớp học của máy</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&family=Source+Serif+4:opsz,wght@8..60,600;8..60,700&display=swap">
+<style>
+:root{--paper:#F2F5F3;--card:#FFFFFF;--ink:#141E1B;--ink-2:#3D4E49;--muted:#68807A;--line:#D8E0DC;--line-2:#E9EEEC;--teal:#0C7B6F;--teal-soft:#E3F0ED;--gold:#B08D2E;--gold-soft:#F6EDD6;--leak:#A3372B;--leak-soft:#F7E5E1;--shadow:0 1px 2px rgba(20,30,27,.05),0 8px 24px -16px rgba(20,30,27,.35)}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){color-scheme:dark;--paper:#121917;--card:#1A2320;--ink:#EEF3F1;--ink-2:#C5D1CC;--muted:#8FA39C;--line:#2C3935;--line-2:#233029;--teal:#4FB8A9;--teal-soft:#183630;--gold:#D6B45C;--gold-soft:#3A2F14;--leak:#E07A6C;--leak-soft:#3D1F1A}}
+:root[data-theme="dark"]{color-scheme:dark;--paper:#121917;--card:#1A2320;--ink:#EEF3F1;--ink-2:#C5D1CC;--muted:#8FA39C;--line:#2C3935;--line-2:#233029;--teal:#4FB8A9;--teal-soft:#183630;--gold:#D6B45C;--gold-soft:#3A2F14;--leak:#E07A6C;--leak-soft:#3D1F1A}
+*{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--ink);font:15px/1.6 "Be Vietnam Pro",system-ui,sans-serif}
+.wrap{max-width:980px;margin:0 auto;padding-block:32px 96px;padding-inline:20px;display:flex;flex-direction:column;gap:30px}
+h1,h2,h3{font-family:"Source Serif 4",Georgia,serif;letter-spacing:-.015em;text-wrap:balance;margin:0}h1{font-size:clamp(28px,4vw,38px);line-height:1.15}h2{font-size:22px}h3{font-size:17px}
+.eyebrow{font-size:11.5px;letter-spacing:.14em;text-transform:uppercase;font-weight:600;color:var(--teal)}.lead{font-size:17px;color:var(--ink-2);max-width:68ch}.note{font-size:13.5px;color:var(--muted)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:4px;box-shadow:var(--shadow);padding:18px 20px;display:flex;flex-direction:column;gap:12px}
+.napbox{display:flex;gap:10px;flex-wrap:wrap;align-items:center}.napbox input{flex:1;min-width:260px;font:inherit;color:var(--ink);background:var(--paper);border:1px solid var(--line);border-radius:4px;padding:11px 12px;font-size:15px}
+.btn{display:inline-block;padding:9px 14px;border-radius:4px;border:1px solid var(--line);background:var(--card);color:var(--ink);font-size:14px;font-weight:600;cursor:pointer}.btn.pri{background:var(--teal);border-color:var(--teal);color:#fff}.btn.sm{padding:4px 10px;font-size:12.5px}
+.chips{display:flex;gap:6px;flex-wrap:wrap}.chip{padding:4px 10px;border-radius:999px;border:1px solid var(--line);font-size:13px;color:var(--ink-2);cursor:pointer}.chip.on{background:var(--teal-soft);border-color:var(--teal);color:var(--teal);font-weight:600}
+.hoi{border:1px dashed var(--line);border-radius:4px;padding:12px 14px;display:flex;flex-direction:column;gap:8px;background:var(--paper)}
+.skills{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px}
+.skill{border:1px solid var(--line);border-radius:4px;padding:14px 16px;display:flex;flex-direction:column;gap:8px;background:var(--card)}.skill h3{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.st{font-size:12px;font-weight:600;padding:2px 9px;border-radius:999px}.st.ngoai{background:var(--line-2);color:var(--ink-2)}.st.hoc{background:var(--gold-soft);color:var(--gold)}.st.moi{background:var(--teal-soft);color:var(--teal)}.st.nha{background:var(--teal);color:#fff}
+.bar{height:6px;background:var(--line-2);border-radius:999px;overflow:hidden}.bar i{display:block;height:100%;background:var(--teal)}
+.big{font-family:"Source Serif 4",serif;font-size:30px;font-weight:700;line-height:1}.big small{font:600 12px "Be Vietnam Pro";color:var(--muted)}
+.sw{display:inline-flex;align-items:center;gap:8px;font-size:13px;color:var(--ink-2)}.sw i{width:38px;height:22px;border-radius:999px;background:var(--line);position:relative;display:inline-block}.sw i::after{content:"";position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:#fff}.sw.on i{background:var(--teal)}.sw.on i::after{left:19px}
+.tl{display:flex;flex-direction:column;gap:6px;font-size:13.5px}.tl div{display:grid;grid-template-columns:96px 1fr;gap:10px}.tl .t{color:var(--muted);font-variant-numeric:tabular-nums}
+.sosanh{display:grid;grid-template-columns:1fr 1fr;gap:12px}.sosanh>div{border:1px solid var(--line);border-radius:4px;padding:10px 12px;font-size:13.5px}.sosanh .thumb{aspect-ratio:9/16;max-height:150px;background:linear-gradient(160deg,var(--teal-soft),var(--line));border-radius:3px;margin-bottom:6px}
+details{border:1px solid var(--line);border-radius:4px;padding:10px 14px;background:var(--card)}summary{cursor:pointer;font-weight:600;color:var(--ink-2)}
+.kho{display:flex;flex-direction:column}.vid{display:flex;gap:10px;padding:8px 0;border-top:1px solid var(--line-2);font-size:13.5px;align-items:center}.vid:first-child{border-top:0}.vid .thumb{width:40px;height:70px;border-radius:3px;background:linear-gradient(160deg,var(--teal-soft),var(--line));flex:none}
+@media (max-width:640px){.sosanh{grid-template-columns:1fr}.tl div{grid-template-columns:1fr}}
+</style>
+<div class="wrap">
+  <header style="display:flex;flex-direction:column;gap:8px"><div class="eyebrow">Máy › Lớp học của máy · mô phỏng 1.0 · 24/09/2026 · thay màn Huấn luyện</div>
+    <h1>Đưa video vào, máy tự học, anh chỉ bật khi thấy tốt hơn</h1>
+    <p class="lead">Ba khối thay cho năm: <b>Nạp</b> một ô, <b>Kỹ năng</b> bốn thẻ nói tiếng người, <b>Nhật ký</b> một dòng mỗi việc. Không còn nút huấn luyện, không chọn phạm vi, không mức API/BÓNG/MỞ. Kỹ thuật gấp xuống dưới cùng.</p>
+    <p class="note">Số trong mô phỏng lấy từ kho hôm nay (142 ví dụ chọn cảnh, 8 video Drive đã học, 7 video Kalodata đang học); phần "bản mới 88 điểm" là ví dụ để thấy trạng thái, chưa có thật.</p></header>
+
+  <section class="card"><h2>1 · Đưa video vào cho máy học</h2>
+    <div class="napbox"><input id="nap" value="https://drive.google.com/drive/folders/1Wx_xwyhCZv4k4pYUCb8I37q-AV84s-Tu"><span class="btn pri">Nạp</span></div>
+    <p class="note">Dán gì cũng được, máy tự nhận: thư mục Drive · thư mục trên máy dựng (D:\…) · @kênh TikTok · tên ngành Kalodata. Video đã dựng tay là quý nhất; có thư mục con <code>goc</code> chứa clip quay gốc thì máy học được cả cách cắt.</p>
+    <div class="hoi"><div><b>Máy nhận ra: thư mục Drive, 15 video.</b> Video này về sản phẩm nào? (bỏ qua cũng được)</div>
+      <div class="chips"><span class="chip on">Keo chít mạch</span><span class="chip">Sơn chống thấm</span><span class="chip">Sàn nhà tắm</span><span class="chip">+ thêm</span></div>
+      <div class="chips"><span class="chip on">Để bán hàng</span><span class="chip">Làm thương hiệu</span></div>
+      <div><span class="btn pri sm">Bắt đầu học</span> <span class="note">máy Ngoc-Han sẽ cắt shot, nghe lời thoại, khoảng 1 phút mỗi video</span></div></div>
+  </section>
+
+  <section style="display:flex;flex-direction:column;gap:12px">
+    <div><h2>2 · Bốn kỹ năng máy đang học</h2><p class="note">Mỗi thẻ trả lời ba câu: máy đang làm bằng gì, học được bao nhiêu, có gì mới để bật không.</p></div>
+    <div class="skills">
+      <div class="skill"><h3>🎞 Chọn cảnh <span class="st moi">có bản mới</span></h3><div class="big">88<small> /100 khớp người · trước 71</small></div><div class="bar"><i style="width:100%"></i></div>
+        <div class="note">142 ví dụ (đủ 30). Bản mới học từ 15 video Drive và 5 lần anh chấm. Đã tách bản riêng cho <b>Keo chít mạch</b> (91).</div>
+        <div class="sosanh"><div><div class="thumb"></div>Bản đang dùng · AI ngoài</div><div><div class="thumb"></div>Bản mới · máy nhà</div></div>
+        <div style="display:flex;gap:8px;align-items:center"><span class="btn pri sm">Bật bản mới</span><span class="btn sm">Xem 3 cảnh khác</span></div></div>
+      <div class="skill"><h3>✂️ Cắt ghép <span class="st hoc">đang gom ví dụ</span></h3><div class="big">15<small> /20 video thành phẩm</small></div><div class="bar"><i style="width:75%"></i></div>
+        <div class="note">Đang dùng luật 2,8 giây mỗi shot. Cần thêm 5 video đã dựng tay là máy tự học. Muốn học cả "chọn đoạn nào trong clip" thì nạp kèm thư mục <code>goc</code>.</div>
+        <div class="sw"><i></i> Máy nhà (chưa có bản)</div></div>
+      <div class="skill"><h3>✍️ Viết kịch bản <span class="st ngoai">AI ngoài</span></h3><div class="big">8<small> /60 kịch bản mẫu</small></div><div class="bar"><i style="width:13%"></i></div>
+        <div class="note">Claude viết, có 8 kịch bản bán tốt từ Kalodata làm tham chiếu. Mỗi bài anh duyệt hoặc trả kèm lý do là một ví dụ. Đủ 60 thì máy 3070 Ti học bản riêng (vài giờ).</div>
+        <div class="sw"><i></i> Máy nhà (chưa có bản)</div></div>
+      <div class="skill"><h3>🔊 Giọng đọc <span class="st nha">máy nhà</span></h3><div class="big">82<small> /100 người chấm "dùng được"</small></div><div class="bar"><i style="width:82%"></i></div>
+        <div class="note">Piper tiếng Việt đang đọc, Google dự phòng khi máy im. Tiết kiệm ₫0 tháng này vì chưa dựng nhiều.</div>
+        <div class="sw on"><i></i> Máy nhà đang bật · <a href="#" style="color:var(--teal)">nghe thử</a></div></div>
+    </div>
+  </section>
+
+  <section class="card"><h2>3 · Nhật ký</h2>
+    <div class="tl">
+      <div><span class="t">17:20</span><span>Máy Ngoc-Han học xong <b>THAY MỚI SÀN TOILET CŨ.mp4</b>: 30 shot, nghe được lời · +31 ví dụ cắt ghép & chọn cảnh</span></div>
+      <div><span class="t">17:15</span><span>Trạm tải xong <b>7 video Kalodata</b> ngành Vật tư xây dựng (doanh thu ₫200 tr đến ₫302 tr) → giao máy học</span></div>
+      <div><span class="t">16:40</span><span style="color:var(--leak)">Kalodata: 3 trong 10 video không lấy được link, đã bỏ qua</span></div>
+      <div><span class="t">16:18</span><span>Anh nạp thư mục Drive (15 video) · chưa gắn sản phẩm → <a href="#" style="color:var(--teal)">gắn ngay</a></span></div>
+      <div><span class="t">14:19</span><span>Dựng lại Keo chít mạch chống mốc: 10 shot, không lặp clip · +6 ví dụ</span></div>
+    </div></section>
+
+  <section class="card"><h2>4 · Kho video máy đã học (23)</h2>
+    <div class="chips"><span class="chip on">Tất cả</span><span class="chip">Drive 15</span><span class="chip">Kalodata 7</span><span class="chip">Keo chít mạch 8</span><span class="chip">Chưa gắn sản phẩm 15</span></div>
+    <div class="kho">
+      <div class="vid"><div class="thumb"></div><div style="flex:1"><b>@nhikem30 · Thang gấp gọn chữ A</b> · Kalodata · ₫301 tr doanh thu · 14 shot · có lời thoại</div><span class="btn sm">Gắn sản phẩm</span><span class="btn sm">Bỏ</span></div>
+      <div class="vid"><div class="thumb"></div><div style="flex:1"><b>CÁCH LÀM MỚI SÀN NHÀ TẮM CŨ KHÔNG CẦN THÁO GẠCH.mp4</b> · Drive · 31 shot · có lời thoại · <span style="color:var(--gold)">chưa gắn sản phẩm</span></div><span class="btn sm">Gắn sản phẩm</span><span class="btn sm">Bỏ</span></div>
+      <div class="vid"><div class="thumb"></div><div style="flex:1"><b>CLIP 1.mp4</b> · Drive · 7 shot · có lời thoại</div><span class="btn sm">Gắn sản phẩm</span><span class="btn sm">Bỏ</span></div>
+    </div></section>
+
+  <details><summary>Chi tiết kỹ thuật (mức API / bóng / mở, phạm vi, phiên bản, lệnh máy) — ai cần mới mở</summary>
+    <p class="note" style="margin-top:8px">Giữ nguyên nội dung màn cũ ở đây: bảng 7 đầu học với mức, mẫu có/cần theo phạm vi, phiên bản chờ duyệt, tiến trình lệnh nguyên văn, xuất tập mẫu LoRA. Người thường không cần vào.</p></details>
+</div>

@@ -32,11 +32,14 @@ export default async function huanLuyen({ app, goiApp, lenh, dir, log, script, m
   const dau = { model_id: modelId, w: Array.from(w).map((x) => +x.toFixed(6)), b: +b.toFixed(6), dims: D, tinh_nang: tn };
   const top1 = (tap, cham) => { let dung = 0; for (const c of tap) { let best = null, bs = -1e9; for (const u of c.uv) { const sc = cham(u); if (sc > bs) { bs = sc; best = u.id; } } if (best === c.nhan) dung++; } return tap.length ? Math.round(dung / tap.length * 100) : 0; };
   const diem = top1(tapKiem, (u) => diemDau(dau, u.f)); const diemTruoc = top1(tapKiem, (u) => u.f[0]); const diemHoc = top1(hoc, (u) => diemDau(dau, u.f));
+  // ADR-013: ví dụ để người "xem thử" trước khi bật — 6 cảnh kiểm: người chọn / bản mới chọn / quy tắc cũ chọn
+  const chonTot = (c, cham) => { let best = null, bs = -1e9; for (const u of c.uv) { const sc = cham(u); if (sc > bs) { bs = sc; best = u.id; } } return best; };
+  const viDu = tapKiem.slice(0, 6).map((c) => { const m = mau.find((x) => x.id === c.id) || {}; return { mau_id: c.id, hinh: m.hinh || "", text: (m.text || "").slice(0, 120), nguoi: c.nhan, moi: chonTot(c, (u) => diemDau(dau, u.f)), cu: chonTot(c, (u) => u.f[0]) }; });
   log("  kết quả: đầu học " + diem + "/100 trên " + tapKiem.length + " cảnh kiểm (cos thuần " + diemTruoc + ", tập học " + diemHoc + ")");
   // ---- checkpoint → app
   const f = join(TH, "dau-" + Date.now() + ".json"); writeFileSync(f, JSON.stringify({ ...dau, danh_gia: { diem, diem_truoc: diemTruoc, n_hoc: hoc.length, n_kiem: tapKiem.length, luc: new Date().toISOString(), may } }));
   const buf = readFileSync(f); const up = await fetch(app.url.replace(/\/+$/, "") + "/hub/upload?type=application/json", { method: "POST", headers: { "X-Hub-Key": app.khoa, "Content-Type": "application/json", "Content-Length": String(buf.length) }, body: buf }); const uj = await up.json().catch(() => ({})); if (!up.ok) return { ok: false, msg: "không tải checkpoint lên (" + up.status + " " + (uj.error || "") + ")" };
-  const pb = await goiApp("/hub/mo-hinh/phien-ban", { method: "POST", body: JSON.stringify({ mo_hinh_id: moId, tinh_nang: tn, pham_vi: phamVi, checkpoint_url: uj.media_url, may, danh_gia: { diem, diem_truoc: diemTruoc, n_hoc: hoc.length, n_kiem: tapKiem.length, ghi_chu: "tập học " + diemHoc + "/100 · " + pairs.length + " cặp" } }) });
+  const pb = await goiApp("/hub/mo-hinh/phien-ban", { method: "POST", body: JSON.stringify({ mo_hinh_id: moId, tinh_nang: tn, pham_vi: phamVi, checkpoint_url: uj.media_url, may, danh_gia: { diem, diem_truoc: diemTruoc, n_hoc: hoc.length, n_kiem: tapKiem.length, vi_du: viDu, ghi_chu: "tập học " + diemHoc + "/100 · " + pairs.length + " cặp" } }) });
   if (!pb.ok) return { ok: false, msg: "app không nhận phiên bản (HTTP " + pb.status + ")" };
   return { ok: true, msg: "đầu " + tn + " " + (pb.d && pb.d.phien_ban) + ": " + diem + "/100 trên " + tapKiem.length + " cảnh kiểm (cos thuần " + diemTruoc + ") — chờ Trưởng MKT duyệt" };
 }
