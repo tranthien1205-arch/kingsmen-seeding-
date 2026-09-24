@@ -20,9 +20,13 @@ const tachCau = (t) => { const ds = String(t || "").replace(/\s+/g, " ").split(/
 const xuongDong = (s, n = 26) => { const w = String(s).split(" "); const dong = []; let cur = ""; for (const x of w) { if ((cur + " " + x).trim().length > n && cur) { dong.push(cur); cur = x; } else cur = (cur + " " + x).trim(); } if (cur) dong.push(cur); return dong.slice(0, 4).join("\n"); };
 const srtTime = (t) => { const ms = Math.round(t * 1000); const h = Math.floor(ms / 3600000), m = Math.floor((ms % 3600000) / 60000), s = Math.floor((ms % 60000) / 1000), x = ms % 1000; return String(h).padStart(2, "0") + ":" + String(m).padStart(2, "0") + ":" + String(s).padStart(2, "0") + "," + String(x).padStart(3, "0"); };
 
+// ADR-010c — cửa sổ đoạn trên phân tích footage: đặc trưng [nét, động, sáng, vị trí, gần 30% đầu, động×nét]
+const cuaSoDoan = (doan, dai, can, buoc = 0.5) => { const ra = []; const het = Math.max(0, dai - can); for (let tu = 0; tu <= het + 1e-6; tu += buoc) { const den = tu + can; const trong = doan.filter((x) => x.t >= tu - 0.01 && x.t < den); if (!trong.length) continue; const tb = (k) => trong.reduce((a, x) => a + (x[k] || 0), 0) / trong.length; const vt = dai ? tu / dai : 0; const net = tb("net"), dong = tb("dong"); ra.push({ tu: +tu.toFixed(2), den: +den.toFixed(2), f: [net, dong, tb("sang"), vt, 1 - Math.abs(vt - 0.3), dong * net] }); } return ra; };
+const diemDau2 = (dau, f) => { let z = dau.b || 0; for (let k = 0; k < f.length; k++) z += (dau.w[k] || 0) * f[k]; return z; };
+
 export default async function dung({ app, goiApp, lenh, dir, log, may, script }) {
   const id = String((lenh.tham_so || {}).noi_dung_id || ""); if (!id) return { ok: false, msg: "lệnh thiếu noi_dung_id" };
-  const r = await goiApp("/hub/viec/dung_video?noi_dung_id=" + encodeURIComponent(id)); if (!r.ok) return { ok: false, msg: "không hỏi được việc dựng (HTTP " + r.status + ")" };
+  const ghepId = String((lenh.tham_so || {}).ghep_id || ""); const r = await goiApp("/hub/viec/dung_video?noi_dung_id=" + encodeURIComponent(id) + (ghepId ? "&ghep_id=" + encodeURIComponent(ghepId) : "")); if (!r.ok) return { ok: false, msg: "không hỏi được việc dựng (HTTP " + r.status + ")" };
   const v = ((r.d && r.d.viec) || [])[0]; if (!v) return { ok: false, msg: "kịch bản không còn ở trạng thái đã duyệt / sản xuất" };
   const cfg = v.cau_hinh || {}; const TH = join(dir, "dung", id); rmSync(TH, { recursive: true, force: true }); for (const d of ["src", "canh", "giong"]) mkdirSync(join(TH, d), { recursive: true });
   const taiVe = async (url, ten) => { const f = join(TH, "src", ten); if (existsSync(f)) return f; const x = await fetch(url, { headers: /\/media\//.test(url) ? { "X-Hub-Key": app.khoa } : {} }); if (!x.ok) throw new Error("tải " + ten + " HTTP " + x.status); writeFileSync(f, Buffer.from(await x.arrayBuffer())); return f; };
@@ -65,11 +69,49 @@ export default async function dung({ app, goiApp, lenh, dir, log, may, script })
   for (const c of canh) { c.cauDs = c.cau.map((text, i) => { const d = coGiong && c.mp3[i] ? Math.max(1.2, thoiLuong(c.mp3[i]) + 0.35) : Math.max(2.5, text.split(" ").length / 2.6); return { text, d }; }); c.d = c.cauDs.reduce((s, x) => s + x.d, 0); }
   const gioiHan = Math.max(20, cfg.giay_toi_da || 90); let tong = 0; const canhDung = []; for (const c of canh) { if (tong + c.d > gioiHan && canhDung.length) break; canhDung.push(c); tong += c.d; }
 
+  // ---- ADR-010: KẾ HOẠCH GHÉP — mỗi cảnh = chuỗi shot {clip, giây vào, giây ra}. Có kế hoạch NGƯỜI (màn Chỉnh ghép) thì làm đúng;
+  //      không thì máy lập: shot đầu = clip đã chọn cho cảnh, shot sau = clip khớp tiếp theo CHƯA DÙNG; độ dài shot theo mô hình ghép
+  //      (thống kê từ video thành phẩm, có trọng số lượt xem); đoạn trong clip theo mô hình chọn đoạn (nét/động/sáng) — MỞ mới dùng, BÓNG/API dùng luật.
+  const layDau = async (tn) => { try { const x = await goiApp("/hub/mo-hinh/" + tn); if (!x.ok) return { muc: "API" }; const d = x.d || {}; let dau = null;
+      if (["BONG", "MO"].includes(d.muc) && d.mo_hinh_mo && d.mo_hinh_mo.checkpoint_url) { const y = await fetch(d.mo_hinh_mo.checkpoint_url, { headers: /\/media\//.test(d.mo_hinh_mo.checkpoint_url) ? { "X-Hub-Key": app.khoa } : {} }); if (y.ok) { const j = await y.json().catch(() => null); if (j && j.tinh_nang === tn) dau = j; } }
+      return { muc: d.muc || "API", dau }; } catch { return { muc: "API" }; } };
+  const dDoan = await layDau("chon_doan"), dGhep = await layDau("ghep_canh");
+  const G = dGhep.muc === "MO" && dGhep.dau ? dGhep.dau : { dai_tb: 2.8, dai_min: 1.5, dai_max: 4.5, chuyen: {} };
+  const ptCua = (t) => (t && t.phan_tich) || null; const daiCua = (t) => (ptCua(t) && ptCua(t).dai) || 0;
+  const diemDoan = (f) => (dDoan.muc === "MO" && dDoan.dau ? diemDau2(dDoan.dau, f) : f[0] + 0.5 * f[1] + (f[2] > 0.25 && f[2] < 0.85 ? 0.1 : 0) + 0.05 * f[4]);
+  const dungDoan = {}; const chonDoan = (t, can) => { const pt = ptCua(t), dai = daiCua(t); if (!pt || !(pt.doan || []).length || !dai) return { tu: 0 };
+    const cs = cuaSoDoan(pt.doan, dai, Math.min(can, dai)); let best = null, bs = -1e9; for (const c of cs) { const trung = (dungDoan[t.id] || []).some((u) => Math.min(u.den, c.den) - Math.max(u.tu, c.tu) > 0.2); const sc = diemDoan(c.f) - (trung ? 5 : 0); if (sc > bs) { bs = sc; best = c; } } return { tu: best ? best.tu : 0 }; };
+  const ghepNguoi = v.ghep && Array.isArray(v.ghep.canh) ? v.ghep.canh : null; const byId = Object.fromEntries(nguon.map((t) => [t.id, t])); const daDung = new Set();
+  for (const c of canhDung) {
+    const gn = ghepNguoi && ghepNguoi.find((x) => x.k === c.k);
+    if (gn && (gn.shots || []).length) c.shots = gn.shots.map((x) => ({ ts: byId[x.tai_san_id], tu: +x.tu, den: +x.den })).filter((x) => x.ts && x.den > x.tu);
+    if (!c.shots || !c.shots.length) {
+      c.shots = []; let con = c.d, truocCo = null, lap = 0;
+      const ds = [c.ts, ...(c.ung_vien || []).map((u) => byId[u.id])].filter((t, i, a) => t && a.indexOf(t) === i);
+      const hang = [ds[0], ...ds.slice(1).filter((t) => !daDung.has(t.id)), ...ds.slice(1).filter((t) => daDung.has(t.id))];
+      while (con > 0.3 && lap < hang.length * 2 && c.shots.length < 6) {
+        const t = hang[lap % hang.length]; lap++; const laAnh = t.media_type === "IMAGE"; const dai = laAnh ? 99 : (daiCua(t) || 99);
+        let can = con > G.dai_max ? G.dai_tb : con; if (con - can < G.dai_min * 0.6) can = con; can = Math.min(can, dai); if (can < 0.6 && con > 0.6) continue;
+        const co = ptCua(t) && ptCua(t).co_canh; if (truocCo && co && G.chuyen && G.chuyen[truocCo] && G.chuyen[truocCo][co] != null && G.chuyen[truocCo][co] < 0.05 && lap < hang.length) continue;
+        const tu = laAnh ? 0 : chonDoan(t, can).tu; c.shots.push({ ts: t, tu, den: +(tu + can).toFixed(2) }); (dungDoan[t.id] = dungDoan[t.id] || []).push({ tu, den: tu + can }); daDung.add(t.id); con -= can; truocCo = co || truocCo;
+      }
+      if (!c.shots.length) c.shots = [{ ts: c.ts, tu: 0, den: +c.d.toFixed(2) }];
+      const tongS = c.shots.reduce((a, x) => a + (x.den - x.tu), 0); if (tongS < c.d - 0.05) c.shots[c.shots.length - 1].den = +(c.shots[c.shots.length - 1].den + c.d - tongS).toFixed(2);
+    }
+    c.ts = c.shots[0].ts;
+  }
+  log("  ghép:", ghepNguoi ? "theo kế hoạch người" : ("máy · shot ~" + G.dai_tb + "s (" + (dGhep.muc === "MO" && dGhep.dau ? "mô hình" : "luật") + ") · đoạn " + (dDoan.muc === "MO" && dDoan.dau ? "mô hình" : "luật")));
+
   // ---- dựng từng cảnh
   const clips = []; let t0 = 0; const srt = []; let stt = 1;
   for (const c of canhDung) {
-    const src = await taiVe(c.ts.media_url, "ts_" + c.ts.id + (c.ts.media_type === "IMAGE" ? ".jpg" : ".mp4"));
-    const laAnh = c.ts.media_type === "IMAGE"; const out = join(TH, "canh", String(c.k + 1).padStart(2, "0") + "-" + c.label.replace(/[^\p{L}\p{N}]+/gu, "-").slice(0, 30) + ".mp4");
+    mkdirSync(join(TH, "shot"), { recursive: true }); const shotF = [];
+    for (let i = 0; i < c.shots.length; i++) { const x = c.shots[i]; const len = Math.max(0.3, x.den - x.tu); const sf = join(TH, "shot", "c" + (c.k + 1) + "_" + i + ".mp4"); const s0 = await taiVe(x.ts.media_url, "ts_" + x.ts.id + (x.ts.media_type === "IMAGE" ? ".jpg" : ".mp4"));
+      if (x.ts.media_type === "IMAGE") ff(["-loop", "1", "-t", len.toFixed(2), "-i", s0, "-vf", "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,zoompan=z='min(zoom+0.0008,1.12)':d=" + Math.ceil(len * 30) + ":s=1080x1920:fps=30,setsar=1", "-t", len.toFixed(2), "-an", "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p", sf]);
+      else ff(["-ss", Math.max(0, x.tu).toFixed(2), "-i", s0, "-t", len.toFixed(2), "-vf", "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,fps=30,setsar=1,tpad=stop_mode=clone:stop_duration=" + len.toFixed(2), "-t", len.toFixed(2), "-an", "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p", sf]);
+      shotF.push(sf); }
+    const src = join(TH, "shot", "c" + (c.k + 1) + "_hinh.mp4"); if (shotF.length === 1) copyFileSync(shotF[0], src); else { const ls = join(TH, "shot", "c" + (c.k + 1) + ".txt"); writeFileSync(ls, shotF.map((q) => "file '" + q.replace(/\\/g, "/") + "'").join("\n")); ff(["-f", "concat", "-safe", "0", "-i", ls, "-c", "copy", src]); }
+    const laAnh = false; const out = join(TH, "canh", String(c.k + 1).padStart(2, "0") + "-" + c.label.replace(/[^\p{L}\p{N}]+/gu, "-").slice(0, 30) + ".mp4");
     // Phụ đề ghi ra tệp chữ (textfile) để GIỮ xuống dòng — trước đây escDT đổi "\n" thành dấu cách nên cả câu thành một dòng tràn hai mép (đo 24/09 trên footage thật)
     mkdirSync(join(TH, "pd"), { recursive: true });
     let tt = 0; const dt = c.cauDs.map((x, i) => { const a = tt; tt += x.d; const tf = join(TH, "pd", "c" + (c.k + 1) + "_" + i + ".txt"); writeFileSync(tf, xuongDong(x.text, 24).replace(/\r/g, ""), "utf8"); const tfE = tf.replace(/\\/g, "/").replace(/:/g, "\\:").replace(/'/g, "");
@@ -80,7 +122,7 @@ export default async function dung({ app, goiApp, lenh, dir, log, may, script })
       ff([...vao, "-i", gi, "-vf", vf, "-map", "0:v", "-map", "1:a", "-t", c.d.toFixed(2), "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest", out]); }
     else ff([...vao, "-f", "lavfi", "-t", c.d.toFixed(2), "-i", "anullsrc=r=44100:cl=stereo", "-vf", vf, "-map", "0:v", "-map", "1:a", "-t", c.d.toFixed(2), "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest", out]);
     clips.push(out); for (const x of c.cauDs) { srt.push(stt++ + "\n" + srtTime(t0) + " --> " + srtTime(t0 + x.d) + "\n" + x.text + "\n"); t0 += x.d; }
-    log("  cảnh", c.k + 1, c.label, "·", c.d.toFixed(1) + "s ·", c.ts.ten);
+    log("  cảnh", c.k + 1, c.label, "·", c.d.toFixed(1) + "s ·", c.shots.map((x) => (x.ts.ten || "").replace(/\.[a-z0-9]+$/i, "").slice(-12) + "[" + x.tu.toFixed(1) + "–" + x.den.toFixed(1) + "]").join(" + "));
   }
   const lst = join(TH, "canh.txt"); writeFileSync(lst, clips.map((c) => "file '" + c.replace(/\\/g, "/") + "'").join("\n"));
   const khongNhac = join(TH, "ban-nhap-khong-nhac.mp4"); ff(["-f", "concat", "-safe", "0", "-i", lst, "-c", "copy", khongNhac]);
@@ -105,7 +147,7 @@ export default async function dung({ app, goiApp, lenh, dir, log, may, script })
   const taiLen = async (f, type) => { const buf = readFileSync(f); const x = await fetch(app.url.replace(/\/+$/, "") + "/hub/upload?type=" + encodeURIComponent(type), { method: "POST", headers: { "X-Hub-Key": app.khoa, "Content-Type": type, "Content-Length": String(buf.length) }, body: buf }); const d = await x.json().catch(() => ({})); if (!x.ok) throw new Error("tải lên " + x.status + " " + (d.error || "")); return d.media_url; };
   const mediaUrl = await taiLen(banNhap, "video/mp4"); let goiUrl = ""; let ttsMoUrl = ""; if (ttsMo) { try { ttsMoUrl = await taiLen(ttsMo.file, "audio/mpeg"); } catch (e) { log("  tải mẫu giọng lỗi:", e.message); } } if (goiF) { try { goiUrl = await taiLen(goiF, "application/zip"); } catch (e) { log("  tải gói lỗi:", e.message); } }
   const moTa = "Máy dựng v2 · " + canhDung.length + " cảnh · " + Math.round(t0) + "s · " + (coGiong ? "giọng " + (nguonGiong === "piper" ? "Piper (mở)" : "Google " + (cfg.tts_giong || "")) : "không giọng (" + ttsLoi + ")") + (nhacF ? " · nhạc nền" : "") + (goiUrl ? " · có gói CapCut" : "");
-  const nap = await goiApp("/hub/nap", { method: "POST", body: JSON.stringify({ viec: "may_dung.dung_video", bang: "content_os.video", luot: "md" + Date.now(), phan: { i: 1, n: 1 }, dong: [{ noi_dung_id: id, media_url: mediaUrl, goi_url: goiUrl, thieu_hinh: thieuHinh, mo_ta: moTa, may, tts_mo: ttsMoUrl ? { mau_url: ttsMoUrl, cau: ttsMo.cau, giong: ttsMo.giong } : undefined, canh_chon: canhDung.map((c) => ({ k: c.k, label: c.label, hinh: c.hinh, text: c.cau.join(" ").slice(0, 300), chon: c.ts && c.ts.id, chon_mo: c.chon_mo || null, cach: cachChon, ung_vien: (c.ung_vien || []).slice(0, 12) })) }] }) });
+  const nap = await goiApp("/hub/nap", { method: "POST", body: JSON.stringify({ viec: "may_dung.dung_video", bang: "content_os.video", luot: "md" + Date.now(), phan: { i: 1, n: 1 }, dong: [{ noi_dung_id: id, media_url: mediaUrl, goi_url: goiUrl, thieu_hinh: thieuHinh, mo_ta: moTa, may, tts_mo: ttsMoUrl ? { mau_url: ttsMoUrl, cau: ttsMo.cau, giong: ttsMo.giong } : undefined, ghep_nguon: ghepNguoi ? "NGUOI" : "MAY", ghep: canhDung.map((c) => ({ k: c.k, label: c.label, hinh: c.hinh, text: c.cau.join(" ").slice(0, 300), d: +c.d.toFixed(2), shots: c.shots.map((x) => ({ tai_san_id: x.ts.id, tu: +x.tu.toFixed(2), den: +x.den.toFixed(2) })) })), canh_chon: canhDung.map((c) => ({ k: c.k, label: c.label, hinh: c.hinh, text: c.cau.join(" ").slice(0, 300), chon: c.ts && c.ts.id, chon_mo: c.chon_mo || null, cach: cachChon, ung_vien: (c.ung_vien || []).slice(0, 12) })) }] }) });
   if (!nap.ok) return { ok: false, msg: "dựng xong nhưng app không nhận lô (HTTP " + nap.status + ")" };
   return { ok: true, msg: moTa + (thieuHinh.length ? " · thiếu hình " + thieuHinh.length + " cảnh" : "") };
 }

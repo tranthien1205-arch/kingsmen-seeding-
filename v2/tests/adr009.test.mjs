@@ -22,7 +22,7 @@ test('seed bộ não: 9 mô hình, 10 định tuyến mức API, cờ khoá', as
   TOKEN = (await dangNhap('admin@kingsmen.vn', 'admin123')).token;
   for (const [ten, email, vt] of [['Ngọc', 'mkt@k.vn', 'MARKETING'], ['Trang', 'truong@k.vn', 'TRUONG_MKT']]) await api('/users', 'POST', { ho_ten: ten, email, password: '123456', vai_tro: vt });
   tMkt = (await dangNhap('mkt@k.vn', '123456')).token; tTruong = (await dangNhap('truong@k.vn', '123456')).token;
-  const a = (await api('/bootstrap')).j.db.ai_nao; assert.equal(a.mo_hinh.length, 12); assert.equal(a.dinh_tuyen.length, 11); assert.ok(a.dinh_tuyen.every(d => d.muc === 'API'));
+  const a = (await api('/bootstrap')).j.db.ai_nao; assert.equal(a.mo_hinh.length, 14); assert.equal(a.dinh_tuyen.length, 13);   // ADR-010: +doan-tuyen-tinh, ghep-thong-ke · +chon_doan, ghep_canh assert.ok(a.dinh_tuyen.every(d => d.muc === 'API'));
   assert.equal(a.mo_hinh.find(m => m.id === 'claude-sonnet-4-5').co_khoa, true); assert.equal(a.mo_hinh.find(m => m.id === 'gemini-2-5-flash').co_khoa, false); assert.equal(a.mo_hinh.find(m => m.id === 'clip-vit-b16').co_khoa, null);
   assert.equal(a.dinh_tuyen.find(d => d.tinh_nang === 'chon_canh').mo_hinh_mo, 'clip-vit-b16');
 });

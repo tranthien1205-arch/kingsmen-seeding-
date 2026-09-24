@@ -194,6 +194,38 @@ Người duyệt: Thiện · Trạng thái: ĐÃ DUYỆT (2026-09-24, "ADR-009c 
 ```
 
 ```
+ADR-010 · 2026-09-24 · MÁY HỌC CHỌN & GHÉP SOURCE — chỉnh ghép, phân tích đoạn, mô hình chọn đoạn/ghép, kho video thành phẩm (Drive · máy · TikTok)
+Bối cảnh : Video Keo chít mạch dựng từ 15 clip Drive: máy mới chọn "clip nào cho cảnh nào" (ADR-009 chon_canh), còn cắt ở giây 0, một
+            cảnh một clip, clip lặp; không học được cách người dựng tay. Thiện: "cần có mô hình huấn luyện cách chọn và ghép source",
+            "hiện tại tôi có nhiều video đã sản xuất thủ công làm kho huấn luyện", "có sẵn ở tiktok / reel / drive / thư mục local",
+            "cả tiktok nữa nhé", "có lượt xem cũng là một cách học hiệu quả".
+Quyết định: (a) CHỈNH GHÉP: máy dựng báo kế hoạch ghép (mỗi cảnh = chuỗi shot {clip, giây vào, giây ra}) → bảng ghep_video nguồn MAY;
+            màn Sản xuất › ✂️ Chỉnh ghép cho người đổi clip, cắt giây, thêm/bớt/đảo shot → POST /noi-dung/:id/ghep lưu bản NGUOI, so
+            máy↔người thành mẫu chon_canh (đổi clip) · chon_doan (cửa sổ người giữ trên clip) · ghep_canh (độ dài shot) rồi giao máy
+            dựng đúng bản người (ghep_id). (b) PHÂN TÍCH FOOTAGE (script phan-tich, một lượt ffmpeg fps=2): mỗi 0,5 s → nét
+            (blurdetect), động (scdet), sáng (signalstats) + 3 khung → Claude Haiku mô tả & xếp CỠ CẢNH (RONG/TRUNG/CAN/SAN_PHAM/
+            THAO_TAC/NGUOI_NOI/CHU) → tai_san.phan_tich; nạp Drive làm sẵn, footage cũ chạy lệnh phan_tich_footage. (c) HAI MÔ HÌNH
+            MỞ chạy CPU: chon_doan = logistic trên cửa sổ [nét, động, sáng, vị trí, gần 30% đầu, động×nét] (mở: doan-tuyen-tinh);
+            ghep_canh = thống kê có trọng số: độ dài shot trung vị/15%/85% + ma trận chuyển cỡ cảnh (mở: ghep-thong-ke). Máy dựng:
+            shot đầu = clip đã chọn, shot sau = clip khớp tiếp theo chưa dùng, độ dài theo ghep_canh, đoạn theo chon_doan (MỞ) hay
+            luật nét+động (API/BÓNG); cùng cổng G4 duyệt phiên bản như ADR-009. (d) KHO VIDEO THÀNH PHẨM (kho_thanh_pham): Trưởng MKT
+            dán link thư mục Drive / đường dẫn thư mục máy dựng / kênh TikTok @tenkenh ở Bộ não AI › Huấn luyện. Máy dựng (script
+            hoc-thanh-pham) cắt shot bằng scdet, khung giữa shot → Claude xếp cỡ cảnh, Whisper nghe lời từng shot (nếu có), dò clip
+            gốc bằng chữ ký ảnh 16×16 (thư mục con goc/source) → POST /hub/thanh-pham → mẫu ghep_canh (luôn), chon_canh (lời ↔
+            khung), chon_doan (khớp gốc). TikTok: Trạm (việc content_os/tai_tiktok, hồ sơ tiktok_cn) tải mp4 + LƯỢT XEM + ngày
+            vào D:\may-dung\thanh-pham\tiktok\<kênh> kèm _meta.json → /hub/tiktok-da-tai → máy dựng học. LƯỢT XEM = TRỌNG SỐ MẪU:
+            log10(xem+10)/log10(trung vị cùng kênh+10) kẹp [0,4; 2,5]; không có lượt xem (Drive/máy/chỉnh ghép) = 1, không ghi 0.
+Đánh đổi  : Chỉnh ghép bằng số giây thay vì kéo thả (375 dùng được, ít mã); scdet bỏ lỡ chuyển cảnh mờ (fade) → shot dài hơn thật;
+            dò clip gốc chỉ đúng khi thành phẩm không đổi màu/crop mạnh; TikTok tải qua phiên đăng nhập, TikTok đổi giao diện thì
+            việc báo lỗi rõ chứ không bịa; Whisper tuỳ máy có transformers.
+Lộ trình  : 010a chỉnh ghép + mẫu · 010b phân tích đoạn + cỡ cảnh · 010c hai mô hình + máy dựng ghép theo shot · 010d kho thành phẩm
+            Drive/máy/TikTok + trọng số lượt xem.
+Người duyệt: Thiện · Trạng thái: ĐÃ DUYỆT (2026-09-24, "Duyệt cả 010a + 010b + 010c"; 010d: "cả tiktok nữa nhé", "có lượt xem
+            cũng là một cách học hiệu quả") · ĐÃ LÀM (chưa đo trên video thật — xem changelog)
+```
+
+
+```
 ADR-007b · 2026-09-24 · SEEDING NÂNG CAO — bình luận dẫn dắt đa tài khoản, lead AI phân loại, nuôi tài khoản, tự chỉnh nhịp
 Bối cảnh : 007a đã có gói → lịch → Trạm đăng → kiểm/lead từ khoá → học. Bản vẽ §11.9 để lại 007b. Thiện: "tiếp tục 007b".
 Quyết định: (1) BÌNH LUẬN DẪN DẮT: bài lên (có link) → máy lên lịch N bình luận (mặc định 2) cho N tài khoản KHÁC người đăng đang ở
@@ -212,6 +244,13 @@ Người duyệt: Thiện · Trạng thái: ĐÃ DUYỆT (2026-09-24, "tiếp t�
 ```
 
 ## Changelog
+
+### 2026-09-24 · ADR-010 — máy học chọn & ghép source (010a–d)
+- **Worker**: bảng `ghep_video`, `kho_thanh_pham` (+luot_xem, luot_thich, ngay_dang, link, kenh), cột `tai_san.phan_tich`; định tuyến `chon_doan` (mở `doan-tuyen-tinh`), `ghep_canh` (mở `ghep-thong-ke`). Tuyến người: `GET/POST /noi-dung/:id/ghep`, `POST /kho-thanh-pham/nap` (Drive/thư mục máy → lệnh `hoc_thanh_pham`; `nguon:TIKTOK` → hàng đợi `module_config.tai_tiktok` + lệnh Trạm `chay_agent content_os/tai_tiktok`, cần Trạm sống). Tuyến hub: `/hub/viec/phan_tich`, `/hub/phan-tich`, `/hub/viec/thanh_pham`, `/hub/thanh-pham` (Claude xếp cỡ cảnh cho shot có khung, tối đa 12), `/hub/viec/tai_tiktok`, `/hub/tiktok-da-tai`; `/hub/viec/dung_video` trả `phan_tich` từng clip và `ghep` khi có `ghep_id`; lô `content_os.video` nhận `ghep`/`ghep_nguon`; `/hub/tap-mau` trả đủ đầu vào cho chon_doan/ghep_canh + `luot_xem`/`kenh`; `/ai/huan-luyen` cho hai tính năng mới, rơi về máy dựng khi không có máy huấn luyện. Script phát thêm: `phan-tich`, `hoc-thanh-pham`.
+- **Máy dựng** (`may-dung.mjs` 1.2): `phan-tich.mjs` (đo thật clip 4,6 s → 9 đoạn, 3 khung), `hoc-thanh-pham.mjs` (scdet cắt shot, khung, Whisper tuỳ máy, chữ ký 16×16 dò clip gốc, `_meta.json` lượt xem TikTok), `dung-video.mjs` ghép theo shot (kế hoạch người khi có `ghep_id`; máy: shot sau = clip khớp chưa dùng, độ dài theo mô hình ghép, đoạn theo mô hình chọn đoạn/luật; báo `ghep` về app), `huan-luyen.mjs` +`hocGhep` (chon_doan logistic, ghep_canh thống kê) +`trongSoLuotXem` áp cả chon_canh, `nap-drive.mjs` phân tích ngay khi nạp.
+- **Trạm** (masfico-insight v9.163): việc `content_os/tai_tiktok` (`content-os-tai-tiktok.mjs`, hồ sơ tiktok_cn, vai kiem): mở kênh, cuộn lấy link + lượt xem, tải mp4 qua phiên, `_meta.json`, báo `/hub/tiktok-da-tai`; captcha → `tk_su_co`, không vượt.
+- **Giao diện**: Sản xuất › ✂️ Chỉnh ghép (mỗi cảnh: clip · giây vào/ra · ↑↓ · ✕ · + shot · 🎬 Dựng lại theo bản chỉnh); Máy › Bộ não AI › Huấn luyện › 🎞 Kho video thành phẩm (dán Drive / `D:\…` / `@kenh`, bảng video · shot · nhịp · khớp gốc · lượt xem, hàng đợi Trạm); nút 🎓 Huấn luyện tự có "Chọn đoạn" và "Ghép shot".
+- **Test** `tests/adr010.test.mjs` (5 bài) — bộ 93/93. Chưa đo trên video thật: cần chạy `phan_tich_footage` cho 15 clip Keo chít mạch rồi dựng lại `nd_9b2030d64i3h` để thấy cảnh nhiều shot, không lặp clip.
 
 ### 2026-09-24 · Khoá API dán trên app (Máy › Bộ não AI › 🔑 Khoá API) — chủ: "có UI ở app để ghép khoá"
 - Đổi quy ước ADR-001 "khoá chỉ là secret Worker": nay **secret Cloudflare vẫn ưu tiên**, nhưng Admin dán được khoá ngay trên app. Bảng `khoa_api` (giá trị mã hoá AES-GCM bằng két `module_config.ket`, chỉ trả 4 ký tự cuối của khoá dán trên app; khoá wrangler chỉ là cờ). `napKhoa(env)` phủ khoá lên env ở cửa `fetch`/`scheduled` (cache 60 giây) nên mọi tuyến cũ (`env.ANTHROPIC_API_KEY`…) dùng được không sửa.
