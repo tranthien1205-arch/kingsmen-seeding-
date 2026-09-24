@@ -213,6 +213,11 @@ Người duyệt: Thiện · Trạng thái: ĐÃ DUYỆT (2026-09-24, "tiếp t�
 
 ## Changelog
 
+### 2026-09-24 · ADR-T01 Trạm (đợt 4, phía Content OS) — Trạm chia ba: Tài khoản · Agent · Cài đặt
+- Trạm (masfico-insight v9.158→9.161) đổi giao diện theo bản vẽ `may/BAN-VE-GIAO-DIEN-3.md`; hợp đồng hub1 không đổi, thêm khối vào nhịp tim `/hub/trang_thai`: `tai_khoan[]` (phiên, `dung_den` khi Trạm dừng sau checkpoint, `dang_dung_boi`, `checkpoint_30d`) và `nhan_vien[]` (nhân viên máy làm cho Content OS + tài khoản được cấp theo vai/trần).
+- **Worker**: lưu hai khối đó vào `tram_trang_thai`; `tkDungTram` — xếp lịch đăng seeding và bình luận **không giao** việc cho tài khoản Trạm đang dừng, dời tới hết hạn dừng (không tự vượt).
+- **Giao diện**: Seeding › Tài khoản MKT hiện "⏸ Trạm dừng tới…", "đang được X dùng"; Máy › Trạm hiện danh sách nhân viên máy + tài khoản được cấp (chỉ xem — cấp quyền đặt trên Trạm).
+
 ### 2026-09-24 · ADR-007b (seeding nâng cao)
 - **Worker**: bảng `binh_luan_seeding, nuoi_seeding`, `lead_seeding.loai/muc_do/goi_y`; config seeding `binh_luan_moi_bai, binh_luan_tre_min/max, nuoi_moi_ngay, nuoi_phut, nuoi_tim, nhip_tu_chinh, go_bai_ha_nhip, checkpoint_ha_nhip`; định tuyến `phan_loai_lead`; helpers `lenBinhLuan, chayBinhLuanSeeding, napBinhLuan, ghiCheckpoint (lịch sử + tự hạ nhịp), lenLichNuoi, chayNuoi, napNuoi, chinhNhipSeeding, phanLoaiBinhLuan`; agents `BINH_LUAN_SEEDING` (15'), `NUOI_TAI_KHOAN` (15'), `LEN_LICH_NUOI` (ngày: nuôi + chỉnh nhịp); hub `/hub/viec/seeding_binh_luan`, `/hub/viec/seeding_nuoi`, lô `content_os.seeding_binh_luan_ket_qua`, `content_os.seeding_nuoi_ket_qua`; endpoints `/seeding/binh-luan/:id/(huy|da-dang)`, `/seeding/nuoi/:id/huy`; `apDungDeXuat` SEEDING_NHIP; bootstrap `seeding.binh_luan, nuoi`.
 - **Trạm** (`v2/tram/`): `content-os-seeding-binh-luan.mjs`, `content-os-seeding-nuoi.mjs`, agents entry +2 việc → masfico-insight v9.156.
