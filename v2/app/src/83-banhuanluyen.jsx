@@ -1,7 +1,7 @@
 // ADR-017 — BÀN HUẤN LUYỆN: sáu làn × dòng sản phẩm (chặng tính từ dữ liệu thật ở /ban-huan-luyen), nguồn lực, hộp việc của người.
 const TEN_CHANG = ['', '1 · Gom', '2 · Thầy gán', '3 · Người', '4 · Đo', '5 · Bóng', '6 · Bật'];
 const MAU_CHANG = ['', 'bg-slate-100 text-slate-600', 'bg-sky-100 text-sky-800', 'bg-amber-100 text-amber-800', 'bg-teal-100 text-teal-800', 'bg-emerald-100 text-emerald-800', 'bg-emerald-600 text-white'];
-const TEN_SO_DO = { doan: 'đoạn đã đọc', thay: 'thầy đã đọc', bat_dong_pct: '% thầy khác mô hình mở', vang: 'nhãn vàng', dung_ngau_nhien_pct: '% đúng · mẫu ngẫu nhiên', thay_pct: '% thầy đúng', mo_pct: '% mô hình mở đúng', cau_co_loi: 'câu có lời', video_da_air: 'video đã air' };
+const TEN_SO_DO = { cau: 'câu có lời', luat_khop_pct: '% ngưỡng hiện tại khớp người', ngau_nhien_khop_pct: '% khớp · mẫu ngẫu nhiên', hoc_khop_pct: '% ngưỡng máy học khớp', nghe_sai_pct: '% câu máy nghe sai', doan: 'đoạn đã đọc', thay: 'thầy đã đọc', bat_dong_pct: '% thầy khác mô hình mở', vang: 'nhãn vàng', dung_ngau_nhien_pct: '% đúng · mẫu ngẫu nhiên', thay_pct: '% thầy đúng', mo_pct: '% mô hình mở đúng', cau_co_loi: 'câu có lời', video_da_air: 'video đã air' };
 const TEN_TG = { tai: 'Tải', cat: 'Cắt shot', nghe: 'Nghe lời', anh_shot: 'Ảnh + dò gốc', nhin: 'Đọc hình (qwen)', thay: 'Thầy Claude' };
 
 function OBan({ x, onClick, chon }) {
@@ -50,7 +50,7 @@ function BanHuanLuyen({ a }) {
         <div className="text-[10px] text-ink-muted">Trung bình {tg.so_video} video gần nhất. Tải, cắt, nghe chiếm phần lớn thì mới đáng chuyển sang máy Ngoc-Han; đọc hình chiếm phần lớn thì giữ Q2.</div></div>
         : <div className="text-xs text-ink-muted">Chưa có số đo. Máy học ghi thời gian từng chặng từ lượt học tiếp theo.</div>}
     </Card>
-    <div className="flex items-center gap-2 flex-wrap"><SectionTitle>Hộp việc của anh/chị</SectionTitle><span className="text-[11px] text-ink-muted">hôm nay {ng.phut_hom_nay ?? 0} / {ng.tran_phut || '∞'} phút · hiện có thẻ nhãn hình; so cặp thẩm mỹ, sửa câu lời, duyệt bản dựng thêm ở các đợt sau</span></div>
-    <GanNhanNhanh dong={dongHV} setDong={setDongHV} dongs={dongs} />
+    <div className="flex items-center gap-2 flex-wrap"><SectionTitle>Hộp việc của anh/chị</SectionTitle><span className="text-[11px] text-ink-muted">hôm nay {ng.phut_hom_nay ?? 0} / {ng.tran_phut || '∞'} phút · thẻ nhãn hình, source, câu lời; so cặp thẩm mỹ và duyệt bản dựng thêm ở các đợt sau</span></div>
+    <HopViec dongs={dongs} />
   </div>;
 }

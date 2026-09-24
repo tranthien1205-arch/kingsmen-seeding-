@@ -26,7 +26,7 @@ test('017a: bàn huấn luyện, trần thầy, trần phút, thời gian chặn
   let b = (await api('/ban-huan-luyen')).j;
   assert.equal(b.lan.length, 6); assert.ok(b.dongs.includes('Finex'));
   assert.equal(b.o.K1.chung.chang, 1); assert.equal(b.o.K1.chung.so_do.doan, 10); assert.equal(b.o.K1.chung.so_do.bat_dong_pct, 50);
-  assert.match(b.o.K3.chung.thieu, /chờ K1/); assert.equal(b.o.K2.chung.chua_lam, true); assert.equal(b.o.K4.chung.so_do.cau_co_loi, 1);
+  assert.match(b.o.K3.chung.thieu, /chờ K1/); assert.equal(b.o.K2.chung.chang, 1); assert.equal(b.o.K4.chung.chang, 1);
   assert.equal(b.nguon_luc.thoi_gian_tb.nhin, 150); assert.equal(b.nguon_luc.may[0].dang_lam, 'hoc_thanh_pham'); assert.equal(b.nguon_luc.thay.tran_usd, 20);
   // ngưỡng nhỏ → K1 Finex lên chặng 3 (thầy đã đọc hết, chờ nhãn vàng)
   datCH('huan_luyen', { k1_gom_dong: 5, k1_vang_dong: 2, tran_phut_ngay: 0.1 });

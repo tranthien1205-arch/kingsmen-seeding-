@@ -84,7 +84,9 @@ const CONFIG_MAC_DINH = {
            gia:{ 'claude-sonnet-4-5':{vao:3,ra:15}, 'claude-haiku-4-5-20251001':{vao:1,ra:5}, 'claude-opus-4-1':{vao:15,ra:75} } },
   duyet: { chan_tu_duyet:true },
   // ADR-017: bàn huấn luyện. tran_phut_ngay: hộp việc của người đóng khi đã làm đủ N phút trong ngày (bấm "làm thêm" vẫn được)
-  huan_luyen:{ tran_phut_ngay:20, k1_gom_chung:300, k1_gom_dong:100, k1_vang_chung:200, k1_vang_dong:60 },
+  // source_nguong: ngưỡng K2 ban đầu (ước lượng) — máy tự học lại khi có ≥ 30 lần người quyết. thay_loi: Claude Haiku gán nhãn câu lời theo cron.
+  huan_luyen:{ tran_phut_ngay:20, k1_gom_chung:300, k1_gom_dong:100, k1_vang_chung:200, k1_vang_dong:60, k2_gom:100, k2_vang:50, k4_gom:150, k4_vang:100, thay_loi:true, thay_loi_model:'claude-haiku-4-5-20251001',
+    source_nguong:{ net:0.55, dong:0.25, sang0:0.15, sang1:0.92 } },
   // ADR-002: gom trend/ý tưởng. tu_khoa_nganh rỗng = nhận tất cả (dễ ngập rác — người trong nghề tự khai);
   // nguong_tu_duyet: điểm máy ≥ ngưỡng và không rủi ro claim thì tự duyệt KHI B1 ở mức AI_TU_LAM
   trend:   { tu_khoa_nganh:[], chong_trung_ngay:30, nguong_tu_duyet:70 },
@@ -1305,7 +1307,7 @@ const TEN_NHOM_CANH={ BOI_CANH:'bối cảnh chung: công trình, không gian, n
 async function thayDocDoan(env, x){ const key=env.ANTHROPIC_API_KEY; if(!key) return {ok:false, loi:'chưa có ANTHROPIC_API_KEY'};
   const ns=await kiemNganSachAI(env,{hoc:true}); if(!ns.ok) return {ok:false, loi:ns.loi, vuot_ngan_sach:true};
   const cfg=(await docCauHinh(env)).ai||{}; const model=chuoi(cfg.thay_nhin_model,60)||AI_MODEL_MAC_DINH;
-  if(so(cfg.ngan_sach_thay_usd)>0){ const da=await env.DB.prepare(`SELECT COALESCE(SUM(chi_phi_usd),0) usd FROM ai_usage WHERE thang=? AND tinh_nang='hoc_nhan_khung'`).bind(thangHienTai()).first()||{}; if(so(da.usd)>=so(cfg.ngan_sach_thay_usd)) return {ok:false, vuot_ngan_sach:true, loi:'Hết ngân sách thầy tháng này ('+so(da.usd).toFixed(2)+'/'+so(cfg.ngan_sach_thay_usd)+' USD)'}; }
+  if(so(cfg.ngan_sach_thay_usd)>0){ const da=await env.DB.prepare(`SELECT COALESCE(SUM(chi_phi_usd),0) usd FROM ai_usage WHERE thang=? AND tinh_nang IN ('hoc_nhan_khung','hoc_doc_loi')`).bind(thangHienTai()).first()||{}; if(so(da.usd)>=so(cfg.ngan_sach_thay_usd)) return {ok:false, vuot_ngan_sach:true, loi:'Hết ngân sách thầy tháng này ('+so(da.usd).toFixed(2)+'/'+so(cfg.ngan_sach_thay_usd)+' USD)'}; }
   const qt=(Array.isArray(x.quy_trinh)?x.quy_trinh:[]).map(v=>chuoi(v,80)).filter(Boolean).slice(0,20), bt=(Array.isArray(x.bai_test)?x.bai_test:[]).map(v=>chuoi(v,80)).filter(Boolean).slice(0,20);
   const anh=[]; for(const u of (Array.isArray(x.anh)?x.anh:[]).filter(u=>/^\/media\//.test(String(u||''))).slice(0,3)){ const obj=env.MEDIA&&await env.MEDIA.get(u.slice(7)); if(!obj) continue; const buf=new Uint8Array(await obj.arrayBuffer()); let bin=''; for(let i=0;i<buf.length;i+=0x8000) bin+=String.fromCharCode(...buf.subarray(i,i+0x8000)); anh.push({type:'image', source:{type:'base64', media_type:'image/jpeg', data:btoa(bin)}}); }
   if(!anh.length) return {ok:false, loi:'không thấy ảnh đoạn'};
@@ -1324,7 +1326,37 @@ async function thayDocDoan(env, x){ const key=env.ANTHROPIC_API_KEY; if(!key) re
   const buoc=nhom==='THI_CONG'&&qt.includes(o.buoc)?o.buoc:null; const test=nhom==='THU_NGHIEM'&&o.bai_test?(bt.length?(bt.includes(o.bai_test)?o.bai_test:null):chuoi(o.bai_test,80)):null;
   const tm=Number(o.tham_my); return {ok:true, model, nhan:{ nhom, buoc, bai_test:test, tham_my:Number.isFinite(tm)&&tm>=0?Math.min(10,tm):null, chac:Math.max(0,Math.min(1,so(o.chac))), mo_ta:chuoi(o.mo_ta,200), ly_do:chuoi(o.ly_do,120) }, vao, ra };
 }
-async function phutNguoiHomNay(env){ const tu=new Date(Date.parse(ngayVN()+'T00:00:00Z')-7*36e5).toISOString(); const ds=(await env.DB.prepare(`SELECT dau_vao FROM mau_hoc_ai WHERE tinh_nang='nhan_khung' AND created_at>=?`).bind(tu).all()).results; return ds.reduce((a,x)=>a+(so((docJSON(x.dau_vao,{})||{}).giay)||5),0)/60; }
+async function phutNguoiHomNay(env){ const tu=new Date(Date.parse(ngayVN()+'T00:00:00Z')-7*36e5).toISOString(); const ds=(await env.DB.prepare(`SELECT dau_vao FROM mau_hoc_ai WHERE tinh_nang IN ('nhan_khung','chat_luong_source') AND created_at>=?`).bind(tu).all()).results; const lo=(await env.DB.prepare(`SELECT nhan FROM mau_hoc_ai WHERE tinh_nang='doc_loi' AND cham_at>=? AND nhan LIKE '%"NGUOI"%'`).bind(tu).all()).results;
+  return (ds.reduce((a,x)=>a+(so((docJSON(x.dau_vao,{})||{}).giay)||5),0)+lo.reduce((a,x)=>a+(so((docJSON(x.nhan,{})||{}).giay)||5),0))/60; }
+async function hetTran(env, url){ const hl=(await docCauHinh(env)).huan_luyen||{}; const phut=await phutNguoiHomNay(env); return { het:so(hl.tran_phut_ngay)>0&&phut>=so(hl.tran_phut_ngay)&&url.searchParams.get('them')!=='1', phut:+phut.toFixed(1), tran:so(hl.tran_phut_ngay) }; }
+// ADR-017 đợt B — K2 CHẤT LƯỢNG SOURCE: số đo ffmpeg của một đoạn footage (nửa giây một mẫu) → luật ngưỡng; người quyết dùng/loại, máy học ngưỡng.
+function soDoSource(pt, d){ const m=(Array.isArray(pt.doan)?pt.doan:[]).filter(x=>x.t>=d.tu-0.01&&x.t<d.den); if(!m.length) return null; const tb=k=>+(m.reduce((a,x)=>a+so(x[k]),0)/m.length).toFixed(3);
+  return { net:tb('net'), net_min:+Math.min(...m.map(x=>so(x.net))).toFixed(3), dong:tb('dong'), dong_max:+Math.max(...m.map(x=>so(x.dong))).toFixed(3), sang:tb('sang'), ro_net:d.ro_net==null?null:so(d.ro_net) }; }
+function luatSource(ng, x){ if(!x) return null; const ly=[]; if(x.net<so(ng.net,0.55)) ly.push('mờ'); if(x.dong>so(ng.dong,0.25)) ly.push('rung'); if(x.sang<so(ng.sang0,0.15)) ly.push('tối'); if(x.sang>so(ng.sang1,0.92)) ly.push('cháy sáng'); return { dung:!ly.length, ly_do:ly }; }
+function bienSource(ng, x){ return Math.min(Math.abs(x.net-so(ng.net,0.55))/0.1, Math.abs(x.dong-so(ng.dong,0.25))/0.1, Math.abs(x.sang-so(ng.sang0,0.15))/0.1, Math.abs(x.sang-so(ng.sang1,0.92))/0.1); }   // gần ngưỡng → đáng hỏi người
+async function hocNguongSource(env){ const ds=(await env.DB.prepare(`SELECT dau_vao, nhan, tap FROM mau_hoc_ai WHERE tinh_nang='chat_luong_source'`).all()).results.map(x=>({v:docJSON(x.dau_vao,{})||{}, n:docJSON(x.nhan,{})||{}, tap:x.tap})).filter(x=>x.v.so_do&&typeof x.n.dung==='boolean');
+  if(ds.length<30) return {ok:false, loi:'cần ≥ 30 lần người quyết (có '+ds.length+')'}; const hoc=ds.filter(x=>x.tap!=='KIEM'), kiem=ds.filter(x=>x.tap==='KIEM'); const chamTren=(tap,ng)=>tap.filter(x=>luatSource(ng,x.v.so_do).dung===x.n.dung).length;
+  let best=null; for(let net=0.40;net<=0.80;net+=0.02) for(let dong=0.10;dong<=0.60;dong+=0.05) for(let s0=0.05;s0<=0.30;s0+=0.05) for(let s1=0.78;s1<=0.99;s1+=0.03){ const ng={net:+net.toFixed(2),dong:+dong.toFixed(2),sang0:+s0.toFixed(2),sang1:+s1.toFixed(2)}; const d=chamTren(hoc,ng); if(!best||d>best.d) best={ng,d}; }
+  const cfg=await docCauHinh(env); const hl=cfg.huan_luyen||{}; const cu=hl.source_nguong||{}; const tapDo=kiem.length>=8?kiem:hoc;
+  const moi={...best.ng, khop_pct:Math.round(chamTren(tapDo,best.ng)/tapDo.length*100), khop_cu_pct:Math.round(chamTren(tapDo,cu)/tapDo.length*100), n:ds.length, n_kiem:kiem.length, luc:nowISO()};
+  const row=await env.DB.prepare(`SELECT cau_hinh FROM module_config WHERE id='huan_luyen'`).first(); const o=row?docJSON(row.cau_hinh,{}):{}; o.source_hoc=moi;
+  await env.DB.prepare(`INSERT OR REPLACE INTO module_config (id, cau_hinh, updated_at) VALUES ('huan_luyen', ?, ?)`).bind(JSON.stringify(o), nowISO()).run(); return {ok:true, ...moi}; }
+// ADR-017 đợt B — K4 ĐỌC LỜI: Claude (Haiku, rẻ) gán nhóm cảnh / bước cho câu thoại video đã air theo lô 20 câu; người xác nhận chỗ thầy khác nhãn hình hoặc không chắc.
+async function thayDocLoi(env, toiDa=60){ const cfg=await docCauHinh(env); const hl=cfg.huan_luyen||{}; const ai=cfg.ai||{}; if(hl.thay_loi===false||ai.thay_nhin===false) return {ok:false, tat:true}; const key=env.ANTHROPIC_API_KEY; if(!key) return {ok:false, loi:'chưa có ANTHROPIC_API_KEY'};
+  if(so(ai.ngan_sach_thay_usd)>0){ const da=await env.DB.prepare(`SELECT COALESCE(SUM(chi_phi_usd),0) usd FROM ai_usage WHERE thang=? AND tinh_nang IN ('hoc_nhan_khung','hoc_doc_loi')`).bind(thangHienTai()).first()||{}; if(so(da.usd)>=so(ai.ngan_sach_thay_usd)) return {ok:false, loi:'Hết ngân sách thầy tháng này'}; }
+  const ds=(await env.DB.prepare(`SELECT id, dau_vao, dong FROM mau_hoc_ai WHERE tinh_nang='doc_loi' AND (dau_ra IS NULL OR dau_ra NOT LIKE '%"thay"%') ORDER BY created_at LIMIT ?`).bind(Math.max(1,Math.min(200,toiDa))).all()).results; if(!ds.length) return {ok:true, so:0};
+  const spAll=(await env.DB.prepare(`SELECT dong, quy_trinh, bai_test FROM san_pham`).all()).results; const model=chuoi(hl.thay_loi_model,60)||'claude-haiku-4-5-20251001'; let xong=0, loi=null;
+  const nhomTheoDong={}; for(const x of ds) (nhomTheoDong[x.dong||'']=nhomTheoDong[x.dong||'']||[]).push(x);
+  for(const [dong, ds0] of Object.entries(nhomTheoDong)) for(let b=0;b<ds0.length;b+=20){ const lo=ds0.slice(b,b+20); const sp=spAll.find(x=>dong&&x.dong===dong&&(x.quy_trinh||x.bai_test))||{}; const qt=dsDongSP(sp.quy_trinh), bt=dsDongSP(sp.bai_test);
+    const cau=lo.map((x,i)=>(i+1)+'. "'+String((docJSON(x.dau_vao,{})||{}).text||'').slice(0,300).replace(/"/g,"'")+'"').join('\n');
+    const p='Bạn là biên tập viên video của Kingsmen (vật liệu xây dựng'+(dong?(', dòng '+dong):'')+'). Dưới đây là các câu thoại (máy nghe chép lại, có thể sai chữ) trong video đã đăng. Với MỖI câu, cho biết câu đó đang nói về nhóm cảnh nào để chọn hình minh hoạ đúng.\nNHÓM: '+NHOM_CANH.map(k=>k+' ('+TEN_NHOM_CANH[k]+')').join('; ')+'.\nBƯỚC THI CÔNG (chỉ khi THI_CONG, chép đúng một dòng hoặc null): '+(qt.length?qt.join(' | '):'(chưa khai — null)')+'.\nBÀI TEST (chỉ khi THU_NGHIEM, chép đúng một dòng hoặc null): '+(bt.length?bt.join(' | '):'(chưa khai — null)')+'.\nNếu câu nghe sai tới mức không hiểu thì nghe_sai=true. chac 0–1, không chắc thì ghi dưới 0,6.\nCÂU:\n'+cau+'\nChỉ trả MỘT mảng JSON, mỗi phần tử {"i":số thứ tự,"nhom":"…","buoc":"…"|null,"bai_test":"…"|null,"chac":số,"nghe_sai":true|false}.';
+    const t0=Date.now(); let res, j; try{ res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST', headers:{'content-type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01'}, body:JSON.stringify({ model, max_tokens:1800, messages:[{role:'user', content:p}] })}); j=await res.json().catch(()=>({})); }catch(e){ loi=String(e.message||e).slice(0,100); break; }
+    await ghiAIUsage(env,{provider:'anthropic', model, tinh_nang:'hoc_doc_loi', tokens_vao:so(j.usage&&j.usage.input_tokens), tokens_ra:so(j.usage&&j.usage.output_tokens), ok:!!res.ok, ms:Date.now()-t0, loi:res.ok?null:String((j.error&&j.error.message)||res.status).slice(0,200), muc:'API'});
+    if(!res.ok){ loi=String((j.error&&j.error.message)||res.status).slice(0,100); break; }
+    const txt=((j.content||[]).find(c=>c.type==='text')||{}).text||''; let arr=[]; try{ arr=JSON.parse(txt.slice(txt.indexOf('['), txt.lastIndexOf(']')+1)); }catch(e){ arr=[]; }
+    for(const o of (Array.isArray(arr)?arr:[])){ const x=lo[so(o.i)-1]; if(!x||!NHOM_CANH.includes(o.nhom)) continue; const th={ nhom:o.nhom, buoc:o.nhom==='THI_CONG'&&qt.includes(o.buoc)?o.buoc:null, bai_test:o.nhom==='THU_NGHIEM'&&o.bai_test?(bt.length?(bt.includes(o.bai_test)?o.bai_test:null):chuoi(o.bai_test,80)):null, chac:+Math.max(0,Math.min(1,so(o.chac))).toFixed(2), nghe_sai:!!o.nghe_sai, model };
+      await env.DB.prepare(`UPDATE mau_hoc_ai SET dau_ra=? WHERE id=?`).bind(JSON.stringify({thay:th}), x.id).run(); xong++; } }
+  return {ok:true, so:xong, loi}; }
 // ADR-017 — khuôn làn: 1 Gom · 2 Thầy gán · 3 Người xác nhận · 4 Đo · 5 Bóng · 6 Bật. Mỗi ô tính từ dữ liệu thật; làn chưa làm nói rõ đợt nào.
 const LAN_HOC=[
   {k:'K1', ten:'Nhận diện khung', dot:'A'}, {k:'K2', ten:'Chất lượng source', dot:'B'}, {k:'K3', ten:'Thẩm mỹ', dot:'C', cho:['K1']},
@@ -1349,7 +1381,20 @@ async function banHuanLuyen(env){ const cfg=await docCauHinh(env); const hl=cfg.
   const o={}; for(const l of LAN_HOC){ o[l.k]={ chung:null, dong:{} }; }
   o.K1.chung=k1Chung; for(const d of dongs) o.K1.dong[d]=k1(d);
   const chuaLam=(l, so_do, gom)=>({ chang:1, chua_lam:true, thieu:'làm ở đợt '+l.dot, so_do, gom });
-  o.K2.chung=chuaLam(LAN_HOC[1], {doan:doan.length}); o.K4.chung=chuaLam(LAN_HOC[3], {cau_co_loi:loiSo});
+  // K2 source: thầy = số đo ffmpeg (đã có sẵn khi gom) → chặng 2 qua ngay
+  { const ftM=ft.map(r=>docJSON(r.phan_tich,{})||{}); let nDoan=0; for(const pt of ftM) for(const d of (pt.timeline||[])) if(soDoSource(pt,d)) nDoan++;
+    const sv=(await env.DB.prepare(`SELECT dau_vao, nhan FROM mau_hoc_ai WHERE tinh_nang='chat_luong_source'`).all()).results.map(x=>({v:docJSON(x.dau_vao,{})||{}, n:docJSON(x.nhan,{})||{}})); const hocS=hl.source_hoc||null; const ng=hl.source_nguong||{};
+    const nn=sv.filter(x=>x.v.ngau_nhien&&x.v.so_do); const gomCan=so(hl.k2_gom,100), vangCan=so(hl.k2_vang,50);
+    const so_do={ doan:nDoan, vang:sv.length, luat_khop_pct:pct(sv.filter(x=>x.v.so_do&&luatSource(ng,x.v.so_do).dung===x.n.dung).length, sv.filter(x=>x.v.so_do).length), ngau_nhien_khop_pct:pct(nn.filter(x=>luatSource(ng,x.v.so_do).dung===x.n.dung).length, nn.length), hoc_khop_pct:hocS?hocS.khop_pct:null };
+    let chang=1, thieu='cần '+gomCan+' đoạn footage có số đo (có '+nDoan+')'; if(nDoan>=gomCan){ chang=3; thieu='cần '+vangCan+' lần người quyết dùng/loại (có '+sv.length+')'; if(sv.length>=vangCan){ chang=4; thieu=hocS?('ngưỡng học khớp người '+hocS.khop_pct+'% (ngưỡng cũ '+hocS.khop_cu_pct+'%) — Bóng: lọc footage dùng ngưỡng học song song (đợt sau)'):'máy chưa học ngưỡng'; } }
+    o.K2.chung={ chang, thieu, so_do, tien_do:chang===1?pct(nDoan,gomCan):chang===3?pct(sv.length,vangCan):null }; }
+  // K4 đọc lời: thầy Claude Haiku theo lô; người xác nhận
+  { const lv=(await env.DB.prepare(`SELECT dau_ra, nhan, dong FROM mau_hoc_ai WHERE tinh_nang='doc_loi'`).all()).results.map(x=>({t:(docJSON(x.dau_ra,{})||{}).thay||null, n:docJSON(x.nhan,{})||{}, dong:x.dong}));
+    const k4=(dong)=>{ const ds=lv.filter(x=>!dong||x.dong===dong); const nThay=ds.filter(x=>x.t).length; const ng=ds.filter(x=>x.n.nguon==='NGUOI'); const ngHieu=ng.filter(x=>!x.n.nghe_sai); const gomCan=so(hl.k4_gom,dong?50:150), vangCan=so(hl.k4_vang,dong?40:100);
+      const so_do={ cau:ds.length, thay:nThay, bat_dong_pct:pct(ds.filter(x=>x.t&&x.n.nhom&&x.n.nguon!=='NGUOI'&&x.t.nhom!==x.n.nhom).length, nThay), vang:ng.length, thay_pct:pct(ngHieu.filter(x=>x.t&&x.t.nhom===x.n.nhom).length, ngHieu.filter(x=>x.t).length), nghe_sai_pct:pct(ng.filter(x=>x.n.nghe_sai).length, ng.length) };
+      let chang=1, thieu='cần '+gomCan+' câu có lời (có '+ds.length+')'; if(ds.length>=gomCan){ chang=2; thieu='thầy mới đọc '+nThay+'/'+ds.length+' câu'; if(nThay>=ds.length*0.8){ chang=3; thieu='cần '+vangCan+' câu người xác nhận (có '+ng.length+')'; if(ng.length>=vangCan){ chang=4; thieu='Bóng cần mô hình mở đọc lời (qwen2.5:7b trên Q2) chạy song song — đợt sau'; } } }
+      return { chang, thieu, so_do, tien_do:chang===1?pct(ds.length,gomCan):chang===2?pct(nThay,ds.length):chang===3?pct(ng.length,vangCan):null }; };
+    o.K4.chung=k4(null); for(const d of dongs) if(lv.some(x=>x.dong===d)) o.K4.dong[d]=k4(d); }
   const choCua=(l)=>({ cho:l.cho, thieu:'chờ '+l.cho.join(' + ')+' tới Bóng' });
   o.K3.chung=choCua(LAN_HOC[2]); o.K5.chung={...choCua(LAN_HOC[4]), so_do:{video_da_air:th.length}}; o.K6.chung={ cho:['K1'], thieu:'chờ K1 bật' };
   const pbGhep=(await env.DB.prepare(`SELECT COUNT(*) n FROM mo_hinh_phien_ban WHERE tinh_nang='ghep_canh' AND trang_thai='CHO_DUYET'`).first().catch(()=>({n:0})))||{n:0}; if(so(pbGhep.n)) o.K5.chung.ghi_chu=so(pbGhep.n)+' phiên bản ghép cũ đang chờ duyệt ở tab Huấn luyện';
@@ -1358,7 +1403,7 @@ async function banHuanLuyen(env){ const cfg=await docCauHinh(env); const hl=cfg.
   const hang=(await env.DB.prepare(`SELECT m.ten, COUNT(*) n FROM tram_lenh l JOIN may_ghep m ON m.id=l.may_id WHERE l.trang_thai IN ('CHO','DA_GUI') GROUP BY m.ten`).all()).results;
   for(const m of may) m.hang=so((hang.find(h=>h.ten===m.ten)||{}).n);
   const tg=th.map(r=>(docJSON(r.phan_tich,{})||{}).thoi_gian).filter(Boolean).slice(0,10); const tb={}; for(const x of tg) for(const [k,v] of Object.entries(x)) tb[k]=(tb[k]||0)+so(v)/tg.length; Object.keys(tb).forEach(k=>tb[k]=+tb[k].toFixed(1));
-  const thayDa=(await env.DB.prepare(`SELECT COALESCE(SUM(chi_phi_usd),0) usd, COUNT(*) n FROM ai_usage WHERE thang=? AND tinh_nang='hoc_nhan_khung'`).bind(thangHienTai()).first())||{};
+  const thayDa=(await env.DB.prepare(`SELECT COALESCE(SUM(chi_phi_usd),0) usd, COUNT(*) n FROM ai_usage WHERE thang=? AND tinh_nang IN ('hoc_nhan_khung','hoc_doc_loi')`).bind(thangHienTai()).first())||{};
   const cho=doan.filter(x=>!x.nguoi).length;
   return { lan:LAN_HOC, dongs, o, nguon_luc:{ may, thoi_gian_tb:tg.length?{...tb, so_video:tg.length}:null, thay:{ usd:+so(thayDa.usd).toFixed(2), lan:so(thayDa.n), tran_usd:so(ai.ngan_sach_thay_usd), bat:ai.thay_nhin!==false }, nguoi:{ phut_hom_nay:+(await phutNguoiHomNay(env)).toFixed(1), tran_phut:so(hl.tran_phut_ngay), doan_chua_gan:cho } } };
 }
@@ -2271,6 +2316,40 @@ async function handleApi(request, env){
     return json({ db: await bootstrap(env,me), dung }); }
   // ADR-017 — Bàn huấn luyện: sáu làn × dòng sản phẩm, mỗi ô có chặng + số đo + điều còn thiếu; nguồn lực (máy, thầy, người)
   if(path==='/ban-huan-luyen' && method==='GET'){ if(!isStaff(me)) return json({error:'Không có quyền'},403); return json(await banHuanLuyen(env)); }
+  // ADR-017 đợt B — K2: hàng đoạn footage để người quyết dùng/loại (gần ngưỡng trước, xen 1/4 ngẫu nhiên)
+  if(path==='/source/hang' && method==='GET'){ if(!isStaff(me)) return json({error:'Không có quyền'},403); const hl=(await docCauHinh(env)).huan_luyen||{}; const ng=hl.source_nguong||{}; const tr=await hetTran(env,url);
+    const ft=(await env.DB.prepare(`SELECT t.id,t.ten,t.media_url,t.phan_tich,sp.dong FROM tai_san t LEFT JOIN muc_noi_dung mu ON mu.id=t.muc_id LEFT JOIN san_pham sp ON sp.id=mu.san_pham_id WHERE t.phan_tich LIKE '%"timeline"%' AND t.phan_tich LIKE '%"doan":[{%' ORDER BY t.created_at DESC LIMIT 200`).all()).results;
+    const bo=new Set(String(url.searchParams.get('bo')||'').split(',').filter(Boolean)); const ds=[];
+    for(const r of ft){ const pt=docJSON(r.phan_tich,{})||{}; (pt.timeline||[]).forEach((d,i)=>{ if(d.source_nguoi) return; const k='S:'+r.id+':'+i; if(bo.has(k)) return; const sd=soDoSource(pt,d); if(!sd) return; ds.push({ k, id:r.id, i, ten:r.ten, dong:r.dong||null, tu:d.tu, den:d.den, nhom:d.nhom||null, mo_ta:d.mo_ta||'', khung_url:d.khung_url||(Array.isArray(pt.khung)&&pt.khung[0])||null, media_url:r.media_url, so_do:sd, may:luatSource(ng,sd), bien:bienSource(ng,sd) }); }); }
+    const gan=ds.slice().sort((a,b)=>a.bien-b.bien); const nn=ds.slice(); for(let j=nn.length-1;j>0;j--){ const q=Math.floor(Math.random()*(j+1)); [nn[j],nn[q]]=[nn[q],nn[j]]; }
+    const ra=[], da=new Set(); while(ra.length<30&&(gan.length||nn.length)){ const lay=(ra.length%4===3&&nn.length)?{...nn.shift(), ngau_nhien:true}:gan.shift()||{...nn.shift(), ngau_nhien:true}; if(lay&&!da.has(lay.k)){ da.add(lay.k); ra.push(lay); } }
+    return json({ hang:tr.het?[]:ra, het_tran:tr.het, phut_hom_nay:tr.phut, tran_phut:tr.tran, con_lai:ds.length, nguong:ng, hoc:hl.source_hoc||null }); }
+  if((m=path.match(/^\/tai-san\/([^/]+)\/doan\/(\d+)\/source$/)) && method==='POST'){ if(!isStaff(me)) return json({error:'Không có quyền'},403); const t=await env.DB.prepare(`SELECT t.id,t.phan_tich,sp.dong FROM tai_san t LEFT JOIN muc_noi_dung mu ON mu.id=t.muc_id LEFT JOIN san_pham sp ON sp.id=mu.san_pham_id WHERE t.id=?`).bind(m[1]).first(); if(!t) return json({error:'Không có footage'},404);
+    const pt=docJSON(t.phan_tich,{})||{}; const tl=Array.isArray(pt.timeline)?pt.timeline:[]; const i=so(m[2]); const d=tl[i]; if(!d) return json({error:'Không có đoạn '+i},404); const sd=soDoSource(pt,d); const ng=((await docCauHinh(env)).huan_luyen||{}).source_nguong||{}; const may=luatSource(ng,sd);
+    const LY=['mờ','rung','tối','cháy sáng','che khuất','bố cục xấu','khác']; const nhan={ dung:!!body.dung, ly_do:(Array.isArray(body.ly_do)?body.ly_do:[]).filter(x=>LY.includes(x)).slice(0,4) };
+    tl[i]={ ...d, source_nguoi:{...nhan, nguoi:me.ho_ten, luc:nowISO()} }; pt.timeline=tl; await env.DB.prepare(`UPDATE tai_san SET phan_tich=? WHERE id=?`).bind(JSON.stringify(pt), t.id).run();
+    await env.DB.prepare(`DELETE FROM mau_hoc_ai WHERE tinh_nang='chat_luong_source' AND doi_tuong_id=? AND dau_vao LIKE ?`).bind(t.id, '{"i":'+i+',%').run();
+    await ghiMauAI(env,{tinh_nang:'chat_luong_source', doi_tuong:'tai_san', doi_tuong_id:t.id, dau_vao:{i, so_do:sd, may, ngau_nhien:!!body.ngau_nhien, giay:Math.max(0,Math.min(120,so(body.giay)))||null, khung_url:d.khung_url||null}, dau_ra:may, nhan, pham_vi:{dong:t.dong||null, muc_dich:null}});
+    const n=so((await env.DB.prepare(`SELECT COUNT(*) n FROM mau_hoc_ai WHERE tinh_nang='chat_luong_source'`).first()||{}).n); let hoc=null; if(n>=30&&n%10===0) hoc=await hocNguongSource(env);
+    return json({ ok:true, dung:!!may&&may.dung===nhan.dung, hoc }); }
+  if(path==='/source/hoc' && method==='POST'){ if(!laGat(me)) return json({error:'Chỉ Trưởng MKT/Admin'},403); return json(await hocNguongSource(env)); }
+  // ADR-017 đợt B — K4: thầy đọc lời (nút) + hàng câu để người xác nhận
+  if(path==='/doc-loi/thay' && method==='POST'){ if(!isStaff(me)) return json({error:'Không có quyền'},403); return json(await thayDocLoi(env, so(body.so)||60)); }
+  if(path==='/doc-loi/hang' && method==='GET'){ if(!isStaff(me)) return json({error:'Không có quyền'},403); const tr=await hetTran(env,url); const locDong=chuoi(url.searchParams.get('dong'),80); const bo=new Set(String(url.searchParams.get('bo')||'').split(',').filter(Boolean));
+    const ds=(await env.DB.prepare(`SELECT m.id, m.dau_vao, m.dau_ra, m.nhan, m.dong, m.doi_tuong_id, k.ten, k.link, k.phan_tich FROM mau_hoc_ai m LEFT JOIN kho_thanh_pham k ON k.id=m.doi_tuong_id WHERE m.tinh_nang='doc_loi' AND m.dau_ra LIKE '%"thay"%' AND (m.nhan IS NULL OR m.nhan NOT LIKE '%"NGUOI"%') ORDER BY m.created_at DESC LIMIT 400`).all()).results;
+    const sp=(await env.DB.prepare(`SELECT dong, quy_trinh, bai_test FROM san_pham`).all()).results;
+    const tt=ds.filter(x=>(!locDong||x.dong===locDong)&&!bo.has('L:'+x.id)).map(x=>{ const v=docJSON(x.dau_vao,{})||{}, t=(docJSON(x.dau_ra,{})||{}).thay||{}, n=docJSON(x.nhan,{})||{}; const pt=docJSON(x.phan_tich,{})||{}; const sh=(pt.shots||[]).find(y=>y.loi&&String(y.loi).trim()===String(v.text||'').trim()); const s0=sp.find(y=>x.dong&&y.dong===x.dong&&(y.quy_trinh||y.bai_test))||{};
+      const hinh=n.nhom?{nhom:n.nhom, buoc:n.buoc||null, bai_test:n.bai_test||null}:null; const lech=!!(hinh&&hinh.nhom!==t.nhom);
+      return { k:'L:'+x.id, id:x.id, text:v.text||'', ten:x.ten||'', link:x.link||null, dong:x.dong||null, khung_url:sh&&sh.khung_url||null, thay:t, hinh, lech, uu:(t.nghe_sai?0:lech?1:(so(t.chac)<0.7?2:9)), quy_trinh:dsDongSP(s0.quy_trinh), bai_test_ds:dsDongSP(s0.bai_test) }; });
+    const kho=tt.filter(x=>x.uu<9).sort((a,b)=>a.uu-b.uu||so(a.thay.chac)-so(b.thay.chac)), de=tt.filter(x=>x.uu===9); for(let j=de.length-1;j>0;j--){ const q=Math.floor(Math.random()*(j+1)); [de[j],de[q]]=[de[q],de[j]]; }
+    const ra=[]; while(ra.length<30&&(kho.length||de.length)){ if(de.length&&(ra.length%4===3||!kho.length)) ra.push({...de.shift(), ngau_nhien:true}); else ra.push(kho.shift()); }
+    return json({ hang:tr.het?[]:ra, het_tran:tr.het, phut_hom_nay:tr.phut, tran_phut:tr.tran, con_lai:tt.length, cho_thay:so((await env.DB.prepare(`SELECT COUNT(*) n FROM mau_hoc_ai WHERE tinh_nang='doc_loi' AND (dau_ra IS NULL OR dau_ra NOT LIKE '%"thay"%')`).first()||{}).n) }); }
+  if((m=path.match(/^\/mau\/([^/]+)\/doc-loi$/)) && method==='POST'){ if(!isStaff(me)) return json({error:'Không có quyền'},403); const x=await env.DB.prepare(`SELECT id, dau_ra, nhan FROM mau_hoc_ai WHERE id=? AND tinh_nang='doc_loi'`).bind(m[1]).first(); if(!x) return json({error:'Không có câu'},404);
+    const t=(docJSON(x.dau_ra,{})||{}).thay||{}; const cu=docJSON(x.nhan,{})||{}; const giay=Math.max(0,Math.min(120,so(body.giay)))||null;
+    const nhan=body.nghe_sai?{ nghe_sai:true, nguon:'NGUOI', hinh:cu.nguon==='NGUOI'?cu.hinh:{nhom:cu.nhom||null, buoc:cu.buoc||null}, giay, ngau_nhien:!!body.ngau_nhien }
+      :{ nhom:NHOM_CANH.includes(body.nhom)?body.nhom:t.nhom, buoc:body.nhom==='THI_CONG'?(chuoi(body.buoc,80)||null):null, bai_test:body.nhom==='THU_NGHIEM'?(chuoi(body.bai_test,80)||null):null, nguon:'NGUOI', hinh:cu.nguon==='NGUOI'?cu.hinh:{nhom:cu.nhom||null, buoc:cu.buoc||null}, giay, ngau_nhien:!!body.ngau_nhien };
+    await env.DB.prepare(`UPDATE mau_hoc_ai SET nhan=?, cham_at=?, cham_boi=? WHERE id=?`).bind(JSON.stringify(nhan), nowISO(), me.ho_ten, x.id).run();
+    return json({ ok:true, dung:!body.nghe_sai&&t.nhom===nhan.nhom }); }
   // ADR-016 — hàng đợi gán nhãn vàng: đoạn máy chưa chắc trước, xen 1/4 đoạn ngẫu nhiên máy "chắc" (để đo độ chính xác không lệch)
   if(path==='/nhan-hinh/hang' && method==='GET'){ if(!isStaff(me)) return json({error:'Không có quyền'},403);
     const locDong=chuoi(url.searchParams.get('dong'),80); const n=Math.max(5,Math.min(60,so(url.searchParams.get('n'))||30)); const bo=new Set(String(url.searchParams.get('bo')||'').split(',').filter(Boolean));
@@ -2384,7 +2463,7 @@ async function xoaMoPhong(env, me){
 }
 
 export default {
-  async scheduled(controller, env, ctx){ ctx.waitUntil((async()=>{ const e=await napKhoa(env); await dieuPhoi(e); await tuHoc(e).catch(()=>{}); })().catch(()=>{})); },
+  async scheduled(controller, env, ctx){ ctx.waitUntil((async()=>{ const e=await napKhoa(env); await dieuPhoi(e); await tuHoc(e).catch(()=>{}); await thayDocLoi(e, 40).catch(()=>{}); })().catch(()=>{})); },
   async fetch(request, env, ctx){
     const url=new URL(request.url);
     env=await napKhoa(env);   // khoá dán ở app phủ lên env (secret Cloudflare vẫn ưu tiên)

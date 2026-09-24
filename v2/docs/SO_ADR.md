@@ -381,6 +381,12 @@ Người duyệt: Thiện · Trạng thái: ĐÃ DUYỆT (2026-09-24, "ok bạn 
 
 ## Changelog
 
+### 2026-09-24 · ADR-017 đợt B — K2 chất lượng source, K4 đọc lời
+- **K2**: `GET /source/hang` (đoạn footage có số đo nét/rung/sáng, gần ngưỡng trước, xen 1/4 ngẫu nhiên), `POST /tai-san/:id/doan/:i/source` {dung, ly_do} → mẫu `chat_luong_source`; ≥ 30 lần quyết thì `hocNguongSource()` dò lưới ngưỡng khớp người nhất (đo trên tập KIỂM) → `huan_luyen.source_hoc`; `POST /source/hoc`.
+- **K4**: `thayDocLoi()` Claude Haiku gán nhóm/bước cho 20 câu một lần gọi (cron 40 câu/15 phút, nút đọc ngay), chi phí `hoc_doc_loi` chung trần thầy; `GET /doc-loi/hang` (nghe sai → lời khác hình → thầy không chắc → 1/4 ngẫu nhiên); `POST /mau/:id/doc-loi` {nhom,buoc | nghe_sai}.
+- **Bàn**: K2, K4 tính chặng thật; hộp việc ba loại thẻ (K1 nhãn hình, K2 source, K4 câu lời), trần phút tính chung.
+- **Test** `tests/adr017b.test.mjs` (máy học đúng ngưỡng nét người dùng).
+
 ### 2026-09-24 · ADR-017 đợt A — Bàn huấn luyện
 - **Worker**: `GET /ban-huan-luyen` (`banHuanLuyen()`, `LAN_HOC`), trần thầy `ai.ngan_sach_thay_usd`, cấu hình `huan_luyen` (trần phút, ngưỡng K1), `/nhan-hinh/hang` báo `het_tran` (`them=1` để làm thêm), mẫu nhãn ghi `giay`, video thành phẩm lưu `thoi_gian` từng chặng + máy.
 - **Máy con**: `hoc-thanh-pham.mjs` đo tải/cắt/nghe/ảnh/nhìn/thầy; `doc-khung.mjs` trả `ms_thay`.
