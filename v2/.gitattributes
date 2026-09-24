@@ -1,2 +1,4 @@
 # File .bat phai xuong dong kieu Windows (CRLF): cmd doc sai nhan goto / khoi lenh khi file chi co LF.
+# Ca ban nguon (tools/) lan ban build phat cho may con (dist/tools/).
 tools/**/*.bat text eol=crlf
+dist/tools/**/*.bat text eol=crlf

@@ -3,7 +3,7 @@
 //   Chạy:   node may-dung.mjs                       (hoặc BAT-DAU.bat) — nhịp tim 2 phút, hỏi lệnh 30 giây/lần
 //   Thử:    node may-dung.mjs --mot-lan              (lấy lệnh một lượt rồi thoát)
 // Mã dựng KHÔNG nằm ở máy này: mỗi lệnh, máy hỏi app /hub/script/dung-video, kiểm hash, rồi mới chạy → sửa ở app là mọi máy dùng bản mới.
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync, mkdirSync, appendFileSync, statSync, renameSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { createHash } from "node:crypto";
@@ -11,7 +11,7 @@ import { spawnSync } from "node:child_process";
 import os from "node:os";
 
 export const DIR = dirname(fileURLToPath(import.meta.url));
-const BAN = "1.2";
+const BAN = "1.3";
 // việc app giao → script phát từ app (ADR-008/009): máy chỉ chạy script đúng hash app xác nhận
 const VIEC_SCRIPT = { dung_video: "dung-video", mo_hinh_bong: "mo-hinh", mo_hinh_chay: "mo-hinh", huan_luyen: "huan-luyen", loc_footage: "loc-footage", nap_drive: "nap-drive", phan_tich_footage: "phan-tich", hoc_thanh_pham: "hoc-thanh-pham" };   // nap_drive: nạp footage từ thư mục Drive (24/09) · phan_tich_footage / hoc_thanh_pham: ADR-010
 const coTransformers = existsSync(join(DIR, "node_modules", "@huggingface", "transformers"));
@@ -19,18 +19,26 @@ const gpu = (() => { const r = spawnSync("nvidia-smi", ["--query-gpu=name,memory
 async function coOllama() { try { const p = await fetch("http://localhost:11434/api/tags", { signal: AbortSignal.timeout(1500) }); return p.ok; } catch { return false; } }
 const CFG = join(DIR, "may-dung.json");
 const args = process.argv.slice(2);
-export const log = (...m) => console.log(new Date().toLocaleTimeString("vi-VN"), ...m);
+// Nhật ký ra file may-dung.log cạnh máy con (ngoài cửa sổ): đọc lại được sau khi cửa sổ đóng / máy khởi động lại.
+// Quá 5 MB thì đổi tên sang may-dung.log.1 (giữ một bản cũ). Ghi hỏng thì bỏ qua — không làm máy dừng.
+const LOG_FILE = join(DIR, "may-dung.log");
+const chuoiLog = (m) => m.map((x) => (typeof x === "string" ? x : x instanceof Error ? (x.stack || x.message) : JSON.stringify(x))).join(" ");
+function ghiLog(muc, m) { try { if (existsSync(LOG_FILE) && statSync(LOG_FILE).size > 5e6) renameSync(LOG_FILE, LOG_FILE + ".1"); appendFileSync(LOG_FILE, new Date().toLocaleString("vi-VN") + (muc ? " " + muc : "") + " " + chuoiLog(m) + "\n"); } catch {} }
+export const log = (...m) => { console.log(new Date().toLocaleTimeString("vi-VN"), ...m); ghiLog("", m); };
+const loi = (...m) => { console.error(...m); ghiLog("[LỖI]", m); };
+process.on("uncaughtException", (e) => { loi("máy con dừng vì lỗi:", e); process.exit(1); });
+process.on("unhandledRejection", (e) => { loi("máy con dừng vì lỗi:", e); process.exit(1); });
 
 if (args[0] === "ghep") {
-  const ma = String(args[1] || "").trim(); if (!ma.startsWith("MAY1.")) { console.error("Mã ghép phải bắt đầu bằng MAY1."); process.exit(2); }
+  const ma = String(args[1] || "").trim(); if (!ma.startsWith("MAY1.")) { loi("Mã ghép phải bắt đầu bằng MAY1."); process.exit(2); }
   const o = JSON.parse(Buffer.from(ma.slice(5).replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf8"));
   writeFileSync(CFG, JSON.stringify({ url: o.url, khoa: o.khoa, may_id: o.may_id, may_ten: o.may_ten, ghep_luc: new Date().toISOString() }, null, 2));
-  console.log("Đã ghép máy '" + o.may_ten + "' với " + o.url + ". Chạy: node may-dung.mjs"); process.exit(0);
+  log("Đã ghép máy '" + o.may_ten + "' với " + o.url + ". Chạy: node may-dung.mjs"); process.exit(0);
 }
-if (!existsSync(CFG)) { console.error("Chưa ghép: node may-dung.mjs ghep <mã ghép từ app › Hồ sơ › Máy dựng>"); process.exit(2); }
+if (!existsSync(CFG)) { loi("Chưa ghép: node may-dung.mjs ghep <mã ghép từ app › Hồ sơ › Máy dựng>"); process.exit(2); }
 export const APP = JSON.parse(readFileSync(CFG, "utf8"));
 const ffmpegOk = (() => { const r = spawnSync("ffmpeg", ["-version"], { encoding: "utf8" }); return !r.error && r.status === 0; })();
-if (!ffmpegOk) console.error("⚠ Chưa có ffmpeg trong PATH — cài: winget install Gyan.FFmpeg rồi mở lại cửa sổ này. Máy vẫn ghép nhưng không dựng được.");
+if (!ffmpegOk) loi("⚠ Chưa có ffmpeg trong PATH — cài: winget install Gyan.FFmpeg rồi mở lại cửa sổ này. Máy vẫn ghép nhưng không dựng được.");
 
 export async function goiApp(duong, opt = {}) {
   let r; try { r = await fetch(APP.url.replace(/\/+$/, "") + duong, { ...opt, headers: { "Content-Type": "application/json", "X-Hub-Key": APP.khoa, ...(opt.headers || {}) } }); } catch (e) { return { ok: false, status: 0, d: { error: "không nối được app: " + String(e.message || e).slice(0, 80) }, headers: new Headers() }; }

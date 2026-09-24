@@ -26,7 +26,8 @@ test('BAT-DAU: dòng hướng dẫn dán mã ghép không có dấu ngoặc (tr�
 
 test('BAT-DAU: git giữ xuống dòng CRLF cho file .bat', () => {
   const ga = fs.readFileSync(new URL('../.gitattributes', import.meta.url), 'utf8');
-  assert.match(ga, /tools\/\*\*\/\*\.bat\s+text\s+eol=crlf/);
+  assert.match(ga, /^tools\/\*\*\/\*\.bat\s+text\s+eol=crlf/m);
+  assert.match(ga, /^dist\/tools\/\*\*\/\*\.bat\s+text\s+eol=crlf/m, 'bản build phát cho máy con cũng phải CRLF');
 });
 
 test('may-dung.mjs: log() ghi thêm ra may-dung.log, có xoay vòng 5 MB và bắt lỗi bất ngờ', () => {
