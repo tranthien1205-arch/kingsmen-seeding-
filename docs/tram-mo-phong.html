@@ -34,8 +34,10 @@ input.f,select.f{font:inherit;font-size:13px;padding:8px 10px;border:1px solid v
 .man{margin:0 auto 40px;box-shadow:0 8px 30px -12px rgba(20,30,27,.4)}
 .topbar{position:sticky;top:0;z-index:9;background:#141E1B;color:#fff;padding:10px 24px;display:flex;gap:10px;align-items:center;font-size:13px}
 .topbar a{color:#fff;opacity:.75;padding:6px 10px;border-radius:4px}.topbar a.on{background:#0C7B6F;opacity:1;font-weight:600}
+.subtabs a{cursor:pointer}.subtabs a.on{border-bottom-color:#0C7B6F!important;color:#0C7B6F!important;font-weight:600}
+.sub[hidden]{display:none}
 </style></head><body>
-<div class="topbar"><b style="font-family:'Source Serif 4',serif;font-size:15px;margin-right:8px">Trạm Masfico — MÔ PHỎNG bản 3 (Tài khoản · Agent · Cài đặt)</b><a href="#Main" data-tab="Main" class="on">Tổng quan</a><a href="#TaiKhoan" data-tab="TaiKhoan">Tài khoản</a><a href="#Agent" data-tab="Agent">Agent</a><a href="#CaiDat" data-tab="CaiDat">Cài đặt hệ thống</a><a href="#NhatKy" data-tab="NhatKy">Nhật ký toàn máy</a><span style="margin-left:auto;opacity:.6">số liệu giả</span></div>
+<div class="topbar"><b style="font-family:'Source Serif 4',serif;font-size:15px;margin-right:8px">Trạm Masfico — MÔ PHỎNG bản 3.1 (Tài khoản · Agent · Cài đặt)</b><a href="#Main" data-tab="Main" class="on">Tổng quan</a><a href="#TaiKhoan" data-tab="TaiKhoan">Tài khoản</a><a href="#Agent" data-tab="Agent">Agent</a><a href="#CaiDat" data-tab="CaiDat">Cài đặt hệ thống</a><a href="#NhatKy" data-tab="NhatKy">Nhật ký toàn máy</a><span style="margin-left:auto;opacity:.6">số liệu giả</span></div>
 <section class="man" id="Main"><div style="width: 1280px; min-height: 900px; box-sizing: border-box; display: flex; background: #F2F5F3; font-family: 'Be Vietnam Pro', system-ui, sans-serif; color: #141E1B;">
   <nav class="nav" style="width: 232px;">
     <div style="display: flex; align-items: center; gap: 10px; padding: 4px 12px 18px;">
@@ -118,72 +120,100 @@ input.f,select.f{font:inherit;font-size:13px;padding:8px 10px;border:1px solid v
   <nav class="nav" style="width: 232px;">
     <div style="display: flex; align-items: center; gap: 10px; padding: 4px 12px 18px;"><div style="width: 34px; height: 34px; border-radius: 4px; background: #0C7B6F; color: #fff; display: grid; place-items: center; font-family: 'Source Serif 4', serif; font-weight: 700; font-size: 18px;">T</div><div><div style="font-family: 'Source Serif 4', serif; font-weight: 700; font-size: 16px; line-height: 1.1;">Trạm Masfico</div><div class="muted" style="font-size: 11px;">Ngoc-Han · v9.157 · mô phỏng</div></div></div>
     <a href="#Main" data-tab="Main">Tổng quan<span class="badge">3</span></a>
-    <a href="#TaiKhoan" data-tab="TaiKhoan" class="on">Tài khoản<span class="badge">2</span></a>
+    <a href="#TaiKhoan" data-tab="TaiKhoan" class="on">Tài khoản<span class="badge">3</span></a>
     <a href="#Agent" data-tab="Agent">Agent</a>
     <a href="#CaiDat" data-tab="CaiDat">Cài đặt hệ thống</a>
   </nav>
-  <main style="flex-grow: 1; padding: 28px 32px; display: flex; flex-direction: column; gap: 18px; overflow: hidden;">
+  <main style="flex-grow: 1; padding: 28px 32px 40px; display: flex; flex-direction: column; gap: 18px;">
     <div style="display: flex; align-items: flex-end; justify-content: space-between;">
-      <div style="display: flex; flex-direction: column; gap: 4px;"><div class="lbl">6 nền tảng · 11 tài khoản</div><h1 class="t-h1">Tài khoản đăng nhập, xếp theo nền tảng</h1><div class="muted" style="max-width: 68ch;">Mỗi tài khoản là một phiên đăng nhập giữ trên máy này, không giữ mật khẩu. Đăng nhập một lần, phiên giữ hàng tháng. Cột "cấp cho agent" cho biết chìa khoá này đang giao cho ai dùng.</div></div>
-      <button class="btn pri">＋ Thêm tài khoản</button>
+      <div style="display: flex; flex-direction: column; gap: 4px;"><div class="lbl">6 nền tảng · 12 tài khoản · 3 cần xử lý</div><h1 class="t-h1">Tài khoản đăng nhập, xếp theo nền tảng</h1><div class="muted" style="max-width: 68ch;">Mỗi tài khoản là một phiên đăng nhập giữ trên máy này, không giữ mật khẩu. Đăng nhập một lần, phiên giữ hàng tuần đến hàng tháng. Cột "cấp cho agent" cho biết chìa khoá này đang giao cho nhân viên nào.</div></div>
+      <div style="display: flex; gap: 8px;"><select class="f" aria-label="Lọc"><option>Mọi nền tảng</option><option>Chỉ cần xử lý (3)</option></select><button class="btn pri">＋ Thêm tài khoản</button></div>
     </div>
-    <div style="display: flex; flex-direction: column; gap: 14px; overflow: hidden;">
-      <section class="card" style="overflow: hidden;">
-        <div style="padding: 10px 16px; border-bottom: 1px solid #E9EEEC; display: flex; align-items: center; gap: 10px;"><h2 class="t-h2">Facebook</h2><span class="muted">5 tài khoản · 1 cần xử lý</span><button class="btn sm" style="margin-left: auto;">＋ Thêm tài khoản Facebook</button></div>
-        <table>
-          <thead><tr><th>Tài khoản</th><th>Mã trên máy</th><th>Phiên</th><th>Đăng nhập</th><th>Dùng lần cuối</th><th>Cấp cho agent</th><th></th></tr></thead>
-          <tbody>
-            <tr><td><b>Kingsmen Page (admin)</b><div class="muted">inbox Business Suite, đăng Page</div></td><td><span class="chip">facebook</span></td><td><span class="pill ok"><span class="dot"></span>Hoạt động</span></td><td>12/09</td><td>06:35</td><td><span class="chip">Hội thoại FB</span> <span class="chip">Đăng bài</span> <span class="chip">Đo lường</span></td><td style="text-align: right; white-space: nowrap;"><button class="btn sm">Mở trình duyệt</button> <button class="btn sm">Đăng xuất</button></td></tr>
-            <tr><td><b>Anh Tư thợ ốp</b><div class="muted">seeding, giọng thợ</div></td><td><span class="chip">facebook-2</span></td><td><span class="pill ok"><span class="dot"></span>Hoạt động</span></td><td>15/09</td><td>07:05</td><td><span class="chip">Seeding hội nhóm</span></td><td style="text-align: right; white-space: nowrap;"><button class="btn sm">Mở trình duyệt</button> <button class="btn sm">Đăng xuất</button></td></tr>
-            <tr style="background: #F7E5E1;"><td><b>Thầu Bảy</b><div class="muted">seeding, giọng thầu</div></td><td><span class="chip">facebook-3</span></td><td><span class="pill bad"><span class="dot"></span>Checkpoint</span></td><td>15/09</td><td>06:41</td><td><span class="chip">Seeding hội nhóm</span> <span class="hot">· agent đã tạm dừng dùng</span></td><td style="text-align: right; white-space: nowrap;"><button class="btn sm pri">Xác minh</button></td></tr>
-            <tr><td><b>Chị Lan</b><div class="muted">seeding, giọng chủ nhà</div></td><td><span class="chip">facebook-4</span></td><td><span class="pill ok"><span class="dot"></span>Hoạt động</span></td><td>18/09</td><td>hôm qua</td><td><span class="chip">Seeding hội nhóm</span></td><td style="text-align: right; white-space: nowrap;"><button class="btn sm">Mở trình duyệt</button> <button class="btn sm">Đăng xuất</button></td></tr>
-            <tr style="opacity: .7;"><td><b>(trống)</b><div class="muted">chưa đăng nhập</div></td><td><span class="chip">facebook-5</span></td><td><span class="pill off">Chưa đăng nhập</span></td><td>—</td><td>—</td><td class="muted">chưa cấp</td><td style="text-align: right; white-space: nowrap;"><button class="btn sm pri">Đăng nhập</button></td></tr>
-          </tbody>
-        </table>
-      </section>
-      <section class="card" style="overflow: hidden;">
-        <div style="padding: 10px 16px; border-bottom: 1px solid #E9EEEC; display: flex; align-items: center; gap: 10px;"><h2 class="t-h2">TikTok</h2><span class="muted">2 tài khoản · 1 hết phiên</span><button class="btn sm" style="margin-left: auto;">＋ Thêm</button></div>
-        <table>
-          <tbody>
-            <tr style="background: #F7E5E1;"><td style="width: 26%;"><b>Kênh cá nhân Kingsmen</b><div class="muted">tin nhắn, bình luận, đăng video</div></td><td><span class="chip">tiktok_cn</span></td><td><span class="pill bad"><span class="dot"></span>Hết phiên 03:10</span></td><td>08/09</td><td>hôm qua 21:00</td><td><span class="chip">Hội thoại TikTok</span> <span class="chip">Đăng bài</span> <span class="hot">· 2 việc đang chờ</span></td><td style="text-align: right;"><button class="btn sm pri">Đăng nhập lại</button></td></tr>
-            <tr><td><b>TikTok Shop</b><div class="muted">đơn, tồn, tài chính</div></td><td><span class="chip">tiktok</span></td><td><span class="pill ok"><span class="dot"></span>Hoạt động</span></td><td>15/09</td><td>06:50</td><td><span class="chip">Sàn TMĐT</span></td><td style="text-align: right;"><button class="btn sm">Đăng xuất</button></td></tr>
-          </tbody>
-        </table>
-      </section>
-      <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px;">
-        <section class="card" style="overflow: hidden;">
-          <div style="padding: 10px 16px; border-bottom: 1px solid #E9EEEC; display: flex; align-items: center; gap: 10px;"><h2 class="t-h2">Zalo</h2><span class="muted">1 · quét QR</span></div>
-          <table><tbody><tr><td><b>Zalo phòng MKT</b><div class="muted">nghe nhóm thợ</div></td><td><span class="pill warn"><span class="dot"></span>Còn 2 ngày</span></td><td><span class="chip">Nghe nhóm Zalo</span></td><td style="text-align: right;"><button class="btn sm">Quét QR lại</button></td></tr></tbody></table>
-        </section>
-        <section class="card" style="overflow: hidden;">
-          <div style="padding: 10px 16px; border-bottom: 1px solid #E9EEEC; display: flex; align-items: center; gap: 10px;"><h2 class="t-h2">Fchat · AMIS · Facebook Ads</h2><span class="muted">3 · đăng nhập web</span></div>
-          <table><tbody>
-            <tr><td><b>Fchat chủ shop</b></td><td><span class="pill ok"><span class="dot"></span>Hoạt động</span></td><td><span class="chip">Phân công hội thoại</span></td><td style="text-align: right;"><button class="btn sm">Đăng xuất</button></td></tr>
-            <tr><td><b>AMIS CRM</b></td><td><span class="pill ok"><span class="dot"></span>Hoạt động</span></td><td><span class="chip">CRM</span></td><td style="text-align: right;"><button class="btn sm">Đăng xuất</button></td></tr>
-            <tr><td><b>Facebook Ads</b></td><td><span class="pill ok"><span class="dot"></span>Hoạt động</span></td><td><span class="chip">Quảng cáo</span></td><td style="text-align: right;"><button class="btn sm">Đăng xuất</button></td></tr>
-          </tbody></table>
-        </section>
-      </div>
-    </div>
+
+    <section class="card" style="overflow: hidden;">
+      <div style="padding: 10px 16px; border-bottom: 1px solid #E9EEEC; display: flex; align-items: center; gap: 10px;"><h2 class="t-h2">Facebook</h2><span class="muted">5 tài khoản · 1 checkpoint · 1 trống</span><button class="btn sm" style="margin-left: auto;">＋ Thêm tài khoản Facebook</button></div>
+      <table>
+        <thead><tr><th style="width: 24%;">Tài khoản</th><th>Mã trên máy</th><th>Phiên</th><th>Đăng nhập</th><th>Dùng lần cuối</th><th style="width: 26%;">Cấp cho agent</th><th></th></tr></thead>
+        <tbody>
+          <tr><td><b>Kingsmen Page (admin)</b><div class="muted">inbox Business Suite, đăng Page</div></td><td><span class="chip">facebook</span></td><td><span class="pill ok"><span class="dot"></span>Hoạt động</span></td><td>12/09</td><td>06:35</td><td><span class="chip">Hội thoại FB</span> <span class="chip">Đăng bài &amp; đo</span></td><td style="text-align: right; white-space: nowrap;"><button class="btn sm">Mở trình duyệt</button> <button class="btn sm">Đăng xuất</button></td></tr>
+          <tr><td><b>Anh Tư thợ ốp</b><div class="muted">seeding, giọng thợ</div></td><td><span class="chip">facebook-2</span></td><td><span class="pill ok"><span class="dot"></span>Hoạt động</span></td><td>15/09</td><td>07:05</td><td><span class="chip">Seeding hội nhóm</span></td><td style="text-align: right; white-space: nowrap;"><button class="btn sm">Mở trình duyệt</button> <button class="btn sm">Đăng xuất</button></td></tr>
+          <tr style="background: #F7E5E1;"><td><b>Thầu Bảy</b><div class="muted">seeding, giọng thầu</div></td><td><span class="chip">facebook-3</span></td><td><span class="pill bad"><span class="dot"></span>Checkpoint 06:41</span></td><td>15/09</td><td>06:41</td><td><span class="chip">Seeding hội nhóm</span><div class="hot" style="font-size: 12px;">agent đã tạm dừng dùng 24h</div></td><td style="text-align: right; white-space: nowrap;"><button class="btn sm pri">Xác minh</button> <button class="btn sm">Đăng xuất</button></td></tr>
+          <tr><td><b>Chị Lan</b><div class="muted">seeding, giọng chủ nhà</div></td><td><span class="chip">facebook-4</span></td><td><span class="pill ok"><span class="dot"></span>Hoạt động</span></td><td>18/09</td><td>hôm qua 18:20</td><td><span class="chip">Seeding hội nhóm</span></td><td style="text-align: right; white-space: nowrap;"><button class="btn sm">Mở trình duyệt</button> <button class="btn sm">Đăng xuất</button></td></tr>
+          <tr style="opacity: .7;"><td><b>(trống)</b><div class="muted">chưa đăng nhập</div></td><td><span class="chip">facebook-5</span></td><td><span class="pill off">Chưa đăng nhập</span></td><td>—</td><td>—</td><td class="muted">chưa cấp</td><td style="text-align: right; white-space: nowrap;"><button class="btn sm pri">Đăng nhập</button></td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="card" style="overflow: hidden;">
+      <div style="padding: 10px 16px; border-bottom: 1px solid #E9EEEC; display: flex; align-items: center; gap: 10px;"><h2 class="t-h2">TikTok</h2><span class="muted">2 tài khoản · 1 hết phiên</span><button class="btn sm" style="margin-left: auto;">＋ Thêm tài khoản TikTok</button></div>
+      <table>
+        <thead><tr><th style="width: 24%;">Tài khoản</th><th>Mã trên máy</th><th>Phiên</th><th>Đăng nhập</th><th>Dùng lần cuối</th><th style="width: 26%;">Cấp cho agent</th><th></th></tr></thead>
+        <tbody>
+          <tr style="background: #F7E5E1;"><td><b>Kênh cá nhân Kingsmen</b><div class="muted">tin nhắn, bình luận, đăng video</div></td><td><span class="chip">tiktok_cn</span></td><td><span class="pill bad"><span class="dot"></span>Hết phiên 03:10</span></td><td>08/09</td><td>hôm qua 21:00</td><td><span class="chip">Hội thoại TikTok</span> <span class="chip">Đăng bài &amp; đo</span><div class="hot" style="font-size: 12px;">2 việc đang chờ phiên</div></td><td style="text-align: right; white-space: nowrap;"><button class="btn sm pri">Đăng nhập lại</button></td></tr>
+          <tr><td><b>TikTok Shop</b><div class="muted">đơn, tồn, tài chính</div></td><td><span class="chip">tiktok</span></td><td><span class="pill ok"><span class="dot"></span>Hoạt động</span></td><td>15/09</td><td>06:50</td><td><span class="chip">Sàn TMĐT</span></td><td style="text-align: right; white-space: nowrap;"><button class="btn sm">Mở trình duyệt</button> <button class="btn sm">Đăng xuất</button></td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="card" style="overflow: hidden;">
+      <div style="padding: 10px 16px; border-bottom: 1px solid #E9EEEC; display: flex; align-items: center; gap: 10px;"><h2 class="t-h2">Zalo</h2><span class="muted">1 tài khoản · đăng nhập bằng quét QR · phiên sắp hết</span><button class="btn sm" style="margin-left: auto;">＋ Thêm tài khoản Zalo</button></div>
+      <table>
+        <thead><tr><th style="width: 24%;">Tài khoản</th><th>Mã trên máy</th><th>Phiên</th><th>Đăng nhập</th><th>Dùng lần cuối</th><th style="width: 26%;">Cấp cho agent</th><th></th></tr></thead>
+        <tbody>
+          <tr style="background: #F6EDD6;"><td><b>Zalo phòng MKT</b><div class="muted">nghe nhóm thợ, nhóm đại lý</div></td><td><span class="chip">zalo</span></td><td><span class="pill warn"><span class="dot"></span>Còn 2 ngày</span></td><td>10/09</td><td>07:00</td><td><span class="chip">Nghe nhóm Zalo</span></td><td style="text-align: right; white-space: nowrap;"><button class="btn sm pri">Quét QR lại</button> <button class="btn sm">Đăng xuất</button></td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="card" style="overflow: hidden;">
+      <div style="padding: 10px 16px; border-bottom: 1px solid #E9EEEC; display: flex; align-items: center; gap: 10px;"><h2 class="t-h2">Fchat</h2><span class="muted">1 tài khoản · đăng nhập web</span><button class="btn sm" style="margin-left: auto;">＋ Thêm tài khoản Fchat</button></div>
+      <table>
+        <thead><tr><th style="width: 24%;">Tài khoản</th><th>Mã trên máy</th><th>Phiên</th><th>Đăng nhập</th><th>Dùng lần cuối</th><th style="width: 26%;">Cấp cho agent</th><th></th></tr></thead>
+        <tbody>
+          <tr><td><b>Fchat chủ shop</b><div class="muted">hội thoại được chia, nhân viên</div></td><td><span class="chip">fchat</span></td><td><span class="pill ok"><span class="dot"></span>Hoạt động</span></td><td>02/09</td><td>07:00</td><td><span class="chip">Fchat phân công</span></td><td style="text-align: right; white-space: nowrap;"><button class="btn sm">Mở trình duyệt</button> <button class="btn sm">Đăng xuất</button></td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="card" style="overflow: hidden;">
+      <div style="padding: 10px 16px; border-bottom: 1px solid #E9EEEC; display: flex; align-items: center; gap: 10px;"><h2 class="t-h2">AMIS CRM</h2><span class="muted">1 tài khoản · đăng nhập web</span><button class="btn sm" style="margin-left: auto;">＋ Thêm tài khoản AMIS</button></div>
+      <table>
+        <thead><tr><th style="width: 24%;">Tài khoản</th><th>Mã trên máy</th><th>Phiên</th><th>Đăng nhập</th><th>Dùng lần cuối</th><th style="width: 26%;">Cấp cho agent</th><th></th></tr></thead>
+        <tbody>
+          <tr><td><b>AMIS phòng kinh doanh</b><div class="muted">khách, cơ hội, đơn</div></td><td><span class="chip">amis</span></td><td><span class="pill ok"><span class="dot"></span>Hoạt động</span></td><td>05/09</td><td>06:30</td><td><span class="chip">AMIS CRM</span></td><td style="text-align: right; white-space: nowrap;"><button class="btn sm">Mở trình duyệt</button> <button class="btn sm">Đăng xuất</button></td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="card" style="overflow: hidden;">
+      <div style="padding: 10px 16px; border-bottom: 1px solid #E9EEEC; display: flex; align-items: center; gap: 10px;"><h2 class="t-h2">Facebook Ads &amp; Business</h2><span class="muted">2 tài khoản · đăng nhập web</span><button class="btn sm" style="margin-left: auto;">＋ Thêm tài khoản Ads</button></div>
+      <table>
+        <thead><tr><th style="width: 24%;">Tài khoản</th><th>Mã trên máy</th><th>Phiên</th><th>Đăng nhập</th><th>Dùng lần cuối</th><th style="width: 26%;">Cấp cho agent</th><th></th></tr></thead>
+        <tbody>
+          <tr><td><b>Ads Manager Kingsmen</b><div class="muted">chi tiêu, kết quả chiến dịch</div></td><td><span class="chip">fb_ads</span></td><td><span class="pill ok"><span class="dot"></span>Hoạt động</span></td><td>12/09</td><td>05:40</td><td><span class="chip">Quảng cáo &amp; đối thủ</span></td><td style="text-align: right; white-space: nowrap;"><button class="btn sm">Mở trình duyệt</button> <button class="btn sm">Đăng xuất</button></td></tr>
+          <tr><td><b>Thư viện quảng cáo (công khai)</b><div class="muted">quét đối thủ, không cần đăng nhập</div></td><td><span class="chip">fb_adlib</span></td><td><span class="pill off">Không cần phiên</span></td><td>—</td><td>05:40</td><td><span class="chip">Quảng cáo &amp; đối thủ</span></td><td style="text-align: right; white-space: nowrap;"><button class="btn sm">Mở trình duyệt</button></td></tr>
+        </tbody>
+      </table>
+    </section>
   </main>
 </div></section>
 <section class="man" id="Agent" hidden><div style="width: 1280px; min-height: 900px; box-sizing: border-box; display: flex; background: #F2F5F3; font-family: 'Be Vietnam Pro', system-ui, sans-serif; color: #141E1B;">
   <nav class="nav" style="width: 232px;">
     <div style="display: flex; align-items: center; gap: 10px; padding: 4px 12px 18px;"><div style="width: 34px; height: 34px; border-radius: 4px; background: #0C7B6F; color: #fff; display: grid; place-items: center; font-family: 'Source Serif 4', serif; font-weight: 700; font-size: 18px;">T</div><div><div style="font-family: 'Source Serif 4', serif; font-weight: 700; font-size: 16px; line-height: 1.1;">Trạm Masfico</div><div class="muted" style="font-size: 11px;">Ngoc-Han · v9.157 · mô phỏng</div></div></div>
     <a href="#Main" data-tab="Main">Tổng quan<span class="badge">3</span></a>
-    <a href="#TaiKhoan" data-tab="TaiKhoan">Tài khoản<span class="badge">2</span></a>
+    <a href="#TaiKhoan" data-tab="TaiKhoan">Tài khoản<span class="badge">3</span></a>
     <a href="#Agent" data-tab="Agent" class="on">Agent</a>
     <a href="#CaiDat" data-tab="CaiDat">Cài đặt hệ thống</a>
   </nav>
-  <main style="flex-grow: 1; padding: 28px 32px; display: flex; flex-direction: column; gap: 16px; overflow: hidden;">
+  <main style="flex-grow: 1; padding: 28px 32px 40px; display: flex; flex-direction: column; gap: 16px;">
     <div style="display: flex; align-items: flex-end; justify-content: space-between;">
-      <div style="display: flex; flex-direction: column; gap: 4px;"><div class="lbl">9 agent · 27 nhiệm vụ</div><h1 class="t-h1">Mỗi agent là một nhân viên: nhiệm vụ, tài khoản được cấp, lịch, cách làm</h1><div class="muted" style="max-width: 72ch;">Chọn một agent để xem nó được giao gì, được dùng chìa khoá nào, làm lúc nào, làm ra sao, hôm nay tình trạng thế nào. Nội dung bài và chọn nhóm vẫn quyết ở app.</div></div>
+      <div style="display: flex; flex-direction: column; gap: 4px;"><div class="lbl">9 agent · 27 nhiệm vụ</div><h1 class="t-h1">Mỗi agent là một nhân viên: nhiệm vụ, tài khoản được cấp, lịch, cách làm</h1><div class="muted" style="max-width: 72ch;">Chọn một agent bên trái, rồi xem 5 mục: được giao gì, được dùng chìa khoá nào, làm ra sao, hôm nay đã làm gì, 30 ngày qua ra kết quả gì. Nội dung bài và chọn nhóm vẫn quyết ở app.</div></div>
       <button class="btn pri">＋ Thêm agent</button>
     </div>
-    <div style="display: grid; grid-template-columns: 280px minmax(0, 1fr); gap: 16px; flex-grow: 1; min-height: 0;">
+    <div style="display: grid; grid-template-columns: 280px minmax(0, 1fr); gap: 16px; align-items: start;">
       <aside class="card" style="display: flex; flex-direction: column; overflow: hidden;">
         <div style="padding: 10px 12px; border-bottom: 1px solid #E9EEEC;"><input class="f" type="search" placeholder="Tìm agent…" style="width: 100%;" aria-label="Tìm agent"></div>
-        <div style="display: flex; flex-direction: column; overflow: hidden;">
+        <div style="display: flex; flex-direction: column;">
           <a href="#seeding" style="display: flex; flex-direction: column; gap: 2px; padding: 10px 14px; background: #E3F0ED; color: #141E1B; border-left: 3px solid #0C7B6F;"><span style="display: flex; align-items: center; gap: 8px; font-weight: 600;"><span class="dot" style="color: #B08D2E;"></span>Seeding hội nhóm</span><span class="muted">3 tài khoản · 4 nhiệm vụ · 1 kẹt</span></a>
           <a href="#dang" style="display: flex; flex-direction: column; gap: 2px; padding: 10px 14px; color: #141E1B;"><span style="display: flex; align-items: center; gap: 8px; font-weight: 600;"><span class="dot" style="color: #0C7B6F;"></span>Đăng bài &amp; đo lường</span><span class="muted">2 tài khoản · 2 nhiệm vụ</span></a>
           <a href="#dung" style="display: flex; flex-direction: column; gap: 2px; padding: 10px 14px; color: #141E1B;"><span style="display: flex; align-items: center; gap: 8px; font-weight: 600;"><span class="dot" style="color: #0C7B6F;"></span>Dựng video</span><span class="muted">không cần tài khoản · đang chạy</span></a>
@@ -199,44 +229,135 @@ input.f,select.f{font:inherit;font-size:13px;padding:8px 10px;border:1px solid v
       <section class="card" style="display: flex; flex-direction: column; overflow: hidden;">
         <div style="padding: 14px 18px; border-bottom: 1px solid #E9EEEC; display: flex; gap: 14px; align-items: flex-start;">
           <div style="flex-grow: 1;"><div style="display: flex; align-items: center; gap: 10px;"><h2 class="t-h2">Seeding hội nhóm</h2><span class="pill warn"><span class="dot"></span>Hôm nay kẹt 1 tài khoản</span></div>
-            <div class="muted" style="margin-top: 4px; max-width: 70ch;"><b>Nhiệm vụ:</b> đăng bài seeding vào hội nhóm thợ theo gói Content OS đã duyệt, bình luận dẫn dắt bằng tài khoản khác, nuôi tài khoản mỗi ngày, kiểm bài sau 2 và 7 ngày. <b>Làm việc cho:</b> Content OS.</div></div>
+            <div class="muted" style="margin-top: 4px; max-width: 70ch;"><b>Nhiệm vụ:</b> đăng bài seeding vào hội nhóm thợ theo gói Content OS đã duyệt, bình luận dẫn dắt bằng tài khoản khác, nuôi tài khoản mỗi ngày, kiểm bài sau 2 và 7 ngày. <b>Làm việc cho:</b> Content OS. <b>Tạo:</b> 15/09/2026.</div></div>
           <div style="display: flex; gap: 6px;"><button class="btn sm">Tạm nghỉ</button><button class="btn sm">Sửa agent</button></div>
         </div>
-        <div style="display: flex; gap: 0; border-bottom: 1px solid #E9EEEC; padding: 0 18px;"><a href="#tab1" style="padding: 10px 12px; border-bottom: 2px solid #0C7B6F; color: #0C7B6F; font-weight: 600;">Nhiệm vụ &amp; lịch</a><a href="#tab2" style="padding: 10px 12px; color: #3D4E49;">Tài khoản được cấp (3)</a><a href="#tab3" style="padding: 10px 12px; color: #3D4E49;">Cách làm</a><a href="#tab4" style="padding: 10px 12px; color: #3D4E49;">Nhật ký hôm nay (6)</a><a href="#tab5" style="padding: 10px 12px; color: #3D4E49;">Kết quả 30 ngày</a></div>
-        <table>
-          <thead><tr><th>Nhiệm vụ</th><th>Lịch</th><th>Dùng tài khoản</th><th>Lần cuối</th><th>Tình trạng</th><th></th></tr></thead>
-          <tbody>
-            <tr><td><b>Đăng bài seeding</b><div class="muted">gói &amp; nhóm do Content OS chọn</div></td><td>khi app giao · giờ vàng nhóm</td><td><span class="chip">facebook-2</span> <span class="chip" style="color: #A3372B;">facebook-3 ⏸</span> <span class="chip">facebook-4</span></td><td>06:41</td><td><span class="pill bad">Checkpoint facebook-3</span></td><td style="text-align: right; white-space: nowrap;"><button class="btn sm">Xem</button> <button class="btn sm">Sửa</button></td></tr>
-            <tr><td><b>Bình luận dẫn dắt</b><div class="muted">tài khoản khác người đăng, theo vai</div></td><td>30–180 phút sau bài</td><td><span class="chip">facebook-2</span> <span class="chip">facebook-4</span></td><td>hôm qua 18:20</td><td><span class="pill ok">Bật</span></td><td style="text-align: right; white-space: nowrap;"><button class="btn sm">Xem</button> <button class="btn sm">Sửa</button></td></tr>
-            <tr><td><b>Nuôi tài khoản</b><div class="muted">xem nhóm, thả tim, không đăng</div></td><td>1 lượt/ngày · 8–21h</td><td><span class="chip">facebook-2</span> <span class="chip">facebook-4</span></td><td>hôm qua 15:05</td><td><span class="pill ok">Bật</span></td><td style="text-align: right; white-space: nowrap;"><button class="btn sm">Xem</button> <button class="btn sm">Sửa</button></td></tr>
-            <tr><td><b>Kiểm &amp; đo bài</b><div class="muted">còn sống, react, bình luận, lead</div></td><td>07:30 · ngày 2 và 7</td><td><span class="chip">facebook</span></td><td>hôm qua 07:30 · 4 bài</td><td><span class="pill ok">Bật</span></td><td style="text-align: right; white-space: nowrap;"><button class="btn sm pri">Chạy ngay</button> <button class="btn sm">Sửa</button></td></tr>
-          </tbody>
-        </table>
-        <div style="display: grid; grid-template-columns: 5fr 7fr; gap: 0; border-top: 1px solid #E9EEEC; margin-top: auto;">
-          <div style="padding: 14px 18px; border-right: 1px solid #E9EEEC;">
-            <h3 class="t-h3">Tài khoản được cấp</h3>
-            <div style="display: flex; flex-direction: column; gap: 6px; margin-top: 8px; font-size: 13px;">
-              <label style="display: flex; align-items: center; gap: 8px;"><input type="checkbox" checked>facebook-2 · Anh Tư<span class="pill ok" style="margin-left: auto;">● phiên tốt</span></label>
-              <label style="display: flex; align-items: center; gap: 8px;"><input type="checkbox" checked>facebook-3 · Thầu Bảy<span class="pill bad" style="margin-left: auto;">tạm dừng 24h</span></label>
-              <label style="display: flex; align-items: center; gap: 8px;"><input type="checkbox" checked>facebook-4 · Chị Lan<span class="pill ok" style="margin-left: auto;">● phiên tốt</span></label>
-              <label style="display: flex; align-items: center; gap: 8px;"><input type="checkbox">facebook · Kingsmen Page<span class="muted" style="margin-left: auto;">không cấp: admin Page</span></label>
-            </div>
-            <div class="muted" style="margin-top: 8px;">Một tài khoản có thể cấp cho nhiều agent, nhưng Trạm không cho hai agent dùng cùng lúc.</div>
-          </div>
-          <div style="padding: 14px 18px;">
-            <h3 class="t-h3">Tình trạng hôm nay</h3>
-            <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-top: 8px;">
-              <div><div class="t-num" style="font-size: 22px; color: #0C7B6F;">3</div><div class="muted">bài đã đăng</div></div>
-              <div><div class="t-num" style="font-size: 22px;">2</div><div class="muted">bình luận</div></div>
-              <div><div class="t-num" style="font-size: 22px; color: #A3372B;">1</div><div class="muted">lỗi checkpoint</div></div>
-              <div><div class="t-num" style="font-size: 22px;">1</div><div class="muted">lead bắt được</div></div>
-            </div>
-            <div style="margin-top: 10px; font-size: 12.5px; display: flex; flex-direction: column; gap: 3px;">
-              <div><span class="muted">07:30</span> · Kiểm 4 bài: 3 đạt, 1 nghi ngờ · 1 lead hỏi giá → giao MKT</div>
-              <div><span class="muted">06:41</span> · <span class="hot">Đăng vào Hội thợ ốp lát: checkpoint facebook-3 → dừng, báo app</span></div>
-              <div><span class="muted">06:20</span> · Đăng vào Nhà thầu dân dụng bằng facebook-2 · <a href="#">link bài</a></div>
+
+        <div class="subtabs" style="display: flex; border-bottom: 1px solid #E9EEEC; padding: 0 18px;">
+          <a href="#s1" data-sub="s1" class="on" style="padding: 10px 12px; border-bottom: 2px solid transparent; color: #3D4E49;">Nhiệm vụ &amp; lịch</a>
+          <a href="#s2" data-sub="s2" style="padding: 10px 12px; border-bottom: 2px solid transparent; color: #3D4E49;">Tài khoản được cấp (3)</a>
+          <a href="#s3" data-sub="s3" style="padding: 10px 12px; border-bottom: 2px solid transparent; color: #3D4E49;">Cách làm</a>
+          <a href="#s4" data-sub="s4" style="padding: 10px 12px; border-bottom: 2px solid transparent; color: #3D4E49;">Nhật ký hôm nay (6)</a>
+          <a href="#s5" data-sub="s5" style="padding: 10px 12px; border-bottom: 2px solid transparent; color: #3D4E49;">Kết quả 30 ngày</a>
+        </div>
+
+        <!-- 1. Nhiệm vụ & lịch -->
+        <div class="sub" id="s1">
+          <table>
+            <thead><tr><th>Nhiệm vụ</th><th>Lịch</th><th>Dùng tài khoản</th><th>Lần cuối</th><th>Tình trạng</th><th></th></tr></thead>
+            <tbody>
+              <tr><td><b>Đăng bài seeding</b><div class="muted">gói &amp; nhóm do Content OS chọn</div></td><td>khi app giao · giờ vàng nhóm</td><td><span class="chip">facebook-2</span> <span class="chip" style="color: #A3372B;">facebook-3 ⏸</span> <span class="chip">facebook-4</span></td><td>06:41</td><td><span class="pill bad">Checkpoint facebook-3</span></td><td style="text-align: right; white-space: nowrap;"><button class="btn sm">Xem</button> <button class="btn sm">Sửa</button></td></tr>
+              <tr><td><b>Bình luận dẫn dắt</b><div class="muted">tài khoản khác người đăng, theo vai</div></td><td>30–180 phút sau bài</td><td><span class="chip">facebook-2</span> <span class="chip">facebook-4</span></td><td>hôm qua 18:20</td><td><span class="pill ok">Bật</span></td><td style="text-align: right; white-space: nowrap;"><button class="btn sm">Xem</button> <button class="btn sm">Sửa</button></td></tr>
+              <tr><td><b>Nuôi tài khoản</b><div class="muted">xem nhóm, thả tim, không đăng</div></td><td>1 lượt/ngày · 8–21h</td><td><span class="chip">facebook-2</span> <span class="chip">facebook-4</span></td><td>hôm qua 15:05</td><td><span class="pill ok">Bật</span></td><td style="text-align: right; white-space: nowrap;"><button class="btn sm">Xem</button> <button class="btn sm">Sửa</button></td></tr>
+              <tr><td><b>Kiểm &amp; đo bài</b><div class="muted">còn sống, react, bình luận, lead</div></td><td>07:30 · ngày 2 và 7</td><td><span class="chip">facebook</span></td><td>hôm qua 07:30 · 4 bài</td><td><span class="pill ok">Bật</span></td><td style="text-align: right; white-space: nowrap;"><button class="btn sm pri">Chạy ngay</button> <button class="btn sm">Sửa</button></td></tr>
+            </tbody>
+          </table>
+          <div style="padding: 14px 18px; border-top: 1px solid #E9EEEC;">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;"><h3 class="t-h3">Lịch tuần này</h3><span class="muted">giờ máy · ô đậm là có việc · Chủ nhật nghỉ đăng</span></div>
+            <div style="display: grid; grid-template-columns: 90px repeat(7, 1fr); gap: 4px; font-size: 12px;">
+              <div class="muted"></div><div class="muted" style="text-align: center;">T2</div><div class="muted" style="text-align: center;">T3</div><div class="muted" style="text-align: center;">T4 · nay</div><div class="muted" style="text-align: center;">T5</div><div class="muted" style="text-align: center;">T6</div><div class="muted" style="text-align: center;">T7</div><div class="muted" style="text-align: center;">CN</div>
+              <div class="muted">Đăng bài</div><div style="background: #E3F0ED; border-radius: 4px; text-align: center; padding: 4px;">2</div><div style="background: #E3F0ED; border-radius: 4px; text-align: center; padding: 4px;">3</div><div style="background: #F7E5E1; border-radius: 4px; text-align: center; padding: 4px; color: #A3372B; font-weight: 600;">3 · 1 kẹt</div><div style="background: #E3F0ED; border-radius: 4px; text-align: center; padding: 4px;">2</div><div style="background: #E3F0ED; border-radius: 4px; text-align: center; padding: 4px;">3</div><div style="background: #E3F0ED; border-radius: 4px; text-align: center; padding: 4px;">1</div><div style="background: #E9EEEC; border-radius: 4px; text-align: center; padding: 4px; color: #68807A;">—</div>
+              <div class="muted">Bình luận</div><div style="background: #E3F0ED; border-radius: 4px; text-align: center; padding: 4px;">4</div><div style="background: #E3F0ED; border-radius: 4px; text-align: center; padding: 4px;">6</div><div style="background: #E3F0ED; border-radius: 4px; text-align: center; padding: 4px;">4</div><div style="background: #E3F0ED; border-radius: 4px; text-align: center; padding: 4px;">4</div><div style="background: #E3F0ED; border-radius: 4px; text-align: center; padding: 4px;">6</div><div style="background: #E3F0ED; border-radius: 4px; text-align: center; padding: 4px;">2</div><div style="background: #E9EEEC; border-radius: 4px; text-align: center; padding: 4px; color: #68807A;">—</div>
+              <div class="muted">Nuôi</div><div style="background: #E3F0ED; border-radius: 4px; text-align: center; padding: 4px;">3 tk</div><div style="background: #E3F0ED; border-radius: 4px; text-align: center; padding: 4px;">3 tk</div><div style="background: #E3F0ED; border-radius: 4px; text-align: center; padding: 4px;">2 tk</div><div style="background: #E3F0ED; border-radius: 4px; text-align: center; padding: 4px;">3 tk</div><div style="background: #E3F0ED; border-radius: 4px; text-align: center; padding: 4px;">3 tk</div><div style="background: #E3F0ED; border-radius: 4px; text-align: center; padding: 4px;">3 tk</div><div style="background: #E3F0ED; border-radius: 4px; text-align: center; padding: 4px;">3 tk</div>
+              <div class="muted">Kiểm 07:30</div><div style="background: #E3F0ED; border-radius: 4px; text-align: center; padding: 4px;">✓</div><div style="background: #E3F0ED; border-radius: 4px; text-align: center; padding: 4px;">✓</div><div style="background: #E3F0ED; border-radius: 4px; text-align: center; padding: 4px;">✓</div><div style="background: #E9EEEC; border-radius: 4px; text-align: center; padding: 4px;">·</div><div style="background: #E9EEEC; border-radius: 4px; text-align: center; padding: 4px;">·</div><div style="background: #E9EEEC; border-radius: 4px; text-align: center; padding: 4px;">·</div><div style="background: #E9EEEC; border-radius: 4px; text-align: center; padding: 4px;">·</div>
             </div>
           </div>
+        </div>
+
+        <!-- 2. Tài khoản được cấp -->
+        <div class="sub" id="s2">
+          <div style="padding: 12px 18px; border-bottom: 1px solid #E9EEEC; display: flex; align-items: center; gap: 10px;"><span class="muted">Agent chỉ được đụng vào tài khoản có tích. Vai nói tài khoản đó được làm gì trong agent này. Giới hạn ngày là mức trần Trạm không bao giờ vượt, dù app giao nhiều hơn.</span><button class="btn sm" style="margin-left: auto;">＋ Cấp tài khoản</button></div>
+          <table>
+            <thead><tr><th></th><th>Tài khoản</th><th>Vai trong agent</th><th>Giới hạn / ngày</th><th>Phiên</th><th>Sức khoẻ 30 ngày</th><th></th></tr></thead>
+            <tbody>
+              <tr><td><input type="checkbox" checked aria-label="cấp"></td><td><b>Anh Tư thợ ốp</b><div class="muted">facebook-2 · giọng thợ</div></td><td><span class="chip">Đăng</span> <span class="chip">Bình luận</span> <span class="chip">Nuôi</span></td><td>2 bài · 6 bình luận</td><td><span class="pill ok"><span class="dot"></span>Tốt</span></td><td>0 checkpoint · 41 bài · 92% còn sống</td><td style="text-align: right;"><button class="btn sm">Sửa vai</button> <button class="btn sm warn">Thu</button></td></tr>
+              <tr style="background: #F7E5E1;"><td><input type="checkbox" checked aria-label="cấp"></td><td><b>Thầu Bảy</b><div class="muted">facebook-3 · giọng thầu</div></td><td><span class="chip">Đăng</span> <span class="chip">Bình luận</span></td><td>1 bài · 4 bình luận <span class="muted">(tự hạ từ 2)</span></td><td><span class="pill bad"><span class="dot"></span>Checkpoint</span></td><td class="hot">2 checkpoint · tạm dừng đến 06:41 mai</td><td style="text-align: right;"><button class="btn sm">Sửa vai</button> <button class="btn sm warn">Thu</button></td></tr>
+              <tr><td><input type="checkbox" checked aria-label="cấp"></td><td><b>Chị Lan</b><div class="muted">facebook-4 · giọng chủ nhà</div></td><td><span class="chip">Bình luận</span> <span class="chip">Nuôi</span></td><td>0 bài · 6 bình luận</td><td><span class="pill ok"><span class="dot"></span>Tốt</span></td><td>0 checkpoint · 0 bài · nuôi 12 ngày</td><td style="text-align: right;"><button class="btn sm">Sửa vai</button> <button class="btn sm warn">Thu</button></td></tr>
+              <tr><td><input type="checkbox" checked aria-label="cấp"></td><td><b>Kingsmen Page (admin)</b><div class="muted">facebook</div></td><td><span class="chip">Kiểm &amp; đo</span> <span class="muted">chỉ đọc</span></td><td>—</td><td><span class="pill ok"><span class="dot"></span>Tốt</span></td><td>—</td><td style="text-align: right;"><button class="btn sm">Sửa vai</button> <button class="btn sm warn">Thu</button></td></tr>
+              <tr style="opacity: .7;"><td><input type="checkbox" aria-label="cấp"></td><td><b>(trống)</b><div class="muted">facebook-5 · chưa đăng nhập</div></td><td class="muted">—</td><td class="muted">—</td><td><span class="pill off">Chưa đăng nhập</span></td><td class="muted">đăng nhập ở tab Tài khoản trước</td><td></td></tr>
+            </tbody>
+          </table>
+          <div style="padding: 12px 18px; border-top: 1px solid #E9EEEC;" class="muted">Một tài khoản có thể cấp cho nhiều agent (ví dụ facebook cấp cho cả Hội thoại FB), nhưng Trạm khoá tuần tự: hai agent không bao giờ dùng cùng một tài khoản cùng lúc.</div>
+        </div>
+
+        <!-- 3. Cách làm -->
+        <div class="sub" id="s3">
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0;">
+            <div style="padding: 14px 18px; border-right: 1px solid #E9EEEC; display: flex; flex-direction: column; gap: 12px;">
+              <h3 class="t-h3">Nhịp &amp; giờ</h3>
+              <label style="display: grid; grid-template-columns: 1fr 140px; align-items: center; gap: 10px;"><span>Bài mỗi tài khoản mỗi ngày (trần)</span><input class="f" value="2"></label>
+              <label style="display: grid; grid-template-columns: 1fr 140px; align-items: center; gap: 10px;"><span>Giãn cách hai bài cùng tài khoản</span><input class="f" value="≥ 4 giờ"></label>
+              <label style="display: grid; grid-template-columns: 1fr 140px; align-items: center; gap: 10px;"><span>Khung giờ được đăng</span><input class="f" value="07:00 – 21:30"></label>
+              <label style="display: grid; grid-template-columns: 1fr 140px; align-items: center; gap: 10px;"><span>Ngày nghỉ đăng</span><input class="f" value="Chủ nhật"></label>
+              <label style="display: grid; grid-template-columns: 1fr 140px; align-items: center; gap: 10px;"><span>Bình luận sau bài</span><input class="f" value="30 – 180 phút"></label>
+              <label style="display: grid; grid-template-columns: 1fr 140px; align-items: center; gap: 10px;"><span>Nuôi tài khoản mỗi ngày</span><input class="f" value="1 lượt · 6–10 phút"></label>
+              <h3 class="t-h3" style="margin-top: 6px;">Cách gõ &amp; thao tác</h3>
+              <label style="display: grid; grid-template-columns: 1fr 140px; align-items: center; gap: 10px;"><span>Tốc độ gõ</span><select class="f"><option>Như người (60–90 từ/phút)</option><option>Nhanh</option></select></label>
+              <label style="display: grid; grid-template-columns: 1fr 140px; align-items: center; gap: 10px;"><span>Lướt đọc nhóm trước khi đăng</span><input class="f" value="2 – 5 phút"></label>
+              <label style="display: grid; grid-template-columns: 1fr 140px; align-items: center; gap: 10px;"><span>Hiện cửa sổ trình duyệt</span><select class="f"><option>Ẩn</option><option>Hiện</option></select></label>
+            </div>
+            <div style="padding: 14px 18px; display: flex; flex-direction: column; gap: 12px;">
+              <h3 class="t-h3">Khi gặp sự cố</h3>
+              <label style="display: grid; grid-template-columns: 1fr 160px; align-items: center; gap: 10px;"><span>Gặp checkpoint / xác minh</span><select class="f"><option>Dừng, báo app, nghỉ 24h</option><option>Dừng, báo app, chờ người</option></select></label>
+              <label style="display: grid; grid-template-columns: 1fr 160px; align-items: center; gap: 10px;"><span>Tài khoản bị 2 checkpoint / 30 ngày</span><select class="f"><option>Tự hạ nhịp còn 1 bài, nghỉ 72h</option></select></label>
+              <label style="display: grid; grid-template-columns: 1fr 160px; align-items: center; gap: 10px;"><span>Nhóm không cho đăng (chờ duyệt)</span><select class="f"><option>Ghi "chờ quản trị", kiểm lại 24h</option></select></label>
+              <label style="display: grid; grid-template-columns: 1fr 160px; align-items: center; gap: 10px;"><span>App không nối được</span><select class="f"><option>Giữ việc, thử lại mỗi 30 giây</option></select></label>
+              <label style="display: grid; grid-template-columns: 1fr 160px; align-items: center; gap: 10px;"><span>Chụp ảnh màn hình</span><select class="f"><option>Mỗi bước, giữ 30 ngày</option><option>Chỉ khi lỗi</option></select></label>
+              <div style="background: #F6EDD6; border-radius: 4px; padding: 10px 12px; font-size: 13px; margin-top: 4px;"><b>Quyết ở app Content OS, không ở đây:</b> nội dung bài và bình luận, chọn nhóm nào, giờ vàng từng nhóm, duyệt gói, phân loại lead. Trạm chỉ là tay chân làm đúng giới hạn trên.</div>
+              <div style="background: #E9EEEC; border-radius: 4px; padding: 10px 12px; font-size: 13px;"><b>Không đổi được:</b> không tự vượt checkpoint, không giữ mật khẩu, không đăng khi app chưa duyệt.</div>
+              <div style="display: flex; gap: 8px; margin-top: auto; justify-content: flex-end;"><button class="btn sm">Về mặc định</button><button class="btn sm pri">Lưu cách làm</button></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 4. Nhật ký hôm nay -->
+        <div class="sub" id="s4">
+          <div style="padding: 12px 18px; border-bottom: 1px solid #E9EEEC; display: flex; align-items: center; gap: 8px;"><select class="f" aria-label="Lọc"><option>Mọi lượt (6)</option><option>Chỉ lỗi (1)</option></select><select class="f" aria-label="Ngày"><option>Hôm nay 24/09</option><option>Hôm qua</option><option>7 ngày</option></select><span class="muted" style="margin-left: auto;">Mỗi lượt có ảnh màn hình từng bước · giữ 30 ngày</span></div>
+          <table>
+            <thead><tr><th>Lúc</th><th>Nhiệm vụ</th><th>Tài khoản</th><th>Nhóm / đối tượng</th><th>Kết quả</th><th></th></tr></thead>
+            <tbody>
+              <tr><td>07:30</td><td>Kiểm &amp; đo bài</td><td><span class="chip">facebook</span></td><td>4 bài ngày 22/09</td><td><span class="pill ok">Xong</span> 3 đạt · 1 nghi ngờ · <b>1 lead hỏi giá</b> → giao MKT</td><td style="text-align: right;"><button class="btn sm">Chi tiết</button></td></tr>
+              <tr style="background: #F7E5E1;"><td>06:41</td><td>Đăng bài seeding</td><td><span class="chip">facebook-3</span></td><td>Hội thợ ốp lát miền Nam</td><td><span class="pill bad">Hỏng</span> <span class="hot">checkpoint · dừng, báo app, dời 06:41 mai</span></td><td style="text-align: right;"><button class="btn sm pri">Xem ảnh</button></td></tr>
+              <tr><td>06:20</td><td>Đăng bài seeding</td><td><span class="chip">facebook-2</span></td><td>Nhà thầu dân dụng Sài Gòn</td><td><span class="pill ok">Đã đăng</span> 128 từ · giọng thợ · <a href="#">link bài</a></td><td style="text-align: right;"><button class="btn sm">Chi tiết</button></td></tr>
+              <tr><td>06:05</td><td>Đăng bài seeding</td><td><span class="chip">facebook-2</span></td><td>Hội thợ sơn nước</td><td><span class="pill ok">Đã đăng</span> 96 từ · dạng hỏi tư vấn · <a href="#">link bài</a></td><td style="text-align: right;"><button class="btn sm">Chi tiết</button></td></tr>
+              <tr><td>hôm qua 18:20</td><td>Bình luận dẫn dắt</td><td><span class="chip">facebook-4</span></td><td>bài 17:05 của facebook-2</td><td><span class="pill ok">Đã bình luận</span> vai chủ nhà hỏi giá</td><td style="text-align: right;"><button class="btn sm">Chi tiết</button></td></tr>
+              <tr><td>hôm qua 15:05</td><td>Nuôi tài khoản</td><td><span class="chip">facebook-2</span> <span class="chip">facebook-4</span></td><td>4 nhóm · 8 phút</td><td><span class="pill ok">Xong</span> 11 lượt xem · 4 tim · 0 đăng</td><td style="text-align: right;"><button class="btn sm">Chi tiết</button></td></tr>
+            </tbody>
+          </table>
+          <div style="padding: 14px 18px; border-top: 1px solid #E9EEEC; display: grid; grid-template-columns: 1fr 260px; gap: 16px;">
+            <div>
+              <h3 class="t-h3">Lượt 06:41 · từng bước</h3>
+              <div style="display: flex; flex-direction: column; gap: 5px; margin-top: 8px; font-size: 13px;">
+                <div style="display: flex; gap: 12px;"><span class="muted" style="width: 62px; font-variant-numeric: tabular-nums;">06:41:02</span><span class="dot" style="color: #0C7B6F; margin-top: 7px;"></span><span>Mở nhóm bằng hồ sơ facebook-3</span></div>
+                <div style="display: flex; gap: 12px;"><span class="muted" style="width: 62px; font-variant-numeric: tabular-nums;">06:41:09</span><span class="dot" style="color: #0C7B6F; margin-top: 7px;"></span><span>Đã là thành viên, lướt đọc 2 phút</span></div>
+                <div style="display: flex; gap: 12px;"><span class="muted" style="width: 62px; font-variant-numeric: tabular-nums;">06:41:31</span><span class="dot" style="color: #0C7B6F; margin-top: 7px;"></span><span>Gõ xong biến thể 128 từ, giọng thầu</span></div>
+                <div style="display: flex; gap: 12px;"><span class="muted" style="width: 62px; font-variant-numeric: tabular-nums;">06:41:44</span><span class="dot" style="color: #A3372B; margin-top: 7px;"></span><span class="hot">Facebook chuyển sang trang xác minh. Dừng, không tự vượt. Báo Content OS.</span></div>
+              </div>
+            </div>
+            <div style="border: 1px solid #D8E0DC; border-radius: 4px; background: #E9EEEC; height: 130px; display: grid; place-items: center; color: #68807A; font-size: 12px; text-align: center;">[ảnh màn hình 06:41:44<br>trang xác minh Facebook]</div>
+          </div>
+        </div>
+
+        <!-- 5. Kết quả 30 ngày -->
+        <div class="sub" id="s5">
+          <div style="padding: 12px 18px; border-bottom: 1px solid #E9EEEC;" class="muted">25/08 – 24/09 · số Trạm tự đếm khi kiểm bài, app Content OS đối chiếu lại và tính lead. Không bịa: ô "—" là chưa đo được.</div>
+          <div style="display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 0; border-bottom: 1px solid #E9EEEC;">
+            <div class="kpi"><span class="lbl" style="color: #68807A;">Bài đăng</span><span class="t-num" style="color: #0C7B6F;">58</span><span class="muted">trên 64 app giao · 6 hỏng</span></div>
+            <div class="kpi"><span class="lbl" style="color: #68807A;">Còn sống ngày 7</span><span class="t-num" style="color: #0C7B6F;">88%</span><span class="muted">51 / 58 · 7 bị xoá hoặc ẩn</span></div>
+            <div class="kpi"><span class="lbl" style="color: #68807A;">Bình luận dẫn</span><span class="t-num">112</span><span class="muted">của mình · 214 của người khác</span></div>
+            <div class="kpi"><span class="lbl" style="color: #68807A;">Lead bắt được</span><span class="t-num" style="color: #0C7B6F;">9</span><span class="muted">hỏi giá 5 · hỏi mua 2 · kỹ thuật 2</span></div>
+            <div class="kpi"><span class="lbl" style="color: #68807A;">Checkpoint</span><span class="t-num" style="color: #A3372B;">3</span><span class="muted">facebook-3 hai lần · facebook-2 một</span></div>
+            <div class="kpi"><span class="lbl" style="color: #68807A;">Giờ máy</span><span class="t-num">21 h</span><span class="muted">đăng 6h · bình luận 4h · nuôi 11h</span></div>
+          </div>
+          <table>
+            <thead><tr><th>Tài khoản</th><th class="num">Bài</th><th class="num">Còn sống</th><th class="num">React / bài</th><th class="num">Bình luận</th><th class="num">Lead</th><th class="num">Checkpoint</th><th>Nhận xét của Trạm</th></tr></thead>
+            <tbody>
+              <tr><td><b>Anh Tư thợ ốp</b> <span class="chip">facebook-2</span></td><td class="num">31</td><td class="num cool">94%</td><td class="num">14,2</td><td class="num">61</td><td class="num cool">6</td><td class="num">1</td><td class="muted">nhóm thợ hợp giọng này, giữ nhịp</td></tr>
+              <tr><td><b>Thầu Bảy</b> <span class="chip">facebook-3</span></td><td class="num">27</td><td class="num hot">78%</td><td class="num">9,1</td><td class="num">38</td><td class="num">3</td><td class="num hot">2</td><td class="muted">đã tự hạ còn 1 bài/ngày · đề nghị app đổi nhóm</td></tr>
+              <tr><td><b>Chị Lan</b> <span class="chip">facebook-4</span></td><td class="num">0</td><td class="num">—</td><td class="num">—</td><td class="num">13</td><td class="num">0</td><td class="num">0</td><td class="muted">mới nuôi 12 ngày · đủ 21 ngày mới cấp vai Đăng</td></tr>
+            </tbody>
+          </table>
+          <div style="padding: 12px 18px; border-top: 1px solid #E9EEEC; display: flex; gap: 8px; align-items: center;"><span class="muted">So tháng trước: bài +12, còn sống +5 điểm, lead +4, checkpoint +2.</span><button class="btn sm" style="margin-left: auto;">Xem trong Content OS</button><button class="btn sm">Xuất bảng</button></div>
         </div>
       </section>
     </div>
@@ -338,6 +459,8 @@ input.f,select.f{font:inherit;font-size:13px;padding:8px 10px;border:1px solid v
 </div></section>
 <script>
 function go(id){document.querySelectorAll('.man').forEach(function(s){s.hidden=s.id!==id});document.querySelectorAll('.topbar a').forEach(function(a){a.classList.toggle('on',a.dataset.tab===id)});history.replaceState(null,'','#'+id);window.scrollTo(0,0)}
-document.addEventListener('click',function(e){var a=e.target.closest('a[data-tab]');if(a){e.preventDefault();go(a.dataset.tab)}});
+function sub(id){document.querySelectorAll('.sub').forEach(function(s){s.hidden=s.id!==id});document.querySelectorAll('.subtabs a').forEach(function(a){a.classList.toggle('on',a.dataset.sub===id)})}
+document.addEventListener('click',function(e){var a=e.target.closest('a[data-tab]');if(a){e.preventDefault();go(a.dataset.tab);return}var b=e.target.closest('a[data-sub]');if(b){e.preventDefault();sub(b.dataset.sub)}});
+sub('s1');
 if(location.hash&&document.getElementById(location.hash.slice(1)))go(location.hash.slice(1));
 </script></body></html>
