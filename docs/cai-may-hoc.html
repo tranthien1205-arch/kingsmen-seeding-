@@ -1,0 +1,56 @@
+<title>Cài máy học Kingsmen</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&family=Source+Serif+4:opsz,wght@8..60,600;8..60,700&display=swap">
+<style>
+:root{--paper:#F2F5F3;--card:#FFFFFF;--ink:#141E1B;--ink-2:#3D4E49;--muted:#68807A;--line:#D8E0DC;--line-2:#E9EEEC;--teal:#0C7B6F;--teal-soft:#E3F0ED;--gold:#B08D2E;--gold-soft:#F6EDD6;--leak:#A3372B;--leak-soft:#F7E5E1}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){color-scheme:dark;--paper:#121917;--card:#1A2320;--ink:#EEF3F1;--ink-2:#C5D1CC;--muted:#8FA39C;--line:#2C3935;--line-2:#233029;--teal:#4FB8A9;--teal-soft:#183630;--gold:#D6B45C;--gold-soft:#3A2F14;--leak:#E07A6C;--leak-soft:#3D1F1A}}
+:root[data-theme="dark"]{color-scheme:dark;--paper:#121917;--card:#1A2320;--ink:#EEF3F1;--ink-2:#C5D1CC;--muted:#8FA39C;--line:#2C3935;--line-2:#233029;--teal:#4FB8A9;--teal-soft:#183630;--gold:#D6B45C;--gold-soft:#3A2F14;--leak:#E07A6C;--leak-soft:#3D1F1A}
+*{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--ink);font:16px/1.62 "Be Vietnam Pro",system-ui,sans-serif}
+.wrap{max-width:760px;margin:0 auto;padding-block:40px 90px;padding-inline:20px;display:flex;flex-direction:column;gap:30px}
+h1,h2{font-family:"Source Serif 4",Georgia,serif;letter-spacing:-.015em;text-wrap:balance;margin:0}h1{font-size:clamp(28px,4vw,38px);line-height:1.15}h2{font-size:21px}
+.eyebrow{font-size:11.5px;letter-spacing:.14em;text-transform:uppercase;font-weight:600;color:var(--teal)}
+.lead{font-size:17px;color:var(--ink-2)}.note{font-size:13.5px;color:var(--muted)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:4px;padding:18px 20px;display:flex;flex-direction:column;gap:12px}
+pre{background:var(--line-2);border:1px solid var(--line);border-radius:4px;padding:12px 14px;overflow-x:auto;font-size:13.5px;margin:0}code{font-family:ui-monospace,Consolas,monospace}
+.copy{align-self:flex-start;padding:6px 12px;border-radius:4px;border:1px solid var(--teal);background:var(--teal);color:#fff;font:600 13px "Be Vietnam Pro",sans-serif;cursor:pointer}
+ol{margin:0;padding-left:22px;display:flex;flex-direction:column;gap:8px}li b{color:var(--ink)}
+.warn{border-left:3px solid var(--gold);background:var(--gold-soft);padding:10px 14px;border-radius:4px;font-size:14px}
+table{border-collapse:collapse;width:100%;font-size:14px}th{text-align:left;background:var(--line-2);color:var(--muted);font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;padding:7px 10px}td{padding:8px 10px;border-top:1px solid var(--line-2);vertical-align:top}
+</style>
+<div class="wrap">
+  <header style="display:flex;flex-direction:column;gap:8px"><div class="eyebrow">Kingsmen Content OS · máy học · 24/09/2026</div>
+    <h1>Nối máy RTX 3070 Ti làm máy học và máy dựng thứ hai</h1>
+    <p class="lead">Một lệnh cài, một mã ghép, xong. Máy này chạy được Qwen 7B, Whisper small và huấn luyện LoRA ngay tại chỗ, không cần thuê GPU ngoài.</p></header>
+
+  <section class="card"><h2>Bước 1 · Chạy lệnh cài (PowerShell, 10 đến 20 phút tuỳ mạng)</h2>
+    <p class="note">Mở PowerShell trên máy 3070 Ti (bấm Start, gõ PowerShell). Dán lệnh dưới, Enter. Lệnh tạo <code>C:\may-dung</code>, tải mã máy con từ app, cài Node 22, ffmpeg, Ollama nếu thiếu, tải CLIP, Whisper và Qwen2.5 7B (khoảng 5,5 GB).</p>
+    <pre id="cmd">irm https://content.masfico.vn/tools/may-dung/cai-may-hoc.ps1 | iex</pre>
+    <button class="copy" id="btnCopy" type="button">Chép lệnh</button>
+    <p class="note">Nếu PowerShell báo chặn script: chạy trước <code>Set-ExecutionPolicy -Scope CurrentUser RemoteSigned</code> rồi chạy lại. Nếu chưa có winget (Windows cũ): cài Node 22 từ nodejs.org, ffmpeg bằng <code>winget install Gyan.FFmpeg</code>, Ollama từ ollama.com, rồi chạy lại lệnh.</p></section>
+
+  <section class="card"><h2>Bước 2 · Lấy mã ghép trong app</h2>
+    <ol><li>Vào <b>content.masfico.vn › Hồ sơ › Máy dựng › ＋ Kết nối máy này</b>. Đặt tên, ví dụ "PC 3070 Ti".</li>
+      <li>App hiện <b>mã ghép một lần</b>. Chép nó.</li>
+      <li>Quay lại cửa sổ <b>BAT-DAU</b> vừa tự mở trên máy 3070 Ti, dán mã, Enter.</li></ol>
+    <div class="warn">Để yên cửa sổ BAT-DAU. Đóng nó là máy ngừng nhận việc. Muốn máy tự bật khi khởi động thì tạo lối tắt BAT-DAU.bat trong thư mục Startup.</div></section>
+
+  <section class="card"><h2>Bước 3 · Kiểm tra</h2>
+    <ol><li>Trong app, Hồ sơ › Máy dựng hiện máy mới với chấm xanh, khả năng: <b>dựng video · mô hình · huấn luyện</b>, có tên GPU.</li>
+      <li>Máy › Bộ não AI › Huấn luyện › mục 1 ghi "Máy huấn luyện đang bật: PC 3070 Ti".</li>
+      <li>Thử một lần: mở thẻ video Keo chít mạch › Sản xuất › chọn máy mới › Dựng ngay. Video ra sau khoảng 1 phút.</li></ol></section>
+
+  <section class="card"><h2>Máy này gánh việc gì, máy Ngoc-Han giữ việc gì</h2>
+    <table><tr><th>Việc</th><th>PC 3070 Ti (8 GB)</th><th>Ngoc-Han (GTX 1650, 4 GB)</th></tr>
+      <tr><td>Dựng video nháp</td><td>được, nhanh hơn</td><td>giữ như hiện nay</td></tr>
+      <tr><td>Chọn cảnh, lọc clip (CLIP)</td><td>ưu tiên</td><td>được, chậm</td></tr>
+      <tr><td>Nghe lời thoại (Whisper)</td><td>ưu tiên, dùng bản small</td><td>bản base</td></tr>
+      <tr><td>Ngôn ngữ mở Qwen 7B (bóng, mở)</td><td><b>chỉ máy này</b></td><td>chỉ chạy 3B, không đủ</td></tr>
+      <tr><td>Huấn luyện đầu nhìn, chọn đoạn, ghép</td><td>ưu tiên</td><td>được</td></tr>
+      <tr><td>Huấn luyện LoRA Qwen 7B</td><td>được (QLoRA 4-bit, 1 đến 3 giờ)</td><td>không</td></tr></table>
+    <p class="note">App tự chọn máy theo khả năng máy khai: việc cần huấn luyện hay mô hình đi về máy có Ollama và GPU. Lúc huấn luyện máy sẽ chậm trong vài phút đến vài giờ, nên đặt ngoài giờ làm.</p></section>
+
+  <section class="card"><h2>Gỡ</h2><p class="note">Hồ sơ › Máy dựng › Gỡ máy. Khoá hết hiệu lực ngay. Xoá thư mục <code>C:\may-dung</code> là sạch. Ollama và các mô hình tải về giữ lại hay xoá tuỳ anh.</p></section>
+</div>
+<script>
+(function(){var b=document.getElementById('btnCopy'),c=document.getElementById('cmd');b.addEventListener('click',function(){var t=c.textContent;function ok(){b.textContent='Đã chép';setTimeout(function(){b.textContent='Chép lệnh'},1500)}
+try{navigator.clipboard.writeText(t).then(ok,function(){sel()})}catch(e){sel()}function sel(){var r=document.createRange();r.selectNodeContents(c);var s=getSelection();s.removeAllRanges();s.addRange(r);b.textContent='Bôi đen rồi, bấm Ctrl+C'}});})();
+</script>
