@@ -67,7 +67,9 @@ test('lead AI phân loại: kiểm bài → bình luận → AI chia loại/mứ
   h = await hub('/hub/nap', 'POST', { viec: 'content_os.seeding_kiem', bang: 'content_os.seeding_kiem', luot: 'k2', dong: [{ viec_id: v1, song: true, noi_dung: nd1, react: 9, binh_luan: 6, binh_luan_ds: [{ nguoi: 'Vũ', text: 'giá bao nhiêu một hộp' }] }] });
   const l2 = (await api('/bootstrap', 'GET', null, tMkt)).j.db.seeding.lead.find(l => l.nguoi === 'Vũ'); assert.equal(l2.loai, 'HOI_GIA'); assert.equal(l2.muc_do, 2); assert.equal(l2.goi_y, ''); env.ANTHROPIC_API_KEY = 'k';
 });
-test('nuôi tài khoản: lên lịch 1 lượt/ngày cho tài khoản sống có nhóm, giờ 8–21h; tới giờ → Trạm; /hub/viec/seeding_nuoi; kết quả → sức khoẻ nuoi_so; không lên lịch lần 2 trong ngày', async () => {
+test('nuôi tài khoản: lên lịch 1 lượt/ngày cho tài khoản sống có nhóm, giờ 8–21h; tới giờ → Trạm; /hub/viec/seeding_nuoi; kết quả → sức khoẻ nuoi_so; không lên lịch lần 2 trong ngày', async (t) => {
+  // cố định đồng hồ 10:00 giờ VN hôm nay: chạy test sau 21h thì hết giờ nuôi trong ngày → lên lịch 0 lượt (đúng), test cũ báo hỏng oan
+  { const d = new Date(); d.setUTCHours(3, 0, 0, 0); t.mock.timers.enable({ apis: ['Date'], now: d.getTime() }); }
   let r = await api('/may/chay-thu', 'POST', { agent: 'LEN_LICH_NUOI' }); const nu = r.j.db.seeding.nuoi; const song = r.j.db.seeding.tai_khoan.filter(t => t.song).length; assert.ok(nu.length >= 1 && nu.length <= song, 'nuôi ' + nu.length + ' / sống ' + song); for (const x of nu) { const g = (new Date(x.gio).getUTCHours() + 7) % 24; assert.ok(g >= 8 && g <= 21, 'giờ ' + g); assert.equal(x.nhom_id, nhomA); }
   // Lượt 2 có thể lên lịch cho tài khoản lượt 1 bỏ sót (chạy test buổi tối: bốc ngẫu nhiên 10 giờ trong 8–21h, giờ đã qua bị bỏ)
   // → không so tổng; điều cần giữ là KHÔNG tài khoản nào có 2 lượt nuôi trong ngày.
