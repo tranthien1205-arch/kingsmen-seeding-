@@ -43,7 +43,7 @@ test('kho thành phẩm KALODATA: doanh thu + lời thoại → kịch bản bá
   const row = DB.raw.prepare(`SELECT * FROM kho_thanh_pham WHERE link=?`).get(LINK(1)); assert.equal(row.nguon, 'KALODATA'); assert.equal(row.doanh_thu, 1250.5); assert.ok(row.kich_ban.includes('bóp một đường'));
   const b = (await api('/bootstrap')).j.db.ai_nao; assert.equal(b.kho_thanh_pham[0].doanh_thu, 1250.5); assert.ok(b.kho_thanh_pham[0].kich_ban.length > 40);
   const m = (await hub('/hub/tap-mau?tinh_nang=ghep_canh')).j.mau.find(x => x.dau_vao.doanh_thu === 1250.5); assert.ok(m, 'mẫu ghép mang doanh thu để đặt trọng số');
-  const nn = (await hub('/hub/tap-mau-ngon-ngu?tinh_nang=soan_nhap_agent')).j.mau; const tp = nn.find(x => x.id === 'tp_' + row.id); assert.ok(tp); assert.equal(tp.quyet, 'DUYET'); assert.ok(tp.nguoi.includes('bóp một đường')); assert.ok(tp.ly_do.includes('1251'));
+  const nn = (await hub('/hub/tap-mau-ngon-ngu?tinh_nang=soan_nhap_agent')).j.mau; const tp = nn.find(x => x.id === 'tp_' + row.id); assert.ok(tp); assert.equal(tp.quyet, 'DUYET'); assert.ok(tp.nguoi.includes('bóp một đường')); assert.ok(tp.ly_do.includes('1.251 đồng'), tp.ly_do);
   // AI viết kịch bản VIDEO cho một mục → lời dặn có KỊCH BẢN BÁN TỐT THAM KHẢO
   const mucId = (await api('/muc', 'POST', { tieu_de: 'Keo chít mạch chống mốc', dinh_dang: 'VIDEO' })).j.id;
   PROMPT = ''; r = await api('/noi-dung/ai-viet', 'POST', { muc_id: mucId, dinh_dang: 'VIDEO' }); assert.equal(r.s, 200, JSON.stringify(r.j).slice(0, 200));
