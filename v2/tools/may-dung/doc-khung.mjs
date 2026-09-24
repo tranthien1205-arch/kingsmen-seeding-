@@ -42,6 +42,9 @@ export async function docKhung(file, ctx = {}) {
   const ds = readdirSync(thu).filter((n) => /^k\d+\.jpg$/.test(n)).sort(); const buoc = 1 / Number(fps); const giay = []; const t0 = Date.now();
   for (let i = 0; i < ds.length; i++) { const t = +(i * buoc).toFixed(2); try { giay.push({ t, ...(await docMotKhung(join(thu, ds[i]), ctx)) }); } catch (e) { log("  khung", i, "lỗi:", String(e.message || e).slice(0, 80)); if (i === 0) throw e; } }
   const msKhung = ds.length ? Math.round((Date.now() - t0) / ds.length) : 0;
+  // làm mượt theo thời gian (đo 24/09: cùng một cảnh bao bì tĩnh, khung lẻ nhảy "pha trộn" ↔ "giới thiệu"): mỗi giây lấy bước chiếm đa số
+  // trong cửa sổ 3 giây quanh nó; cảnh không đổi cỡ cảnh thì không tách đoạn chỉ vì một khung lệch
+  if (giay.length >= 3) { const goc = giay.map((g) => g.buoc); for (let i = 0; i < giay.length; i++) { const cs = goc.slice(Math.max(0, i - 1), i + 2); const dem = {}; for (const b of cs) dem[b] = (dem[b] || 0) + 1; const top = Object.entries(dem).sort((x, y) => y[1] - x[1])[0]; if (top[1] >= 2) giay[i].buoc = top[0]; } }
   const doan = []; for (const g of giay) { const cu = doan[doan.length - 1]; if (cu && cu.buoc === g.buoc && cu.co_canh === g.co_canh) { cu.den = +(g.t + buoc).toFixed(2); cu._n++; cu.tham_my += g.tham_my; cu.ro_net += g.ro_net; cu.co_nguoi = cu.co_nguoi || g.co_nguoi; } else doan.push({ tu: g.t, den: +(g.t + buoc).toFixed(2), buoc: g.buoc, hanh_dong: g.hanh_dong, vat_lieu: g.vat_lieu, co_canh: g.co_canh, tham_my: g.tham_my, ro_net: g.ro_net, co_nguoi: g.co_nguoi, mo_ta: g.mo_ta, _n: 1 }); }
   for (const d of doan) { d.tham_my = +(d.tham_my / d._n).toFixed(1); d.ro_net = +(d.ro_net / d._n).toFixed(1); delete d._n; } if (dai && doan.length) doan[doan.length - 1].den = +Math.min(doan[doan.length - 1].den, dai).toFixed(2);
   rmSync(thu, { recursive: true, force: true });
