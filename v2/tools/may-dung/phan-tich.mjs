@@ -27,7 +27,9 @@ export function phanTich(file, khungDir) {
   return { dai: +dai.toFixed(2), doan: ra, khung };
 }
 
-export default async function chay({ app, goiApp, lenh, dir, log }) {
+export default async function chay({ app, goiApp, lenh, dir, log, script, may }) {
+  // ADR-014a: {doc_khung:true} → đọc từng giây bằng mô hình nhìn-hiểu (doc-khung.mjs phát từ app)
+  if ((lenh.tham_so || {}).doc_khung) { if (!script) return { ok: false, msg: "máy con quá cũ, không tải được script doc-khung" }; const DK = await script("doc-khung"); return DK.default({ app, goiApp, lenh, dir, log, may }); }
   // KIỂM MÁY (24/09): {kiem_may:true} → báo cấu hình thật của máy con (Ollama, GPU, Python/yt-dlp, dung lượng, bản máy con) và gửi may-dung.mjs
   // đang chạy lên kho app để so với repo; {keo_mo_hinh:"qwen2.5:7b"} → ollama pull (chỉ tên mô hình dạng a-z0-9.:-). Không đọc/gửi khoá, mã ghép.
   const ts0 = lenh.tham_so || {};
