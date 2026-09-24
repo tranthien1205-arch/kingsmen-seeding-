@@ -20,6 +20,7 @@ Máy con rút gọn: nhận lệnh **dựng video nháp** từ app cho tài kho�
 - Ở thẻ video đã duyệt › tab **Sản xuất** › **🎬 Dựng trên máy…** chọn máy của bạn. Máy tải footage/ảnh của thẻ, đọc lời bình bằng giọng Google (nếu Admin đã cắm khoá), trộn nhạc nền, in phụ đề, xuất **bản nháp** và **gói CapCut** (từng cảnh + giọng + SRT + nhạc) về thẻ.
 - Máy nào cũng chạy được lệnh của người khác nếu người đó chọn máy bạn; máy chỉ nhận lệnh gửi đích danh cho nó.
 - Kết quả xem ở thẻ › Sản xuất; việc "Xem & duyệt video nháp" xuất hiện ở Việc của tôi.
+- Nhật ký: mọi dòng hiện trên cửa sổ đen cũng được ghi vào `may-dung.log` cạnh máy con (quá 5 MB thì bản cũ sang `may-dung.log.1`). Máy dừng vì lỗi bất ngờ thì dòng `[LỖI]` cuối file cho biết lý do.
 
 ## Gỡ
 Xoá máy ở app (Hồ sơ › Máy dựng › Gỡ) → khoá hết hiệu lực; xoá thư mục là xong.
