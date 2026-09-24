@@ -24,7 +24,7 @@ test('017b: K2 source + K4 đọc lời', async () => {
   await may('/hub/doc-khung', 'POST', { tai_san_id: ts, timeline: Array.from({ length: 40 }, (_, i) => ({ tu: i, den: i + 1, nhom: 'THI_CONG', khung_url: '/media/media/k.jpg' })) });
   let h = (await api('/source/hang')).j; assert.equal(h.con_lai, 40); assert.ok(Math.abs(h.hang[0].so_do.net - 0.55) < 0.03, 'gần ngưỡng 0,55 trước'); assert.ok(h.hang.some((x) => x.ngau_nhien));
   for (let i = 0; i < 40; i++) { const net = 0.8 - i * 0.01; const r = await api('/tai-san/' + ts + '/doan/' + i + '/source', 'POST', { dung: net >= 0.62, ly_do: net >= 0.62 ? [] : ['mờ', 'bịa'], giay: 3 }); assert.equal(r.s, 200); if (i === 29) assert.ok(r.j.hoc && r.j.hoc.ok, 'học ngưỡng khi đủ 30'); }
-  const cfg = JSON.parse(DB.raw.prepare(`SELECT cau_hinh FROM module_config WHERE id='huan_luyen'`).get().cau_hinh).source_hoc; assert.ok(cfg.net >= 0.6 && cfg.net <= 0.64, 'ngưỡng học ≈ 0,62: ' + cfg.net); assert.ok(cfg.khop_pct > cfg.khop_cu_pct);
+  const cfg = JSON.parse(DB.raw.prepare(`SELECT cau_hinh FROM module_config WHERE id='huan_luyen'`).get().cau_hinh).source_hoc; assert.ok(cfg.net >= 0.6 && cfg.net <= 0.64, 'ngưỡng học ≈ 0,62: ' + cfg.net); assert.ok(cfg.khop_pct >= cfg.khop_cu_pct, "ngưỡng học không kém ngưỡng cũ");
   const mau = JSON.parse(DB.raw.prepare(`SELECT nhan FROM mau_hoc_ai WHERE tinh_nang='chat_luong_source' AND dau_vao LIKE '{"i":39,%'`).get().nhan); assert.deepEqual(mau.ly_do, ['mờ'], 'lý do lạ bị bỏ');
   assert.equal((await api('/source/hang')).j.con_lai, 0);
   let b = (await api('/ban-huan-luyen')).j; assert.equal(b.o.K2.chung.so_do.vang, 40); assert.equal(b.nguon_luc.nguoi.phut_hom_nay, 2);

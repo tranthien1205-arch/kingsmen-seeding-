@@ -11,7 +11,7 @@ import { spawnSync } from "node:child_process";
 import os from "node:os";
 
 export const DIR = dirname(fileURLToPath(import.meta.url));
-const BAN = "1.4";
+const BAN = "1.5";
 // việc app giao → script phát từ app (ADR-008/009): máy chỉ chạy script đúng hash app xác nhận
 const VIEC_SCRIPT = { dung_video: "dung-video", mo_hinh_bong: "mo-hinh", mo_hinh_chay: "mo-hinh", huan_luyen: "huan-luyen", loc_footage: "loc-footage", nap_drive: "nap-drive", phan_tich_footage: "phan-tich", hoc_thanh_pham: "hoc-thanh-pham" };   // nap_drive: nạp footage từ thư mục Drive (24/09) · phan_tich_footage / hoc_thanh_pham: ADR-010
 const coTransformers = existsSync(join(DIR, "node_modules", "@huggingface", "transformers"));
@@ -107,7 +107,8 @@ if (args[0] === "xuat-tap-mau" || args[0] === "phien-ban") {
 let ping = await goiApp("/hub/ping"); while (!ping.ok) { log("Chưa nối được app (" + (ping.status || "mạng") + "): " + ((ping.d && ping.d.error) || "") + " — thử lại sau 30 giây"); await new Promise((x) => setTimeout(x, 30000)); ping = await goiApp("/hub/ping"); }
 log("Máy dựng '" + APP.may_ten + "' (" + os.hostname() + ") đã nối " + APP.url + " · app v" + ping.d.ban + " · ffmpeg " + (ffmpegOk ? "có" : "KHÔNG") + " · AI nhìn " + (coTransformers ? "có" : "chưa (npm install)") + (gpu ? " · GPU " + gpu : ""));
 await nhipTim();
+// (1.5) nhịp tim bật TRƯỚC khi làm tiếp lệnh dở: lệnh học dài vài giờ, không có nhịp tim thì app tưởng máy tắt và đánh hỏng lệnh máy đang giữ
+const nhipTimDinhKy = args.includes("--mot-lan") ? null : setInterval(nhipTim, 120000);
 await lamTiepLenhDo();
 if (args.includes("--mot-lan")) { const n = await motLuot(); log("xong", n, "lệnh"); process.exit(0); }
-setInterval(nhipTim, 120000);
 for (;;) { try { await motLuot(); } catch (e) { log("lỗi vòng lặp:", e.message); } await new Promise((x) => setTimeout(x, 30000)); }
