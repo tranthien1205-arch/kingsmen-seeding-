@@ -295,6 +295,38 @@ Quyết định: (1) NẠP MỘT Ô: POST /lop-hoc/nap {nap, dong?, muc_dich?, t
 Người duyệt: Thiện · Trạng thái: ĐÃ DUYỆT (2026-09-24, "Duyệt, làm theo mô phỏng") · ĐÃ LÀM
 ```
 
+```
+ADR-014 · 2026-09-24 · MÁY HIỂU TỪNG ĐOẠN HÌNH THEO QUY TRÌNH THI CÔNG
+Bối cảnh : Thiện: "các sản phẩm của tôi là vật liệu với quy trình thi công kỹ thuật khá phức tạp và độ thẩm mỹ hoàn thiện nên tôi muốn mô hình
+            AI hiểu được từng khung hình để có thể lựa chọn cắt ghép phù hợp với kịch bản và lời thoại". Trước đó máy chỉ nhìn 3 khung/clip
+            (Claude Haiku) và CLIP so chữ–hình chung chung → chọn đúng clip nhưng không đúng giây.
+Quyết định: (a) san_pham.quy_trinh (mỗi dòng một bước, đúng thứ tự). Máy học (Q2, qwen2.5vl:7b qua Ollama, không phí) đọc 1 khung/giây
+            (tối đa 40) → bước (chọn trong quy trình chuẩn, không có thì bộ bước chung), hành động, vật liệu, cỡ cảnh, thẩm mỹ 0–10, nét 0–10,
+            có người, mô tả; làm mượt cửa sổ 3 giây; gộp thành đoạn → tai_san.phan_tich.timeline (+ vl {model, so_khung, ms_khung}).
+            Tuyến /muc/:id/doc-khung, hub /hub/viec/doc_khung + /hub/doc-khung; lệnh đi qua phan_tich_footage {doc_khung} → script doc-khung.
+            (b) gắn nhãn kịch bản + chọn đoạn theo bước/thẩm mỹ, (c) học từ sửa của người — gộp vào ADR-015 (M2, M3, M1).
+Đo thật  : RTX 3070 Ti ≈ 2,4 s/khung; clip 5 s ≈ 12 s. Cảnh bao bì tĩnh bị nhảy nhãn giữa các giây → thêm làm mượt (74258fb).
+Người duyệt: Thiện · Trạng thái: ĐÃ DUYỆT (2026-09-24, "Duyệt cả 014a + 014b + 014c") · 014a ĐÃ LÀM (a99d85d, 74258fb)
+```
+
+```
+ADR-015 · 2026-09-24 · KIẾN TRÚC HỌC VIDEO THI CÔNG — đúng kỹ thuật và đẹp, học từ video Kingsmen đã air
+Bối cảnh : Thiện: "cần thiết kế kiến trúc học phù hợp đặc thù sản phẩm để tạo ra video đúng chuẩn và đẹp"; "hiện tại tôi đã sản xuất và air
+            rất nhiều video dựng thủ công, đây có thể là nguồn huấn luyện hữu ích nhất". Bản thiết kế docs/kien-truc-hoc.html (artifact
+            G7b31HbDaE5K8MRRLWG9kd).
+Quyết định: Năm chỉ số: đúng trình tự (100%, luật cứng), khớp lời (≥ 85% câu), thẩm mỹ cảnh chốt (≥ 8/10), nét ≥ 6 và lệch nhịp ≤ 20%,
+            điểm tái dựng video đã air. Bốn tầng dữ liệu: vàng = video đã air + clip gốc; bạc = footage đã đọc (ADR-014a); đồng = video bán
+            chạy ngoài (chỉ cấu trúc bán hàng); sửa của người. Năm phần máy: M1 đọc hình (qwen2.5vl; học: ví dụ sửa trong lời nhắc, tinh chỉnh
+            khi ≥ 300 nhãn); M2 đọc lời (qwen2.5 7B: câu → ý + bước, tập đóng; học từ câu nói lúc shot chiếu bước nào); M3 ghép câu–đoạn
+            (xếp hạng 6 đặc trưng: khớp bước, khớp ý, thẩm mỹ, nét, đủ dài, chưa dùng; học từ video đã air có clip gốc + Chỉnh ghép);
+            M4 nhịp (ADR-010 ghep_canh, mở rộng theo ý/bước); M5 kiểm định (luật cứng: đảo bước, thiếu bước bắt buộc, đoạn mờ, cảnh chốt
+            xấu, lặp clip). Chuẩn vàng: giữ 20% video đã air có clip gốc, dựng lại từ clip gốc, so từng shot với người; bản mới chỉ đề nghị bật
+            khi điểm tái dựng cao hơn.
+Thứ tự   : 1 M5 · 2 M2 · 3 M3 · 4 bộ đề tái dựng · 5 M1 học từ sửa nhãn.
+Người duyệt: Thiện · Trạng thái: ĐÃ DUYỆT (2026-09-24, "ok duyệt") · ĐANG LÀM
+```
+
+
 
 
 
