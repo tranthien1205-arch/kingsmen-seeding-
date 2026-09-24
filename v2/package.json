@@ -6,7 +6,9 @@
     "build": "node build.mjs",
     "dev": "node dev.mjs",
     "test": "node --test --no-warnings \"tests/*.test.mjs\"",
-    "check": "node --check worker/index.js && node build.mjs --out .build-check && node -e \"require('fs').rmSync('.build-check',{recursive:true,force:true})\""
+    "check": "node --check worker/index.js && node build.mjs --out .build-check && node -e \"require('fs').rmSync('.build-check',{recursive:true,force:true})\"",
+    "deploy": "node deploy.mjs",
+    "deploy:thu": "node deploy.mjs --thu"
   },
   "devDependencies": {
     "@babel/standalone": "^7.26.0",
