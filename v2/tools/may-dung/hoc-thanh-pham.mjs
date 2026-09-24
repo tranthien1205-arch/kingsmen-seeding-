@@ -41,7 +41,7 @@ export default async function hoc({ app, goiApp, lenh, dir, log, script }) {
   if (nguon === "DRIVE") {
     const ND = await script("nap-drive"); const fid = String(ts.folder_id || ""); if (!fid) return { ok: false, msg: "lệnh thiếu folder_id" }; thuMuc = "drive:" + fid;
     // đi sâu tối đa 3 tầng thư mục (đo 24/09: kho của chủ là gốc → BÁN HÀNG → DOUYIN_20V/FINEX/TERRAZY → video); thư mục tên goc/source ở tầng nào cũng là clip gốc
-    const duyet = async (id, duong, tang) => { const ds = await ND.docThuMuc(id).catch(() => []); for (const x of ds) { if (x.la_thu_muc) { if (tang < 3) await duyet(x.id, duong ? duong + "/" + x.ten : x.ten, tang + 1); } else if (LA_VIDEO.test(x.ten)) { if (LA_GOC.test((duong || "").split("/").pop() || "")) goc.push({ ...x, drive: true }); else video.push({ ...x, drive: true, nhom: duong || "" }); } } };
+    const duyet = async (id, duong, tang) => { const ds = await ND.docThuMuc(id).catch(() => []); for (const x of ds) { if (x.la_thu_muc) { if (tang < 5 && !/thumb/i.test(x.ten)) await duyet(x.id, duong ? duong + "/" + x.ten : x.ten, tang + 1); } else if (LA_VIDEO.test(x.ten)) { if (LA_GOC.test((duong || "").split("/").pop() || "")) goc.push({ ...x, drive: true }); else video.push({ ...x, drive: true, nhom: duong || "" }); } } };
     await duyet(fid, "", 0); log("  Drive:", video.length, "video ·", goc.length, "clip gốc");
   } else if (Array.isArray(ts.links) && ts.links.length) {
     // 24/09 tối (chủ: "tải về máy Q2 luôn để huấn luyện"): máy học tự tải thẳng từ TikTok về ổ của nó, giữ lại để học lại lần sau
@@ -57,7 +57,7 @@ export default async function hoc({ app, goiApp, lenh, dir, log, script }) {
     meta = docMeta(thuMuc); const ls = (th) => readdirSync(th).map((n) => ({ n, f: join(th, n), st: statSync(join(th, n)) }));
     for (const e of ls(thuMuc)) { if (e.st.isDirectory()) { const trong = ls(e.f).filter((x) => x.st.isFile() && LA_VIDEO.test(x.n)).map((x) => ({ id: x.f, ten: x.n, f: x.f })); if (LA_GOC.test(e.n)) goc.push(...trong); else video.push(...trong.map((x) => ({ ...x, nhom: e.n }))); } else if (LA_VIDEO.test(e.n)) video.push({ id: e.f, ten: e.n, f: e.f }); }
   }
-  video = video.filter((v) => !daCo.has(v.drive ? v.id : v.ten)).slice(0, toiDa); goc = goc.slice(0, 40);
+  video = video.filter((v) => ts.lam_lai || !daCo.has(v.drive ? v.id : v.ten)).slice(0, toiDa); goc = goc.slice(0, 40);
   if (!video.length) return { ok: true, msg: "không có video thành phẩm mới trong " + thuMuc + " (đã học " + daCo.size + ")" };
   log("  thành phẩm:", video.length, "· clip gốc:", goc.length, "· nguồn", nguon);
   const taiDrive = async (x, f) => { if (existsSync(f) && statSync(f).size > 1000) return f; const r = await fetch("https://drive.usercontent.google.com/download?id=" + encodeURIComponent(x.id) + "&export=download&confirm=t", { redirect: "follow" }); if (!r.ok) throw new Error("tải Drive HTTP " + r.status); if (/text\/html/.test(r.headers.get("content-type") || "")) throw new Error("Drive trả trang HTML (file riêng tư / hết hạn mức)"); writeFileSync(f, Buffer.from(await r.arrayBuffer())); return f; };
@@ -66,6 +66,10 @@ export default async function hoc({ app, goiApp, lenh, dir, log, script }) {
   const gocKy = []; for (const g of goc) { try { const f = g.drive ? await taiDrive(g, join(TH, "goc_" + basename(g.ten).replace(/[^a-z0-9_.-]/gi, "_"))) : g.f; const dai = thoiLuong(f); if (!dai) continue; const ky = chuKy(f, 2); let pt = null; if (PT) { try { pt = PT.phanTich(f, join(TH, "pt_" + gocKy.length)); } catch {} } gocKy.push({ ten: g.ten, f, dai, ky, doan: pt ? pt.doan : null }); log("  gốc", g.ten, dai.toFixed(1) + "s", ky.length, "khung"); } catch (e) { log("  bỏ gốc", g.ten, String(e.message || e).slice(0, 60)); } }
   // ---- Whisper (tuỳ máy)
   let asr = null; try { const T = await import("@huggingface/transformers"); asr = await T.pipeline("automatic-speech-recognition", "onnx-community/whisper-base", { dtype: "q8" }); log("  whisper sẵn sàng"); } catch { log("  không có whisper — bỏ lời thoại"); }
+  // ---- M1 đọc hình video thành phẩm (máy có qwen2.5vl): mỗi shot mang nhóm cảnh / bước / bài test / thẩm mỹ → câu nói lúc đó ↔ cảnh (nguồn học M2)
+  let DK = null; try { const m = script ? await script("doc-khung") : null; if (m && (await m.coVL())) { DK = m; log("  mô hình nhìn sẵn sàng:", m.MO_HINH_VL); } } catch (e) { log("  không tải được doc-khung:", String(e.message || e).slice(0, 60)); }
+  // nhãn theo đường dẫn thư mục (chủ đặt tên thư mục theo mục đích và nhãn hàng)
+  const nhanDuong = (duong) => { const b = String(duong || "").toUpperCase(); return { muc_dich: /ECOMMERCE|BÁN HÀNG|BAN HANG|SALE|TEASER/.test(b) ? "BAN_HANG" : /CREATIVE|BRAND|ĐỊNH VỊ|DINH VI/.test(b) ? "BRAND" : null, dong: /FINEX/.test(b) ? "Finex" : /TERRAZ/.test(b) ? "Terrazo" : /RON/.test(b) ? "Keo chít mạch" : null }; };
   // ---- 2+3. từng video
   let xong = 0, mau = 0; const loi = [];
   for (const v of video) {
@@ -89,9 +93,12 @@ export default async function hoc({ app, goiApp, lenh, dir, log, script }) {
         if (gocKy.length) { const kyS = chuKy(f, 2, s.t0, s.t1 - s.t0); if (kyS.length) { let best = null; for (const g of gocKy) { for (let j = 0; j + kyS.length <= g.ky.length; j++) { let d = 0; for (let q = 0; q < kyS.length; q++) d += khoangCach(kyS[q], g.ky[j + q]); d /= kyS.length; if (!best || d < best.d) best = { g, j, d }; } }
           if (best && best.d < 18) { const tu = best.j / 2, den = tu + (s.t1 - s.t0); s.goc = { ten: best.g.ten, tu: +tu.toFixed(2), den: +den.toFixed(2), diem: +(1 - best.d / 18).toFixed(3), doan: best.g.doan, dai: best.g.dai }; } } }
       }
+      let tlVL = null; if (DK) { try { const kq = await DK.docKhung(f, { dai, toiDa: 60, san_pham: nhanDuong(v.nhom).dong || "", chu_de: v.ten.replace(/.[a-z0-9]+$/i, ""), log, thuMuc: join(TH, "vl_" + xong) }); tlVL = kq.timeline;
+        for (const sh of shots) { const giua = (sh.t0 + sh.t1) / 2; const d = tlVL.find((x) => giua >= x.tu && giua < x.den) || tlVL[tlVL.length - 1]; if (d) { sh.nhom = d.nhom; sh.buoc = d.buoc; sh.bai_test = d.bai_test; sh.tham_my = d.tham_my; sh.tu_tin = d.tu_tin; sh.mo_ta_vl = d.mo_ta; } } } catch (e) { log("  đọc hình lỗi:", String(e.message || e).slice(0, 80)); } }
+      const nd = nhanDuong(v.nhom);
       const mt = meta[v.ten] || {};
       const kichBan = shots.map((x) => x.loi).filter(Boolean).join(" ").trim();   // ADR-011: lời thoại nghe được = kịch bản mẫu bán hàng
-      const r = await goiApp("/hub/thanh-pham", { method: "POST", body: JSON.stringify({ ten: v.ten, nguon_id: v.drive ? v.id : v.ten, nguon, thu_muc: thuMuc.slice(0, 200), dai: +dai.toFixed(2), shots, luot_xem: mt.luot_xem ?? null, luot_thich: mt.luot_thich ?? null, ngay_dang: mt.ngay_dang || null, link: mt.link || null, kenh: mt.kenh || ts.kenh || null, dong: ts.dong || null, muc_dich: ts.muc_dich || null, doanh_thu: mt.doanh_thu ?? null, luot_ban: mt.luot_ban ?? null, san_pham: mt.san_pham || null, kich_ban: kichBan || null }) });
+      const r = await goiApp("/hub/thanh-pham", { method: "POST", body: JSON.stringify({ ten: v.ten, nguon_id: v.drive ? v.id : v.ten, nguon, thu_muc: (thuMuc + (v.nhom ? "/" + v.nhom : "")).slice(0, 200), dai: +dai.toFixed(2), shots, timeline: tlVL || undefined, lam_lai: !!ts.lam_lai, luot_xem: mt.luot_xem ?? null, luot_thich: mt.luot_thich ?? null, ngay_dang: mt.ngay_dang || null, link: mt.link || null, kenh: mt.kenh || ts.kenh || null, dong: ts.dong || nd.dong || null, muc_dich: ts.muc_dich || nd.muc_dich || null, doanh_thu: mt.doanh_thu ?? null, luot_ban: mt.luot_ban ?? null, san_pham: mt.san_pham || null, kich_ban: kichBan || null }) });
       if (!r.ok) throw new Error("app " + r.status + " " + ((r.d && r.d.error) || ""));
       xong++; mau += (r.d && r.d.so_mau) || 0; log("  ✓", v.ten, "·", shots.length, "shot ·", shots.filter((s) => s.goc).length, "khớp gốc ·", (r.d && r.d.so_mau) || 0, "mẫu", mt.luot_xem != null ? "· " + mt.luot_xem + " xem" : "");
       rmSync(KD, { recursive: true, force: true }); if (v.drive || v.url) rmSync(f, { force: true });
