@@ -7,6 +7,11 @@ compatibility_date = "2025-06-01"
 routes = [{ pattern = "content.masfico.vn", custom_domain = true }]
 workers_dev = true   # giữ thêm địa chỉ workers.dev để dự phòng / kiểm tra
 
+# Ghim nơi chạy Worker ở Singapore (24/09): văn phòng VN được Cloudflare phục vụ từ Hồng Kông (colo HKG),
+# mà Anthropic từ chối yêu cầu đi từ Hồng Kông ("Request not allowed"). Singapore được Anthropic phục vụ.
+[placement]
+region = "aws:ap-southeast-1"
+
 [assets]
 directory = "./dist"
 binding = "ASSETS"
