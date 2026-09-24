@@ -62,13 +62,13 @@ test('010d: kho thành phẩm — Drive/thư mục máy → lệnh hoc_thanh_pha
   l = (await hub('/hub/lenh')).j.lenh.find(x => x.viec === 'hoc_thanh_pham' && x.tham_so.nguon === 'DRIVE'); assert.equal(l.tham_so.folder_id, '1EodWW7d1a4Q5lDA9rV4HAnbmvfWzGbrb');
   const shots = [{ t0: 0, t1: 2.5, khung_url: '/media/media/s0.jpg', loi: 'ron gạch nhà bạn có bị mốc' }, { t0: 2.5, t1: 4, khung_url: '/media/media/s1.jpg', loi: 'bóp keo', goc: { ten: 'A.mp4', tu: 1, den: 2.5, diem: 0.9, doan: Array.from({ length: 12 }, (_, i) => ({ t: i / 2, net: 0.7, dong: 0.3, sang: 0.5 })), dai: 6 } }, { t0: 4, t1: 7.2, khung_url: '/media/media/s2.jpg', loi: 'Kingsmen' }];
   r = await hub('/hub/thanh-pham', 'POST', { ten: 'keo-chit-1.mp4', nguon_id: 'keo-chit-1.mp4', nguon: 'TIKTOK', thu_muc: 'D:\\may-dung\\thanh-pham\\tiktok\\kingsmen', dai: 7.2, shots, luot_xem: 12500, kenh: '@kingsmen', link: 'https://www.tiktok.com/@kingsmen/video/1', ngay_dang: '2026-09-01' });
-  assert.equal(r.s, 200); assert.ok(r.j.so_mau >= 1 + 3 + 1, 'ghep_canh + 3 chon_canh + 1 chon_doan');
+  assert.equal(r.s, 200); assert.ok(r.j.so_mau >= 1 + 1, 'ghep_canh + 1 chon_doan (không còn chon_canh từ thành phẩm)');
   assert.equal((await hub('/hub/thanh-pham', 'POST', { ten: 'keo-chit-1.mp4', nguon_id: 'keo-chit-1.mp4', shots })).j.trung, true);
   assert.deepEqual((await hub('/hub/viec/thanh_pham')).j.da_co, ['keo-chit-1.mp4']);
   const kho = DB.raw.prepare(`SELECT * FROM kho_thanh_pham`).all(); assert.equal(kho.length, 1); assert.equal(kho[0].luot_xem, 12500); assert.equal(kho[0].kenh, '@kingsmen'); assert.equal(kho[0].so_shot, 3); assert.equal(kho[0].co_goc, 1);
   assert.equal(JSON.parse(kho[0].phan_tich).shots[0].co_canh, 'CAN', 'cỡ cảnh do Claude xếp từ khung');
   const tm = (await hub('/hub/tap-mau?tinh_nang=ghep_canh')).j.mau; const m = tm.find(x => x.dau_vao.nguon === 'THANH_PHAM'); assert.ok(m); assert.equal(m.dau_vao.luot_xem, 12500); assert.equal(m.nhan.shots.length, 3);
-  const tmc = (await hub('/hub/tap-mau?tinh_nang=chon_canh')).j.mau; assert.ok(tmc.some(x => x.luot_xem === 12500), 'mẫu chọn cảnh mang lượt xem để đặt trọng số');
+  // (24/09) không còn mẫu chọn cảnh từ thành phẩm — lượt xem chỉ đi theo mẫu ghép
   const b = (await api('/bootstrap')).j.db.ai_nao; assert.equal(b.kho_thanh_pham.length, 1); assert.equal(b.kho_thanh_pham[0].luot_xem, 12500);
   assert.ok(b.dinh_tuyen.some(d => d.tinh_nang === 'chon_doan' && d.mo_hinh_mo === 'doan-tuyen-tinh')); assert.ok(b.dinh_tuyen.some(d => d.tinh_nang === 'ghep_canh' && d.mo_hinh_mo === 'ghep-thong-ke'));
   let h = await api('/ai/huan-luyen', 'POST', { tinh_nang: 'ghep_canh' }); assert.equal(h.s, 409); assert.ok(h.j.error.includes('Cần ≥ 10 mẫu'), 'chưa đủ mẫu thì nói rõ, không bịa');
