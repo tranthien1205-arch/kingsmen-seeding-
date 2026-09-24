@@ -1,5 +1,5 @@
 // XUẤT TẬP MẪU NGÔN NGỮ & ĐÁNH GIÁ PHIÊN BẢN OLLAMA (ADR-009c-4)
-//   node may-dung.mjs xuat-tap-mau [tinh_nang]        → out/hoc/ngon-ngu/<tinh_nang>.train.jsonl + .kiem.jsonl (đưa lên GPU thuê chạy huan-luyen-ngon-ngu.py)
+//   node may-dung.mjs xuat-tap-mau [tinh_nang]        → out/hoc/ngon-ngu/<tinh_nang>.train.jsonl + .kiem.jsonl (chạy huan-luyen-ngon-ngu.py tại máy học có GPU ≥ 8 GB — cai-hoc-ngon-ngu.ps1 — hoặc GPU thuê)
 //   node may-dung.mjs phien-ban <ollama-model> [tinh_nang] → chạy model trên tập KIỂM, đo giống với bài người → gửi /hub/mo-hinh/phien-ban (Trưởng MKT duyệt)
 import { writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
@@ -14,7 +14,7 @@ export default async function chay({ goiApp, lenh, dir, log, may }) {
   if (xuat || !model) {
     const dong = (ds) => ds.map((m) => JSON.stringify({ messages: [{ role: "system", content: m.system }, { role: "user", content: m.user }, { role: "assistant", content: m.nguoi }] })).join("\n");
     writeFileSync(join(TH, tn + ".train.jsonl"), dong(hoc)); writeFileSync(join(TH, tn + ".kiem.jsonl"), dong(kiem));
-    log("  đã xuất", hoc.length, "mẫu học +", kiem.length, "mẫu kiểm →", TH); log("  bước tiếp: đưa file .train.jsonl + huan-luyen-ngon-ngu.py lên GPU thuê (RunPod/Colab), chạy: python huan-luyen-ngon-ngu.py " + tn + ".train.jsonl → GGUF → ollama create kingsmen-qwen:v1 → node may-dung.mjs phien-ban kingsmen-qwen:v1 " + tn);
+    log("  đã xuất", hoc.length, "mẫu học +", kiem.length, "mẫu kiểm →", TH); log("  bước tiếp: máy học có GPU ≥ 8 GB (đã chạy cai-hoc-ngon-ngu.ps1) chạy HUAN-LUYEN.bat " + join(TH, tn + ".train.jsonl") + " (hoặc đưa file lên GPU thuê: python huan-luyen-ngon-ngu.py " + tn + ".train.jsonl) → GGUF → ollama create kingsmen-qwen:v1 → node may-dung.mjs phien-ban kingsmen-qwen:v1 " + tn);
     if (!model) return { ok: true, msg: "xuất " + hoc.length + " học / " + kiem.length + " kiểm" };
   }
   // đánh giá model trên tập kiểm

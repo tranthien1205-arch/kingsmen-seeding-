@@ -36,3 +36,18 @@ test('may-dung.mjs: log() ghi thêm ra may-dung.log, có xoay vòng 5 MB và b�
   assert.match(MAY, /process\.on\("uncaughtException"/);
   assert.ok(!/console\.error\(/.test(MAY.replace(/const loi = \(\.\.\.m\) => \{ console\.error\(/, '')), 'lỗi ở luồng chính phải đi qua loi() để vào file');
 });
+
+test('cai-hoc-ngon-ngu.ps1: dòng lệnh chỉ dùng ASCII (irm giải mã ISO-8859-1, chạy từ đĩa giải mã cp1252 → dấu tiếng Việt thành nháy cong phá cú pháp)', () => {
+  const PS = fs.readFileSync(new URL('../tools/may-dung/cai-hoc-ngon-ngu.ps1', import.meta.url), 'utf8');
+  const la = PS.split(/\r?\n/).filter((d) => !/^\s*#/.test(d) && /[^\x00-\x7f]/.test(d));
+  assert.deepEqual(la, [], 'dòng lệnh có ký tự ngoài ASCII');
+  for (const ban of ['torch==2.11.0', 'unsloth==2026.9.11', 'trl==0.24.0', 'download.pytorch.org/whl/cu128']) assert.ok(PS.includes(ban), 'thiếu ghim ' + ban);
+});
+
+test('huan-luyen-ngon-ngu.py: chạy được card 8 GB (trả cache VRAM mỗi lượt con) và tìm GGUF cả ở out/gguf_gguf', () => {
+  const PY = fs.readFileSync(new URL('../tools/may-dung/huan-luyen-ngon-ngu.py', import.meta.url), 'utf8');
+  assert.match(PY, /def on_substep_end\([^)]*\): torch\.cuda\.empty_cache\(\)/);
+  assert.match(PY, /callbacks=\[TraVram\(\)\]/);
+  assert.match(PY, /os\.walk\(a\.out\)/);
+  assert.match(PY, /--khong-gguf/);
+});

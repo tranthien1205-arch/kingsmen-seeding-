@@ -13,7 +13,7 @@ Máy con rút gọn: nhận lệnh **dựng video nháp** từ app cho tài kho�
 - Mô hình ngôn ngữ mở chạy bóng: cài Ollama (https://ollama.com) rồi `ollama pull qwen2.5:7b`. Máy tự nhận ra Ollama đang chạy.
 - Giọng đọc mở (Piper, ADR-009c): tự tải `piper` + giọng `vi_VN-vais1000-medium` vào thư mục `piper/` lần đầu dựng khi tính năng tts ở mức BÓNG/MỞ.
 - Lọc footage (Whisper + CLIP): cần `npm install` (whisper-base tải lần đầu ~150 MB); bấm 🤖 Máy lọc footage ở thẻ video.
-- LoRA ngôn ngữ: `node may-dung.mjs xuat-tap-mau soan_nhap_agent` → đưa `.train.jsonl` + `huan-luyen-ngon-ngu.py` lên GPU thuê → `ollama create kingsmen-qwen:v1` → `node may-dung.mjs phien-ban kingsmen-qwen:v1` → Trưởng MKT duyệt trong app.
+- LoRA ngôn ngữ: máy có GPU NVIDIA ≥ 8 GB cài một lần `irm https://content.masfico.vn/tools/may-dung/cai-hoc-ngon-ngu.ps1 | iex` (Python 3.12 + torch CUDA + unsloth, ~10 GB). Rồi `node may-dung.mjs xuat-tap-mau soan_nhap_agent` → `HUAN-LUYEN.bat <file .train.jsonl>` tại máy (hoặc đưa `.train.jsonl` + `huan-luyen-ngon-ngu.py` lên GPU thuê) → `ollama create kingsmen-qwen:v1` → `node may-dung.mjs phien-ban kingsmen-qwen:v1` → Trưởng MKT duyệt trong app.
 - Mã các phần này cũng phát từ app, máy chỉ giữ bản cache theo hash.
 
 ## Dùng
