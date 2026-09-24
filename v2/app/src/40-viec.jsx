@@ -19,6 +19,7 @@ function ViecCuaToi({go}){
   return <div className="space-y-4">
     <PageHeader title={'Chào '+me.ho_ten} sub={'Hôm nay '+hn+' · '+(laXemMkt(me)?(soAI+'/'+buoc.length+' bước đang giao cho AI'):'')}/>
     {thieuDanhMuc && <Callout tone="warn"><b>Bắt đầu đợt 1:</b> nhập danh mục gốc để máy có dữ kiện thật — sản phẩm & thông số, claim cấm, pillar, framework, kênh. Vào <LinkBtn onClick={()=>go('chienluoc')}>Chiến lược & Kế hoạch</LinkBtn> để nhập tay, hoặc <LinkBtn onClick={()=>go('may')}>Máy › Nhập danh mục</LinkBtn> để nhập một lần từ app cũ.</Callout>}
+    {laXemMkt(me) && <Card pad="p-3" className="cursor-pointer hover:border-brand" onClick={()=>go('daymay')}><div className="flex items-center gap-3 flex-wrap"><span className="text-2xl">🎓</span><div className="flex-1 min-w-[200px]"><div className="text-sm font-semibold text-ink">Dạy máy hiểu video</div><div className="text-[11px] text-ink-muted">Máy đưa từng khung hình, đoạn footage, câu thoại; anh/chị bấm một phím xác nhận đúng hay sửa. Mỗi thẻ vài giây, tối đa 20 phút/ngày.</div></div><Btn variant="brand" className="!py-1.5 !px-3 text-xs" onClick={(e)=>{ e.stopPropagation(); go('daymay'); }}>Bắt đầu →</Btn></div></Card>}
     {laXemMkt(me) && <div>
       <SectionTitle className="mb-2">4 cổng của con người</SectionTitle>
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-2">{cong.map(c=><Card key={c.ma} pad="p-3" className="cursor-pointer hover:border-brand" onClick={()=>go(c.page)}>

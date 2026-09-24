@@ -95,3 +95,17 @@ function HopViec({ dongs }) {
     {loai === 'hinh' && <GanNhanNhanh dong={dong} setDong={setDong} dongs={dongs} />}{loai === 'source' && <TheSource />}{loai === 'loi' && <TheLoi />}
   </div>;
 }
+
+// Màn riêng "Dạy máy" (thanh bên): chủ 25/09 "ui để người gán nhãn thế nào cho trực quan tôi chưa thấy" — hộp việc trước đây nằm cuối Máy › Bộ não AI.
+function DayMay({ go }) {
+  const { db } = useApp(); const a = db.ai_nao || {}; const d = a.do_chinh_xac_hinh || {};
+  return <div className="space-y-3">
+    <PageHeader title="🎓 Dạy máy" sub="Máy đang học hiểu video của Kingsmen. Anh/chị chỉ cần xác nhận máy đúng hay sửa lại, mỗi thẻ vài giây." />
+    <div className="grid sm:grid-cols-3 gap-2 text-xs">
+      <Card pad="p-3"><div className="font-semibold text-ink mb-0.5">1 · Nhìn</div><div className="text-ink-muted">Mỗi thẻ là một khung hình, đoạn footage hoặc câu thoại, kèm điều máy đang hiểu.</div></Card>
+      <Card pad="p-3"><div className="font-semibold text-ink mb-0.5">2 · Bấm một phím</div><div className="text-ink-muted"><b>Enter</b> nếu máy đúng. Sai thì bấm số của lựa chọn đúng. Không rõ thì <b>0</b>, muốn bỏ qua thì <b>→</b>.</div></Card>
+      <Card pad="p-3"><div className="font-semibold text-ink mb-0.5">3 · Máy học</div><div className="text-ink-muted">Mỗi lần bấm vừa chấm máy, vừa dạy máy. Đã có {d.so_nhan || 0} nhãn hình. <button className="underline" onClick={() => go('may')}>Xem tiến độ ở Máy › Bộ não AI</button>.</div></Card>
+    </div>
+    <HopViec dongs={a.dong_san_pham || []} />
+  </div>;
+}
