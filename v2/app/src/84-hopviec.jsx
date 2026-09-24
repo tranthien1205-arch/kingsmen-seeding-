@@ -66,7 +66,7 @@ function TheLoi() {
   const nhan = (o) => o ? tenNhom(o.nhom) + (o.buoc ? ' · ' + o.buoc : '') + (o.bai_test ? ' · ' + o.bai_test : '') : '—';
   return <Card pad="p-3">
     <div className="flex items-center gap-2 flex-wrap mb-2"><SectionTitle>K4 · Câu này nói về gì</SectionTitle>
-      {tt && <span className="text-[11px] text-ink-muted">còn {tt.con_lai} câu thầy đã đọc · {tt.cho_thay} câu chờ thầy (máy tự đọc 40 câu mỗi 15 phút)</span>}
+      {tt && <span className="text-[11px] text-ink-muted">còn {tt.con_lai} câu cần người · {tt.thay_nghe_sai || 0} câu thầy báo máy nghe sai (không đưa vào hộp, chỉ xen ngẫu nhiên để kiểm) · {tt.cho_thay} câu chờ thầy</span>}
       <Btn variant="ghost" className="!py-1 !px-2 text-[11px]" onClick={docNgay} disabled={dangDoc}>{dangDoc ? 'Thầy đang đọc…' : 'Cho thầy đọc ngay 60 câu'}</Btn>
       <span className="ml-auto text-[11px] text-ink-muted">phiên này {dem.n} · thầy đúng {phanTram(dem.khop, dem.n)}</span></div>
     {!x && tt && tt.het_tran ? <HetTran tt={tt} setThem={setThem} /> : !x ? <Empty>{dangTai ? 'Đang lấy câu…' : 'Chưa có câu nào thầy đã đọc mà cần người xác nhận.'}</Empty> :

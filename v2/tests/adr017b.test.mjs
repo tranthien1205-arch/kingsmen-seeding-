@@ -35,11 +35,12 @@ test('017b: K2 source + K4 đọc lời', async () => {
   let r = await api('/doc-loi/thay', 'POST', {}); assert.equal(r.j.so, 5); assert.equal(GOI, 1, 'một lô 20 câu = một lần gọi');
   assert.equal((await api('/doc-loi/thay', 'POST', {})).j.so, 0, 'không đọc lại');
   assert.ok(DB.raw.prepare(`SELECT COUNT(*) n FROM ai_usage WHERE tinh_nang='hoc_doc_loi'`).get().n === 1);
-  h = (await api('/doc-loi/hang')).j; assert.equal(h.con_lai, 5);
-  assert.equal(h.hang[0].thay.nghe_sai, true, 'nghe sai lên đầu'); assert.equal(h.hang[1].lech, true, 'thầy khác nhãn hình lên trước'); assert.equal(h.hang[1].thay.nhom, 'GIAI_PHAP');
+  h = (await api('/doc-loi/hang')).j; assert.equal(h.con_lai, 4, 'câu thầy báo nghe sai không vào hộp'); assert.equal(h.thay_nghe_sai, 1); assert.ok(h.hang.every((x) => !x.thay.nghe_sai));
+  assert.equal(h.hang[0].lech, true, 'thầy khác nhãn hình lên trước'); assert.equal(h.hang[0].thay.nhom, 'GIAI_PHAP');
+  const idSai = DB.raw.prepare(`SELECT id FROM mau_hoc_ai WHERE tinh_nang='doc_loi' AND dau_ra LIKE '%"nghe_sai":true%'`).get().id;
   const c2 = h.hang.find((x) => x.thay.buoc === 'Trát'); assert.ok(c2, 'bước đúng danh sách giữ'); assert.ok(h.hang.every((x) => x.thay.buoc !== 'Bịa'), 'bước bịa bỏ'); assert.ok(h.hang.some((x) => x.khung_url), 'ảnh shot cùng câu');
-  r = await api('/mau/' + h.hang[1].id + '/doc-loi', 'POST', { nhom: 'GIAI_PHAP', giay: 4 }); assert.equal(r.j.dung, true);
-  r = await api('/mau/' + h.hang[0].id + '/doc-loi', 'POST', { nghe_sai: true }); assert.equal(r.j.dung, false);
+  r = await api('/mau/' + h.hang[0].id + '/doc-loi', 'POST', { nhom: 'GIAI_PHAP', giay: 4 }); assert.equal(r.j.dung, true);
+  r = await api('/mau/' + idSai + '/doc-loi', 'POST', { nghe_sai: true }); assert.equal(r.j.dung, false);
   assert.equal((await api('/doc-loi/hang')).j.con_lai, 3);
-  b = (await api('/ban-huan-luyen')).j; assert.equal(b.o.K4.chung.so_do.vang, 2); assert.equal(b.o.K4.chung.so_do.thay_pct, 100); assert.equal(b.o.K4.chung.so_do.nghe_sai_pct, 50); assert.ok(b.o.K4.dong.Finex);
+  b = (await api('/ban-huan-luyen')).j; assert.equal(b.o.K4.chung.so_do.vang, 2); assert.equal(b.o.K4.chung.so_do.thay_pct, 100); assert.equal(b.o.K4.chung.so_do.nghe_sai_pct, 50); assert.equal(b.o.K4.chung.so_do.thay_nghe_sai_pct, 20); assert.ok(b.o.K4.dong.Finex);
 });
