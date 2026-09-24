@@ -64,7 +64,7 @@ test('may-dung.mjs 1.4: nhớ lệnh đang làm (dang-lam.json), khởi động 
   assert.match(MAY, /writeFileSync\(DANG_LAM_F,/);
   assert.match(MAY, /rmSync\(DANG_LAM_F, \{ force: true \}\)/);
   assert.match(MAY, /const LAN_TOI_DA = 3/);
-  assert.match(MAY, /await nhipTim\(\);\s*\r?\nawait lamTiepLenhDo\(\);/);
+  assert.match(MAY, /await nhipTim\(\);[\s\S]{0,300}setInterval\(nhipTim, 120000\);\s*\r?\nawait lamTiepLenhDo\(\);/, '1.5: nhịp tim định kỳ bật trước khi làm tiếp lệnh dở');
   assert.match(MAY, /ts\.length > 300 \? ts\.slice\(0, 300\)/);
 });
 
