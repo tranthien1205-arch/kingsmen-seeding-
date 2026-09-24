@@ -1,0 +1,188 @@
+<title>Bàn huấn luyện cuốn chiếu</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&family=Source+Serif+4:opsz,wght@8..60,600;8..60,700&display=swap">
+<style>
+:root{--paper:#F2F5F3;--card:#FFFFFF;--ink:#141E1B;--ink-2:#3D4E49;--muted:#68807A;--line:#D8E0DC;--line-2:#E9EEEC;--teal:#0C7B6F;--teal-soft:#E3F0ED;--gold:#B08D2E;--gold-soft:#F6EDD6;--leak:#A3372B;--leak-soft:#F7E5E1;--sky:#2B6CB0;--sky-soft:#E4EEF8;--shadow:0 1px 2px rgba(20,30,27,.05),0 8px 24px -16px rgba(20,30,27,.35)}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){color-scheme:dark;--paper:#121917;--card:#1A2320;--ink:#EEF3F1;--ink-2:#C5D1CC;--muted:#8FA39C;--line:#2C3935;--line-2:#233029;--teal:#4FB8A9;--teal-soft:#183630;--gold:#D6B45C;--gold-soft:#3A2F16;--leak:#E0786B;--leak-soft:#3B211D;--sky:#7FB0E8;--sky-soft:#1B2B3D;--shadow:none}}
+:root[data-theme="dark"]{color-scheme:dark;--paper:#121917;--card:#1A2320;--ink:#EEF3F1;--ink-2:#C5D1CC;--muted:#8FA39C;--line:#2C3935;--line-2:#233029;--teal:#4FB8A9;--teal-soft:#183630;--gold:#D6B45C;--gold-soft:#3A2F16;--leak:#E0786B;--leak-soft:#3B211D;--sky:#7FB0E8;--sky-soft:#1B2B3D;--shadow:none}
+*{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--ink);font:16px/1.62 "Be Vietnam Pro",system-ui,sans-serif}
+.wrap{max-width:1040px;margin:0 auto;padding-block:48px 96px;padding-inline:20px;display:flex;flex-direction:column;gap:44px}
+h1,h2,h3{font-family:"Source Serif 4",Georgia,serif;letter-spacing:-.015em;text-wrap:balance;margin:0}h1{font-size:clamp(30px,4.6vw,44px);line-height:1.12}h2{font-size:clamp(22px,3vw,28px);line-height:1.25}h3{font-size:18px;line-height:1.3}
+.eyebrow{font-size:11.5px;letter-spacing:.14em;text-transform:uppercase;font-weight:600;color:var(--teal)}.lead{font-size:19px;color:var(--ink-2);max-width:68ch;margin:0}.note{font-size:13.5px;color:var(--muted);margin:0}.col{max-width:68ch;margin:0}
+section{display:flex;flex-direction:column;gap:16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:4px;box-shadow:var(--shadow);padding:16px 18px}
+.tbl-wrap{overflow-x:auto}table{border-collapse:collapse;width:100%;min-width:640px;font-size:14px}th{background:var(--line-2);color:var(--muted);font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;text-align:left;padding:8px 10px;font-weight:600}td{padding:8px 10px;border-top:1px solid var(--line);vertical-align:top}td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
+.hot{color:var(--leak);font-weight:600}.cool{color:var(--teal);font-weight:600}
+figure{margin:0}.fig-box{background:var(--card);border:1px solid var(--line);border-radius:4px;padding:14px;overflow-x:auto}figcaption{font-size:13.5px;color:var(--muted);margin-top:8px;max-width:80ch}
+svg{width:100%;min-width:760px;height:auto;display:block}svg text{font-family:"Be Vietnam Pro",sans-serif;font-size:12px;fill:var(--ink)}svg .sub{font-size:10.5px;fill:var(--muted)}svg .b{fill:var(--card);stroke:var(--line)}svg .bt{fill:var(--teal-soft);stroke:var(--teal)}svg .bg{fill:var(--gold-soft);stroke:var(--gold)}svg .bs{fill:var(--sky-soft);stroke:var(--sky)}svg .bl{fill:var(--leak-soft);stroke:var(--leak)}svg .ar{fill:none;stroke:var(--muted);stroke-width:1.3;marker-end:url(#m)}svg .ad{fill:none;stroke:var(--muted);stroke-width:1.2;stroke-dasharray:4 3;marker-end:url(#m)}svg .mk{fill:var(--muted)}svg .gate{fill:var(--gold)}
+.final{border-left:3px solid var(--teal)}
+.ex{font-size:11px;letter-spacing:.12em;text-transform:uppercase;font-weight:600;color:var(--gold)}
+/* mô phỏng app */
+.app{background:#F6F8FA;border:1px solid var(--line);border-radius:6px;padding:14px;font-size:12.5px;color:#1f2a27;overflow-x:auto}
+.app *{font-family:"Be Vietnam Pro",system-ui,sans-serif}
+.app .in{min-width:820px;display:flex;flex-direction:column;gap:10px}
+.app .pn{background:#fff;border:1px solid #DDE3E0;border-radius:12px;padding:10px 12px}
+.app .ttl{font-weight:600;font-size:13px;color:#111}.app .mu{color:#6b7c77;font-size:11px}
+.app .tabs{display:flex;gap:6px}.app .tab{padding:4px 10px;border-radius:999px;background:#EEF2F0;font-size:11.5px}.app .tab.on{background:#0C7B6F;color:#fff}
+.app table{min-width:0;font-size:12px}.app th{background:#F1F4F2;font-size:10px}.app td{padding:6px 8px;border-top:1px solid #E6EBE8}
+.cell{display:flex;flex-direction:column;gap:2px}.pill{display:inline-block;border-radius:999px;padding:1px 7px;font-size:10px;font-weight:600;white-space:nowrap}
+.p0{background:#EEF1F4;color:#55606b}.p1{background:#E4EEF8;color:#2B6CB0}.p2{background:#F6EDD6;color:#8a6a12}.p3{background:#E3F0ED;color:#0C7B6F}.p4{background:#DDF3E6;color:#15803d}.pX{background:#F7E5E1;color:#A3372B}
+.bar{height:5px;border-radius:3px;background:#E8EDEB;overflow:hidden}.bar i{display:block;height:100%;background:#0C7B6F}
+.grid3{display:grid;grid-template-columns:1.6fr 1fr;gap:10px}.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}.kpi{border:1px solid #E1E7E4;border-radius:10px;padding:6px 8px}.kpi b{font-size:18px;display:block}
+.card-t{border:1px solid #E1E7E4;border-radius:10px;padding:8px;display:flex;gap:8px;align-items:flex-start}.sw{width:92px;height:52px;border-radius:6px;flex:none}
+.keys span{display:inline-block;border:1px solid #CBD5D1;border-radius:4px;padding:0 5px;font-family:ui-monospace,monospace;font-size:10.5px;margin-right:3px;background:#fff}
+@media (max-width:640px){.wrap{gap:36px}}
+</style>
+<div class="wrap">
+  <header style="display:flex;flex-direction:column;gap:12px"><div class="eyebrow">Kingsmen Content OS · đề xuất ADR-017 · triển khai huấn luyện · 24/09/2026</div>
+    <h1>Sáu kỹ năng đi trên cùng một khuôn, chạy song song và mở dần theo từng dòng sản phẩm</h1>
+    <p class="lead">Mỗi kỹ năng máy cần học là một “làn” có đúng sáu chặng và năm cổng giống nhau. Làn sau được bắt đầu khi làn trước tới chặng Bóng, không phải đợi làn trước bật hẳn. Trong mỗi làn, dòng sản phẩm nào đủ dữ liệu thì chạy trước. Người chỉ làm việc ở một hộp việc chung.</p>
+    <p class="note">Hiện trạng đo tối 24/09: 0 nhãn vàng; Q2 học video Drive khoảng 12 phút một video (3 trên 33 xong sau 1 giờ 35 phút); 90 video TikTok đang chờ; máy Ngoc-Han rảnh. Số trong các khung “mô phỏng” bên dưới là ví dụ minh hoạ, không phải số đo.</p>
+  </header>
+
+  <section><h2>Một khuôn cho mọi kỹ năng: sáu chặng, năm cổng</h2>
+    <p class="col">Hôm nay mỗi kỹ năng tự có đường đi riêng: chọn cảnh có kho mẫu và phiên bản, nhận diện hình có nhãn vàng và bảng đo, thẩm mỹ chưa có gì. Làm thêm năm kỹ năng theo kiểu đó thì năm màn, năm luật bật khác nhau. Khuôn chung bắt mọi làn đi qua cùng các chặng, cùng cách đo, cùng cách bật, nên chạy nhiều làn một lúc vẫn nhìn được trên một bảng.</p>
+    <figure><div class="fig-box"><svg viewBox="0 0 980 190" role="img" aria-label="Sáu chặng: Gom, Thầy gán, Người xác nhận, Đo, Bóng, Bật; giữa các chặng là cổng; từ Bật có vòng quay lại Gom khi số đo tụt">
+      <defs><marker id="m" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="mk" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+      <rect class="b" x="10" y="40" width="130" height="70" rx="3"/><text x="22" y="64" style="font-weight:600">1 · Gom</text><text class="sub" x="22" y="82">video, footage, kịch bản</text><text class="sub" x="22" y="97">máy tự chạy</text>
+      <rect class="bs" x="175" y="40" width="130" height="70" rx="3"/><text x="187" y="64" style="font-weight:600">2 · Thầy gán</text><text class="sub" x="187" y="82">Claude + mô hình mở</text><text class="sub" x="187" y="97">cùng đọc, so nhau</text>
+      <rect class="bg" x="340" y="40" width="130" height="70" rx="3"/><text x="352" y="64" style="font-weight:600">3 · Người xác nhận</text><text class="sub" x="352" y="82">chỉ chỗ bất đồng</text><text class="sub" x="352" y="97">+ mẫu ngẫu nhiên</text>
+      <rect class="b" x="505" y="40" width="130" height="70" rx="3"/><text x="517" y="64" style="font-weight:600">4 · Đo</text><text class="sub" x="517" y="82">trên bộ đề vàng</text><text class="sub" x="517" y="97">đóng băng, không học</text>
+      <rect class="bt" x="670" y="40" width="130" height="70" rx="3"/><text x="682" y="64" style="font-weight:600">5 · Bóng</text><text class="sub" x="682" y="82">chạy thật song song</text><text class="sub" x="682" y="97">chỉ để so, không dùng</text>
+      <rect class="bt" x="835" y="40" width="130" height="70" rx="3"/><text x="847" y="64" style="font-weight:600">6 · Bật</text><text class="sub" x="847" y="82">máy dùng thật</text><text class="sub" x="847" y="97">người duyệt bật</text>
+      <path class="ar" d="M140,75 L173,75"/><path class="ar" d="M305,75 L338,75"/><path class="ar" d="M470,75 L503,75"/><path class="ar" d="M635,75 L668,75"/><path class="ar" d="M800,75 L833,75"/>
+      <circle class="gate" cx="157" cy="75" r="5"/><circle class="gate" cx="322" cy="75" r="5"/><circle class="gate" cx="487" cy="75" r="5"/><circle class="gate" cx="652" cy="75" r="5"/><circle class="gate" cx="817" cy="75" r="5"/>
+      <path class="ad" d="M900,112 C900,165 75,165 75,114"/><text class="sub" x="400" y="160">số đo lúc Bật tụt dưới ngưỡng 2 lần liền → tự lùi về Bóng, gom thêm</text>
+      <text class="sub" x="10" y="24">● cổng: điều kiện số, máy tự kiểm; riêng cổng vào Bật cần người duyệt</text>
+    </svg></div><figcaption>Chặng 2 dùng hai bên cùng đọc: chỗ Claude và mô hình mở khớp nhau thành nhãn bạc; chỗ bất đồng thành việc cho người ở chặng 3. Chặng 4 luôn đo trên bộ đề vàng riêng, không bao giờ dùng bộ đó để học.</figcaption></figure>
+    <div class="tbl-wrap"><table>
+      <tr><th>Cổng</th><th>Điều kiện mặc định (mỗi làn chỉnh được)</th><th>Ai mở</th></tr>
+      <tr><td>Gom → Thầy gán</td><td>đủ mẫu tối thiểu của làn (ví dụ nhận diện: 300 đoạn)</td><td>máy</td></tr>
+      <tr><td>Thầy gán → Người xác nhận</td><td>thầy đã đọc xong lô; tỉ lệ bất đồng được ghi lại</td><td>máy</td></tr>
+      <tr><td>Người xác nhận → Đo</td><td>bộ đề vàng đủ cỡ (ví dụ 200 nhãn người, rải đều nhóm)</td><td>máy</td></tr>
+      <tr><td>Đo → Bóng</td><td>mô hình mở hơn cách làm hiện tại, trên mẫu ngẫu nhiên</td><td>máy</td></tr>
+      <tr><td>Bóng → Bật</td><td>đạt ngưỡng của làn và chạy bóng ≥ 7 ngày không tụt</td><td><b>người duyệt</b></td></tr>
+    </table></div></section>
+
+  <section><h2>Sáu làn, mỗi làn nói rõ học từ đâu, ai dạy, đo bằng gì</h2>
+    <div class="tbl-wrap"><table style="min-width:900px">
+      <tr><th>Làn</th><th>Máy học gì</th><th>Thầy</th><th>Người làm gì</th><th>Đo bằng</th><th>Ngưỡng bật</th></tr>
+      <tr><td><b>K1 · Nhận diện</b></td><td>đoạn hình nói về gì: nhóm cảnh, bước, bài test</td><td>Claude</td><td>phím 1–8 ở chỗ bất đồng</td><td>đúng nhóm, đúng chi tiết trên mẫu ngẫu nhiên</td><td>nhóm ≥ 90%, chi tiết ≥ 80%</td></tr>
+      <tr><td><b>K2 · Source</b></td><td>đoạn đủ chuẩn quay chưa: nét, rung, sáng, che khuất</td><td>ffmpeg đo số</td><td>bấm “loại” khi thấy đoạn hỏng</td><td>trùng với lần người loại</td><td>≥ 90% trùng</td></tr>
+      <tr><td><b>K3 · Thẩm mỹ</b></td><td>cảnh hoàn thiện nào đẹp hơn theo chuẩn Kingsmen</td><td>không có (Claude chỉ gợi ý)</td><td>so cặp: chọn A hay B</td><td>đoán đúng bên người chọn</td><td>≥ 80%</td></tr>
+      <tr><td><b>K4 · Đọc lời</b></td><td>câu thoại đang nói nhóm nào, bước nào</td><td>Claude</td><td>sửa câu gán sai</td><td>đúng nhóm trên câu người xác nhận</td><td>≥ 90%</td></tr>
+      <tr><td><b>K5 · Ghép và nhịp</b></td><td>câu nào đi cảnh nào, shot dài bao lâu, thứ tự nhóm cảnh</td><td>video đã air (tính nặng theo lượt xem, doanh thu)</td><td>duyệt bản dựng thử</td><td>dựng lại video đã air, so với bản gốc</td><td>hơn cách cũ ≥ 5 điểm</td></tr>
+      <tr><td><b>K6 · Kiểm kỹ thuật</b></td><td>thiếu bước, đảo bước, cảnh làm sai, claim cấm</td><td>luật từ quy trình + claim cấm</td><td>trả video về kèm lý do</td><td>bắt được lỗi người đã trả về</td><td>không lọt lỗi nào đã biết</td></tr>
+    </table></div>
+    <p class="col note">K6 không bao giờ tự bật thay người: nó chỉ chặn và báo. K3 không dùng Claude làm thầy vì Claude không biết chuẩn thẩm mỹ riêng của Kingsmen; người là nguồn duy nhất.</p></section>
+
+  <section><h2>Song song: làn sau khởi động khi làn trước tới Bóng</h2>
+    <p class="col">Ba làn chạy được ngay hôm nay vì không cần làn nào khác: nhận diện, source, đọc lời. Thẩm mỹ cần nhận diện để biết đoạn nào là cảnh hoàn thiện; ghép cần cả nhận diện lẫn đọc lời; kiểm kỹ thuật cần nhận diện để biết bước. Nếu đợi làn trước Bật mới làm làn sau thì dự án kéo dài gấp đôi; đợi tới Bóng là đủ, vì ở Bóng nhãn đã đủ tốt để lọc dữ liệu cho làn sau, chỉ chưa đủ để máy dựng video thật.</p>
+    <figure><div class="fig-box"><svg viewBox="0 0 980 270" role="img" aria-label="Biểu đồ bậc thang: K1, K2, K4 bắt đầu ngay; K3 bắt đầu khi K1 tới Bóng; K5 khi K1 và K4 tới Bóng; K6 khi K1 Bật">
+      <defs><marker id="m2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="mk" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+      <text class="sub" x="150" y="18">Gom · Thầy · Người · Đo</text><text class="sub" x="560" y="18">Bóng</text><text class="sub" x="800" y="18">Bật</text>
+      <text x="10" y="48" style="font-weight:600">K1 Nhận diện</text><rect class="bs" x="130" y="34" width="400" height="20" rx="2"/><rect class="bt" x="530" y="34" width="230" height="20" rx="2"/><rect class="bt" x="760" y="34" width="210" height="20" rx="2" style="opacity:.6"/>
+      <text x="10" y="84" style="font-weight:600">K2 Source</text><rect class="bs" x="130" y="70" width="260" height="20" rx="2"/><rect class="bt" x="390" y="70" width="200" height="20" rx="2"/><rect class="bt" x="590" y="70" width="380" height="20" rx="2" style="opacity:.6"/>
+      <text x="10" y="120" style="font-weight:600">K4 Đọc lời</text><rect class="bs" x="130" y="106" width="330" height="20" rx="2"/><rect class="bt" x="460" y="106" width="240" height="20" rx="2"/><rect class="bt" x="700" y="106" width="270" height="20" rx="2" style="opacity:.6"/>
+      <text x="10" y="156" style="font-weight:600">K3 Thẩm mỹ</text><rect class="bg" x="530" y="142" width="280" height="20" rx="2"/><rect class="bt" x="810" y="142" width="160" height="20" rx="2"/>
+      <text x="10" y="192" style="font-weight:600">K5 Ghép, nhịp</text><rect class="bg" x="530" y="178" width="330" height="20" rx="2"/><rect class="bt" x="860" y="178" width="110" height="20" rx="2"/>
+      <text x="10" y="228" style="font-weight:600">K6 Kiểm kỹ thuật</text><rect class="bg" x="760" y="214" width="210" height="20" rx="2"/>
+      <path class="ad" d="M530,56 L530,140" marker-end="url(#m2)"/><path class="ad" d="M700,128 C700,160 560,160 545,176" marker-end="url(#m2)"/><path class="ad" d="M760,56 L760,212" marker-end="url(#m2)"/>
+      <text class="sub" x="130" y="258">xanh dương: đang gom và gán · vàng: làn mới vào, dữ liệu lọc từ làn trước · xanh lá: Bóng, đậm hơn là Bật</text>
+    </svg></div><figcaption>Độ dài các thanh là minh hoạ thứ tự, không phải lịch. Lịch thật do cổng quyết: làn nào qua cổng sớm thì đi sớm.</figcaption></figure></section>
+
+  <section><h2>Cuốn chiếu: trong mỗi làn, dòng sản phẩm đủ dữ liệu đi trước</h2>
+    <p class="col">Mỗi ô của bảng “làn × dòng” có chặng riêng. Bản chung học trên mọi dòng; bản riêng của một dòng chỉ bật khi hơn bản chung trên chính dòng đó (cơ chế phạm vi đã có từ ADR-012). Khi một dòng qua Bóng ở K1, dòng đó được mở luôn K3 và K5, trong khi dòng khác vẫn đang gom ở K1. Thứ tự dòng do máy xếp theo số nhãn sẵn có; anh kéo đổi được.</p>
+    <div class="tbl-wrap"><table>
+      <tr><th>Dòng</th><th>Nguồn đang có (đo 24/09)</th><th>Đủ để đi trước ở làn</th></tr>
+      <tr><td>Keo chít mạch</td><td>14 clip footage đã đọc; quy trình cần khai lại cho khớp</td><td>K1, K2 (footage thô)</td></tr>
+      <tr><td>Finex</td><td>thư mục Drive FINEX; 30 video TikTok @vatlieumoifinex, bài cao nhất 529.227 lượt xem</td><td>K4, K5 (video đã air có lời)</td></tr>
+      <tr><td>Terrazo</td><td>thư mục Drive TERRAZ; 30 video TikTok @santerrazotuphang</td><td>K4, K5</td></tr>
+      <tr><td>Chung</td><td>Kalodata 6 video ngành vật tư xây dựng; video định vị thương hiệu</td><td>bản chung của mọi làn</td></tr>
+    </table></div></section>
+
+  <section><h2>Ba nguồn lực chạy song song, mỗi nguồn có hàng riêng</h2>
+    <p class="col">Chậm hiện nay không phải vì thiếu máy mà vì một video được học trọn gói trên một máy: tải, cắt shot, nghe, đọc hình, tải ảnh, tất cả nối đuôi trên Q2 trong khi Ngoc-Han ngồi không. Tách việc học một video thành chặng, mỗi chặng vào hàng của nguồn phù hợp.</p>
+    <figure><div class="fig-box"><svg viewBox="0 0 980 230" role="img" aria-label="Một video đi qua năm chặng; chặng cắt shot, đo source và nghe lời chạy ở Ngoc-Han; chặng đọc hình ở Q2; chặng thầy gọi Claude qua app; chặng người vào hộp việc">
+      <defs><marker id="m3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="mk" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+      <rect class="b" x="10" y="30" width="150" height="60" rx="3"/><text x="22" y="54" style="font-weight:600">Tải + cắt shot</text><text class="sub" x="22" y="72">+ đo source (ffmpeg)</text>
+      <rect class="b" x="200" y="30" width="150" height="60" rx="3"/><text x="212" y="54" style="font-weight:600">Nghe lời</text><text class="sub" x="212" y="72">Whisper small</text>
+      <rect class="bt" x="390" y="30" width="150" height="60" rx="3"/><text x="402" y="54" style="font-weight:600">Đọc hình</text><text class="sub" x="402" y="72">qwen2.5vl · GPU 8 GB</text>
+      <rect class="bs" x="580" y="30" width="150" height="60" rx="3"/><text x="592" y="54" style="font-weight:600">Thầy đọc</text><text class="sub" x="592" y="72">Claude qua app</text>
+      <rect class="bg" x="770" y="30" width="200" height="60" rx="3"/><text x="782" y="54" style="font-weight:600">Người xác nhận</text><text class="sub" x="782" y="72">hộp việc chung</text>
+      <path class="ar" d="M160,60 L198,60" marker-end="url(#m3)"/><path class="ar" d="M350,60 L388,60" marker-end="url(#m3)"/><path class="ar" d="M540,60 L578,60" marker-end="url(#m3)"/><path class="ar" d="M730,60 L768,60" marker-end="url(#m3)"/>
+      <rect class="b" x="10" y="130" width="340" height="44" rx="3"/><text x="22" y="150" style="font-weight:600">Hàng Ngoc-Han (GTX 1650)</text><text class="sub" x="22" y="166">tải, cắt, đo, nghe · nhiều video cùng lúc</text>
+      <rect class="bt" x="390" y="130" width="150" height="44" rx="3"/><text x="402" y="150" style="font-weight:600">Hàng Q2</text><text class="sub" x="402" y="166">chỉ việc cần GPU lớn</text>
+      <rect class="bs" x="580" y="130" width="150" height="44" rx="3"/><text x="592" y="150" style="font-weight:600">Hàng Claude</text><text class="sub" x="592" y="166">4 luồng · trần ngân sách</text>
+      <rect class="bg" x="770" y="130" width="200" height="44" rx="3"/><text x="782" y="150" style="font-weight:600">Hàng người</text><text class="sub" x="782" y="166">trần phút mỗi ngày</text>
+      <path class="ad" d="M180,92 L180,128"/><path class="ad" d="M465,92 L465,128"/><path class="ad" d="M655,92 L655,128"/><path class="ad" d="M870,92 L870,128"/>
+      <text class="sub" x="10" y="210">Máy nào rảnh và đủ sức thì nhận chặng; Q2 chết thì Ngoc-Han nhận cả đọc hình (chậm hơn) — đúng vai dự phòng anh đã chọn.</text>
+    </svg></div><figcaption>Q2 chỉ còn làm việc mà chỉ nó làm được. Ước tính (chưa đo): phần đọc hình trên Q2 khoảng 2–3 phút một video, nên Q2 xử lý được 3–4 lần số video hiện nay nếu phần còn lại chuyển sang Ngoc-Han. Tôi sẽ đo lại sau khi tách.</figcaption></figure></section>
+
+  <section><h2>Người chỉ làm ở một hộp việc, việc nào gần cổng nhất lên trước</h2>
+    <p class="col">Bốn loại thẻ trong cùng một hàng: nhãn hình (K1), so cặp thẩm mỹ (K3), sửa câu lời (K4), duyệt bản dựng thử (K5, K6). Thứ tự: làn đang gần cổng nhất, rồi thẻ bất đồng nặng nhất, rồi xen thẻ ngẫu nhiên để đo không lệch. Mỗi thẻ làm bằng phím, trung bình dưới 5 giây. Anh đặt trần phút mỗi ngày; hết trần thì hộp đóng, máy không dồn thêm.</p></section>
+
+  <section><h2>Giao diện: Bàn huấn luyện thay ba màn đang tách rời</h2>
+    <p class="col">Màn Huấn luyện, Lớp học và Nhãn hình hiện nằm ở ba tab. Gộp thành một “Bàn huấn luyện” với ba vùng: bảng làn × dòng, hộp việc, nguồn lực. Bấm một ô mở chi tiết làn của dòng đó. Màn cũ vẫn giữ trong “Chi tiết” cho tới khi Bàn chạy ổn.</p>
+    <div class="ex">Mô phỏng · số liệu ví dụ</div>
+    <div class="app"><div class="in">
+      <div class="tabs"><span class="tab on">🎯 Bàn huấn luyện</span><span class="tab">Định tuyến</span><span class="tab">Mô hình</span><span class="tab">Khoá API</span><span class="tab">Chi phí</span><span class="tab">Chi tiết (màn cũ)</span></div>
+      <div class="kpis">
+        <div class="kpi"><b>3 / 6</b><span class="mu">làn đang chạy</span></div>
+        <div class="kpi"><b>47</b><span class="mu">thẻ chờ anh · khoảng 4 phút</span></div>
+        <div class="kpi"><b>Q2 bận · NH rảnh</b><span class="mu">hàng máy: 12 video chờ</span></div>
+        <div class="kpi"><b>3,1 / 10 USD</b><span class="mu">ngân sách thầy tháng này</span></div>
+      </div>
+      <div class="grid3">
+        <div class="pn"><div class="ttl">Làn × dòng sản phẩm</div><div class="mu">mỗi ô: chặng · số đo chính · còn thiếu gì để qua cổng</div>
+          <table style="margin-top:6px"><tr><th>Làn</th><th>Chung</th><th>Keo chít mạch</th><th>Finex</th><th>Terrazo</th></tr>
+            <tr><td><b>K1 Nhận diện</b></td><td><div class="cell"><span class="pill p2">3 · Người</span><span class="mu">82 / 200 nhãn</span><div class="bar"><i style="width:41%"></i></div></div></td><td><div class="cell"><span class="pill p3">5 · Bóng</span><span class="mu">91% · còn 4 ngày</span></div></td><td><div class="cell"><span class="pill p1">2 · Thầy</span><span class="mu">bất đồng 34%</span></div></td><td><div class="cell"><span class="pill p0">1 · Gom</span><span class="mu">40 / 300 đoạn</span></div></td></tr>
+            <tr><td><b>K2 Source</b></td><td><div class="cell"><span class="pill p3">5 · Bóng</span><span class="mu">trùng 88%</span></div></td><td>theo chung</td><td>theo chung</td><td>theo chung</td></tr>
+            <tr><td><b>K3 Thẩm mỹ</b></td><td><span class="mu">—</span></td><td><div class="cell"><span class="pill p2">3 · Người</span><span class="mu">so cặp 26 / 150</span></div></td><td><span class="pill pX">chờ K1</span></td><td><span class="pill pX">chờ K1</span></td></tr>
+            <tr><td><b>K4 Đọc lời</b></td><td><div class="cell"><span class="pill p1">2 · Thầy</span><span class="mu">312 câu</span></div></td><td>—</td><td><div class="cell"><span class="pill p2">3 · Người</span><span class="mu">60 / 150</span></div></td><td><div class="cell"><span class="pill p0">1 · Gom</span></div></td></tr>
+            <tr><td><b>K5 Ghép, nhịp</b></td><td><span class="pill pX">chờ K1 + K4</span></td><td></td><td></td><td></td></tr>
+            <tr><td><b>K6 Kiểm kỹ thuật</b></td><td><span class="pill pX">chờ K1 bật</span></td><td></td><td></td><td></td></tr>
+          </table></div>
+        <div class="pn"><div class="ttl">Hộp việc của anh</div><div class="mu">trần hôm nay 20 phút · đã làm 6 phút</div>
+          <div style="display:flex;flex-direction:column;gap:6px;margin-top:6px">
+            <div class="card-t"><div class="sw" style="background:linear-gradient(135deg,#8a6a3a,#c9a36b)"></div><div><b>Nhãn hình · Finex</b><div class="mu">Claude: Thi công · Trát lớp 2 — qwen: Hoàn thiện</div><div class="keys" style="margin-top:3px"><span>1–8</span><span>Enter</span><span>0</span></div></div></div>
+            <div class="card-t"><div class="sw" style="background:linear-gradient(90deg,#d9d4c8 50%,#cfc6b2 50%)"></div><div><b>So cặp thẩm mỹ · Keo</b><div class="mu">Mạch nào đẹp hơn? Trái hay phải</div><div class="keys" style="margin-top:3px"><span>←</span><span>→</span><span>=</span></div></div></div>
+            <div class="card-t"><div class="sw" style="background:#E3F0ED"></div><div><b>Câu lời · Finex</b><div class="mu">“lớp này giúp bám dính tốt hơn” → Claude: Thi công · Lăn lót</div><div class="keys" style="margin-top:3px"><span>Enter</span><span>1–8</span></div></div></div>
+            <div style="text-align:right"><span class="tab on">Bắt đầu 20 thẻ →</span></div>
+          </div></div>
+      </div>
+    </div></div>
+    <p class="note">Ô màu đỏ “chờ …” nói thẳng làn đó đang đợi làn nào. Anh không phải nhớ thứ tự; bảng tự mở ô khi cổng qua.</p>
+
+    <div class="ex">Mô phỏng · chi tiết một ô: K1 Nhận diện · Keo chít mạch</div>
+    <div class="app"><div class="in">
+      <div class="pn"><div class="ttl">K1 · Nhận diện · Keo chít mạch <span class="pill p3">5 · Bóng</span></div><div class="mu">bản chung v3 · bản riêng v2 (hơn bản chung 6 điểm trên dòng này)</div>
+        <table style="margin-top:6px"><tr><th>Chặng</th><th>Trạng thái</th><th>Cổng</th><th>Số đo</th></tr>
+          <tr><td>1 Gom</td><td>xong</td><td>≥ 300 đoạn</td><td class="n">412 đoạn</td></tr>
+          <tr><td>2 Thầy gán</td><td>xong</td><td>thầy đọc hết lô</td><td class="n">bất đồng 22%</td></tr>
+          <tr><td>3 Người</td><td>xong</td><td>≥ 200 nhãn vàng</td><td class="n">214 nhãn</td></tr>
+          <tr><td>4 Đo</td><td>xong</td><td>hơn cách hiện tại</td><td class="n">mở 91% · Claude 94% · cũ 63%</td></tr>
+          <tr><td>5 Bóng</td><td>ngày 3 / 7</td><td>không tụt 7 ngày</td><td class="n">90–92%</td></tr>
+          <tr><td>6 Bật</td><td>chờ</td><td>người duyệt</td><td><span class="tab">Duyệt bật (mở sau 4 ngày)</span></td></tr>
+        </table></div>
+    </div></div>
+  </section>
+
+  <section><h2>Triển khai cũng cuốn chiếu: bốn đợt, mỗi đợt tự chạy được</h2>
+    <div class="tbl-wrap"><table>
+      <tr><th>Đợt</th><th>Làm gì</th><th>Anh thấy gì sau đợt</th></tr>
+      <tr><td><b>A</b></td><td>Khuôn làn + cổng trong app; Bàn huấn luyện (bảng làn × dòng, hộp việc, nguồn lực); đưa K1 và màn nhãn hình vào khuôn; tách việc học video thành chặng, Ngoc-Han nhận tải, cắt, đo, nghe</td><td>một màn thay ba màn; Q2 nhanh hơn; hộp việc có thẻ nhãn hình</td></tr>
+      <tr><td><b>B</b></td><td>K2 source (nút loại đoạn, ngưỡng học từ lần loại); K4 đọc lời với Claude làm thầy, thẻ sửa câu lời</td><td>ba làn chạy song song</td></tr>
+      <tr><td><b>C</b></td><td>K3 so cặp thẩm mỹ, mở theo dòng khi K1 của dòng tới Bóng</td><td>thẻ so cặp trong hộp việc</td></tr>
+      <tr><td><b>D</b></td><td>K5 dựng lại video đã air rồi so với bản gốc, nối vào dựng thật; K6 kiểm kỹ thuật chặn trước khi giao video</td><td>video máy dựng mang điểm và lý do bị chặn</td></tr>
+    </table></div>
+    <p class="col note">Mỗi đợt deploy riêng qua lệnh deploy có khoá, có test, không phá màn cũ. Đợt sau chỉ bắt đầu khi đợt trước chạy ổn trên dữ liệu thật ít nhất một đêm.</p></section>
+
+  <section class="card final"><h3>Cần anh duyệt</h3>
+    <ol class="col" style="margin:8px 0 0;padding-left:20px;display:flex;flex-direction:column;gap:6px">
+      <li>Khuôn sáu chặng, năm cổng cho mọi kỹ năng; làn sau mở khi làn trước tới Bóng.</li>
+      <li>Cuốn chiếu theo dòng sản phẩm: máy xếp thứ tự theo dữ liệu, anh đổi được.</li>
+      <li>Tách việc học video thành chặng: Ngoc-Han làm tải, cắt, đo, nghe; Q2 chỉ đọc hình.</li>
+      <li>Bàn huấn luyện thay ba tab Huấn luyện, Lớp học, Nhãn hình (giữ màn cũ trong Chi tiết).</li>
+      <li>Làm đợt A trước; anh đặt ngân sách thầy tháng và trần phút hộp việc mỗi ngày.</li>
+    </ol></section>
+</div>
