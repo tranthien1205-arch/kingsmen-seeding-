@@ -37,10 +37,15 @@ test('may-dung.mjs: log() ghi thêm ra may-dung.log, có xoay vòng 5 MB và b�
   assert.ok(!/console\.error\(/.test(MAY.replace(/const loi = \(\.\.\.m\) => \{ console\.error\(/, '')), 'lỗi ở luồng chính phải đi qua loi() để vào file');
 });
 
-test('cai-hoc-ngon-ngu.ps1: dòng lệnh chỉ dùng ASCII (irm giải mã ISO-8859-1, chạy từ đĩa giải mã cp1252 → dấu tiếng Việt thành nháy cong phá cú pháp)', () => {
-  const PS = fs.readFileSync(new URL('../tools/may-dung/cai-hoc-ngon-ngu.ps1', import.meta.url), 'utf8');
-  const la = PS.split(/\r?\n/).filter((d) => !/^\s*#/.test(d) && /[^\x00-\x7f]/.test(d));
-  assert.deepEqual(la, [], 'dòng lệnh có ký tự ngoài ASCII');
+test('mọi *.ps1 máy con: dòng lệnh chỉ dùng ASCII (irm giải mã ISO-8859-1, chạy từ đĩa giải mã cp1252 → dấu tiếng Việt thành nháy cong phá cú pháp)', () => {
+  const thuMuc = new URL('../tools/may-dung/', import.meta.url);
+  const ds = fs.readdirSync(thuMuc).filter((f) => f.endsWith('.ps1'));
+  assert.ok(ds.includes('cai-may-hoc.ps1') && ds.includes('cai-hoc-ngon-ngu.ps1'));
+  for (const f of ds) {
+    const la = fs.readFileSync(new URL(f, thuMuc), 'utf8').split(/\r?\n/).filter((d) => !/^\s*#/.test(d) && /[^\x00-\x7f]/.test(d));
+    assert.deepEqual(la, [], f + ': dòng lệnh có ký tự ngoài ASCII');
+  }
+  const PS = fs.readFileSync(new URL('cai-hoc-ngon-ngu.ps1', thuMuc), 'utf8');
   for (const ban of ['torch==2.11.0', 'unsloth==2026.9.11', 'trl==0.24.0', 'download.pytorch.org/whl/cu128']) assert.ok(PS.includes(ban), 'thiếu ghim ' + ban);
 });
 

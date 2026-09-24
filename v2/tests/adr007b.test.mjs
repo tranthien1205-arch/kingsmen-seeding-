@@ -69,7 +69,10 @@ test('lead AI phân loại: kiểm bài → bình luận → AI chia loại/mứ
 });
 test('nuôi tài khoản: lên lịch 1 lượt/ngày cho tài khoản sống có nhóm, giờ 8–21h; tới giờ → Trạm; /hub/viec/seeding_nuoi; kết quả → sức khoẻ nuoi_so; không lên lịch lần 2 trong ngày', async () => {
   let r = await api('/may/chay-thu', 'POST', { agent: 'LEN_LICH_NUOI' }); const nu = r.j.db.seeding.nuoi; const song = r.j.db.seeding.tai_khoan.filter(t => t.song).length; assert.ok(nu.length >= 1 && nu.length <= song, 'nuôi ' + nu.length + ' / sống ' + song); for (const x of nu) { const g = (new Date(x.gio).getUTCHours() + 7) % 24; assert.ok(g >= 8 && g <= 21, 'giờ ' + g); assert.equal(x.nhom_id, nhomA); }
-  r = await api('/may/chay-thu', 'POST', { agent: 'LEN_LICH_NUOI' }); assert.equal(r.j.db.seeding.nuoi.length, nu.length, 'không nhân đôi trong ngày');
+  // Lượt 2 có thể lên lịch cho tài khoản lượt 1 bỏ sót (chạy test buổi tối: bốc ngẫu nhiên 10 giờ trong 8–21h, giờ đã qua bị bỏ)
+  // → không so tổng; điều cần giữ là KHÔNG tài khoản nào có 2 lượt nuôi trong ngày.
+  r = await api('/may/chay-thu', 'POST', { agent: 'LEN_LICH_NUOI' }); const dem = {}; for (const n of r.j.db.seeding.nuoi) dem[n.tai_khoan_id] = (dem[n.tai_khoan_id] || 0) + 1;
+  assert.ok(Object.values(dem).every((n) => n === 1), 'không nhân đôi trong ngày: ' + JSON.stringify(dem)); assert.ok(r.j.db.seeding.nuoi.length >= nu.length && r.j.db.seeding.nuoi.length <= song);
   const x = nu[0]; DB.raw.prepare(`UPDATE nuoi_seeding SET gio=? WHERE id=?`).run(new Date(Date.now() - 1000).toISOString(), x.id);
   r = await api('/may/chay-thu', 'POST', { agent: 'NUOI_TAI_KHOAN' }); assert.match(r.j.kq[0].tom_tat, /nuôi 1/); let h = await hub('/hub/viec/seeding_nuoi'); assert.equal(h.j.viec.length, 1); assert.equal(h.j.viec[0].phut, 4); assert.equal(h.j.viec[0].tim, 3); assert.match(h.j.viec[0].nhom.link_hoac_id, /groups\/tho/);
   h = await hub('/hub/nap', 'POST', { viec: 'content_os.seeding_nuoi', bang: 'content_os.seeding_nuoi_ket_qua', luot: 'n1', dong: [{ id: x.id, ok: true, tim: 2, xem_phut: 4.2 }] }); assert.equal(h.j.cap_nhat, 1);

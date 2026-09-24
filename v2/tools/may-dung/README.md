@@ -5,7 +5,7 @@ Máy con rút gọn: nhận lệnh **dựng video nháp** từ app cho tài kho�
 ## Cài một lần (Windows)
 1. Cài **Node.js 22** (https://nodejs.org) và **ffmpeg**: mở PowerShell, chạy `winget install Gyan.FFmpeg`, đóng mở lại cửa sổ.
 2. Tạo thư mục, ví dụ `C:\may-dung`, tải 3 file vào đó: `may-dung.mjs`, `BAT-DAU.bat`, `README.md` (link ở app › Hồ sơ › Máy dựng).
-3. Trong app: **Hồ sơ › Máy dựng › ＋ Kết nối máy này** → copy mã ghép (hiện một lần).
+3. Trong app: bấm vào **tên của bạn** (góc dưới bên trái) → hộp Hồ sơ của tôi → khung **🎬 Máy dựng của tôi** → **＋ Kết nối máy này** → copy mã ghép (hiện một lần). Khung này chỉ hiện với vai trò Marketing, Trưởng MKT, Admin.
 4. Chạy `BAT-DAU.bat`, dán mã ghép khi được hỏi. Máy báo nhịp tim 2 phút/lần; app hiện 🟢 ở Hồ sơ › Máy dựng.
 
 ## Bật phần AI (tuỳ chọn — ADR-009)
