@@ -13,7 +13,7 @@ import os from "node:os";
 export const DIR = dirname(fileURLToPath(import.meta.url));
 const BAN = "1.1";
 // việc app giao → script phát từ app (ADR-008/009): máy chỉ chạy script đúng hash app xác nhận
-const VIEC_SCRIPT = { dung_video: "dung-video", mo_hinh_bong: "mo-hinh", mo_hinh_chay: "mo-hinh", huan_luyen: "huan-luyen", loc_footage: "loc-footage" };
+const VIEC_SCRIPT = { dung_video: "dung-video", mo_hinh_bong: "mo-hinh", mo_hinh_chay: "mo-hinh", huan_luyen: "huan-luyen", loc_footage: "loc-footage", nap_drive: "nap-drive" };   // nap_drive: nạp footage từ thư mục Drive (24/09)
 const coTransformers = existsSync(join(DIR, "node_modules", "@huggingface", "transformers"));
 const gpu = (() => { const r = spawnSync("nvidia-smi", ["--query-gpu=name,memory.total", "--format=csv,noheader"], { encoding: "utf8" }); return !r.error && r.status === 0 ? String(r.stdout || "").trim().split("\n")[0].slice(0, 60) : ""; })();
 async function coOllama() { try { const p = await fetch("http://localhost:11434/api/tags", { signal: AbortSignal.timeout(1500) }); return p.ok; } catch { return false; } }

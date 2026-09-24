@@ -40,3 +40,19 @@ test('secret Cloudflare (env thật) ưu tiên: hiện nguồn wrangler, PUT b�
   const r = await api('/khoa-api/ANTHROPIC_API_KEY', 'DELETE'); assert.equal(r.s, 200);
   assert.equal(r.j.db.san_sang.ai, false); assert.equal(r.j.db.khoa_api.find(x => x.ten === 'ANTHROPIC_API_KEY').co, false);
 });
+test('nạp Drive: /muc/:id/nap-drive tạo lệnh nap_drive cho máy con; /hub/tai-san lưu FOOTAGE nguồn DRIVE, chống trùng; script nap-drive được phát', async () => {
+  let r = await api('/muc', 'POST', { tieu_de: 'Video keo chít mạch', dinh_dang: 'VIDEO' }); const mucId = r.j.id;
+  assert.equal((await api('/muc/' + mucId + '/nap-drive', 'POST', { link: 'https://example.com/x' })).s, 400);
+  assert.equal((await api('/muc/' + mucId + '/nap-drive', 'POST', { link: 'https://drive.google.com/drive/folders/1EodWW7d1a4Q5lDA9rV4HAnbmvfWzGbrb' })).s, 409);   // chưa có máy dựng
+  const ma = (await api('/may-ghep', 'POST', { ten: 'Máy thử' })).j; const khoaMay = JSON.parse(Buffer.from(ma.ma_ghep.slice(5).replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8')).khoa;
+  {
+    const hubM = (p, method = 'GET', body) => worker.fetch(new Request('https://x/api' + p, { method, headers: { 'Content-Type': 'application/json', 'X-Hub-Key': khoaMay }, body: body ? JSON.stringify(body) : undefined }), env, {}).then(async x => ({ s: x.status, j: await x.json().catch(() => ({})) }));
+    await hubM('/hub/trang_thai', 'POST', { may: 'thu', ffmpeg: true, kha_nang: ['dung_video'] });
+    r = await api('/muc/' + mucId + '/nap-drive', 'POST', { link: 'https://drive.google.com/drive/folders/1EodWW7d1a4Q5lDA9rV4HAnbmvfWzGbrb', toi_da: 5 }); assert.equal(r.s, 200); assert.equal(r.j.toi_da, 5);
+    const l = (await hubM('/hub/lenh')).j.lenh.find(x => x.viec === 'nap_drive'); assert.equal(l.tham_so.folder_id, '1EodWW7d1a4Q5lDA9rV4HAnbmvfWzGbrb');
+    let t = await hubM('/hub/tai-san', 'POST', { muc_id: mucId, ten: 'DJI_0438.MP4', media_url: '/media/media/m_x.mp4', media_type: 'VIDEO', giay: 4.7 }); assert.equal(t.s, 200); assert.ok(t.j.id);
+    t = await hubM('/hub/tai-san', 'POST', { muc_id: mucId, ten: 'DJI_0438.MP4', media_url: '/media/media/m_x.mp4' }); assert.equal(t.j.trung, true);
+    assert.deepEqual((await hubM('/hub/viec/nap_drive?muc_id=' + mucId)).j.da_co, ['DJI_0438.MP4']);
+    assert.equal((await hubM('/hub/tai-san', 'POST', { muc_id: mucId, ten: 'x', media_url: 'https://ngoai.com/a.mp4' })).s, 400);
+  }
+});
