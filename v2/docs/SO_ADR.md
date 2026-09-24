@@ -381,6 +381,10 @@ Người duyệt: Thiện · Trạng thái: ĐÃ DUYỆT (2026-09-24, "ok bạn 
 
 ## Changelog
 
+### 2026-09-24 · Bộ nghe tiếng Việt: đo và chọn
+- Đo trên "Làm đúng ngay từ đầu.mp4" (74 giây, máy Ngoc-Han CPU): whisper-base 42 giây, không đọc được; whisper-small 61 giây, đọc hiểu gần hết, sai tên riêng; PhoWhisper-small (huuquyet ONNX) 45 giây, tương đương nhưng rơi một đoạn giữa. Giữ whisper-small.
+- `hoc-thanh-pham.mjs`: `suaThuatNgu()` sửa chỗ chắc chắn (Kingsmen, epoxy, keo chít mạch, đường/màu ron); video Drive giữ lại ở `thanh-pham/drive/<id>` trên máy học (học lại không tải lại ~180 MB/video).
+
 ### 2026-09-24 · ADR-017 đợt B — K2 chất lượng source, K4 đọc lời
 - **K2**: `GET /source/hang` (đoạn footage có số đo nét/rung/sáng, gần ngưỡng trước, xen 1/4 ngẫu nhiên), `POST /tai-san/:id/doan/:i/source` {dung, ly_do} → mẫu `chat_luong_source`; ≥ 30 lần quyết thì `hocNguongSource()` dò lưới ngưỡng khớp người nhất (đo trên tập KIỂM) → `huan_luyen.source_hoc`; `POST /source/hoc`.
 - **K4**: `thayDocLoi()` Claude Haiku gán nhóm/bước cho 20 câu một lần gọi (cron 40 câu/15 phút, nút đọc ngay), chi phí `hoc_doc_loi` chung trần thầy; `GET /doc-loi/hang` (nghe sai → lời khác hình → thầy không chắc → 1/4 ngẫu nhiên); `POST /mau/:id/doc-loi` {nhom,buoc | nghe_sai}.
