@@ -31,6 +31,13 @@ test('010b: máy con báo phân tích đoạn + khung → tai_san.phan_tich (c�
   v = (await hub('/hub/viec/phan_tich?muc_id=' + mucId)).j.viec; assert.equal(v.length, 2);
   const dv = (await hub('/hub/viec/dung_video?noi_dung_id=' + ndId)).j.viec[0]; assert.ok(dv); const tA = dv.tai_san.find(t => t.id === ts[0]); assert.equal(tA.phan_tich.doan.length, 12);
 });
+test('010b: người bấm 🔬 Phân tích footage → lệnh phan_tich_footage cho máy dựng; hết footage chưa phân tích → 409', async () => {
+  const r = await api('/muc/' + mucId + '/phan-tich', 'POST', {}); assert.equal(r.s, 200); assert.equal(r.j.so_clip, 2, 'A đã phân tích, còn B và C');
+  const l = (await hub('/hub/lenh')).j.lenh.find(x => x.viec === 'phan_tich_footage'); assert.ok(l); assert.equal(l.tham_so.muc_id, mucId);
+  for (const id of ts.slice(1)) await hub('/hub/phan-tich', 'POST', { tai_san_id: id, phan_tich: { dai: 6, doan: [{ t: 0, net: 0.5, dong: 0.1, sang: 0.5 }, { t: 0.5, net: 0.5, dong: 0.1, sang: 0.5 }, { t: 1, net: 0.5, dong: 0.1, sang: 0.5 }] } });
+  assert.equal((await api('/muc/' + mucId + '/phan-tich', 'POST', {})).s, 409);
+  assert.equal((await api('/bootstrap')).j.db.tai_san.filter(t => t.muc_id === mucId && t.phan_tich).length, 3, 'bootstrap mang phan_tich để màn hiện/ẩn nút');
+});
 test('010a: lô video mang kế hoạch ghép MAY → ghep_video; GET /noi-dung/:id/ghep; người chỉnh (đổi clip, cắt giây) → POST lưu NGUOI, ghi mẫu, giao dựng lại với ghep_id', async () => {
   const ghep = [{ k: 0, label: 'Vấn đề', text: 'Ron mốc đen', hinh: 'ron mốc', d: 3, shots: [{ tai_san_id: ts[1], tu: 0, den: 3 }] }, { k: 1, label: 'Cách làm', text: 'Bóp keo', hinh: 'tay bóp keo', d: 4, shots: [{ tai_san_id: ts[1], tu: 3, den: 5 }, { tai_san_id: ts[2], tu: 0, den: 2 }] }];
   const lo = await hub('/hub/nap', 'POST', { viec: 'may_dung.dung_video', bang: 'content_os.video', luot: 'v010', dong: [{ noi_dung_id: ndId, media_url: '/media/media/v1.mp4', giay: 7, ghep_nguon: 'MAY', ghep, canh_chon: ghep.map(c => ({ k: c.k, label: c.label, hinh: c.hinh, chon: c.shots[0].tai_san_id, cach: 'API', ung_vien: ts.map(id => ({ id, ten: id })) })) }] });
