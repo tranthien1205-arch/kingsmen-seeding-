@@ -170,7 +170,8 @@ const MUC_DICH_TEN={BAN_HANG:'Bán hàng',BRAND:'Brand'};
 const fmtVND=n=>n==null?'—':n>=1e9?('₫'+(n/1e9).toFixed(2).replace('.',',')+' tỉ'):n>=1e6?('₫'+(n/1e6).toFixed(1).replace('.',',')+' tr'):n>=1e3?('₫'+Math.round(n/1e3)+'k'):('₫'+Math.round(n));
 const TEN_PV=pv=>!pv||pv==='chung'?'chung':pv.startsWith('dong:')?pv.slice(5):pv.startsWith('muc_dich:')?(MUC_DICH_TEN[pv.slice(9)]||pv.slice(9)):pv;
 function NhanPhamVi({dong,setDong,mucDich,setMucDich,dongs}){
-  return <><Select className="!py-1.5 text-xs !w-40" value={dong} onChange={e=>setDong(e.target.value)} title="Dòng sản phẩm — máy tách bản riêng khi đủ mẫu"><option value="">dòng: chung</option>{dongs.map(d=><option key={d} value={d}>{d}</option>)}</Select>
+  // gõ tự do + gợi ý từ dòng đã có (Danh mục › Sản phẩm trường "Dòng", hoặc dòng đã gắn cho video/mẫu trước đó) — chưa có sản phẩm nào vẫn gắn được
+  return <><Input className="!py-1.5 text-xs !w-44" list="ds-dong-sp" placeholder="dòng sản phẩm (trống = chung)" value={dong} onChange={e=>setDong(e.target.value)} title="Dòng sản phẩm — máy tách bản riêng khi đủ mẫu; gõ tên mới hoặc chọn dòng đã có"/><datalist id="ds-dong-sp">{dongs.map(d=><option key={d} value={d}/>)}</datalist>
     <Select className="!py-1.5 text-xs !w-32" value={mucDich} onChange={e=>setMucDich(e.target.value)}><option value="">mục đích: —</option><option value="BAN_HANG">Bán hàng</option><option value="BRAND">Brand</option></Select></>;
 }
 function HuanLuyenAI({a}){

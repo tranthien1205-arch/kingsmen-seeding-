@@ -1400,7 +1400,7 @@ async function bootstrap(env, u){
       mo_hinh:(await all(`SELECT * FROM mo_hinh ORDER BY loai, cach_goi, created_at`)).map(x=>({...x, ten_khoa:tenKhoa(x), co_khoa: x.cach_goi==='API'?!!env[tenKhoa(x)]:null})),
       dinh_tuyen: await all(`SELECT * FROM dinh_tuyen ORDER BY loai, tinh_nang`),
       phien_ban:(await all(`SELECT * FROM mo_hinh_phien_ban ORDER BY created_at DESC LIMIT 20`)).map(p=>({...p, danh_gia:docJSON(p.danh_gia,{})})),
-      dong_san_pham: (await all(`SELECT DISTINCT dong FROM san_pham WHERE dong IS NOT NULL AND dong<>'' ORDER BY dong`)).map(x=>x.dong),
+      dong_san_pham: (await all(`SELECT dong FROM (SELECT dong FROM san_pham UNION SELECT dong FROM kho_thanh_pham UNION SELECT dong FROM mau_hoc_ai) WHERE dong IS NOT NULL AND dong<>'' GROUP BY dong ORDER BY dong`)).map(x=>x.dong),
       pham_vi_thong_ke: await all(`SELECT tinh_nang, COALESCE(dong,'') dong, COALESCE(muc_dich,'') muc_dich, COUNT(*) tong, SUM(CASE WHEN nhan IS NOT NULL OR phan_quyet IS NOT NULL THEN 1 ELSE 0 END) da_cham FROM mau_hoc_ai GROUP BY tinh_nang, dong, muc_dich`),
       tien_trinh:(await all(`SELECT * FROM tram_lenh WHERE viec IN ('huan_luyen','hoc_thanh_pham','phan_tich_footage','nap_drive','chay_agent') ORDER BY created_at DESC LIMIT 40`)).map(l=>({...l, tham_so:docJSON(l.tham_so,{})})).filter(l=>l.viec!=='chay_agent'||['tai_tiktok','kalodata_video'].includes(l.tham_so.viec)).slice(0,20),
       kho_thanh_pham: await all(`SELECT id,ten,nguon,thu_muc,dai,so_shot,nhip,co_goc,created_at,luot_xem,luot_thich,ngay_dang,link,kenh,doanh_thu,luot_ban,san_pham,dong,muc_dich,substr(kich_ban,1,300) kich_ban FROM kho_thanh_pham ORDER BY COALESCE(doanh_thu,-1) DESC, COALESCE(luot_xem,-1) DESC, created_at DESC LIMIT 80`),
