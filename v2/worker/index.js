@@ -387,7 +387,12 @@ async function tietKiemMo(env, thang){ const rows=(await env.DB.prepare(`SELECT 
   for(const r of rows){ const dt=await env.DB.prepare(`SELECT mo_hinh_chinh FROM dinh_tuyen WHERE tinh_nang=?`).bind(r.tinh_nang).first(); const mh=dt?await docMoHinh(env, dt.mo_hinh_chinh):null; const u=mh?chiPhiMoHinh(mh, r.vao, r.ra):0; usd+=u; luot+=so(r.n); ct.push({tinh_nang:r.tinh_nang, luot:so(r.n), usd_tuong_duong:+u.toFixed(4), theo:mh?mh.ten:'—'}); }
   return {usd:+usd.toFixed(4), luot, chi_tiet:ct}; }
 // máy ghép đang bật có khả năng X (mo_hinh | huan_luyen | dung_video) → id, không có → null
-async function mayChoViec(env, khaNang){ const ds=(await mayGhepSong(env)).filter(x=>x.song&&x.kha_nang.includes(khaNang)); return ds.length?ds[0].id:null; }
+// 24/09: máy mạnh trước cho việc mô hình/huấn luyện (VRAM lớn nhất, có Ollama); việc dựng giữ thứ tự cũ. Máy Q2 (3070 Ti 8 GB) > Ngoc-Han (1650 4 GB).
+const vramMay=m=>{ const g=String((m.than||{}).gpu||''); const x=g.match(/(\d{3,6})\s*MiB/i); return x?+x[1]:0; };
+async function mayChoViec(env, khaNang, {cungMay=null}={}){ let ds=(await mayGhepSong(env)).filter(x=>x.song&&x.kha_nang.includes(khaNang)); if(!ds.length) return null;
+  if(cungMay){ const c=ds.find(x=>String((x.than||{}).may||'').toLowerCase()===String(cungMay).toLowerCase()); if(c) return c.id; }
+  if(['mo_hinh','huan_luyen'].includes(khaNang)) ds=ds.slice().sort((a,b)=>(((b.than||{}).ollama?1e6:0)+vramMay(b))-(((a.than||{}).ollama?1e6:0)+vramMay(a)));
+  return ds[0].id; }
 // điểm & đề nghị định tuyến: NGON_NGU BÓNG = giống trung bình mở↔chính (×100); NHIN = % mẫu người chấm mà mô hình mở chọn đúng; đủ ngưỡng & mẫu (& có phiên bản duyệt với NHIN) → đề nghị LÊN, việc cho Trưởng MKT
 async function tinhDinhTuyen(env){ const ds=(await env.DB.prepare(`SELECT * FROM dinh_tuyen`).all()).results; const kq=[]; let len=0;
   for(const d of ds){ let diem=0, soMau=0;
@@ -1536,7 +1541,7 @@ async function handleApi(request, env){
     if(path==='/hub/viec/tai_tiktok' && method==='GET'){ const cfg=await docCauHinh(env); const hang=((cfg.tai_tiktok||{}).hang)||[]; const da=(await env.DB.prepare(`SELECT nguon_id FROM kho_thanh_pham WHERE nguon='TIKTOK'`).all()).results.map(x=>x.nguon_id); return json({ viec: hang, da_co: da }); }
     if(path==='/hub/tiktok-da-tai' && method==='POST'){ const kenh=chuoi(body.kenh,60), thu=chuoi(body.thu_muc,300); if(!kenh||!thu) return json({error:'Thiếu kênh/thư mục'},400);
       const cfg=await docCauHinh(env); const mucCu=(((cfg.tai_tiktok||{}).hang)||[]).find(x=>x.kenh===kenh)||{}; const hang=(((cfg.tai_tiktok||{}).hang)||[]).filter(x=>x.kenh!==kenh); await env.DB.prepare(`UPDATE module_config SET cau_hinh=? WHERE id='tai_tiktok'`).bind(JSON.stringify({hang})).run();
-      const mayId=await mayChoViec(env,'mo_hinh')||await mayChoViec(env,'dung_video'); if(!mayId) return json({ok:true, giao:false, loi:'không có máy dựng đang bật — nạp lại sau'});
+      const ttTram=await docTramTrangThai(env); const hostTram=(ttTram&&(ttTram.may||ttTram.hostname))||null; const mayId=await mayChoViec(env,'dung_video',{cungMay:hostTram})||await mayChoViec(env,'mo_hinh'); if(!mayId) return json({ok:true, giao:false, loi:'không có máy dựng đang bật — nạp lại sau'});   // thư mục Trạm tải về nằm trên ổ máy Trạm
       const r=await taoLenhTram(env,'hoc_thanh_pham',{nguon:chuoi(body.nguon,10)==='KALODATA'?'KALODATA':'TIKTOK', kenh, duong_dan:thu, toi_da:Math.max(1,Math.min(60,so(body.so,20))), dong:mucCu.dong||null, muc_dich:mucCu.muc_dich||null}, MAY('Trạm'), mayId); return json({ ok:true, giao:true, lenh_id:r.id }); }
     // ADR-011 — Kalodata: Trạm hỏi ngành hàng cần quét (đến hạn theo lịch tuần hoặc chủ bấm quét); Trạm trả bảng video → app xếp hàng tải bằng tiktok_cn
     if(path==='/hub/viec/kalodata' && method==='GET'){ const cfg=(await docCauHinh(env)).kalodata||{}; const nganh=Array.isArray(cfg.nganh)?cfg.nganh:[]; const lanCuoi=cfg.lan_cuoi?new Date(cfg.lan_cuoi).getTime():0; const denHan=!!cfg.quet_ngay||(cfg.tu_dong!==false&&nganh.length>0&&Date.now()-lanCuoi>6.5*864e5); return json({ viec: denHan&&nganh.length?{ nganh, top_n:Math.max(3,Math.min(50,so(cfg.top_n,10))), khu_vuc:cfg.khu_vuc||'VN', thoi_gian:cfg.thoi_gian||'30' }:null, da_co:(await env.DB.prepare(`SELECT link FROM kho_thanh_pham WHERE link IS NOT NULL`).all()).results.map(x=>x.link) }); }
