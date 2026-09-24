@@ -1448,7 +1448,15 @@ async function handleApi(request, env){
     if(path==='/hub/trang_thai' && method==='POST'){ const than=JSON.stringify({ may:chuoi(body.may,80), ban:chuoi(body.ban,20), khoi_luc:chuoi(body.khoi_luc,40), gio_may:chuoi(body.gio_may,40), dung_nha:body.dung_nha!==false, phien:(body.phien&&typeof body.phien==='object')?body.phien:{}, hang_loat:body.hang_loat||null,
         // ADR-T01 đợt 4 (Trạm v9.161): sổ tài khoản (dung_den = Trạm dừng sau checkpoint) và nhân viên máy kèm tài khoản được cấp
         tai_khoan:Array.isArray(body.tai_khoan)?body.tai_khoan.slice(0,60):[], nhan_vien:Array.isArray(body.nhan_vien)?body.nhan_vien.slice(0,30):[] }).slice(0,60000);
-      await env.DB.prepare(`INSERT INTO tram_trang_thai (id,than,nhan_luc) VALUES ('tram',?,?) ON CONFLICT(id) DO UPDATE SET than=excluded.than, nhan_luc=excluded.nhan_luc`).bind(than, nowISO()).run(); return json({ok:true, ban:'2.0.3'}); }
+      await env.DB.prepare(`INSERT INTO tram_trang_thai (id,than,nhan_luc) VALUES ('tram',?,?) ON CONFLICT(id) DO UPDATE SET than=excluded.than, nhan_luc=excluded.nhan_luc`).bind(than, nowISO()).run();
+      /* "Thêm tài khoản ở Trạm là app dùng được" (chủ 24/09): tài khoản Facebook mà Trạm đã cấp cho nhân viên Seeding hội nhóm với vai đăng,
+         app chưa khai → TỰ KHAI (nhãn = tên trên Trạm, giọng THỢ mặc định, nhịp = trần Trạm). Người còn phải: chọn đúng giọng/câu chuyện và
+         gắn tài khoản vào nhóm nó là thành viên (máy không biết tài khoản nào ở nhóm nào). Không xoá khi Trạm bỏ — chỉ hiện ○ chưa đăng nhập. */
+      let tuKhai=0; try{ const nvSeed=(Array.isArray(body.nhan_vien)?body.nhan_vien:[]).find(n=>n&&n.nv==='content_os:seeding'); const capDang={}; for(const c of ((nvSeed&&nvSeed.cap)||[])) if(c&&(c.vai||[]).includes('dang')) capDang[c.tk]=c;
+        for(const t of (Array.isArray(body.tai_khoan)?body.tai_khoan:[])){ if(!t||t.nen!=='facebook'||!capDang[t.id]) continue; const co=await env.DB.prepare(`SELECT id FROM tai_khoan_seeding WHERE tram_id=?`).bind(t.id).first(); if(co) continue;
+          const tran=(capDang[t.id].tran||{}).bai_ngay; await env.DB.prepare(`INSERT INTO tai_khoan_seeding (id,nhan,nen,tram_id,giong,persona,nhip_ngay,active,created_at) VALUES (?,?,'FB',?,?,?,?,1,?)`).bind(uid('tk'), chuoi(t.ten,80)||t.id, chuoi(t.id,60), 'THO', JSON.stringify({nghe:'',khu_vuc:'',cau_chuyen:'',tu_tram:true}), Math.max(1,Math.min(10,so(tran,2))), nowISO()).run();
+          await logAudit(env, MAY('Trạm'), 'tự khai tài khoản seeding từ Trạm', 'tai_khoan_seeding', t.id, 'giọng THỢ mặc định — chọn lại giọng/câu chuyện và gắn nhóm ở Seeding › Tài khoản MKT'); tuKhai++; } }catch(e){}
+      return json({ok:true, ban:'2.0.3', tu_khai:tuKhai}); }
     if(path==='/hub/nap' && method==='POST'){ const r=await napLoTram(env, body); return json(r); }
     // Trạm hỏi danh sách việc cho agent content_os (script content-os-dang / content-os-do-luong / content-os-dung-video)
     if(path==='/hub/viec/dang' && method==='GET'){ const ds=(await env.DB.prepare(`SELECT b.*, k.ten kenh_ten, k.loai kenh_loai, k.api_object_id kenh_doi_tuong, n.dinh_dang, n.tieu_de FROM bai_dang b LEFT JOIN kenh k ON k.id=b.kenh_id LEFT JOIN noi_dung n ON n.id=b.noi_dung_id WHERE b.trang_thai='DANG_GUI' AND b.cach='TRAM' ORDER BY b.gio_dang LIMIT 20`).all()).results;
