@@ -41,9 +41,11 @@ export default async function huanLuyen({ app, goiApp, lenh, dir, log, script, m
 }
 
 // ===== ADR-010d — lượt xem làm trọng số: so với trung vị CÙNG KÊNH; không có lượt xem (Drive/local, chỉnh ghép) = 1 =====
-export function trongSoLuotXem(mau) { const theoKenh = {}; for (const m of mau) { const v = m.luot_xem ?? (m.dau_vao && m.dau_vao.luot_xem); if (v == null) continue; const k = (m.kenh ?? (m.dau_vao && m.dau_vao.kenh)) || "_"; (theoKenh[k] = theoKenh[k] || []).push(v); }
+// ADR-011: có doanh thu (Kalodata) thì doanh thu là thước đo, không thì lượt xem
+const soDo = (m) => { const dt = m.doanh_thu ?? (m.dau_vao && m.dau_vao.doanh_thu); if (dt != null) return dt * 100; const v = m.luot_xem ?? (m.dau_vao && m.dau_vao.luot_xem); return v == null ? null : v; };
+export function trongSoLuotXem(mau) { const theoKenh = {}; for (const m of mau) { const v = soDo(m); if (v == null) continue; const k = (m.kenh ?? (m.dau_vao && m.dau_vao.kenh)) || "_"; (theoKenh[k] = theoKenh[k] || []).push(v); }
   const tv = {}; for (const [k, a] of Object.entries(theoKenh)) { a.sort((x, y) => x - y); tv[k] = a[Math.floor(a.length / 2)]; }
-  return (m) => { if (!m) return 1; const v = m.luot_xem ?? (m.dau_vao && m.dau_vao.luot_xem); if (v == null) return 1; const k = (m.kenh ?? (m.dau_vao && m.dau_vao.kenh)) || "_"; const med = tv[k] || v; return Math.max(0.4, Math.min(2.5, Math.log10(v + 10) / Math.log10(med + 10))); }; }
+  return (m) => { if (!m) return 1; const v = soDo(m); if (v == null) return 1; const k = (m.kenh ?? (m.dau_vao && m.dau_vao.kenh)) || "_"; const med = tv[k] || v; return Math.max(0.4, Math.min(2.5, Math.log10(v + 10) / Math.log10(med + 10))); }; }
 
 // ===== ADR-010c — chọn đoạn (logistic trên cửa sổ) & ghép (thống kê có trọng số) =====
 const DT_DOAN = ["net", "dong", "sang", "vi_tri", "gan_dau", "dong_net"];

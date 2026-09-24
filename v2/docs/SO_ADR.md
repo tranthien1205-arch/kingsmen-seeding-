@@ -224,6 +224,34 @@ Người duyệt: Thiện · Trạng thái: ĐÃ DUYỆT (2026-09-24, "Duyệt c
             cũng là một cách học hiệu quả") · ĐÃ LÀM (chưa đo trên video thật — xem changelog)
 ```
 
+```
+ADR-011 · 2026-09-24 · KALODATA — tài khoản trên Trạm, agent quét video bán chạy, kho thành phẩm theo doanh thu, học kịch bản bán hàng
+Bối cảnh : ADR-010d học từ video thành phẩm của mình và kênh TikTok (lượt xem). Thiện: "tôi muốn máy trạm thêm tài khoản kalodata và các
+            agent để học video và kịch bản hiệu quả bán hàng" — Kalodata (SaaS trả phí) có bảng video TikTok Shop theo ngành hàng với
+            doanh thu, lượt bán, lượt xem, sản phẩm; doanh thu là thước đo "hiệu quả bán hàng" tốt hơn lượt xem.
+Quyết định: (1) TÀI KHOẢN `kalodata` trên Trạm (masfico-insight v9.164): thẻ chỉ đăng nhập (dang-nhap-chung, hồ sơ kalodata-profile,
+            Trạm không giữ mật khẩu); nền tảng "Kalodata" trong sổ tài khoản; cấp mặc định cho nhân viên content_os:dang_do vai kiem.
+            (2) AGENT content_os/kalodata_video (lịch ngày 06:40, chỉ chạy khi app nói đến hạn: tự động mỗi ~7 ngày khi có ngành hàng,
+            hoặc chủ bấm Quét ngay): hỏi /hub/viec/kalodata → mở kalodata.com/video bằng hồ sơ kalodata → lọc từng ngành → bảng đã
+            xếp theo doanh thu → đọc top N (tiêu đề, kênh, doanh thu, lượt bán, lượt xem, sản phẩm, ngày) → mở chi tiết lấy link
+            tiktok.com → POST /hub/kalodata. Ô còn **** (chưa đăng nhập / hết gói) → báo lỗi rõ, không bịa. (3) APP xếp các link vào
+            hàng đợi tai_tiktok (kenh 'kalodata:<ngành>', nguon KALODATA, meta doanh thu) → Trạm tải bằng tiktok_cn (việc tai_tiktok
+            nhận danh sách link) → /hub/tiktok-da-tai nguon KALODATA → máy dựng hoc-thanh-pham: cắt shot, Whisper nghe lời, cỡ cảnh;
+            kho_thanh_pham thêm doanh_thu, luot_ban, san_pham, kich_ban (lời thoại ghép lại). TRỌNG SỐ MẪU: có doanh thu thì dùng
+            doanh thu (×100 rồi so log với trung vị cùng kênh), không thì lượt xem, không có gì = 1. (4) HỌC KỊCH BẢN BÁN HÀNG:
+            angleFootage (lời dặn AI viết kịch bản VIDEO) kèm 3 kịch bản bán tốt nhất theo doanh thu, luật "chỉ học cấu trúc: mở đầu
+            3 giây, vấn đề, bằng chứng, chốt đơn; không chép câu, không nhắc shop/sản phẩm/giá"; /hub/tap-mau-ngon-ngu
+            (soan_nhap_agent) thêm mỗi kịch bản bán tốt thành một mẫu DUYỆT (lý do = doanh thu) cho LoRA ADR-009c. (5) MÀN: Bộ não
+            AI › Huấn luyện › Kho thành phẩm › khối Kalodata (ngành hàng, top N, tự quét tuần, Quét ngay, kết quả lần cuối); bảng kho
+            thêm cột Doanh thu và dấu 🗣 có lời thoại.
+Đánh đổi  : Kalodata đổi giao diện thì việc quét báo lỗi chứ không tự sửa (đo 24/09: bảng là <table> thứ 2, cột 2 tiêu đề, 3 kênh, 4 doanh
+            thu, 5 sản phẩm, 6 lượt bán, 8 lượt xem, 15 ngày; link TikTok lấy ở trang chi tiết — chưa kiểm được vì cần đăng nhập);
+            dùng gói Kalodata của công ty đúng điều khoản (chỉ đọc bảng, top N ≤ 50/ngành/tuần); lời thoại Whisper base có sai chính tả
+            → chỉ làm tham chiếu cấu trúc, không làm câu chữ.
+Người duyệt: Thiện · Trạng thái: ĐÃ DUYỆT (2026-09-24, "Duyệt, làm cả 4 phần") · ĐÃ LÀM (chưa quét thật — chờ đăng nhập Kalodata trên Trạm)
+```
+
+
 
 ```
 ADR-007b · 2026-09-24 · SEEDING NÂNG CAO — bình luận dẫn dắt đa tài khoản, lead AI phân loại, nuôi tài khoản, tự chỉnh nhịp
@@ -244,6 +272,13 @@ Người duyệt: Thiện · Trạng thái: ĐÃ DUYỆT (2026-09-24, "tiếp t�
 ```
 
 ## Changelog
+
+### 2026-09-24 · ADR-011 — Kalodata: video bán chạy → kho thành phẩm theo doanh thu → kịch bản bán hàng
+- **Worker**: `kho_thanh_pham` +doanh_thu, luot_ban, san_pham, kich_ban; `PUT /kalodata` (ngành hàng, top N, tự quét tuần), `POST /kalodata/quet` (cần Trạm sống → `chay_agent content_os/kalodata_video`); hub `GET /hub/viec/kalodata` (đến hạn?), `POST /hub/kalodata` (bảng video → hàng đợi `tai_tiktok` nguồn KALODATA với link + meta → lệnh Trạm tải), `/hub/tiktok-da-tai` nhận `nguon`; `/hub/thanh-pham` nhận doanh thu/sản phẩm/kịch bản (lời shot ghép lại); `angleFootage` kèm 3 kịch bản bán tốt; `/hub/tap-mau-ngon-ngu` thêm mẫu từ kho; bootstrap `ai_nao.kalodata`.
+- **Máy dựng**: `hoc-thanh-pham.mjs` gửi doanh thu / sản phẩm / kịch bản từ `_meta.json`; `huan-luyen.mjs` trọng số ưu tiên doanh thu.
+- **Trạm** (v9.164): thẻ đăng nhập `kalodata`, nền tảng Kalodata, cấp mặc định content_os:dang_do vai kiem; việc `kalodata_video` (`content-os-kalodata.mjs`); `content-os-tai-tiktok.mjs` nhận danh sách link + meta.
+- **Giao diện**: khối 📈 Kalodata trong Kho video thành phẩm; cột Doanh thu, dấu 🗣 lời thoại.
+- **Test** `tests/adr011.test.mjs` (3 bài). Chưa quét thật: cần Thiện đăng nhập Kalodata ở Trạm › Tài khoản rồi đặt ngành hàng và bấm Quét ngay.
 
 ### 2026-09-24 · ADR-010 — máy học chọn & ghép source (010a–d)
 - **Worker**: bảng `ghep_video`, `kho_thanh_pham` (+luot_xem, luot_thich, ngay_dang, link, kenh), cột `tai_san.phan_tich`; định tuyến `chon_doan` (mở `doan-tuyen-tinh`), `ghep_canh` (mở `ghep-thong-ke`). Tuyến người: `GET/POST /noi-dung/:id/ghep`, `POST /kho-thanh-pham/nap` (Drive/thư mục máy → lệnh `hoc_thanh_pham`; `nguon:TIKTOK` → hàng đợi `module_config.tai_tiktok` + lệnh Trạm `chay_agent content_os/tai_tiktok`, cần Trạm sống). Tuyến hub: `/hub/viec/phan_tich`, `/hub/phan-tich`, `/hub/viec/thanh_pham`, `/hub/thanh-pham` (Claude xếp cỡ cảnh cho shot có khung, tối đa 12), `/hub/viec/tai_tiktok`, `/hub/tiktok-da-tai`; `/hub/viec/dung_video` trả `phan_tich` từng clip và `ghep` khi có `ghep_id`; lô `content_os.video` nhận `ghep`/`ghep_nguon`; `/hub/tap-mau` trả đủ đầu vào cho chon_doan/ghep_canh + `luot_xem`/`kenh`; `/ai/huan-luyen` cho hai tính năng mới, rơi về máy dựng khi không có máy huấn luyện. Script phát thêm: `phan-tich`, `hoc-thanh-pham`.
