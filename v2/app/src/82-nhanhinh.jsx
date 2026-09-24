@@ -19,7 +19,7 @@ function NhanHinh({ a }) {
   const d = a.do_chinh_xac_hinh || {}; const dongs = a.dong_san_pham || [];
   const [dong, setDong] = useState('');
   return <div className="space-y-3">
-    <Callout tone="info"><b>Vì sao có màn này.</b> Mọi phần thông minh phía sau (chọn đoạn theo lời thoại, ghép, chấm thẩm mỹ) đứng trên một câu hỏi: <b>khung hình này đang nói về gì</b>. Máy chỉ được tin khi đã đo trên nhãn người. Mỗi lần anh/chị bấm một phím là một nhãn vàng: vừa để đo, vừa làm ví dụ cho lần đọc sau. Chưa đủ khoảng 200 nhãn và chưa đạt 80% trên mẫu ngẫu nhiên thì chưa dùng nhãn máy để huấn luyện.</Callout>
+    <Callout tone="info"><b>Vì sao có màn này.</b> Mọi phần thông minh phía sau (chọn đoạn theo lời thoại, ghép, chấm thẩm mỹ) đứng trên một câu hỏi: <b>khung hình này đang nói về gì</b>. Máy chỉ được tin khi đã đo trên nhãn người. Khi học, <b>Claude làm thầy</b> đọc từng đoạn cùng lúc với mô hình mở. Hai bên khớp nhau thì thành nhãn dạy mô hình mở. Bất đồng hoặc thầy không chắc thì đoạn vào đây cho anh/chị quyết. Mỗi phím là một nhãn vàng: vừa đo thầy và mô hình mở đúng bao nhiêu, vừa làm ví dụ cho lần đọc sau. Chưa đủ khoảng 200 nhãn và chưa đạt 80% trên mẫu ngẫu nhiên thì chưa dùng nhãn máy để huấn luyện.</Callout>
     <BangDoHinh d={d} />
     <GanNhanNhanh dong={dong} setDong={setDong} dongs={dongs} />
   </div>;
@@ -31,11 +31,12 @@ function BangDoHinh({ d }) {
     ['Đúng nhóm cảnh · mẫu ngẫu nhiên', phanTram(nn.dung_nhom, nn.so), 'trên ' + (nn.so || 0) + ' đoạn chọn ngẫu nhiên — con số thật', nn.so >= 30 && nn.dung_nhom / nn.so >= 0.8 ? 'text-emerald-700' : 'text-rose-700'],
     ['Đúng nhóm cảnh · tất cả', phanTram(d.dung_nhom, d.so_nhan), 'trên ' + (d.so_nhan || 0) + ' nhãn người (lệch về đoạn khó)', 'text-ink'],
     ['Đúng cả bước / bài test', phanTram(d.dung_chi_tiet, d.so_nhan), 'nhóm đúng và chi tiết đúng', 'text-ink'],
+    ['Thầy Claude đúng nhóm', phanTram((d.thay || {}).dung_nhom, (d.thay || {}).so), 'trên ' + ((d.thay || {}).so || 0) + ' nhãn người · mô hình mở: ' + phanTram((d.mo || {}).dung_nhom, (d.mo || {}).so) + ' trên ' + ((d.mo || {}).so || 0), 'text-ink'],
     ['Nhãn vàng đã có', String(d.so_nhan || 0), 'mục tiêu đợt đầu: 200', (d.so_nhan || 0) >= 200 ? 'text-emerald-700' : 'text-amber-700'],
   ];
   return <Card pad="p-3"><SectionTitle className="mb-1">Máy nhìn đúng đến đâu</SectionTitle>
     <div className="text-[11px] text-ink-muted mb-2">Đo trên nhãn người, không dùng số máy tự khai. Footage: {phanTram((nguon.FOOTAGE || {}).dung_nhom, (nguon.FOOTAGE || {}).so)} trên {(nguon.FOOTAGE || {}).so || 0} · Video thành phẩm: {phanTram((nguon.THANH_PHAM || {}).dung_nhom, (nguon.THANH_PHAM || {}).so)} trên {(nguon.THANH_PHAM || {}).so || 0}.</div>
-    <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 mb-3">{o.map(([t, v, g, c]) => <div key={t} className="rounded-xl border border-line p-2"><div className={'text-2xl font-bold tabular-nums ' + c}>{v}</div><div className="text-[11px] font-semibold text-ink">{t}</div><div className="text-[10px] text-ink-muted">{g}</div></div>)}</div>
+    <div className="grid grid-cols-2 lg:grid-cols-5 gap-2 mb-3">{o.map(([t, v, g, c]) => <div key={t} className="rounded-xl border border-line p-2"><div className={'text-2xl font-bold tabular-nums ' + c}>{v}</div><div className="text-[11px] font-semibold text-ink">{t}</div><div className="text-[10px] text-ink-muted">{g}</div></div>)}</div>
     {(d.so_nhan || 0) === 0 ? <div className="text-xs text-ink-muted">Chưa có nhãn nào. Bắt đầu ở khung gán nhãn bên dưới.</div> :
       <div className="grid md:grid-cols-3 gap-3 text-xs">
         <div><div className="font-semibold text-ink mb-1">Theo nhóm (nhãn người)</div>
@@ -91,6 +92,7 @@ function GanNhanNhanh({ dong, setDong, dongs }) {
           <div className="rounded-xl border border-line p-2"><div className="text-[10px] uppercase tracking-wider text-ink-muted font-semibold">Máy đọc là</div>
             <div className="text-sm font-semibold text-ink">{tenNhom(x.nhom)}{x.buoc ? ' · ' + x.buoc : ''}{x.bai_test ? ' · ' + x.bai_test : ''}</div>
             <div className="text-ink-muted">{x.mo_ta}{x.hanh_dong ? ' — ' + x.hanh_dong : ''}</div>
+            {(x.thay || x.mo) && <div className="mt-1 grid gap-0.5 text-[11px]">{x.thay && <div><span className="text-ink-muted">Thầy Claude:</span> <b>{tenNhom(x.thay.nhom)}{x.thay.buoc ? ' · ' + x.thay.buoc : ''}{x.thay.bai_test ? ' · ' + x.thay.bai_test : ''}</b> <span className="text-ink-muted">chắc {x.thay.chac ?? '—'}{x.thay.ly_do ? ' — ' + x.thay.ly_do : ''}</span></div>}{x.mo && <div><span className="text-ink-muted">Mô hình mở:</span> <b>{tenNhom(x.mo.nhom)}{x.mo.buoc ? ' · ' + x.mo.buoc : ''}{x.mo.bai_test ? ' · ' + x.mo.bai_test : ''}</b></div>}{x.thay && x.mo && <div className={x.thay.nhom === x.mo.nhom ? 'text-emerald-700' : 'text-rose-700'}>{x.thay.nhom === x.mo.nhom ? 'Hai bên cùng nhóm' : 'Hai bên bất đồng: anh/chị quyết'}</div>}</div>}
             <div className="text-[10px] text-ink-muted">tự khai chắc {x.tu_tin ?? '—'}{x.can_xac_nhan ? ' · máy đánh dấu chưa chắc' : ''}</div>
             <Btn variant="ok" className="!py-1 !px-2 text-[11px] mt-1" onClick={dongY}>Enter · Đúng rồi</Btn></div>
           {!buoc2 ? <div><div className="text-[10px] uppercase tracking-wider text-ink-muted font-semibold mb-1">Hay thật ra là</div>

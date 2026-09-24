@@ -369,6 +369,13 @@ Người duyệt: Thiện · Trạng thái: ĐÃ DUYỆT (2026-09-24, "tiếp t�
 
 ## Changelog
 
+### 2026-09-24 · ADR-016b — Claude làm thầy gán nhãn hình khi học
+- Chủ 24/09: "khi học có thể dùng gọi api hoặc claude nhận diện gán nhãn để dạy cho mô hình mở, khung hình nào không chắc thì tôi sẽ tham gia gán nhãn".
+- **Worker**: `POST /hub/thay-doc` (≤ 30 đoạn, song song 4) → `thayDocDoan()` gọi Claude (mặc định `ai.thay_nhin_model` = Sonnet 4.5) với ≤ 3 dải hình/đoạn, tập nhãn đóng theo sản phẩm; chi phí ghi `hoc_nhan_khung` (chịu hạn mức ngân sách học); tắt bằng `ai.thay_nhin=false`. Dòng thời gian giữ `mo` (mô hình mở), `thay` (Claude), `nguon_nhan` THAY_KHOP | THAY | MO; bảng đo tách độ chính xác thầy / mô hình mở.
+- **Máy con**: `doc-khung.mjs` tải dải đầu/giữa/cuối mỗi đoạn, gọi thầy; khớp → nhãn bạc (tu_tin ≥ 0,85, không cần người); bất đồng hoặc thầy chắc < 0,7 → cần người xác nhận; nhãn chính = nhãn thầy.
+- **Giao diện**: màn Nhãn hình hiện ý kiến thầy + mô hình mở + "hai bên bất đồng"; ô "Thầy Claude đúng nhóm".
+- **Test** `tests/adr016b.test.mjs`.
+
 ### 2026-09-24 · ADR-016 — Nhãn vàng cho mô hình nhìn
 - **Worker**: `tlSach()` dùng chung; `/hub/thanh-pham` lưu `timeline`; `POST /(tai-san|kho-thanh-pham)/:id/doan/:i` (`khong_ro`, `nhe`, `ngau_nhien`);
   `GET /nhan-hinh/hang`; bootstrap `ai_nao.do_chinh_xac_hinh` thêm `ngau_nhien`, `theo_nhom`, `nham`, `muc_tin`, `theo_nguon`.

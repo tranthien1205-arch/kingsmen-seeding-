@@ -58,6 +58,9 @@ export function viterbi(ds, qt) { const S = [...new Set(ds.map((d) => d.k))]; if
   for (let i = 1; i < ds.length; i++) { const nv = [], tr = []; for (let j = 0; j < S.length; j++) { let best = -1e9, bi = 0; for (let q = 0; q < S.length; q++) { const x = v[q] + chuyen(S[q], S[j]); if (x > best) { best = x; bi = q; } } nv.push(best + phat(ds[i], S[j])); tr.push(bi); } v = nv; tro.push(tr); }
   let j = v.indexOf(Math.max(...v)); const ra = [S[j]]; for (let i = tro.length - 1; i >= 0; i--) { j = tro[i][j]; ra.unshift(S[j]); } return ra; }
 
+/** Hàm gọi thầy qua app (khoá Claude chỉ nằm ở app). Trả mảng kết quả cùng thứ tự. */
+export function taoThay(goiApp) { return async (doan, meta) => { const r = await goiApp("/hub/thay-doc", { method: "POST", body: JSON.stringify({ doan, ...meta }) }); if (!r.ok) throw new Error("app " + r.status); if (r.d && r.d.ok === false) throw new Error(r.d.loi || "thầy tắt"); return (r.d && r.d.kq) || []; }; }
+
 /** Đọc cả clip → dòng thời gian đoạn. */
 export async function docKhung(file, ctx = {}) {
   const log = ctx.log || (() => {}); const thu = ctx.thuMuc || (file + "_khung"); rmSync(thu, { recursive: true, force: true }); mkdirSync(thu, { recursive: true });
@@ -78,10 +81,25 @@ export async function docKhung(file, ctx = {}) {
     else doan.push({ tu: g.t, den: +(g.t + cua).toFixed(2), k: g.k, _anh: [g.anh], _sua: !!g._sua, nhom: g.nhom, buoc: g.buoc, bai_test: g.bai_test, hanh_dong: g.hanh_dong, vat_lieu: g.vat_lieu, co_canh: g.co_canh, _tm: [g.tham_my], ro_net: g.ro_net, tu_tin: g.tu_tin, co_nguoi: g.co_nguoi, mo_ta: g.mo_ta, _n: 1 }); }
   for (const d of doan) { const tm = d._tm.filter((x) => x != null); d.tham_my = tm.length ? +(tm.reduce((a, x) => a + x, 0) / tm.length).toFixed(1) : null; d.ro_net = +(d.ro_net / d._n).toFixed(1); d.tu_tin = +(d.tu_tin / d._n).toFixed(2); d.can_xac_nhan = d._sua || (d.den - d.tu) < 2 * cua || d.tu_tin < 0.6; delete d._n; delete d._tm; delete d.k; delete d._sua; }
   if (dai && doan.length) doan[doan.length - 1].den = +Math.min(doan[doan.length - 1].den, dai).toFixed(2);
-  if (ctx.up) for (const d of doan) { try { const anh = d._anh.length ? d._anh[Math.floor(d._anh.length / 2)] : null; if (anh) d.khung_url = await ctx.up(join(thu, anh), "image/jpeg"); } catch {} }
-  for (const d of doan) delete d._anh;
+  // ảnh đoạn: dải đầu · giữa · cuối (khung_url = dải giữa, người nhìn; cả ba cho thầy đọc)
+  if (ctx.up) for (const d of doan) { const a = d._anh; const chon = [...new Set([a[0], a[Math.floor(a.length / 2)], a[a.length - 1]].filter(Boolean))]; d._url = [];
+    for (const n of chon) { try { const u = await ctx.up(join(thu, n), "image/jpeg"); if (u) d._url.push(u); } catch {} }
+    d.khung_url = d._url[Math.min(d._url.length - 1, chon.length > 1 ? 1 : 0)] || null; }
+  for (const d of doan) { d.mo = { nhom: d.nhom, buoc: d.buoc, bai_test: d.bai_test, chac: d.tu_tin, model: MO_HINH_VL }; d.nguon_nhan = "MO"; }
+  // ADR-016b THẦY: Claude (qua app, khoá nằm ở app) đọc cùng đoạn theo cùng tập nhãn. Khớp mô hình mở → nhãn bạc dùng để dạy; bất đồng → người gán.
+  let soThay = 0, soKhop = 0, loiThay = null;
+  if (ctx.thay && doan.some((d) => d._url && d._url.length)) {
+    for (let b = 0; b < doan.length; b += 30) { const lo = doan.slice(b, b + 30); let kq = [];
+      try { kq = await ctx.thay(lo.map((d) => ({ anh: d._url || [] })), { quy_trinh: dsBuoc, bai_test: dsTest, san_pham: ctx.san_pham || "", ngu_canh: ctx.ngu_canh || "" }); } catch (e) { loiThay = String(e.message || e).slice(0, 100); break; }
+      lo.forEach((d, i) => { const x = kq[i]; if (!x || !x.ok) { if (x && x.loi) loiThay = x.loi; return; } const th = { ...x.nhan, model: x.model }; soThay++;
+        const khop = d.mo.nhom === th.nhom && (d.mo.buoc || null) === (th.buoc || null) && (d.mo.bai_test || null) === (th.bai_test || null); if (khop) soKhop++;
+        d.thay = th; d.nhom = th.nhom; d.buoc = th.buoc; d.bai_test = th.bai_test; if (th.tham_my != null) d.tham_my = th.tham_my; if (th.mo_ta) d.mo_ta = th.mo_ta;
+        d.nguon_nhan = khop ? "THAY_KHOP" : "THAY"; d.tu_tin = khop ? Math.max(0.85, th.chac || 0) : Math.min(0.5, th.chac || 0.5); d.can_xac_nhan = !khop || (th.chac || 0) < 0.7; });
+      if (loiThay && /ngân sách|tắt|ANTHROPIC/i.test(loiThay)) break; }
+    log("  thầy đọc", soThay + "/" + doan.length, "đoạn · khớp mô hình mở", soKhop + (loiThay ? " · " + loiThay : "")); }
+  for (const d of doan) { delete d._anh; delete d._url; }
   rmSync(thu, { recursive: true, force: true });
-  return { timeline: doan, tong_quan: tq, so_khung: ds.length * 3, so_dai: ds.length, ms_dai: msDai };
+  return { timeline: doan, tong_quan: tq, so_khung: ds.length * 3, so_dai: ds.length, ms_dai: msDai, so_thay: soThay, so_khop: soKhop, loi_thay: loiThay };
 }
 
 // lệnh phan_tich_footage {doc_khung:true, muc_id?, tai_san_id?, lai?} (phan-tich.mjs chuyển sang đây)
@@ -89,16 +107,16 @@ export default async function chay({ app, goiApp, lenh, dir, log, may }) {
   const ts = lenh.tham_so || {}; if (!(await coVL())) return { ok: false, msg: "máy này chưa có " + MO_HINH_VL + " trong Ollama (chạy: ollama pull " + MO_HINH_VL + ")" };
   const r = await goiApp("/hub/viec/doc_khung?muc_id=" + encodeURIComponent(ts.muc_id || "") + "&tai_san_id=" + encodeURIComponent(ts.tai_san_id || "") + (ts.lai ? "&lai=1" : "")); const ds = (r.d && r.d.viec) || [];
   if (!ds.length) return { ok: true, msg: "không có footage nào cần đọc" };
-  const TH = join(dir, "doc-khung"); mkdirSync(TH, { recursive: true }); let xong = 0, tongMs = 0, tongDai = 0, canXN = 0; const loi = [];
+  const TH = join(dir, "doc-khung"); mkdirSync(TH, { recursive: true }); let tongThay = 0, tongKhop = 0, loiThay = null; let xong = 0, tongMs = 0, tongDai = 0, canXN = 0; const loi = [];
   for (const t of ds) {
     try { const src = join(TH, t.id + ".mp4"); if (!existsSync(src)) { const x = await fetch(t.media_url, { headers: /\/media\//.test(t.media_url) ? { "X-Hub-Key": app.khoa } : {} }); if (!x.ok) throw new Error("tải " + x.status); writeFileSync(src, Buffer.from(await x.arrayBuffer())); }
       const up = async (f2, type) => { const buf = readFileSync(f2); const x = await fetch(app.url.replace(/\/+$/, "") + "/hub/upload?type=" + encodeURIComponent(type), { method: "POST", headers: { "X-Hub-Key": app.khoa, "Content-Type": type, "Content-Length": String(buf.length) }, body: buf }); const j = await x.json().catch(() => ({})); if (!x.ok) throw new Error("tải ảnh " + x.status); return j.media_url; };
-      const kq = await docKhung(src, { quy_trinh: t.quy_trinh, bai_test: t.bai_test, vi_du: t.vi_du, san_pham: t.san_pham, chu_de: t.chu_de, dai: t.dai, log, up, thuMuc: join(TH, t.id + "_k") });
+      const kq = await docKhung(src, { quy_trinh: t.quy_trinh, bai_test: t.bai_test, vi_du: t.vi_du, san_pham: t.san_pham, chu_de: t.chu_de, dai: t.dai, log, up, thay: taoThay(goiApp), thuMuc: join(TH, t.id + "_k") });
       const g = await goiApp("/hub/doc-khung", { method: "POST", body: JSON.stringify({ tai_san_id: t.id, timeline: kq.timeline, tong_quan: kq.tong_quan, model: MO_HINH_VL, so_khung: kq.so_khung, ms_khung: kq.so_dai ? Math.round(kq.ms_dai * kq.so_dai / kq.so_khung) : 0, may }) }); if (!g.ok) throw new Error("app " + g.status);
-      xong++; tongMs += kq.ms_dai * kq.so_dai; tongDai += kq.so_dai; canXN += kq.timeline.filter((d) => d.can_xac_nhan).length;
+      xong++; tongThay += kq.so_thay || 0; tongKhop += kq.so_khop || 0; if (kq.loi_thay) loiThay = kq.loi_thay; tongMs += kq.ms_dai * kq.so_dai; tongDai += kq.so_dai; canXN += kq.timeline.filter((d) => d.can_xac_nhan).length;
       log("  ✓", t.ten, "·", kq.so_dai, "dải ·", kq.ms_dai, "ms/dải ·", kq.timeline.map((d) => (d.nhom + (d.buoc ? ":" + d.buoc : d.bai_test ? ":" + d.bai_test : "")).slice(0, 26) + " tm" + d.tham_my + " tt" + d.tu_tin).join(" | ").slice(0, 240));
       rmSync(src, { force: true });
     } catch (e) { loi.push(t.ten + ": " + String(e.message || e).slice(0, 80)); log("  ✗", t.ten, String(e.message || e).slice(0, 120)); }
   }
-  return { ok: xong > 0, msg: "đọc hình " + xong + "/" + ds.length + " footage · " + tongDai + " dải · " + (tongDai ? Math.round(tongMs / tongDai) : 0) + " ms/dải · " + canXN + " đoạn cần người xác nhận (" + MO_HINH_VL + ")" + (loi.length ? " · lỗi: " + loi.slice(0, 2).join(" · ") : "") };
+  return { ok: xong > 0, msg: "đọc hình " + xong + "/" + ds.length + " footage · " + tongDai + " dải · " + (tongDai ? Math.round(tongMs / tongDai) : 0) + " ms/dải · " + canXN + " đoạn cần người xác nhận (" + MO_HINH_VL + ")" + (tongThay ? " · thầy Claude đọc " + tongThay + " đoạn, khớp mô hình mở " + tongKhop : "") + (loiThay ? " · thầy: " + loiThay : "") + (loi.length ? " · lỗi: " + loi.slice(0, 2).join(" · ") : "") };
 }
