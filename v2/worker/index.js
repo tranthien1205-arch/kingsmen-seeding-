@@ -1318,6 +1318,7 @@ async function dsDongSanPham(env){ await MAU().dam(env); const m={}; const cong=
   for(const r of (await env.DB.prepare(`SELECT dong, COUNT(*) n FROM kho_thanh_pham GROUP BY dong`).all()).results) cong(r.dong,'video',r.n);
   for(const r of (await env.DB.prepare(`SELECT sp.dong, COUNT(*) n FROM tai_san t JOIN muc_noi_dung mu ON mu.id=t.muc_id JOIN san_pham sp ON sp.id=mu.san_pham_id GROUP BY sp.dong`).all()).results) cong(r.dong,'footage',r.n);
   for(const r of (await env.DB.prepare(`SELECT dong, COUNT(*) n FROM (SELECT dong FROM mau_hoc_ai UNION ALL SELECT dong FROM mau_doan WHERE hieu_luc=1) GROUP BY dong`).all()).results) cong(r.dong,'mau',r.n);
+  for(const r of (await env.DB.prepare(`SELECT ten FROM bo_nhan WHERE truong='dong' AND trang_thai='DUNG'`).all()).results) cong(r.ten,'san_pham',0);
   const sp=(await env.DB.prepare(`SELECT id, ma, ten, dong FROM san_pham ORDER BY dong, ten`).all()).results;
   return { dong:Object.values(m).sort((a,b)=>(b.video+b.footage+b.mau)-(a.video+a.footage+a.mau)), san_pham:sp, anh_xa_dong:((await docCauHinh(env)).huan_luyen||{}).anh_xa_dong||[] }; }
 // ADR-017 — khuôn làn: 1 Gom · 2 Thầy gán · 3 Người xác nhận · 4 Đo · 5 Bóng · 6 Bật. Mỗi ô tính từ dữ liệu thật; làn chưa làm nói rõ đợt nào.

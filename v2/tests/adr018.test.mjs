@@ -123,3 +123,28 @@ test('018d: bản xem 360p cho video đã đăng + /media tua được (206)', a
   const r = await worker.fetch(new Request('https://x/media/media/a360.mp4', { headers: { Range: 'bytes=100-199' } }), env, { waitUntil() {} });
   assert.equal(r.status, 206); assert.equal(r.headers.get('content-range'), 'bytes 100-199/1000'); assert.equal(r.headers.get('accept-ranges'), 'bytes');
 });
+
+test('018e: dòng chưa có sản phẩm vẫn duyệt được bước; thêm dòng; duyệt / bỏ hàng loạt; đếm mẫu theo dòng', async () => {
+  const DB = taoD1(); env = taoEnv(DB); TOKEN = (await api('/login', 'POST', { email: 'admin@kingsmen.vn', password: 'admin123' })).j.token;
+  const may = hubK(giai((await api('/may-ghep', 'POST', { ten: 'Q2' })).j.ma_ghep).khoa);
+  // như prod 26/09: Danh mục trống, video Terrazo + Finex, thầy gán bước "Pha trộn vật liệu" ở cả hai dòng
+  const tl = (n) => Array.from({ length: n }, (_, i) => ({ tu: i * 2, den: i * 2 + 2, nhom: 'THI_CONG', thay: { nhom: 'THI_CONG', buoc: 'Pha trộn vật liệu', vat_lieu: ['bột màu'], chac: 0.9 } }));
+  await may('/hub/thanh-pham', 'POST', { ten: 't.mp4', nguon_id: 't', nguon: 'TIKTOK', dai: 6, dong: 'Terrazo', shots: [{ t0: 0, t1: 3 }, { t0: 3, t1: 6 }], timeline: tl(3) });
+  await may('/hub/thanh-pham', 'POST', { ten: 'f.mp4', nguon_id: 'f', nguon: 'TIKTOK', dai: 2, dong: 'Finex', mot_canh: true, shots: [{ t0: 0, t1: 2 }], timeline: tl(1) });
+  let bn = (await api('/bo-nhan')).j; const dx = bn.de_xuat.filter((x) => x.ten === 'Pha trộn vật liệu');
+  assert.deepEqual(dx.map((x) => x.dong + ':' + x.so_mau).sort(), ['Finex:1', 'Terrazo:3'], 'mẫu dùng đếm theo đúng dòng'); assert.deepEqual(bn.dongs, ['Finex', 'Terrazo'], 'dòng lấy từ mẫu khi Danh mục trống');
+  const t = dx.find((x) => x.dong === 'Terrazo'); const r = await api('/bo-nhan/' + t.id + '/duyet', 'POST', {}); assert.equal(r.s, 200, 'không còn lỗi "chưa có sản phẩm"');
+  assert.ok(r.j.gia_tri.some((x) => x.truong === 'buoc' && x.ten === 'Pha trộn vật liệu' && x.dong === 'Terrazo' && x.trang_thai === 'DUNG'));
+  assert.ok(r.j.de_xuat.some((x) => x.ten === 'Pha trộn vật liệu' && x.dong === 'Finex'), 'đề xuất của dòng khác vẫn còn');
+  // thầy lần sau thấy bước này trong quy trình Terrazo → không đề xuất lại
+  await may('/hub/thanh-pham', 'POST', { ten: 't2.mp4', nguon_id: 't2', nguon: 'TIKTOK', dai: 6, dong: 'Terrazo', shots: [{ t0: 0, t1: 3 }, { t0: 3, t1: 6 }], timeline: tl(3) });
+  assert.equal(DB.raw.prepare(`SELECT COUNT(*) n FROM bo_nhan WHERE truong='buoc' AND dong='Terrazo' AND trang_thai='DE_XUAT'`).get().n, 0);
+  // thêm bước tay cho dòng chưa có sản phẩm; thêm dòng mới
+  assert.equal((await api('/bo-nhan', 'POST', { truong: 'buoc', ten: 'Cán phẳng', dong: 'Terrazo' })).s, 200);
+  const d = await api('/bo-nhan', 'POST', { truong: 'dong', ten: 'Keo chít mạch' }); assert.ok(d.j.dongs.includes('Keo chít mạch'));
+  assert.ok((await api('/dong-san-pham')).j.dong.some((x) => x.dong === 'Keo chít mạch'), 'màn Dòng sản phẩm thấy dòng mới');
+  // hàng loạt
+  bn = (await api('/bo-nhan')).j; const vl = bn.de_xuat.filter((x) => x.truong === 'vat_lieu').map((x) => x.id); assert.equal(vl.length, 2);
+  const h = await api('/bo-nhan/hang-loat', 'POST', { ids: vl, hanh: 'duyet' }); assert.equal(h.j.so, 2); assert.equal(h.j.de_xuat.filter((x) => x.truong === 'vat_lieu').length, 0);
+  const h2 = await api('/bo-nhan/hang-loat', 'POST', { ids: h.j.de_xuat.map((x) => x.id), hanh: 'bo' }); assert.equal(h2.j.de_xuat.length, 0);
+});
