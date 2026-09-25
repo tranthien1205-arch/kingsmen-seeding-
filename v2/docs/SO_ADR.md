@@ -381,6 +381,9 @@ Người duyệt: Thiện · Trạng thái: ĐÃ DUYỆT (2026-09-24, "ok bạn 
 
 ## Changelog
 
+### 2026-09-25 · Gán nhãn trên PC
+- Chủ: "tối ưu ui dạy trên pc sao cho trực quan và thao tác người kiểm tra xử lý dễ dàng nhanh chóng". Ba cột vừa một màn 1440×900: hàng thẻ (đã làm · tiếp theo) | ảnh lớn + dải thời gian cả video (`tl_video`) | bảng quyết định (thầy gán + lý do, nút Đúng lớn, nhóm, bước, mô tả, tách khung). Lưu lạc quan (sang thẻ kế ~0,16 giây, lỗi thì thẻ quay lại hàng), tải sẵn ảnh 5 thẻ kế; phím Enter/1–8/1–9/Esc/M/T/0/→/←/?. Dạy máy: thầy + việc cần quyết thu thành một dòng; khung giải thích Bộ não AI chỉ ở Tổng quan. Kiểm bằng trình duyệt tự động: không lỗi, không tràn ở 390px.
+
 ### 2026-09-25 · Thầy làm chủ đạo
 - Chủ: "thầy (Opus) giải thích gần như chính xác → nâng vai trò thầy làm chủ đạo để gán nhãn chi tiết nhiều hơn thay vì đẩy cho người". Nhãn thầy là nhãn làm việc; mô hình mở lệch thầy chỉ để đo học trò. Hàng việc của người chỉ còn đoạn thầy chắc < 0,6 và mẫu kiểm ngẫu nhiên ~8% (`kiem_ngau_nhien`, dùng để đo độ đúng thầy không lệch). Đoạn chưa có thầy đọc không vào hàng (sẽ học lại).
 - Bản vẽ ADR-018 và mô phỏng cập nhật theo vai trò mới (tỉ lệ kiểm tự tăng ở trường thầy đúng < 85%).

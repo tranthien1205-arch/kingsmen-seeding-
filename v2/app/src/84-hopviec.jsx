@@ -105,9 +105,14 @@ function DayMay({ a, setTab, dem, taiDem }) {
   const quyet = async (p, q) => { if (q === 'tu-choi' && !(ly[p.id] || '').trim()) return notify('Từ chối phải ghi lý do', 'err'); setBusy(true); const r = await goi('/ai/phien-ban/' + p.id + '/' + q, { method: 'POST', body: { ly_do: ly[p.id] || '' } }); setBusy(false); if (r.ok) notify(q === 'duyet' ? 'Đã bật phiên bản' : 'Đã từ chối'); else notify(r.msg, 'err'); };
   const batKN = async (k) => { setBusy(true); const r = await goi('/lop-hoc/bat', { method: 'POST', body: { tinh_nang: k.tinh_nang_chinh, phien_ban_id: k.ban_moi ? k.ban_moi.id : undefined } }); setBusy(false); if (r.ok) notify('Đã bật máy nhà cho ' + k.ten); else notify(r.msg, 'err'); };
   const soQuyet = pbs.length + kn.length + dt.length; const d = dem || {};
-  return <div className="space-y-3">
-    <Callout tone="info"><b>Dạy máy</b> là nơi duy nhất máy hỏi anh/chị trong lúc học. Phía trên là các <b>quyết định</b> (bật bản mới, đề nghị của máy). Phía dưới là <b>thẻ gán nhãn</b>: máy hoặc thầy Claude chưa chắc thì đẩy về đây. Mỗi thẻ bấm một phím: <b>Enter</b> nếu máy đúng, <b>số</b> để chọn đáp án khác, <b>0</b> nếu không rõ, <b>→</b> để bỏ qua. Tối đa {d.tran_phut || 20} phút mỗi ngày, hôm nay đã làm {d.phut_hom_nay ?? 0} phút.</Callout>
-    <ChonThay />
+  const [moRong, setMoRong] = useState(false); const aiCfg = ((useApp().db.module_config || {}).ai) || {};
+  return <div className="space-y-2">
+    <div className="flex items-center gap-2 flex-wrap text-[11px] rounded-xl border border-line bg-white px-3 py-1.5">
+      <span className="text-ink-muted">Thầy:</span><b className="text-ink">{(MO_HINH_THAY.find(y => y.id === (aiCfg.thay_nhin_model || 'claude-opus-5')) || {}).ten || aiCfg.thay_nhin_model}</b><span className="text-ink-muted">· suy nghĩ {({ low: 'thấp', medium: 'vừa', high: 'cao' })[aiCfg.thay_nhin_effort || 'medium']} · trần {aiCfg.ngan_sach_thay_usd ?? 20} USD/tháng</span>
+      <span className="text-ink-muted">· thầy chốt nhãn, anh/chị chỉ kiểm thẻ dưới đây</span>
+      {soQuyet > 0 && <button onClick={() => setMoRong(true)} className="rounded-full bg-amber-100 text-amber-900 px-2 py-0.5 font-semibold">⚑ {soQuyet} việc cần quyết</button>}
+      <button onClick={() => setMoRong(!moRong)} className="ml-auto underline text-ink-muted">{moRong ? 'thu gọn' : 'đổi thầy · việc cần quyết'}</button></div>
+    {moRong && <><ChonThay />
     <Card pad="p-3"><div className="flex items-center gap-2 mb-1"><SectionTitle>Máy cần anh/chị quyết</SectionTitle><span className="text-[11px] text-ink-muted">{soQuyet ? soQuyet + ' việc' : 'không có việc nào'}</span></div>
       {!soQuyet ? <div className="text-xs text-ink-muted">Máy chưa có bản mới hay đề nghị nào cần duyệt.</div> : <div className="divide-y divide-line text-xs">
         {kn.map(k => <div key={'k' + k.id} className="py-2 flex items-center gap-2 flex-wrap"><Pill cls="bg-emerald-100 text-emerald-800">kỹ năng có bản mới</Pill><b className="text-ink">{k.icon} {k.ten}</b><span className="text-ink-muted">khớp người {k.ban_moi.diem}/100 (cách cũ {k.ban_moi.diem_truoc}) trên {k.ban_moi.n_kiem} mẫu kiểm</span>
@@ -117,7 +122,7 @@ function DayMay({ a, setTab, dem, taiDem }) {
         {dt.map(x => <div key={'d' + x.tinh_nang} className="py-2 flex items-center gap-2 flex-wrap"><Pill cls="bg-sky-100 text-sky-800">máy đề nghị</Pill><b className="text-ink">{x.ten}</b><span className="text-ink-muted">đề nghị chuyển sang {x.de_nghi}</span><Btn variant="ghost" className="ml-auto !py-1 !px-2 text-[11px]" onClick={() => setTab('mohinh')}>Xem ở Mô hình</Btn></div>)}
       </div>}
     </Card>
-    <div className="flex items-center gap-2 flex-wrap"><SectionTitle>Thẻ gán nhãn</SectionTitle><span className="text-[11px] text-ink-muted">{(d.k1 || 0) + (d.k2 || 0) + (d.k4 || 0)} thẻ chờ · khung hình thầy chưa chắc: {d.k1_can || 0} · mẫu kiểm ngẫu nhiên: {(d.k1 || 0) - (d.k1_can || 0)}</span><Btn variant="ghost" className="ml-auto !py-1 !px-2 text-[11px]" onClick={taiDem}>Đếm lại</Btn></div>
+</>}
     <HopViec dongs={a.dong_san_pham || []} dem={d} />
   </div>;
 }

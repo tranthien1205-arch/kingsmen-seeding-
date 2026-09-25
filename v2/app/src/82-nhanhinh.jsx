@@ -62,72 +62,120 @@ function ChonNhan({ v, onChange, x }) {   // chọn nhóm + bước/bài test (c
     <Input className="!py-1 !px-1.5 text-[11px] w-full" placeholder="mô tả đúng (tuỳ chọn)" value={v.mo_ta || ''} onChange={e => onChange({ ...v, mo_ta: e.target.value })} />
   </div>;
 }
+// ===== GÁN NHÃN — bản PC (25/09, chủ: "tối ưu ui dạy trên pc sao cho trực quan và thao tác người kiểm tra xử lý dễ dàng nhanh chóng") =====
+// Ba cột vừa một màn: hàng thẻ (đã làm · tiếp theo) | ảnh lớn + dải thời gian cả video | bảng quyết định.
+// Làm là sang thẻ ngay (lưu nền, lỗi thì thẻ quay lại hàng); ảnh thẻ kế tải sẵn; bàn phím đủ cho mọi thao tác; ← quay lại sửa thẻ vừa làm.
+function DaiVideo({ tl, dai, tu, den }) {
+  if (!Array.isArray(tl) || !tl.length) return null; const het = dai || Math.max(...tl.map(y => y[1])) || 1;
+  return <div className="mt-2"><div className="relative h-4 rounded bg-slate-100 overflow-hidden" role="img" aria-label="dải thời gian cả video theo nhóm cảnh">
+    {tl.map((y, j) => { const n = NHOM_HINH.find(z => z.k === y[2]); const dang = Math.abs(y[0] - tu) < 0.01 && Math.abs(y[1] - den) < 0.01;
+      return <div key={j} title={y[0] + '–' + y[1] + 's · ' + tenNhom(y[2]) + (y[3] ? ' · người đã kiểm' : '')} className="absolute top-0 bottom-0" style={{ left: (y[0] / het * 100) + '%', width: Math.max(0.6, (y[1] - y[0]) / het * 100) + '%', background: n ? n.mau : '#94a3b8', opacity: dang ? 1 : 0.45, outline: dang ? '2px solid #0f172a' : 'none', outlineOffset: '-2px' }}>{y[3] ? <span className="absolute right-0.5 top-0 text-[8px] text-white">✓</span> : null}</div>; })}
+  </div><div className="flex justify-between text-[10px] text-ink-muted mt-0.5"><span>0s</span><span>đang xem: giây {tu}–{den} (viền đậm)</span><span>{Math.round(het)}s</span></div></div>;
+}
 function GanNhanNhanh({ dong, setDong, dongs }) {
   const { goi, notify, refresh } = useApp();
-  const [hang, setHang] = useState([]); const [tt, setTt] = useState(null); const [dangTai, setDangTai] = useState(false);
-  const [buoc2, setBuoc2] = useState(null); const [phien, setPhien] = useState({ gan: 0, trung: 0 }); const daXem = useRef(new Set()); const dangGui = useRef(false); const batDau = useRef(Date.now()); const [them, setThem] = useState(false);
-  const [moTa, setMoTa] = useState(''); const [buocMoi, setBuocMoi] = useState(''); const [themQT, setThemQT] = useState(true); const [laDai, setLaDai] = useState(false); const [tach, setTach] = useState(null);
-  const tai = async (reset) => { setDangTai(true); const r = await goi('/nhan-hinh/hang?n=30' + (them ? '&them=1' : '') + '&dong=' + encodeURIComponent(dong) + '&bo=' + encodeURIComponent(reset ? '' : [...daXem.current].slice(-300).join(','))); setDangTai(false);
-    if (!r.ok) return notify(r.msg, 'err'); setTt(r); setHang(h => { const moi = (r.hang || []).filter(x => !daXem.current.has(x.k) && !(reset ? [] : h).some(y => y.k === x.k)); return reset ? moi : [...h, ...moi]; }); };
-  useEffect(() => { daXem.current = new Set(); setHang([]); tai(true); }, [dong, them]);
-  const x = hang[0];
-  useEffect(() => { batDau.current = Date.now(); setMoTa(''); setBuocMoi(''); setTach(null); setLaDai(false); setBuoc2(null); }, [x && x.k]);   // thẻ mới: xoá phần gõ dở
-  const qua = () => { if (x) daXem.current.add(x.k); setHang(h => { const c = h.slice(1); if (c.length < 5 && !dangTai) setTimeout(() => tai(false), 0); return c; }); };
-  const gui = async (body) => { if (!x || dangGui.current) return; dangGui.current = true;
-    const duong = (x.nguon === 'THANH_PHAM' ? '/kho-thanh-pham/' : '/tai-san/') + x.id + '/doan/' + x.i;
-    const r = await goi(duong, { method: 'POST', body: { ...body, mo_ta: body.mo_ta || moTa.trim() || undefined, ngau_nhien: !!x.ngau_nhien, giay: Math.round((Date.now() - batDau.current) / 1000), nhe: true } }); dangGui.current = false;
-    if (!r.ok) return notify(r.msg, 'err');
-    if (r.them_vao) notify(r.them_vao.loi || ('Đã thêm "' + r.them_vao.gia_tri + '" vào ' + (r.them_vao.cot === 'quy_trinh' ? 'quy trình' : 'bài test') + ' của ' + r.them_vao.dong));
-    if (!body.khong_ro) setPhien(p => ({ gan: p.gan + 1, trung: p.trung + (r.dung ? 1 : 0) }));
-    qua(); };
-  // Thi công / Bài test luôn mở danh sách chọn (có ô gõ bước mới kể cả khi dòng chưa khai quy trình)
+  const [hang, setHang] = useState([]); const [tt, setTt] = useState(null); const [dangTai, setDangTai] = useState(false); const [them, setThem] = useState(false);
+  const [daLam, setDaLam] = useState([]); const [sua, setSua] = useState(null);
+  const [buoc2, setBuoc2] = useState(null); const [moTa, setMoTa] = useState(''); const [buocMoi, setBuocMoi] = useState(''); const [themQT, setThemQT] = useState(true); const [laDai, setLaDai] = useState(false); const [tach, setTach] = useState(null); const [phim, setPhim] = useState(false);
+  const daXem = useRef(new Set()); const batDau = useRef(Date.now()); const moTaRef = useRef(null); const dangTaiRef = useRef(false);
+  const tai = async (reset) => { if (dangTaiRef.current) return; dangTaiRef.current = true; setDangTai(true);
+    const r = await goi('/nhan-hinh/hang?n=30' + (them ? '&them=1' : '') + '&dong=' + encodeURIComponent(dong) + '&bo=' + encodeURIComponent(reset ? '' : [...daXem.current].slice(-300).join(',')));
+    dangTaiRef.current = false; setDangTai(false); if (!r.ok) return notify(r.msg, 'err'); setTt(r);
+    setHang(h => { const moi = (r.hang || []).filter(y => !daXem.current.has(y.k) && !(reset ? [] : h).some(z => z.k === y.k)); return reset ? moi : [...h, ...moi]; }); };
+  useEffect(() => { daXem.current = new Set(); setHang([]); setDaLam([]); setSua(null); tai(true); }, [dong, them]);
+  const x = sua != null && daLam[sua] ? daLam[sua].x : hang[0];
+  useEffect(() => { batDau.current = Date.now(); setMoTa(sua != null && daLam[sua] ? (daLam[sua].body.mo_ta || '') : ''); setBuocMoi(''); setTach(null); setLaDai(false); setBuoc2(null); }, [x && x.k, sua]);
+  useEffect(() => { hang.slice(1, 6).forEach(y => { if (y.khung_url) { const im = new Image(); im.src = y.khung_url; } }); }, [hang]);   // tải sẵn ảnh thẻ kế
+  const duongCua = (y) => (y.nguon === 'THANH_PHAM' ? '/kho-thanh-pham/' : '/tai-san/') + y.id + '/doan/' + y.i;
+  const nhanTxt = (o) => o ? tenNhom(o.nhom) + (o.buoc ? ' · ' + o.buoc : '') + (o.bai_test ? ' · ' + o.bai_test : '') : '—';
+  const gocThay = (y) => y.thay || { nhom: y.nhom, buoc: y.buoc, bai_test: y.bai_test };
+  // lưu lạc quan: sang thẻ kế ngay, lỗi thì trả thẻ về hàng
+  const gui = (body0) => { if (!x) return; const y = x; const laSua = sua != null;
+    const body = { ...body0, mo_ta: body0.mo_ta || moTa.trim() || undefined, ngau_nhien: !!y.ngau_nhien, giay: Math.round((Date.now() - batDau.current) / 1000), nhe: true };
+    if (laSua) { setDaLam(d => d.map(z => z.x.k === y.k ? { ...z, body, dang: true } : z)); setSua(null); }
+    else { daXem.current.add(y.k); setDaLam(d => [...d, { x: y, body, dang: true }]); setHang(h => { const c = h.slice(1); if (c.length < 5) setTimeout(() => tai(false), 0); return c; }); }
+    goi(duongCua(y), { method: 'POST', body }).then(r => {
+      if (!r.ok) { notify('Chưa lưu được (' + r.msg + ') — thẻ quay lại hàng', 'err'); setDaLam(d => d.filter(z => z.x.k !== y.k)); if (!laSua) { daXem.current.delete(y.k); setHang(h => [y, ...h]); } return; }
+      if (r.them_vao) notify(r.them_vao.loi || ('Đã thêm "' + r.them_vao.gia_tri + '" vào ' + (r.them_vao.cot === 'quy_trinh' ? 'quy trình' : 'bài test') + ' ' + r.them_vao.dong));
+      setDaLam(d => d.map(z => z.x.k === y.k ? { ...z, dang: false, dung: r.dung } : z)); }); };
+  const qua = () => { if (!x) return; if (sua != null) { setSua(null); return; } daXem.current.add(x.k); setHang(h => { const c = h.slice(1); if (c.length < 5) setTimeout(() => tai(false), 0); return c; }); };
+  const quayLai = () => { if (!daLam.length) return; setSua(sua == null ? daLam.length - 1 : Math.max(0, sua - 1)); };
+  const dongY = () => { const g = gocThay(x); gui({ nhom: g.nhom, buoc: g.buoc, bai_test: g.bai_test }); };
   const chonNhom = (k) => { if (k === 'THI_CONG' || k === 'THU_NGHIEM') setBuoc2({ nhom: k, ds: (k === 'THI_CONG' ? x.quy_trinh : x.bai_test_ds) || [] }); else gui({ nhom: k }); };
   const theoBuoc = (b, moi) => gui(buoc2.nhom === 'THI_CONG' ? { nhom: 'THI_CONG', buoc: b, them_buoc: moi && themQT } : { nhom: 'THU_NGHIEM', bai_test: b, them_buoc: moi && themQT });
-  const dongY = () => { if (!x) return; gui({ nhom: x.nhom, buoc: x.buoc, bai_test: x.bai_test }); };
-  const moTach = () => setTach([0, 1, 2].map(() => ({ nhom: x.nhom, buoc: x.buoc || null, bai_test: x.bai_test || null, mo_ta: '' })));
+  const moTach = () => { const g = gocThay(x); setTach([0, 1, 2].map(() => ({ nhom: g.nhom, buoc: g.buoc || null, bai_test: g.bai_test || null, mo_ta: '' }))); };
   const luuTach = () => { const p = tach.map(v => ({ ...v, buoc: v.buoc && v.buoc.trim() || null, bai_test: v.bai_test && v.bai_test.trim() || null, mo_ta: (v.mo_ta || '').trim() || null }));
     const coMoi = p.some(v => (v.buoc && !(x.quy_trinh || []).includes(v.buoc)) || (v.bai_test && !(x.bai_test_ds || []).includes(v.bai_test))); gui({ phan: p, them_buoc: coMoi && themQT }); };
-  useEffect(() => { const f = (e) => { if (!x || tach || /INPUT|TEXTAREA|SELECT/.test((e.target || {}).tagName || '')) return; const n = parseInt(e.key, 10);
-      if (buoc2) { if (e.key === 'Backspace' || e.key === 'Escape') { setBuoc2(null); e.preventDefault(); } else if (n >= 1 && n <= buoc2.ds.length) theoBuoc(buoc2.ds[n - 1]); else if (e.key === 'Enter') gui({ nhom: buoc2.nhom }); return; }
-      if (n >= 1 && n <= 8) chonNhom(NHOM_HINH[n - 1].k); else if (e.key === 'Enter') { e.preventDefault(); dongY(); } else if (e.key === '0') gui({ khong_ro: true }); else if (e.key === 'ArrowRight') qua(); };
+  useEffect(() => { const f = (e) => { const tag = (e.target || {}).tagName || '';
+      if (/INPUT|TEXTAREA|SELECT/.test(tag)) { if (e.key === 'Escape') e.target.blur(); if (e.key === 'Enter' && e.target === moTaRef.current) { e.preventDefault(); e.target.blur(); dongY(); } return; }
+      if (e.key === '?') { setPhim(p => !p); return; } if (phim) { if (e.key === 'Escape') setPhim(false); return; }
+      if (!x || tach) { if (e.key === 'Escape') setTach(null); return; } const n = parseInt(e.key, 10);
+      if (buoc2) { if (e.key === 'Escape' || e.key === 'Backspace') { e.preventDefault(); setBuoc2(null); } else if (n >= 1 && n <= buoc2.ds.length) theoBuoc(buoc2.ds[n - 1]); else if (e.key === 'Enter') { e.preventDefault(); gui({ nhom: buoc2.nhom }); } return; }
+      if (e.key === 'Enter') { e.preventDefault(); dongY(); } else if (n >= 1 && n <= 8) chonNhom(NHOM_HINH[n - 1].k); else if (e.key === '0') gui({ khong_ro: true });
+      else if (e.key === 'ArrowRight') { e.preventDefault(); qua(); } else if (e.key === 'ArrowLeft') { e.preventDefault(); quayLai(); }
+      else if ((e.key === 't' || e.key === 'T') && laDai) moTach(); else if (e.key === 'm' || e.key === 'M') { e.preventDefault(); moTaRef.current && moTaRef.current.focus(); } };
     window.addEventListener('keydown', f); return () => window.removeEventListener('keydown', f); });
-  const nhanTxt = (o) => tenNhom(o.nhom) + (o.buoc ? ' · ' + o.buoc : '') + (o.bai_test ? ' · ' + o.bai_test : '');
-
-  return <Card pad="p-3">
-    <div className="flex items-center gap-2 flex-wrap mb-2"><SectionTitle>Khung hình này nói gì</SectionTitle>
-      <Select className="!py-1 !px-2 text-xs !w-44" value={dong} onChange={e => setDong(e.target.value)}><option value="">mọi dòng sản phẩm</option>{dongs.map(v => <option key={v} value={v}>{v}</option>)}</Select>
-      {tt && <span className="text-[11px] text-ink-muted">còn {tt.con_lai} đoạn chưa gán ({tt.can_xac_nhan} máy chưa chắc) · đã gán {tt.da_gan}/{tt.tong_doan}{tt.khong_anh ? ' · ' + tt.khong_anh + ' đoạn chưa có ảnh' : ''}</span>}
-      <span className="ml-auto text-[11px] text-ink-muted">phiên này: {phien.gan} nhãn · máy đúng {phanTram(phien.trung, phien.gan)}</span>
-      <Btn variant="ghost" className="!py-1 !px-2 text-[11px]" onClick={() => { refresh(); tai(true); }}>Tải lại</Btn></div>
-    {!x && tt && tt.het_tran ? <div className="text-center py-8 text-sm text-ink-muted">Đã đủ {tt.tran_phut} phút hôm nay ({tt.phut_hom_nay} phút), máy không dồn thêm thẻ. <Btn variant="ghost" className="ml-2 !py-1 !px-2 text-[11px]" onClick={() => setThem(true)}>Làm thêm</Btn></div> : !x ? <Empty>{dangTai ? 'Đang lấy đoạn…' : 'Không còn đoạn nào cần gán. Máy đọc thêm footage/video thành phẩm thì đoạn mới sẽ hiện ở đây.'}</Empty> :
-      <div className="grid lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)] gap-3">
-        <div>
-          {tach ? <div className="grid grid-cols-3 gap-2">{tach.map((v, k) => <div key={k} className="space-y-1"><KhungCat url={x.khung_url} k={k} /><div className="text-[10px] text-ink-muted text-center">khung {k + 1}</div><ChonNhan v={v} x={x} onChange={nv => setTach(tach.map((o, j) => j === k ? nv : o))} /></div>)}</div>
-            : <div className="rounded-xl overflow-hidden bg-slate-900 aspect-video flex items-center justify-center">
-              {x.khung_url ? <img key={x.k} src={x.khung_url} alt={x.mo_ta || 'khung hình'} className="max-h-full max-w-full object-contain" onLoad={e => setLaDai(e.target.naturalWidth / Math.max(1, e.target.naturalHeight) > 2.2)} /> : x.media_url ? <video key={x.k} src={x.media_url + '#t=' + x.tu + ',' + x.den} controls muted autoPlay className="max-h-full max-w-full" /> : <span className="text-slate-400 text-xs">không có ảnh</span>}
-            </div>}
-          <div className="text-[11px] text-ink-muted mt-1">{x.khung_url && x.nguon === 'FOOTAGE' && x.media_url ? <a className="underline mr-2" href={x.media_url + '#t=' + x.tu} target="_blank" rel="noreferrer">mở clip</a> : null}{x.link ? <a className="underline mr-2" href={x.link} target="_blank" rel="noreferrer">mở bài đăng</a> : null}
-            {x.nguon === 'THANH_PHAM' ? 'Video thành phẩm' : 'Footage'} · <b className="text-ink">{x.ten}</b> · giây {x.tu}–{x.den}{x.dong ? ' · ' + x.dong : ''}{x.ngau_nhien ? ' · mẫu ngẫu nhiên' : ''}</div>
-          {laDai && !tach && <Btn variant="soft" className="!py-1.5 !px-3 text-xs mt-2" onClick={moTach}>✂ Ba khung khác nội dung? Gán từng khung</Btn>}
-          {tach && <div className="flex gap-2 mt-2 flex-wrap items-center"><Btn variant="brand" className="!py-1.5 !px-3 text-xs" onClick={luuTach}>Lưu 3 khung</Btn><Btn variant="ghost" className="!py-1.5 !px-3 text-xs" onClick={() => setTach(null)}>Huỷ, gán cả đoạn</Btn>{x.dong && <label className="text-[11px] text-ink-muted flex items-center gap-1"><input type="checkbox" checked={themQT} onChange={e => setThemQT(e.target.checked)} />bước mới thêm vào quy trình {x.dong}</label>}</div>}
+  const soGan = daLam.filter(z => !z.body.khong_ro).length, soDung = daLam.filter(z => z.dung && !z.body.khong_ro).length;
+  const phut = tt ? (tt.phut_hom_nay || 0) : 0, tran = tt ? (tt.tran_phut || 0) : 0; const g = x ? gocThay(x) : null;
+  const Anh = ({ y, cls }) => y && y.khung_url ? <img src={y.khung_url} alt="" className={cls} loading="lazy" /> : <div className={cls + ' bg-slate-200'} />;
+  return <Card pad="p-0" className="overflow-hidden">
+    <div className="flex items-center gap-3 flex-wrap px-3 py-2 border-b border-line bg-slate-50">
+      <SectionTitle>Khung hình này nói gì</SectionTitle>
+      <Select className="!py-1 !px-2 text-xs !w-40" value={dong} onChange={e => setDong(e.target.value)}><option value="">mọi dòng</option>{dongs.map(v => <option key={v} value={v}>{v}</option>)}</Select>
+      <div className="flex items-center gap-2 text-[11px] text-ink-muted"><span>phiên này <b className="text-ink">{soGan}</b> thẻ · thầy đúng <b className="text-ink">{phanTram(soDung, soGan)}</b></span>
+        <span className="hidden sm:inline">· hôm nay {phut}/{tran || '∞'} phút</span>{tran ? <span className="hidden sm:block w-24 h-1.5 rounded bg-slate-200 overflow-hidden"><span className="block h-full bg-teal-600" style={{ width: Math.min(100, phut / tran * 100) + '%' }} /></span> : null}
+        <span>· còn {tt ? tt.con_lai : '…'} thẻ</span></div>
+      <div className="ml-auto flex gap-1"><Btn variant="ghost" className="!py-1 !px-2 text-[11px]" onClick={() => setPhim(true)}>? Phím tắt</Btn><Btn variant="ghost" className="!py-1 !px-2 text-[11px]" onClick={() => { refresh(); tai(true); }}>Tải lại</Btn></div>
+    </div>
+    {!x && tt && tt.het_tran ? <div className="text-center py-10 text-sm text-ink-muted">Đã đủ {tt.tran_phut} phút hôm nay ({tt.phut_hom_nay} phút), máy không dồn thêm thẻ. <Btn variant="ghost" className="ml-2 !py-1 !px-2 text-[11px]" onClick={() => setThem(true)}>Làm thêm</Btn></div>
+      : !x ? <Empty>{dangTai ? 'Đang lấy thẻ…' : 'Không còn thẻ nào cần người. Thầy chốt các đoạn còn lại; thẻ mới hiện khi thầy chưa chắc hoặc đến lượt kiểm ngẫu nhiên.'}</Empty>
+      : <div className="grid lg:grid-cols-[176px_minmax(0,1fr)_360px]">
+        {/* cột 1: hàng thẻ */}
+        <div className="hidden lg:flex flex-col gap-1 border-r border-line p-2 max-h-[calc(100vh-220px)] overflow-y-auto text-[11px]">
+          {daLam.length > 0 && <div className="text-[10px] uppercase tracking-wider text-ink-muted font-semibold">Đã làm · ← quay lại</div>}
+          {daLam.slice(-8).map((z, j0) => { const j = daLam.length - Math.min(8, daLam.length) + j0; return <button key={z.x.k} onClick={() => setSua(j)} className={'flex gap-1.5 items-center text-left rounded-lg p-1 hover:bg-slate-50 ' + (sua === j ? 'ring-1 ring-ink' : '')}>
+            <Anh y={z.x} cls="w-12 h-8 rounded object-cover flex-none" /><span className="min-w-0 flex-1 truncate">{z.body.khong_ro ? 'không rõ' : z.body.phan ? 'từng khung' : tenNhom(z.body.nhom)}</span><span className={z.dang ? 'text-ink-muted' : z.dung ? 'text-emerald-600' : 'text-rose-600'}>{z.dang ? '…' : z.body.khong_ro ? '·' : z.dung ? '✓' : '✎'}</span></button>; })}
+          <div className="text-[10px] uppercase tracking-wider text-ink-muted font-semibold mt-1">Tiếp theo</div>
+          {hang.slice(sua == null ? 0 : 0, 10).map((y, j) => <div key={y.k} className={'flex gap-1.5 items-center rounded-lg p-1 ' + (sua == null && j === 0 ? 'bg-teal-50 ring-1 ring-teal-600' : '')}>
+            <Anh y={y} cls="w-12 h-8 rounded object-cover flex-none" /><span className="min-w-0 flex-1 truncate">{tenNhom((y.thay || y).nhom)}</span><span className={'text-[9px] ' + (y.ngau_nhien ? 'text-sky-700' : 'text-rose-700')}>{y.ngau_nhien ? 'kiểm' : 'chưa chắc'}</span></div>)}
         </div>
-        {!tach && <div className="space-y-2 text-xs">
-          <div className="rounded-xl border border-line p-2"><div className="text-[10px] uppercase tracking-wider text-ink-muted font-semibold">Thầy gán là · {x.ly_do_hoi === 'KIEM' ? 'mẫu kiểm ngẫu nhiên để đo thầy đúng bao nhiêu' : 'thầy tự báo chưa chắc'}</div>
-            <div className="text-sm font-semibold text-ink">{nhanTxt(x)}</div>
-            <div className="text-ink-muted">{x.mo_ta}{x.hanh_dong ? ' — ' + x.hanh_dong : ''}</div>
-            {(x.thay || x.mo) && <div className="mt-1 grid gap-0.5 text-[11px]">{x.thay && <div><span className="text-ink-muted">Thầy Claude:</span> <b>{nhanTxt(x.thay)}</b> <span className="text-ink-muted">chắc {x.thay.chac ?? '—'}{x.thay.ly_do ? ' — ' + x.thay.ly_do : ''}</span></div>}{x.mo && <div><span className="text-ink-muted">Mô hình mở:</span> <b>{nhanTxt(x.mo)}</b></div>}{x.thay && x.mo && <div className={x.thay.nhom === x.mo.nhom ? 'text-emerald-700' : 'text-rose-700'}>{x.thay.nhom === x.mo.nhom ? 'Mô hình mở cùng nhóm với thầy' : 'Mô hình mở khác thầy (học trò còn sai, chỉ để đo)'}</div>}</div>}
-            <Input className="!py-1 !px-2 text-[11px] w-full mt-1" placeholder="Mô tả đúng hơn (tuỳ chọn), vd: gạt Finex bằng bay răng vàng" value={moTa} onChange={e => setMoTa(e.target.value)} />
-            <Btn variant="ok" className="!py-1 !px-2 text-[11px] mt-1" onClick={dongY}>Enter · Đúng rồi</Btn></div>
-          {!buoc2 ? <div><div className="text-[10px] uppercase tracking-wider text-ink-muted font-semibold mb-1">Hay thật ra là</div>
-            <div className="grid grid-cols-2 gap-1">{NHOM_HINH.map((n, i) => <button key={n.k} onClick={() => chonNhom(n.k)} className={'text-left rounded-lg border px-2 py-1 hover:bg-slate-50 ' + (x.nhom === n.k ? 'border-ink' : 'border-line')}>
-              <span className="inline-block w-5 text-center rounded bg-slate-100 font-mono mr-1">{i + 1}</span><span className="inline-block w-2 h-2 rounded-full mr-1" style={{ background: n.mau }} /><b>{n.ten}</b><div className="text-[10px] text-ink-muted pl-6">{n.mo}</div></button>)}</div></div>
-            : <div><div className="text-[10px] uppercase tracking-wider text-ink-muted font-semibold mb-1">{buoc2.nhom === 'THI_CONG' ? 'Bước thi công nào' : 'Bài test nào'} · Esc quay lại</div>
-              <div className="grid gap-1">{buoc2.ds.map((b, i) => <button key={b} onClick={() => theoBuoc(b)} className={'text-left rounded-lg border px-2 py-1 hover:bg-slate-50 ' + (x.buoc === b || x.bai_test === b ? 'border-ink' : 'border-line')}><span className="inline-block w-5 text-center rounded bg-slate-100 font-mono mr-1">{i + 1}</span>{b}</button>)}
-                <div className="rounded-lg border border-dashed border-line p-1.5 space-y-1"><div className="flex gap-1"><Input className="!py-1 !px-2 text-[11px] flex-1" placeholder={buoc2.nhom === 'THI_CONG' ? '＋ bước khác, vd: khò nhiệt phá bọt khí' : '＋ bài test khác'} value={buocMoi} onChange={e => setBuocMoi(e.target.value)} /><Btn variant="brand" className="!py-1 !px-2 text-[11px]" disabled={!buocMoi.trim()} onClick={() => theoBuoc(buocMoi.trim(), true)}>Lưu</Btn></div>
-                  {x.dong && <label className="text-[10px] text-ink-muted flex items-center gap-1"><input type="checkbox" checked={themQT} onChange={e => setThemQT(e.target.checked)} />thêm vào {buoc2.nhom === 'THI_CONG' ? 'quy trình chuẩn' : 'danh sách bài test'} của {x.dong}</label>}</div>
-                <button onClick={() => gui({ nhom: buoc2.nhom })} className="text-left rounded-lg border border-line px-2 py-1 hover:bg-slate-50 text-ink-muted">Enter · không rõ {buoc2.nhom === 'THI_CONG' ? 'bước nào' : 'bài test nào'}</button></div></div>}
-          <div className="flex gap-1 flex-wrap"><Btn variant="ghost" className="!py-1 !px-2 text-[11px]" onClick={() => gui({ khong_ro: true })}>0 · Hình không rõ</Btn><Btn variant="ghost" className="!py-1 !px-2 text-[11px]" onClick={qua}>→ Bỏ qua</Btn></div>
-        </div>}
+        {/* cột 2: ảnh + dải thời gian */}
+        <div className="p-3 min-w-0">
+          {sua != null && <div className="mb-2 text-[11px] rounded-lg bg-amber-50 text-amber-800 px-2 py-1">Đang sửa lại thẻ đã làm. Lưu để thay nhãn cũ; → để về thẻ đang chờ.</div>}
+          {tach ? <div className="grid grid-cols-3 gap-2">{tach.map((v, k) => <div key={k} className="space-y-1"><div className="rounded-lg bg-slate-900 aspect-video w-full" style={{ backgroundImage: 'url(' + x.khung_url + ')', backgroundSize: '300% 100%', backgroundPosition: (k * 50) + '% 0' }} /><div className="text-[10px] text-ink-muted text-center">khung {k + 1}</div><ChonNhan v={v} x={x} onChange={nv => setTach(tach.map((o, j) => j === k ? nv : o))} /></div>)}
+            <div className="col-span-3 flex gap-2 flex-wrap items-center"><Btn variant="brand" className="!py-1.5 !px-3 text-xs" onClick={luuTach}>Lưu 3 khung</Btn><Btn variant="ghost" className="!py-1.5 !px-3 text-xs" onClick={() => setTach(null)}>Esc · Huỷ</Btn>{x.dong && <label className="text-[11px] text-ink-muted flex items-center gap-1"><input type="checkbox" checked={themQT} onChange={e => setThemQT(e.target.checked)} />bước mới thêm vào quy trình {x.dong}</label>}</div></div>
+            : <div className="rounded-xl overflow-hidden bg-slate-900 flex items-center justify-center" style={{ minHeight: 220 }}>
+              {x.khung_url ? <img key={x.k} src={x.khung_url} alt={x.mo_ta || 'khung hình'} className="w-full max-h-[48vh] object-contain" onLoad={e => setLaDai(e.target.naturalWidth / Math.max(1, e.target.naturalHeight) > 2.2)} /> : x.media_url ? <video key={x.k} src={x.media_url + '#t=' + x.tu + ',' + x.den} controls muted autoPlay className="w-full max-h-[48vh]" /> : <span className="text-slate-400 text-xs">không có ảnh</span>}</div>}
+          {!tach && laDai && <div className="grid grid-cols-3 text-center text-[10px] text-ink-muted mt-0.5"><span>khung 1</span><span>khung 2 · cách 0,5 giây</span><span>khung 3</span></div>}
+          <DaiVideo tl={x.tl_video} dai={x.dai_video} tu={x.tu} den={x.den} />
+          <div className="text-[11px] text-ink-muted mt-1">{x.nguon === 'THANH_PHAM' ? 'Video thành phẩm' : 'Footage'} · <b className="text-ink">{x.ten}</b> · giây {x.tu}–{x.den}{x.dong ? ' · ' + x.dong : ''}{x.link ? <> · <a className="underline" href={x.link} target="_blank" rel="noreferrer">mở bài đăng</a></> : null}{x.media_url ? <> · <a className="underline" href={x.media_url + '#t=' + x.tu} target="_blank" rel="noreferrer">mở clip</a></> : null}</div>
+        </div>
+        {/* cột 3: quyết định */}
+        <div className="border-t lg:border-t-0 lg:border-l border-line p-3 space-y-2 text-xs">
+          <div className={'rounded-lg px-2 py-1 text-[11px] ' + (x.ngau_nhien ? 'bg-sky-50 text-sky-800' : 'bg-rose-50 text-rose-700')}>{x.ngau_nhien ? 'Mẫu kiểm ngẫu nhiên — thầy đã chốt, anh/chị xem để đo thầy đúng bao nhiêu' : 'Thầy tự báo chưa chắc' + (x.thay && x.thay.chac != null ? ' (chắc ' + x.thay.chac + ')' : '')}</div>
+          <div><div className="text-[10px] uppercase tracking-wider text-ink-muted font-semibold">Thầy gán</div><div className="text-base font-bold text-ink leading-snug">{nhanTxt(g)}</div>
+            {x.thay && x.thay.ly_do && <div className="text-ink-muted">vì {x.thay.ly_do}</div>}<div className="text-ink-muted">{x.mo_ta}</div>
+            {x.mo && <div className="text-[10px] text-ink-muted mt-0.5">mô hình mở (học trò): {nhanTxt(x.mo)}</div>}</div>
+          <button onClick={dongY} className="w-full rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 text-sm">✓ Đúng <span className="font-mono text-[11px] bg-white/20 rounded px-1 ml-1">Enter</span></button>
+          <input ref={moTaRef} className={inputCls+" !py-1.5 !px-2 text-[11px] w-full"} placeholder="M · mô tả đúng hơn (tuỳ chọn), Enter để lưu" value={moTa} onChange={e => setMoTa(e.target.value)} />
+          {!buoc2 ? <div><div className="text-[10px] uppercase tracking-wider text-ink-muted font-semibold mb-1">Sai? Chọn nhóm đúng</div>
+            <div className="grid grid-cols-2 gap-1">{NHOM_HINH.map((n, i) => <button key={n.k} onClick={() => chonNhom(n.k)} className={'text-left rounded-lg border px-2 py-1.5 hover:bg-slate-50 flex items-center gap-1 ' + (g.nhom === n.k ? 'border-ink' : 'border-line')}>
+              <span className="w-5 text-center rounded bg-slate-100 font-mono">{i + 1}</span><span className="inline-block w-2 h-2 rounded-full" style={{ background: n.mau }} /><b className="truncate">{n.ten}</b></button>)}</div></div>
+            : <div><div className="text-[10px] uppercase tracking-wider text-ink-muted font-semibold mb-1">{buoc2.nhom === 'THI_CONG' ? 'Bước thi công nào' : 'Bài test nào'} · Enter nếu không rõ · Esc quay lại</div>
+              <div className="grid gap-1 max-h-56 overflow-y-auto">{buoc2.ds.map((b, i) => <button key={b} onClick={() => theoBuoc(b)} className={'text-left rounded-lg border px-2 py-1 hover:bg-slate-50 ' + (g.buoc === b || g.bai_test === b ? 'border-ink' : 'border-line')}><span className="inline-block w-5 text-center rounded bg-slate-100 font-mono mr-1">{i + 1}</span>{b}</button>)}</div>
+              <div className="flex gap-1 mt-1"><Input className="!py-1 !px-2 text-[11px] flex-1 min-w-0" placeholder={buoc2.nhom === 'THI_CONG' ? '＋ bước khác' : '＋ bài test khác'} value={buocMoi} onChange={e => setBuocMoi(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && buocMoi.trim()) { e.preventDefault(); theoBuoc(buocMoi.trim(), true); } }} /><Btn variant="brand" className="!py-1 !px-2 text-[11px]" disabled={!buocMoi.trim()} onClick={() => theoBuoc(buocMoi.trim(), true)}>Lưu</Btn></div>
+              {x.dong && <label className="text-[10px] text-ink-muted flex items-center gap-1 mt-1"><input type="checkbox" checked={themQT} onChange={e => setThemQT(e.target.checked)} />thêm vào {buoc2.nhom === 'THI_CONG' ? 'quy trình chuẩn' : 'danh sách bài test'} của {x.dong}</label>}</div>}
+          <div className="grid grid-cols-2 gap-1">
+            {laDai && !tach ? <Btn variant="ghost" className="!py-1 !px-2 text-[11px] col-span-2" onClick={moTach}>✂ T · Ba khung khác nội dung</Btn> : null}
+            <Btn variant="ghost" className="!py-1 !px-2 text-[11px]" onClick={() => gui({ khong_ro: true })}>0 · Không rõ</Btn>
+            <Btn variant="ghost" className="!py-1 !px-2 text-[11px]" onClick={qua}>→ Bỏ qua</Btn>
+            <Btn variant="ghost" className="!py-1 !px-2 text-[11px] col-span-2" disabled={!daLam.length} onClick={quayLai}>← Quay lại thẻ vừa làm</Btn>
+          </div>
+        </div>
       </div>}
+    {phim && <div className="fixed inset-0 z-50 bg-black/30 flex items-center justify-center p-4" onClick={() => setPhim(false)}><div className="bg-white rounded-2xl p-4 max-w-sm w-full text-sm space-y-1" onClick={e => e.stopPropagation()}>
+      <div className="font-bold mb-1">Phím tắt</div>
+      {[['Enter', 'thầy đúng, sang thẻ kế'], ['1–8', 'chọn nhóm cảnh đúng'], ['1–9', 'chọn bước / bài test (sau khi chọn Thi công / Bài test)'], ['Esc', 'quay ra / huỷ'], ['M', 'ghi mô tả đúng hơn (Enter để lưu)'], ['T', 'gán từng khung khi dải 3 khung khác nội dung'], ['0', 'hình không rõ'], ['→', 'bỏ qua'], ['←', 'quay lại sửa thẻ vừa làm'], ['?', 'bật / tắt bảng này']].map(([k, v]) => <div key={k} className="flex gap-2"><span className="font-mono text-xs bg-slate-100 rounded px-1.5 min-w-[44px] text-center">{k}</span><span>{v}</span></div>)}
+      <Btn variant="ghost" className="!py-1 !px-3 text-xs mt-2" onClick={() => setPhim(false)}>Đóng</Btn></div></div>}
   </Card>;
 }
