@@ -381,6 +381,12 @@ Người duyệt: Thiện · Trạng thái: ĐÃ DUYỆT (2026-09-24, "ok bạn 
 
 ## Changelog
 
+### 2026-09-26 · Quy trình chuẩn theo dòng từ tài liệu Kingsmen
+- Chủ gửi hướng dẫn thi công sàn epoxy hiệu ứng / tự phẳng (áp cho Terrazy và Finex; độ ẩm nền cập nhật ≤ 8%) và keo chít mạch (keokingsmen.com). Nạp thành quy trình chuẩn: sàn tự phẳng 8 bước, keo chít mạch 4 bước, mỗi bước có dấu hiệu nhận biết (`bo_nhan.mo_ta`, `thu_tu`); gieo dụng cụ / thao tác / vật liệu; kiến thức lỗi thường gặp đưa vào lời nhắc thầy để nhận cảnh VAN_DE.
+- Dòng đã khai quy trình ở Danh mục sản phẩm thì giữ quy trình đó (bước chuẩn của hệ thống bị bỏ qua cho dòng này).
+- Thầy chọn bước theo danh sách có dấu hiệu, không đặt tên bước mới khi cảnh khớp bước có sẵn.
+- Chuẩn hoá bước cũ (cron, Haiku đọc mô tả / dụng cụ / thao tác thầy đã ghi — không đọc lại hình, một lượt gọi / 30 đoạn); giữ tên cũ ở `buoc_goc`; dòng chuẩn hoá xong thì dọn đề xuất bước (GOP → quy trình chuẩn).
+
 ### 2026-09-25 · Thầy đọc bù (chủ: "sao thầy để trống nhãn nhiều quá")
 - Đo prod: thầy chạm trần 20,12 / 20 USD (Opus 5: 578 lượt 17,51 USD) → video học sau đó chỉ có nhãn mô hình mở; 527 đoạn cũ không có ảnh (học trước khi có ảnh dải); ~300 đoạn thầy đọc bằng lời nhắc cũ chỉ có nhóm + mô tả.
 - Máy Q2 cắt bù ảnh dải (3 khung 448px, cách 0,5 giây quanh giữa đoạn — đúng khuôn `doc-khung`) chung lệnh bản xem `hoc_thanh_pham {chi_proxy}`; mỗi đoạn thử tối đa 2 lần (`mau_doan.anh_thu`). Footage cũng được cắt bù.

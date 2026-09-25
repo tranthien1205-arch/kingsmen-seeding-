@@ -43,16 +43,16 @@ test('018b: thầy gán đủ trường theo bộ nhãn → đề xuất; duyệ
   const may = hubK(giai((await api('/may-ghep', 'POST', { ten: 'Q2' })).j.ma_ghep).khoa);
   const sp = (await api('/danh-muc/san_pham', 'POST', { ma: 'F', ten: 'Finex', dong: 'Finex', quy_trinh: 'Lăn lót\nTrát' })).j.id;
   let bn = (await api('/bo-nhan')).j; assert.ok(bn.truong.some((t) => t.k === 'dung_cu')); assert.ok(bn.gia_tri.some((x) => x.truong === 'dung_cu' && x.ten === 'bay răng')); assert.ok(bn.gia_tri.some((x) => x.truong === 'buoc' && x.ten === 'Trát' && x.dong === 'Finex'), 'bước lấy từ quy trình sản phẩm');
-  TRA = ['{"nhom":"THI_CONG","buoc":"trát","bai_test":null,"hanh_dong":["Gạt","xoa nền"],"vat_lieu":["Finex F300"],"dung_cu":["Bay Răng","bay inox"],"vi_tri":"sàn nhà tắm","nguoi":"thợ","co_canh":"cận thao tác","goc_may":"từ trên xuống","chuyen_dong":"bay bổng","tham_my":-1,"dung_cho":"minh hoạ lời","chac":0.85,"mo_ta":"thợ gạt Finex","ly_do":"bay trên nền"}'];
+  TRA = ['{"nhom":"THI_CONG","buoc":"trát","bai_test":null,"hanh_dong":["Gạt","xoa nền"],"vat_lieu":["Finex F300"],"dung_cu":["Bay Răng","bay nhựa"],"vi_tri":"sàn nhà tắm","nguoi":"thợ","co_canh":"cận thao tác","goc_may":"từ trên xuống","chuyen_dong":"bay bổng","tham_my":-1,"dung_cho":"minh hoạ lời","chac":0.85,"mo_ta":"thợ gạt Finex","ly_do":"bay trên nền"}'];
   const r = await may('/hub/thay-doc', 'POST', { dong: 'Finex', san_pham: 'Finex', doan: [{ anh: ['/media/media/a.jpg'] }] }); const n = r.j.kq[0].nhan;
-  assert.equal(n.buoc, 'Trát', 'chuẩn hoá theo quy trình (hoa/thường)'); assert.deepEqual(n.hanh_dong, ['gạt', 'xoa nền']); assert.deepEqual(n.dung_cu, ['bay răng', 'bay inox']); assert.equal(n.co_canh, 'THAO_TAC', 'tên cỡ cảnh → mã'); assert.equal(n.chuyen_dong, null, 'giá trị cố định lạ bị bỏ'); assert.equal(n.tham_my, null); assert.equal(n.nguoi, 'thợ');
-  bn = (await api('/bo-nhan')).j; const dx = bn.de_xuat.map((x) => x.truong + ':' + x.ten).sort(); assert.deepEqual(dx, ['dung_cu:bay inox', 'hanh_dong:xoa nền', 'vat_lieu:Finex F300'], 'thứ thầy thấy mà bộ nhãn chưa có → đề xuất');
+  assert.equal(n.buoc, 'Trát', 'chuẩn hoá theo quy trình (hoa/thường)'); assert.deepEqual(n.hanh_dong, ['gạt', 'xoa nền']); assert.deepEqual(n.dung_cu, ['bay răng', 'bay nhựa']); assert.equal(n.co_canh, 'THAO_TAC', 'tên cỡ cảnh → mã'); assert.equal(n.chuyen_dong, null, 'giá trị cố định lạ bị bỏ'); assert.equal(n.tham_my, null); assert.equal(n.nguoi, 'thợ');
+  bn = (await api('/bo-nhan')).j; const dx = bn.de_xuat.map((x) => x.truong + ':' + x.ten).sort(); assert.deepEqual(dx, ['dung_cu:bay nhựa', 'hanh_dong:xoa nền', 'vat_lieu:Finex F300'], 'thứ thầy thấy mà bộ nhãn chưa có → đề xuất');
   // footage có nhãn thầy chi tiết
   const muc = (await api('/muc', 'POST', { tieu_de: 'x', dinh_dang: 'VIDEO', san_pham_id: sp })).j.id;
   const ts = (await may('/hub/tai-san', 'POST', { muc_id: muc, ten: 'A.mp4', media_url: '/media/media/a.mp4', media_type: 'VIDEO', giay: 6 })).j.id;
-  await may('/hub/doc-khung', 'POST', { tai_san_id: ts, timeline: [{ tu: 0, den: 3, nhom: 'THI_CONG', thay: { ...n, dung_cu: ['bay inox'] } }, { tu: 3, den: 6, nhom: 'THI_CONG', thay: { nhom: 'THI_CONG', buoc: 'Lăn lót', dung_cu: ['bay inox', 'con lăn'], chac: 0.9 } }] });
-  // gộp "bay inox" vào "bay răng": mọi mẫu chuyển theo
-  const inox = bn.de_xuat.find((x) => x.ten === 'bay inox'); assert.equal(inox.so_mau, 0);
+  await may('/hub/doc-khung', 'POST', { tai_san_id: ts, timeline: [{ tu: 0, den: 3, nhom: 'THI_CONG', thay: { ...n, dung_cu: ['bay nhựa'] } }, { tu: 3, den: 6, nhom: 'THI_CONG', thay: { nhom: 'THI_CONG', buoc: 'Lăn lót', dung_cu: ['bay nhựa', 'con lăn'], chac: 0.9 } }] });
+  // gộp "bay nhựa" vào "bay răng": mọi mẫu chuyển theo
+  const inox = bn.de_xuat.find((x) => x.ten === 'bay nhựa'); assert.equal(inox.so_mau, 0);
   let g = await api('/bo-nhan/' + inox.id + '/gop', 'POST', { vao: 'bay răng' }); assert.equal(g.s, 200); assert.equal(g.j.mau_chuyen, 2);
   assert.deepEqual(JSON.parse(DB.raw.prepare(`SELECT nhan_thay FROM mau_doan WHERE id=?`).get('H:' + ts + ':1').nhan_thay).dung_cu, ['bay răng', 'con lăn']);
   // duyệt đề xuất vật liệu; đề xuất bước → vào quy trình sản phẩm
@@ -147,4 +147,27 @@ test('018e: dòng chưa có sản phẩm vẫn duyệt được bước; thêm d
   bn = (await api('/bo-nhan')).j; const vl = bn.de_xuat.filter((x) => x.truong === 'vat_lieu').map((x) => x.id); assert.equal(vl.length, 2);
   const h = await api('/bo-nhan/hang-loat', 'POST', { ids: vl, hanh: 'duyet' }); assert.equal(h.j.so, 2); assert.equal(h.j.de_xuat.filter((x) => x.truong === 'vat_lieu').length, 0);
   const h2 = await api('/bo-nhan/hang-loat', 'POST', { ids: h.j.de_xuat.map((x) => x.id), hanh: 'bo' }); assert.equal(h2.j.de_xuat.length, 0);
+});
+
+test('018f: quy trình chuẩn sàn tự phẳng (Terrazy / Finex) + chuẩn hoá bước cũ bằng Haiku + dọn đề xuất bước', async () => {
+  const DB = taoD1(); env = taoEnv(DB); TOKEN = (await api('/login', 'POST', { email: 'admin@kingsmen.vn', password: 'admin123' })).j.token;
+  const may = hubK(giai((await api('/may-ghep', 'POST', { ten: 'Q2' })).j.ma_ghep).khoa);
+  const bn = (await api('/bo-nhan')).j; const qt = bn.gia_tri.filter((x) => x.truong === 'buoc' && x.dong === 'Terrazo').map((x) => x.ten);
+  assert.deepEqual(qt, ['Kiểm tra và chuẩn bị nền', 'Tạo nhám', 'Trám và vệ sinh bề mặt', 'Thi công lớp lót (primer)', 'Trộn vật liệu', 'Thi công lớp phủ (đổ và cán)', 'Lăn gai chỉnh bề mặt', 'Bảo vệ chờ khô'], '8 bước đúng thứ tự khi Danh mục chưa khai');
+  assert.ok(bn.gia_tri.some((x) => x.truong === 'dung_cu' && x.ten === 'con lăn gai'));
+  assert.deepEqual(bn.gia_tri.filter((x) => x.truong === 'buoc' && x.dong === 'Keo chít mạch').map((x) => x.ten), ['Chuẩn bị và vệ sinh khe ron', 'Bơm keo vào khe gạch', 'Miết ron tạo bề mặt', 'Làm sạch và hoàn thiện'], 'keo chít mạch: 4 bước theo hướng dẫn'); assert.ok(bn.gia_tri.some((x) => x.truong === 'dung_cu' && x.ten === 'bi cầu miết ron')); assert.ok(bn.gia_tri.some((x) => x.truong === 'buoc' && x.dong === 'Finex' && x.ten === 'Tạo nhám'));
+  // thầy thấy dấu hiệu từng bước + kiến thức lỗi (ngưỡng ẩm 8%)
+  let nhac = ''; const f0 = globalThis.fetch; globalThis.fetch = async (u, o) => { if (String(u).includes('anthropic')) nhac = JSON.parse(o.body).messages[0].content.slice(-1)[0].text; return f0(u, o); };
+  TRA = ['{"nhom":"THI_CONG","buoc":"Lăn gai chỉnh bề mặt","chac":0.9}']; await may('/hub/thay-doc', 'POST', { dong: 'Terrazo', doan: [{ anh: ['/media/media/a.jpg'] }] }); globalThis.fetch = f0;
+  assert.match(nhac, /Lăn gai chỉnh bề mặt — nhận biết: con lăn gai/); assert.match(nhac, /trên 8%/);
+  // bước cũ đặt tên tự do → Haiku đưa về bước chuẩn; đề xuất bước của dòng được dọn
+  await may('/hub/thanh-pham', 'POST', { ten: 't.mp4', nguon_id: 't', nguon: 'TIKTOK', dai: 6, dong: 'Terrazo', shots: [{ t0: 0, t1: 3 }, { t0: 3, t1: 6 }], timeline: [
+    { tu: 0, den: 3, nhom: 'THI_CONG', thay: { nhom: 'THI_CONG', buoc: 'Pha trộn vật liệu', mo_ta: 'khuấy bột trong xô', chac: 0.9 } }, { tu: 3, den: 6, nhom: 'THI_CONG', thay: { nhom: 'THI_CONG', buoc: 'Thi công chính', mo_ta: 'rulo gai lăn phá bọt', chac: 0.9 } }] });
+  assert.equal(DB.raw.prepare(`SELECT COUNT(*) n FROM bo_nhan WHERE truong='buoc' AND dong='Terrazo' AND trang_thai='DE_XUAT'`).get().n, 2);
+  const goi0 = globalThis.fetch; const DS_GOI = []; globalThis.fetch = async (u, o) => { if (String(u).includes('anthropic') && String(o.body).includes('Quy trình thi công dòng')) { DS_GOI.push('chuan_hoa'); return new Response(JSON.stringify({ content: [{ type: 'text', text: 'Kết quả: [{"i":1,"buoc":"Trộn vật liệu"},{"i":2,"buoc":"lăn gai chỉnh bề mặt"}]' }], usage: { input_tokens: 900, output_tokens: 60 } }), { status: 200 }); } return goi0(u, o); };
+  TRA = ['Kết quả: [{"i":1,"buoc":"Trộn vật liệu"},{"i":2,"buoc":"lăn gai chỉnh bề mặt"}]'];
+  const cron = async () => { let p; await worker.scheduled({}, env, { waitUntil: (x) => { p = x; } }); await p; }; await cron();
+  const b = (i) => JSON.parse(DB.raw.prepare('SELECT nhan_thay FROM mau_doan WHERE id=?').get('H:' + DB.raw.prepare(`SELECT id FROM kho_thanh_pham`).get().id + ':' + i).nhan_thay);
+  globalThis.fetch = goi0; assert.deepEqual(DS_GOI, ['chuan_hoa'], 'một lần gọi Haiku cho cả lô'); assert.equal(b(0).buoc, 'Trộn vật liệu'); assert.equal(b(0).buoc_goc, 'Pha trộn vật liệu', 'giữ tên cũ để đối chiếu'); assert.equal(b(1).buoc, 'Lăn gai chỉnh bề mặt', 'chuẩn hoá hoa / thường');
+  await cron(); assert.equal(DB.raw.prepare(`SELECT COUNT(*) n FROM bo_nhan WHERE truong='buoc' AND dong='Terrazo' AND trang_thai='DE_XUAT'`).get().n, 0, 'dòng chuẩn hoá xong → dọn đề xuất bước');
 });
