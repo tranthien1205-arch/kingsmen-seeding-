@@ -54,10 +54,11 @@ export default async function hoc({ app, goiApp, lenh, dir, log, script }) {
   // 25/09: chế độ chỉ tạo bản xem 360p cho video đã học (không nghe / nhìn / thầy lại) — tìm file đã tải trên ổ trước, không có mới tải
   const timFile = (ten, th = join(dir, "thanh-pham"), sau = 0) => { if (!existsSync(th) || sau > 3) return null; for (const n of readdirSync(th)) { const p = join(th, n); let st; try { st = statSync(p); } catch { continue; } if (st.isFile() && n === ten && st.size > 50000) return p; if (st.isDirectory()) { const x = timFile(ten, p, sau + 1); if (x) return x; } } return null; };
   if (Array.isArray(ts.ds_proxy)) { thuMuc = "bản xem"; const TAI = join(dir, "thanh-pham", "proxy-tai"); mkdirSync(TAI, { recursive: true });
-    for (const x of ts.ds_proxy) { const idTT = (String(x.link || "").match(/\/video\/(\d+)/) || [])[1];
-      if (idTT) { const ten = idTT + ".mp4"; video.push({ id: ten, ten, link: x.link, f: timFile(ten) || join(TAI, ten), nguon_id: x.nguon_id }); }
-      else if (String(x.nguon).toUpperCase() === "DRIVE") video.push({ id: x.nguon_id, ten: x.ten, drive: true, nguon_id: x.nguon_id });
-      else { const f = timFile(String(x.ten || "")); if (f) video.push({ id: x.ten, ten: x.ten, f, nguon_id: x.nguon_id }); else log("  ·", x.ten, "không thấy file trên máy — bỏ"); } }
+    for (const x of ts.ds_proxy) { const idTT = (String(x.link || "").match(/\/video\/(\d+)/) || [])[1]; const them = { nguon_id: x.nguon_id, app_id: x.id, can_proxy: x.can_proxy !== false, doan: Array.isArray(x.doan) ? x.doan : [] };
+      if (String(x.nguon).toUpperCase() === "FOOTAGE" && x.media_url) video.push({ id: x.id, ten: x.ten || x.id, url: x.media_url, ...them });   // footage đã ở kho app: tải về cắt ảnh đoạn
+      else if (idTT) { const ten = idTT + ".mp4"; video.push({ id: ten, ten, link: x.link, f: timFile(ten) || join(TAI, ten), ...them }); }
+      else if (String(x.nguon).toUpperCase() === "DRIVE") video.push({ id: x.nguon_id, ten: x.ten, drive: true, ...them });
+      else { const f = timFile(String(x.ten || "")); if (f) video.push({ id: x.ten, ten: x.ten, f, ...them }); else log("  ·", x.ten, "không thấy file trên máy — bỏ"); } }
   } else if (nguon === "DRIVE") {
     const ND = await script("nap-drive"); const fid = String(ts.folder_id || ""); if (!fid) return { ok: false, msg: "lệnh thiếu folder_id" }; thuMuc = "drive:" + fid;
     // đi sâu tối đa 3 tầng thư mục (đo 24/09: kho của chủ là gốc → BÁN HÀNG → DOUYIN_20V/FINEX/TERRAZY → video); thư mục tên goc/source ở tầng nào cũng là clip gốc
@@ -116,7 +117,14 @@ export default async function hoc({ app, goiApp, lenh, dir, log, script }) {
       const taiApp = async (x, f) => { if (existsSync(f) && statSync(f).size > 1000) return f; const u = /^https?:/.test(x.url) ? x.url : app.url.replace(/\/api\/?$/, "").replace(/\/+$/, "") + x.url; const r = await fetch(u, { headers: { "X-Hub-Key": app.khoa } }); if (!r.ok) throw new Error("tải từ kho app HTTP " + r.status); writeFileSync(f, Buffer.from(await r.arrayBuffer())); return f; };
       const tg = {}; let tMoc = Date.now(); const bam = (k) => { tg[k] = +((Date.now() - tMoc) / 1000).toFixed(1); tMoc = Date.now(); };   // ADR-017: đo từng chặng để quyết tách máy
       const f = v.link ? await taiTikTok(v, v.f) : v.drive ? await taiDrive(v, join(KHO_DRIVE, v.id + ((v.ten.match(/.[a-z0-9]+$/i) || [".mp4"])[0]))) : v.url ? await taiApp(v, join(TH, "tp_" + basename(v.ten).replace(/[^a-z0-9_.-]/gi, "_"))) : v.f; const dai = thoiLuong(f); if (!dai) throw new Error("không đọc được thời lượng");
-      if (ts.chi_proxy) { const u = await taoProxy(f, v.ten); if (!u) throw new Error("ffmpeg không tạo được bản xem"); const r = await goiApp("/hub/thanh-pham/proxy", { method: "POST", body: JSON.stringify({ nguon_id: v.nguon_id, proxy_url: u }) }); if (!r.ok) throw new Error("app " + r.status); xong++; log("  ✓ bản xem", v.ten, "·", (r.d && r.d.so_mau) || 0, "mẫu"); if (v.url) rmSync(f, { force: true }); continue; }
+      if (ts.chi_proxy) { let ghi = "";
+        if (v.can_proxy !== false) { const u = await taoProxy(f, v.ten); if (!u) throw new Error("ffmpeg không tạo được bản xem"); const r = await goiApp("/hub/thanh-pham/proxy", { method: "POST", body: JSON.stringify({ id: v.app_id, nguon_id: v.nguon_id, proxy_url: u }) }); if (!r.ok) throw new Error("app " + r.status); ghi += "bản xem · "; }
+        // ảnh dải bù cho đoạn học từ trước khi có ảnh: 3 khung 448px cách 0,5 giây quanh giữa đoạn (đúng khuôn doc-khung) → thầy đọc bù được
+        const anh = []; for (const d of (v.doan || []).slice(0, 120)) { const giua = (Number(d.tu) + Number(d.den)) / 2; const t0 = Math.max(0, Math.max(Number(d.tu), giua - 0.5)); const o = join(TH, "bu_" + xong + "_" + d.i + ".jpg");
+          spawnSync("ffmpeg", ["-hide_banner", "-loglevel", "error", "-y", "-ss", t0.toFixed(2), "-i", f, "-vf", "fps=2,scale=448:-2,tile=3x1", "-frames:v", "1", "-q:v", "4", o], { encoding: "utf8", timeout: 60000, windowsHide: true });
+          if (existsSync(o)) { try { anh.push({ i: d.i, url: await up(o, "image/jpeg") }); } catch {} rmSync(o, { force: true }); } }
+        if (anh.length) { const r = await goiApp("/hub/mau-doan/anh", { method: "POST", body: JSON.stringify({ doi_tuong_id: v.app_id, anh }) }); ghi += ((r.d && r.d.so) || 0) + " ảnh đoạn"; }
+        xong++; log("  ✓", v.ten, "·", ghi || "không có gì phải làm"); if (v.url) rmSync(f, { force: true }); continue; }
       let proxyUrl = null; try { proxyUrl = await taoProxy(f, v.ten); } catch (e) { log("  bản xem lỗi:", String(e.message || e).slice(0, 80)); }
       bam("tai"); let shots = catShot(f, dai); bam("cat"); let motCanh = false;
       // (25/09) video một cảnh (nhiều video TikTok quay liền) vẫn dạy được nhìn + nghe: chia đoạn 5 giây, không ghi mẫu ghép

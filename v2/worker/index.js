@@ -1403,14 +1403,20 @@ async function mauTuChinhGhep(env, nd, may, nguoi){ const ts={}; for(const t of 
   return n; }
 // ADR-018: nhãn không còn nằm trong phan_tich — gắn dòng thời gian (đọc từ mau_doan) khi gửi footage / thành phẩm ra màn và máy
 // 25/09: giao máy Q2 tạo bản xem 360p cho video đã học chưa có (lô 25, không đọc hình / thầy lại)
-async function giaoProxy(env, tacNhan){ const ds=(await env.DB.prepare(`SELECT id, ten, nguon, nguon_id, link, kenh FROM kho_thanh_pham WHERE proxy_url IS NULL ORDER BY created_at DESC`).all()).results; if(!ds.length) return {ok:true, so:0, lenh:[]};
+async function giaoProxy(env, tacNhan){ await MAU().dam(env); const THIEU=`EXISTS (SELECT 1 FROM mau_doan m WHERE m.doi_tuong_id=X.id AND m.loai='HINH' AND m.hieu_luc=1 AND m.khung_url IS NULL AND COALESCE(m.anh_thu,0)<2)`;
+  const tp=(await env.DB.prepare(`SELECT X.id, X.ten, X.nguon, X.nguon_id, X.link, X.kenh, X.proxy_url FROM kho_thanh_pham X WHERE X.proxy_url IS NULL OR ${THIEU} ORDER BY X.created_at DESC`).all()).results;
+  const ft=(await env.DB.prepare(`SELECT X.id, X.ten, X.media_url FROM tai_san X WHERE ${THIEU}`).all()).results;
+  const doanThieu=async(id)=>(await env.DB.prepare(`SELECT i, tu, den FROM mau_doan WHERE doi_tuong_id=? AND loai='HINH' AND hieu_luc=1 AND khung_url IS NULL AND COALESCE(anh_thu,0)<2 ORDER BY i`).bind(id).all()).results;
+  const ds=[]; for(const x of tp) ds.push({ id:x.id, ten:x.ten, nguon:x.nguon, nguon_id:x.nguon_id, link:x.link||null, kenh:x.kenh||null, can_proxy:!x.proxy_url, doan:await doanThieu(x.id) });
+  for(const x of ft) ds.push({ id:x.id, ten:x.ten, nguon:'FOOTAGE', nguon_id:x.id, media_url:x.media_url, can_proxy:false, doan:await doanThieu(x.id) });
+  if(!ds.length) return {ok:true, so:0, lenh:[]}; await env.DB.prepare(`UPDATE mau_doan SET anh_thu=COALESCE(anh_thu,0)+1 WHERE loai='HINH' AND hieu_luc=1 AND khung_url IS NULL`).run();
   const mayId=await mayManhNhat(env,'dung_video'); if(!mayId) return {ok:false, loi:'chưa ghép máy học nào'}; const lenh=[];
-  for(let i=0;i<ds.length;i+=25){ const r=await taoLenhTram(env,'hoc_thanh_pham',{ chi_proxy:true, nguon:'PROXY', ds_proxy:ds.slice(i,i+25).map(x=>({ id:x.id, ten:x.ten, nguon:x.nguon, nguon_id:x.nguon_id, link:x.link||null, kenh:x.kenh||null })) }, tacNhan, mayId); if(r.id) lenh.push(r.id); }
+  for(let i=0;i<ds.length;i+=25){ const r=await taoLenhTram(env,'hoc_thanh_pham',{ chi_proxy:true, nguon:'PROXY', ds_proxy:ds.slice(i,i+25) }, tacNhan, mayId); if(r.id) lenh.push(r.id); }
   return {ok:true, so:ds.length, lenh}; }
 // cron: video đã học còn thiếu bản xem → tự giao máy Q2 (nhiều nhất 6 giờ / lần, không giao khi còn lệnh bản xem đang chờ)
 async function tuGiaoProxy(env){ const cho=await env.DB.prepare(`SELECT 1 x FROM tram_lenh WHERE viec='hoc_thanh_pham' AND trang_thai IN ('CHO','DA_GUI') AND tham_so LIKE '%"chi_proxy":true%' LIMIT 1`).first(); if(cho) return {bo_qua:'đang có lệnh'};
   const r=await env.DB.prepare(`SELECT cau_hinh FROM module_config WHERE id='proxy_lan'`).first(); const lan=r?Date.parse((docJSON(r.cau_hinh,{})||{}).luc||0):0; if(Date.now()-lan<6*36e5) return {bo_qua:'chưa tới giờ'};
-  const thieu=await env.DB.prepare(`SELECT COUNT(*) n FROM kho_thanh_pham WHERE proxy_url IS NULL`).first(); if(!so((thieu||{}).n)) return {bo_qua:'đủ bản xem'};
+  await MAU().dam(env); const thieu=await env.DB.prepare(`SELECT (SELECT COUNT(*) FROM kho_thanh_pham WHERE proxy_url IS NULL)+(SELECT COUNT(*) FROM mau_doan WHERE loai='HINH' AND hieu_luc=1 AND khung_url IS NULL AND COALESCE(anh_thu,0)<2) n`).first(); if(!so((thieu||{}).n)) return {bo_qua:'đủ bản xem và ảnh đoạn'};
   await env.DB.prepare(`INSERT OR REPLACE INTO module_config (id, cau_hinh, updated_at, updated_by_name) VALUES ('proxy_lan', ?, ?, 'Máy')`).bind(JSON.stringify({luc:nowISO()}), nowISO()).run(); return giaoProxy(env, MAY('Máy (bản xem)')); }
 async function ganTimeline(env, ds){ const ids=ds.map(t=>t.id).filter(Boolean); if(!ids.length) return ds; const tl=await MAU().timelineCua(env, ids); return ds.map(t=>{ if(!tl[t.id]) return t; const pt=typeof t.phan_tich==='string'?(docJSON(t.phan_tich,{})||{}):(t.phan_tich||{}); return {...t, phan_tich:{...pt, timeline:tl[t.id]}}; }); }
 async function bootstrap(env, u){
@@ -1684,6 +1690,8 @@ async function handleApi(request, env){
     // 25/09: bản xem 360p của video đã đăng (máy Q2 tạo) → người xem / nghe đúng đoạn mẫu trong Kho mẫu
     if(path==='/hub/thanh-pham/proxy' && method==='POST'){ const u=chuoi(body.proxy_url,300); if(!/^\/media\//.test(u)) return json({error:'proxy_url phải là file đã tải lên app'},400); const tp=await env.DB.prepare(`SELECT id FROM kho_thanh_pham WHERE nguon_id=? OR id=?`).bind(chuoi(body.nguon_id,120), chuoi(body.id,40)).first(); if(!tp) return json({error:'Không có video'},404);
       await env.DB.prepare(`UPDATE kho_thanh_pham SET proxy_url=? WHERE id=?`).bind(u, tp.id).run(); await MAU().dam(env); const r=await env.DB.prepare(`UPDATE mau_doan SET media_url=?, updated_at=? WHERE doi_tuong_id=?`).bind(u, nowISO(), tp.id).run(); return json({ ok:true, so_mau:(r.meta&&r.meta.changes)||0 }); }
+    if(path==='/hub/mau-doan/anh' && method==='POST'){ const id=chuoi(body.doi_tuong_id,40); const ds=(Array.isArray(body.anh)?body.anh:[]).filter(x=>x&&/^\/media\//.test(String(x.url||''))).slice(0,120); await MAU().dam(env); let n=0;
+      for(const x of ds){ const r=await env.DB.prepare(`UPDATE mau_doan SET khung_url=?, updated_at=? WHERE id=? AND khung_url IS NULL`).bind(chuoi(x.url,300), nowISO(), 'H:'+id+':'+Math.round(so(x.i))).run(); n+=(r.meta&&r.meta.changes)||0; } return json({ ok:true, so:n }); }
     if(path==='/hub/viec/nap_drive' && method==='GET'){ const mid=chuoi(url.searchParams.get('muc_id'),40); const ds=(await env.DB.prepare(`SELECT ten FROM tai_san WHERE muc_id=? AND nguon='DRIVE'`).bind(mid).all()).results; return json({ da_co: ds.map(x=>x.ten) }); }
     if(path==='/hub/tai-san' && method==='POST'){ const mucId=chuoi(body.muc_id,40); const muc=mucId?await env.DB.prepare(`SELECT id,tieu_de FROM muc_noi_dung WHERE id=?`).bind(mucId).first():null; if(!muc) return json({error:'Không có mục'},404);
       const media_url=chuoi(body.media_url,500); if(!/^\/media\//.test(media_url)) return json({error:'media_url phải là file đã tải lên app'},400); const ten=chuoi(body.ten,200)||media_url.split('/').pop(); const mt=String(body.media_type||'VIDEO').toUpperCase()==='IMAGE'?'IMAGE':'VIDEO';
@@ -2385,7 +2393,7 @@ async function xoaMoPhong(env, me){
 }
 
 export default {
-  async scheduled(controller, env, ctx){ ctx.waitUntil((async()=>{ const e=await napKhoa(env); await dieuPhoi(e); await tuHoc(e).catch(()=>{}); await thayDocLoi(e, 40).catch(()=>{}); await tuGiaoProxy(e).catch(()=>{}); })().catch(()=>{})); },
+  async scheduled(controller, env, ctx){ ctx.waitUntil((async()=>{ const e=await napKhoa(env); await dieuPhoi(e); await tuHoc(e).catch(()=>{}); await thayDocLoi(e, 40).catch(()=>{}); await tuGiaoProxy(e).catch(()=>{}); await MAU().thayDocBu(e, 16).catch(()=>{}); })().catch(()=>{})); },
   async fetch(request, env, ctx){
     const url=new URL(request.url);
     env=await napKhoa(env);   // khoá dán ở app phủ lên env (secret Cloudflare vẫn ưu tiên)

@@ -48,6 +48,18 @@ const Kbd = ({ children }) => <span className="font-mono bg-black/10 rounded px-
 const CHAM18 = { KIEM: 'bg-[#1F5FA8]', KHONG_CHAC: 'bg-[#A3372B]', THAY_CHOT: 'bg-[#9AA9B2]', VANG: 'bg-[#C9A84C]', MO: 'bg-[#0C6B5E]', LUAT: 'bg-[#0C6B5E]', KHONG_RO: 'bg-[#B8C4CA]', NGHE_SAI: 'bg-[#B8C4CA]', CHO_THAY: 'bg-[#B8C4CA]' };
 const nutCls = 'border border-line bg-white rounded-[10px] px-3 py-1.5 font-semibold text-xs disabled:opacity-40 disabled:cursor-not-allowed';
 
+// thầy hết trần / đang đọc bù — báo thẳng trên màn (25/09: hết trần 20 USD làm 556 đoạn không có nhãn thầy mà không ai biết)
+function BaoThay({ bu: bu0, onDoi }) {
+  const { me, goi, notify } = useApp(); const [bu, setBu] = useState(bu0 || null); const [busy, setBusy] = useState(false);
+  useEffect(() => { if (bu0) setBu(bu0); else goi('/thay/bu').then((r) => { if (r.ok) setBu(r); }); }, [bu0]);
+  if (!bu || (!bu.het_tran && !bu.cho && !bu.thieu_anh)) return null;
+  const docNgay = async () => { setBusy(true); const r = await goi('/thay/doc-bu', { method: 'POST', body: { so: 12 } }); setBusy(false); if (r.ok) { setBu(r.bu); notify(r.het_tran ? 'Dừng: ' + r.het_tran : 'Thầy đã đọc bù ' + r.so + ' đoạn'); onDoi && onDoi(); } else notify(r.msg, 'err'); };
+  return <div className={'rounded-xl px-3 py-2 text-xs flex items-center gap-2 flex-wrap ' + (bu.het_tran ? 'bg-[#FBE4E1] text-[#A3372B]' : 'bg-[#E3EEFA] text-[#1F5FA8]')}>
+    {bu.het_tran ? <span><b>Thầy đã hết trần tháng này</b> ({String(bu.usd).replace('.', ',')} / {bu.tran} USD): video học mới chỉ có nhãn mô hình mở, {bu.cho} đoạn đang chờ thầy đọc bù. Nâng trần ở <b>Bộ nhãn › Thầy gán nhãn</b> để thầy đọc tiếp.</span>
+      : <span><b>Thầy đang đọc bù</b> {bu.cho} đoạn còn trống hoặc thiếu nhãn chi tiết (tự chạy 16 đoạn mỗi 15 phút) · đã tiêu {String(bu.usd).replace('.', ',')} / {bu.tran} USD tháng này</span>}
+    {bu.thieu_anh > 0 && <span className="text-ink-muted">· {bu.thieu_anh} đoạn cũ chưa có ảnh — máy Q2 đang cắt bù</span>}
+    {!bu.het_tran && bu.cho > 0 && laGat(me) && <button className={nutCls + ' ml-auto !py-0.5'} disabled={busy} onClick={docNgay}>{busy ? 'Thầy đang đọc…' : 'Đọc bù ngay 12 đoạn'}</button>}</div>;
+}
 // ===================== KHO MẪU =====================
 function KhoMau18({ onDoi }) {
   const { goi, notify } = useApp(); const { bn } = useBoNhan(); const rong = useRong(900);
@@ -99,6 +111,7 @@ function KhoMau18({ onDoi }) {
   return <Card pad="p-3" className="flex flex-col gap-3 !rounded-[14px] !shadow-none">
     <div className="flex items-center gap-2 flex-wrap"><span className="font-bold text-sm text-ink">Kho mẫu</span><span className="text-xs text-ink-muted">chỗ làm việc của người: thầy và mô hình mở gán, anh/chị cân chỉnh</span>
       <label className="ml-auto flex items-center gap-1.5 text-xs cursor-pointer"><input type="checkbox" checked={tuanTu} onChange={(e) => { setTuanTu(e.target.checked); if (e.target.checked && tt !== 'CAN') setTt('CAN'); }} /> Duyệt tuần tự</label></div>
+    {kn === 'K1' && <BaoThay onDoi={() => tai(true)} />}
     <Tabs size="sm" active={kn} onChange={(k) => { setKn(k); setTt('CAN'); setTick(new Set()); setTrang(1); }} tabs={[{ key: 'K1', label: 'Khung hình' }, { key: 'K4', label: 'Câu thoại' }, { key: 'K2', label: 'Footage chất lượng' }]} />
     <div className="flex items-center gap-2 flex-wrap">
       <button onClick={() => { setTt('CAN'); setTrang(1); }} className={'rounded-full border px-2.5 py-0.5 text-xs font-bold ' + (tt === 'CAN' ? 'border-ink' : 'border-line bg-white')}>⚑ Cần người · {kq ? kq.can : '…'}</button>
@@ -276,6 +289,7 @@ function TongQuan18({ a, setTab }) {
   const dm = d.dem || {}; const phaiXem = dm.hinh ? Math.round(dm.k1 / dm.hinh * 100) : 0; const yeu = d.truong_yeu || [];
   const th = 'text-[10px] tracking-[.06em] uppercase text-ink-muted bg-[#F5F8F9] px-2 py-1.5 font-bold text-left'; const td = 'border-t border-[#EEF3F4] px-2 py-1.5 align-middle';
   return <div className="flex flex-col gap-3">
+    <BaoThay bu={d.bu} />
     <div className="grid grid-cols-2 min-[760px]:grid-cols-4 gap-2">{[[dm.hinh_thay_chot || 0, 'mẫu hình thầy đã chốt'], [phaiXem + '%', 'mẫu người phải xem (kiểm ngẫu nhiên + thầy chưa chắc: ' + (dm.k1 || 0) + '/' + (dm.hinh || 0) + ')'], [dm.hinh_vang || 0, 'mẫu người đã kiểm'], [d.so_de_xuat || 0, 'nhãn đề xuất chờ duyệt']].map(([x, t], i) => <Card key={i} pad="p-3" className="!rounded-[14px] !shadow-none"><b className="text-[22px] block tabular-nums">{x}</b><span className="text-[11px] text-ink-muted">{t}</span></Card>)}</div>
     <Card pad="p-3" className="flex flex-col gap-3 !rounded-[14px] !shadow-none"><div className="flex items-center gap-2 flex-wrap"><span className="font-bold text-sm">Độ đúng theo từng trường</span><span className="text-xs text-ink-muted">đo trên {d.so_nhan} nhãn người · cổng huấn luyện 80%</span></div>
       <div className="overflow-x-auto"><table className="w-full border-collapse text-xs min-w-[600px]"><thead><tr><th className={th}>Trường</th><th className={th + ' !text-right'}>Mẫu kiểm</th><th className={th}>Thầy đúng</th><th className={th}>Mô hình mở đúng</th><th className={th}>Tỉ lệ kiểm</th><th className={th}>Cổng học trò</th></tr></thead>

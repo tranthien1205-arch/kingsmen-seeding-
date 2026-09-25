@@ -45,6 +45,7 @@ export function taoMau(H) {
       env.DB.prepare(`CREATE TABLE IF NOT EXISTS bo_nhan (id TEXT PRIMARY KEY, truong TEXT, ten TEXT, dong TEXT, trang_thai TEXT, nguon TEXT, gop_vao TEXT, created_at TEXT, updated_at TEXT)`),
       env.DB.prepare(`CREATE UNIQUE INDEX IF NOT EXISTS ux_bn ON bo_nhan(truong, ten, dong)`),
     ]);
+    for (const c of ['anh_thu', 'thay_thu']) { try { await env.DB.prepare(`ALTER TABLE mau_doan ADD COLUMN ${c} INTEGER DEFAULT 0`).run(); } catch (e) {} }   // số lần đã thử cắt ảnh bù / thầy đọc bù
     if (!(await env.DB.prepare(`SELECT 1 x FROM bo_nhan LIMIT 1`).first())) { const st = [];
       for (const [t, ds] of Object.entries(GIEO)) for (const v of ds) st.push(env.DB.prepare(`INSERT OR IGNORE INTO bo_nhan (id,truong,ten,dong,trang_thai,nguon,created_at,updated_at) VALUES (?,?,?,'',?,?,?,?)`).bind(uid('bn'), t, v, 'DUNG', 'HE_THONG', nowISO(), nowISO()));
       if (st.length) await env.DB.batch(st); }
@@ -324,6 +325,23 @@ export function taoMau(H) {
       if (st.length) await env.DB.batch(st); }
     await ghiDeXuat(env, deXuat); return { ok: true, so: xong, loi }; }
 
+  // ---------- THẦY ĐỌC BÙ (cron): đoạn có ảnh mà chưa có nhãn thầy, hoặc nhãn thầy đời cũ thiếu trường chi tiết → thầy đọc lại theo bộ nhãn.
+  // Chỉ chạy trong trần ngân sách thầy; mỗi đoạn thử tối đa 2 lần; đoạn chưa có nhãn thầy trước. Ngữ cảnh = câu thoại cùng lúc của video.
+  const SQL_BU = `loai='HINH' AND hieu_luc=1 AND khung_url LIKE '/media/%' AND COALESCE(thay_thu,0)<2 AND (nhan_thay IS NULL OR nhan_thay NOT LIKE '%"goc_may":"%')`;
+  async function thayDocBu(env, n = 16) { await dam(env); const ai = (await docCauHinh(env)).ai || {}; if (ai.thay_nhin === false || ai.thay_bu === false) return { ok: false, tat: true }; if (!env.ANTHROPIC_API_KEY) return { ok: false, loi: 'chưa có ANTHROPIC_API_KEY' };
+    const rows = (await env.DB.prepare(`SELECT * FROM mau_doan WHERE ${SQL_BU} ORDER BY CASE WHEN nhan_thay IS NULL THEN 0 ELSE 1 END, created_at DESC LIMIT ?`).bind(Math.max(1, Math.min(40, n))).all()).results; if (!rows.length) return { ok: true, so: 0 };
+    const bn = await boNhan(env); const vdCache = {}; const kiemTL = await tiLeKiem(env); let xong = 0, k = 0, dung = null;
+    const lam = async () => { while (k < rows.length && !dung) { const r = rows[k++]; const loi = (await env.DB.prepare(`SELECT text FROM mau_doan WHERE doi_tuong_id=? AND loai='LOI' AND hieu_luc=1 AND den>=? AND tu<=? ORDER BY i LIMIT 4`).bind(r.doi_tuong_id, so(r.tu) - 3, so(r.den) + 3).all()).results.map((x) => x.text).filter(Boolean).join(' ');
+      const vd = vdCache[r.dong || ''] || (vdCache[r.dong || ''] = await viDu(env, r.dong));
+      const kq = await thayDocDoan(env, { anh: [r.khung_url], dong: r.dong, san_pham: r.dong, ngu_canh: [r.ten ? 'Video: ' + r.ten : '', loi ? 'Lời thoại lúc đó: ' + loi : ''].filter(Boolean).join(' · ') }, bn, vd).catch((e) => ({ ok: false, loi: String(e.message || e) }));
+      if (kq.vuot_ngan_sach) { dung = kq.loi; break; }
+      if (!kq.ok) { await env.DB.prepare(`UPDATE mau_doan SET thay_thu=COALESCE(thay_thu,0)+1 WHERE id=?`).bind(r.id).run(); continue; }
+      const moi = { ...r, nhan_thay: J(kq.nhan), chac: kq.nhan.chac, kiem: r.nhan_thay ? r.kiem : (Math.random() < kiemTL.p(kq.nhan) ? 1 : 0) }; moi.trang_thai = tinhTT(moi);
+      await env.DB.prepare(`UPDATE mau_doan SET nhan_thay=?, chac=?, kiem=?, trang_thai=?, thay_thu=COALESCE(thay_thu,0)+1, updated_at=? WHERE id=?`).bind(moi.nhan_thay, moi.chac, moi.kiem, moi.trang_thai, nowISO(), r.id).run(); xong++; } };
+    await Promise.all([lam(), lam(), lam(), lam()]); return { ok: true, so: xong, het_tran: dung || null }; }
+  async function tinhBu(env) { await dam(env); const g = (await env.DB.prepare(`SELECT SUM(CASE WHEN ${SQL_BU} THEN 1 ELSE 0 END) cho, SUM(CASE WHEN loai='HINH' AND hieu_luc=1 AND khung_url IS NULL THEN 1 ELSE 0 END) thieu_anh FROM mau_doan`).first()) || {};
+    const ai = (await docCauHinh(env)).ai || {}; const da = (await env.DB.prepare(`SELECT COALESCE(SUM(chi_phi_usd),0) usd FROM ai_usage WHERE thang=? AND tinh_nang IN ('hoc_nhan_khung','hoc_doc_loi')`).bind(thangHienTai()).first()) || {};
+    return { cho: so(g.cho), thieu_anh: so(g.thieu_anh), usd: +so(da.usd).toFixed(2), tran: so(ai.ngan_sach_thay_usd), het_tran: so(ai.ngan_sach_thay_usd) > 0 && so(da.usd) >= so(ai.ngan_sach_thay_usd) }; }
   // ---------- BỘ NHÃN: đọc, thêm, duyệt, gộp (mọi mẫu chuyển theo), bỏ, đổi tên ----------
   async function dsBoNhan(env) { await dam(env); const bn = await boNhan(env); const all = (await env.DB.prepare(`SELECT nhan_mo, nhan_thay, nhan_nguoi FROM mau_doan WHERE hieu_luc=1`).all()).results;
     const dem = {}; for (const r of all) for (const s of [r.nhan_thay, r.nhan_nguoi, r.nhan_mo]) { const o = P(s); if (!o) continue; for (const t of TRUONG) { const v = o[t.k]; if (v == null || t.k === 'mo_ta') continue; for (const x of [].concat(v)) { const kk = t.k + '|' + cf(x); dem[kk] = (dem[kk] || 0) + 1; } } }
@@ -371,7 +389,9 @@ export function taoMau(H) {
     if (path === '/bo-nhan' && method === 'GET') { if (!isStaff(me)) return json({ error: 'Không có quyền' }, 403); return json(await dsBoNhan(env)); }
     if (path === '/bo-nhan' && method === 'POST') return themBoNhan(env, me, body);
     if ((m = path.match(/^\/bo-nhan\/([^/]+)\/(duyet|gop|bo|doi-ten)$/)) && method === 'POST') return suaBoNhan(env, me, m[1], m[2], body);
-    if (path === '/do-chinh-xac' && method === 'GET') { if (!isStaff(me)) return json({ error: 'Không có quyền' }, 403); const d = await doChinhXac(env); const tl = await tiLeKiem(env); const dx = await env.DB.prepare(`SELECT COUNT(*) n FROM bo_nhan WHERE trang_thai='DE_XUAT'`).first(); return json({ ...d, truong_yeu: tl.yeu, dem: await dem(env), so_de_xuat: so((dx || {}).n) }); }
+    if (path === '/do-chinh-xac' && method === 'GET') { if (!isStaff(me)) return json({ error: 'Không có quyền' }, 403); const d = await doChinhXac(env); const tl = await tiLeKiem(env); const dx = await env.DB.prepare(`SELECT COUNT(*) n FROM bo_nhan WHERE trang_thai='DE_XUAT'`).first(); return json({ ...d, truong_yeu: tl.yeu, dem: await dem(env), so_de_xuat: so((dx || {}).n), bu: await tinhBu(env) }); }
+    if (path === '/thay/doc-bu' && method === 'POST') { if (!canGat(me)) return json({ error: 'Chỉ Trưởng MKT/Admin' }, 403); const r = await thayDocBu(env, so(body.so) || 12); return json({ ...r, bu: await tinhBu(env) }); }
+    if (path === '/thay/bu' && method === 'GET') { if (!isStaff(me)) return json({ error: 'Không có quyền' }, 403); return json(await tinhBu(env)); }
     return null; }
-  return { dam, api, hubThayDoc, upsertHinh, upsertLoi, capNhatSoDo, xoaTheoDoiTuong, timelineCua, viDu, doChinhXac, dem, phutNguoi, thayDocLoi, hocNguong, boNhan, TRUONG };
+  return { dam, api, thayDocBu, tinhBu, hubThayDoc, upsertHinh, upsertLoi, capNhatSoDo, xoaTheoDoiTuong, timelineCua, viDu, doChinhXac, dem, phutNguoi, thayDocLoi, hocNguong, boNhan, TRUONG };
 }

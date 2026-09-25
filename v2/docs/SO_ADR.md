@@ -381,6 +381,12 @@ Người duyệt: Thiện · Trạng thái: ĐÃ DUYỆT (2026-09-24, "ok bạn 
 
 ## Changelog
 
+### 2026-09-25 · Thầy đọc bù (chủ: "sao thầy để trống nhãn nhiều quá")
+- Đo prod: thầy chạm trần 20,12 / 20 USD (Opus 5: 578 lượt 17,51 USD) → video học sau đó chỉ có nhãn mô hình mở; 527 đoạn cũ không có ảnh (học trước khi có ảnh dải); ~300 đoạn thầy đọc bằng lời nhắc cũ chỉ có nhóm + mô tả.
+- Máy Q2 cắt bù ảnh dải (3 khung 448px, cách 0,5 giây quanh giữa đoạn — đúng khuôn `doc-khung`) chung lệnh bản xem `hoc_thanh_pham {chi_proxy}`; mỗi đoạn thử tối đa 2 lần (`mau_doan.anh_thu`). Footage cũng được cắt bù.
+- Cron `thayDocBu`: 16 đoạn / 15 phút, đoạn chưa có thầy trước, rồi đoạn thiếu trường; ngữ cảnh = câu thoại cùng lúc; trong trần thầy; mỗi đoạn tối đa 2 lần (`thay_thu`). Nút "Đọc bù ngay" (Admin / Trưởng MKT).
+- Báo trên màn (Tổng quan + Kho mẫu): hết trần thầy / số đoạn chờ đọc bù / số đoạn chờ ảnh.
+
 ### 2026-09-25 · Xem / nghe đúng đoạn mẫu · thầy chắc theo nhóm cảnh · danh sách hẹp
 - Chủ: "câu thoại và footage chưa nghe và xem được" · "câu mô tả rất đúng nhưng trạng thái chưa chắc rất nhiều, thầy có thể gán" · "bảng người kiểm bị hẹp; cột danh sách chỉ còn tên mẫu".
 - `/media` trả 206 theo Range (trước trả cả file → trình duyệt không tua được giữa clip). Bản xem 360p cho video đã đăng (`kho_thanh_pham.proxy_url`, gắn `media_url` cho mọi mẫu của video): máy Q2 tạo khi học, video cũ tạo bù bằng lệnh `hoc_thanh_pham {chi_proxy}` (tìm file đã tải trên ổ trước, không nghe / nhìn / thầy lại); cron tự giao khi còn thiếu (≤ 6 giờ / lần). Đo thử: video 20 giây → bản xem 224 KB, 6–10 giây.

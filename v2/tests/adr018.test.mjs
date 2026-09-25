@@ -100,8 +100,9 @@ test('018d: bản xem 360p cho video đã đăng + /media tua được (206)', a
   const tp = (n) => DB.raw.prepare(`SELECT id, proxy_url FROM kho_thanh_pham WHERE nguon_id=?`).get(n);
   assert.equal(tp('b.mp4').proxy_url, '/media/media/b360.mp4'); assert.equal(DB.raw.prepare(`SELECT COUNT(*) n FROM mau_doan WHERE doi_tuong_id=? AND media_url='/media/media/b360.mp4'`).get(tp('b.mp4').id).n, 2, 'đoạn hình + câu thoại đều có bản xem');
   // video cũ chưa có bản xem → giao máy Q2 một lệnh chỉ tạo bản xem
-  const g = await api('/kho-thanh-pham/tao-proxy', 'POST', {}); assert.equal(g.j.so, 1); const l = JSON.parse(DB.raw.prepare(`SELECT tham_so FROM tram_lenh WHERE viec='hoc_thanh_pham'`).get().tham_so);
-  assert.equal(l.chi_proxy, true); assert.equal(l.ds_proxy[0].link, 'https://www.tiktok.com/@x/video/1');
+  const g = await api('/kho-thanh-pham/tao-proxy', 'POST', {}); assert.equal(g.j.so, 2, 'a thiếu bản xem + ảnh đoạn, b chỉ thiếu ảnh đoạn'); const l = JSON.parse(DB.raw.prepare(`SELECT tham_so FROM tram_lenh WHERE viec='hoc_thanh_pham'`).get().tham_so);
+  const la = l.ds_proxy.find((x) => x.nguon_id === 'a.mp4'), lb = l.ds_proxy.find((x) => x.nguon_id === 'b.mp4');
+  assert.equal(l.chi_proxy, true); assert.equal(la.link, 'https://www.tiktok.com/@x/video/1'); assert.equal(la.can_proxy, true); assert.equal(lb.can_proxy, false); assert.deepEqual(lb.doan, [{ i: 0, tu: 0, den: 10 }], 'đoạn thiếu ảnh để máy cắt bù');
   assert.equal((await may('/hub/thanh-pham/proxy', 'POST', { nguon_id: 'a.mp4', proxy_url: '/media/media/a360.mp4' })).j.so_mau, 2);
   assert.equal((await api('/kho-mau?kn=K4&tt=')).j.hang.find((x) => x.doi_tuong_id === tp('a.mp4').id).media_url, '/media/media/a360.mp4');
   // học lại giữ bản xem
@@ -109,7 +110,14 @@ test('018d: bản xem 360p cho video đã đăng + /media tua được (206)', a
   // cron tự giao lệnh bản xem cho video còn thiếu (không trùng khi đang có lệnh, không lặp trong 6 giờ)
   await may('/hub/thanh-pham', 'POST', { ...body, ten: 'c.mp4', nguon_id: 'c.mp4', link: 'https://www.tiktok.com/@x/video/3' }); DB.raw.prepare("UPDATE tram_lenh SET trang_thai='XONG'").run();
   const cron = async () => { let p; await worker.scheduled({}, env, { waitUntil: (x) => { p = x; } }); await p; };
-  await cron(); await cron(); const ls = DB.raw.prepare("SELECT tham_so FROM tram_lenh WHERE trang_thai='CHO'").all(); assert.equal(ls.length, 1, 'một lệnh'); assert.deepEqual(JSON.parse(ls[0].tham_so).ds_proxy.map((x) => x.nguon_id), ['c.mp4']);
+  await cron(); await cron(); const ls = DB.raw.prepare("SELECT tham_so FROM tram_lenh WHERE trang_thai='CHO'").all(); assert.equal(ls.length, 1, 'một lệnh'); const dc = JSON.parse(ls[0].tham_so).ds_proxy; assert.ok(dc.find((x) => x.nguon_id === 'c.mp4').can_proxy, 'video mới thiếu bản xem'); assert.equal(dc.find((x) => x.nguon_id === 'b.mp4').can_proxy, false);
+  // máy cắt xong ảnh đoạn → gửi về; thầy đọc bù đoạn có ảnh mà nhãn thầy thiếu trường; hết trần thì dừng và báo
+  const idB = tp('b.mp4').id; assert.equal((await may('/hub/mau-doan/anh', 'POST', { doi_tuong_id: idB, anh: [{ i: 0, url: '/media/media/dai-b0.jpg' }, { i: 7, url: '/media/media/x.jpg' }] })).j.so, 1);
+  let bu = (await api('/thay/bu')).j; assert.equal(bu.cho, 1, 'đoạn b0: có ảnh, nhãn thầy cũ thiếu trường');
+  TRA = ['{"nhom":"KHAC","hanh_dong":["đo"],"dung_cu":["thước dây"],"nguoi":"không có","co_canh":"CHU","goc_may":"từ trên xuống","chuyen_dong":"đứng yên","dung_cho":"minh hoạ lời","chac":0.9,"mo_ta":"đồ hoạ đo"}'];
+  const r0 = await api('/thay/doc-bu', 'POST', {}); assert.equal(r0.j.so, 1); const nt = JSON.parse(DB.raw.prepare('SELECT nhan_thay FROM mau_doan WHERE id=?').get('H:' + idB + ':0').nhan_thay); assert.equal(nt.goc_may, 'từ trên xuống'); assert.deepEqual(nt.dung_cu, ['thước dây']);
+  assert.equal(r0.j.bu.cho, 0, 'đọc rồi không đọc lại');
+  DB.raw.prepare(`INSERT OR REPLACE INTO module_config (id, cau_hinh, updated_at) VALUES ('ai', ?, '')`).run(JSON.stringify({ ngan_sach_thay_usd: 0.0001 })); assert.equal((await api('/thay/bu')).j.het_tran, true, 'báo hết trần thầy');
   // /media trả 206 khi có Range
   const buf = new Uint8Array(1000); env.MEDIA.get = async (k, o) => ({ body: buf.slice(100, 200), size: 1000, range: o && o.range ? { offset: 100, length: 100 } : undefined, httpMetadata: { contentType: 'video/mp4' } });
   const r = await worker.fetch(new Request('https://x/media/media/a360.mp4', { headers: { Range: 'bytes=100-199' } }), env, { waitUntil() {} });
