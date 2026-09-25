@@ -1399,7 +1399,7 @@ async function banHuanLuyen(env){ const cfg=await docCauHinh(env); const hl=cfg.
   o.K3.chung=choCua(LAN_HOC[2]); o.K5.chung={...choCua(LAN_HOC[4]), so_do:{video_da_air:th.length}}; o.K6.chung={ cho:['K1'], thieu:'chờ K1 bật' };
   const pbGhep=(await env.DB.prepare(`SELECT COUNT(*) n FROM mo_hinh_phien_ban WHERE tinh_nang='ghep_canh' AND trang_thai='CHO_DUYET'`).first().catch(()=>({n:0})))||{n:0}; if(so(pbGhep.n)) o.K5.chung.ghi_chu=so(pbGhep.n)+' phiên bản ghép cũ đang chờ duyệt ở tab Huấn luyện';
   // nguồn lực
-  const may=(await env.DB.prepare(`SELECT id,ten,nhan_luc,than FROM may_ghep WHERE active=1`).all()).results.map(m=>{ const t=docJSON(m.than,{})||{}; return { ten:m.ten, song:Date.now()-Date.parse(m.nhan_luc||0)<5*60e3, dang_lam:t.dang_lam||'', gpu:t.gpu||'' }; });
+  const may=(await env.DB.prepare(`SELECT id,ten,nhan_luc,than FROM may_ghep WHERE active=1`).all()).results.map(m=>{ const t=docJSON(m.than,{})||{}; return { ten:m.ten, song:Date.now()-Date.parse(m.nhan_luc||0)<5*60e3, dang_lam:t.dang_lam||'', gpu:t.gpu||'', ollama:t.ollama===true, can_nhin:/[6-9]\d{3} MiB|\d{5} MiB/.test(t.gpu||'') }; });
   const hang=(await env.DB.prepare(`SELECT m.ten, COUNT(*) n FROM tram_lenh l JOIN may_ghep m ON m.id=l.may_id WHERE l.trang_thai IN ('CHO','DA_GUI') GROUP BY m.ten`).all()).results;
   for(const m of may) m.hang=so((hang.find(h=>h.ten===m.ten)||{}).n);
   const tg=th.map(r=>(docJSON(r.phan_tich,{})||{}).thoi_gian).filter(Boolean).slice(0,10); const tb={}; for(const x of tg) for(const [k,v] of Object.entries(x)) tb[k]=(tb[k]||0)+so(v)/tg.length; Object.keys(tb).forEach(k=>tb[k]=+tb[k].toFixed(1));

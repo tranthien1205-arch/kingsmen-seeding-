@@ -29,6 +29,7 @@ function BanHuanLuyen({ a, setTab, dem, soQuyet }) {
   ];
   return <div className="space-y-3">
     <Callout tone="info"><b>Bàn huấn luyện.</b> Sáu kỹ năng máy cần học đi cùng một khuôn sáu chặng: Gom → Thầy gán → Người xác nhận → Đo → Bóng → Bật. Kỹ năng sau mở khi kỹ năng trước tới Bóng. Trong mỗi kỹ năng, dòng sản phẩm đủ dữ liệu đi trước. Ô đỏ nói rõ đang chờ kỹ năng nào. Anh/chị chỉ làm ở hộp việc bên dưới.</Callout>
+    {may.filter(m => m.song && m.can_nhin && !m.ollama).map(m => <Callout key={m.ten} tone="warn"><b>{m.ten}: Ollama đang tắt.</b> Máy vẫn học nhưng KHÔNG đọc được hình (không có nhãn khung hình, không có thầy Claude). Máy học bản mới tự bật Ollama khi nhận lệnh kế tiếp; nếu vẫn tắt, mở ứng dụng Ollama trên máy đó.</Callout>)}
     <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">{kpi.map(([v, t]) => <div key={t} className="rounded-xl border border-line bg-white p-2"><div className="text-lg font-bold text-ink tabular-nums leading-tight">{v}</div><div className="text-[11px] text-ink-muted">{t}</div></div>)}</div>
     <Card pad="p-3">
       <div className="flex items-center gap-2 mb-1 flex-wrap"><SectionTitle>Làn × dòng sản phẩm</SectionTitle><span className="text-[11px] text-ink-muted">mỗi ô: chặng · còn thiếu gì để qua cổng · bấm để xem số đo</span><Btn variant="ghost" className="ml-auto !py-1 !px-2 text-[11px]" onClick={tai}>Tính lại</Btn></div>
