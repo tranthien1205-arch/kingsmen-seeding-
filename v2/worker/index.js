@@ -1816,6 +1816,8 @@ async function handleApi(request, env){
     return json({error:'Không có đường hub '+path},404);
   }   // công cụ Lọc video hỏi nhạc nền — không có trên web
 
+  // (25/09) phiên bản đang chạy — lấy từ sổ deploy (deploy.mjs ghi commit + máy + giờ); app hiện ở góc phải dưới và so để báo "có bản mới"
+  if(path==='/ban' && method==='GET'){ const r=await env.DB.prepare(`SELECT cau_hinh FROM module_config WHERE id='deploy_so'`).first().catch(()=>null); const d=r?docJSON(r.cau_hinh,{}):{}; return new Response(JSON.stringify({ commit:d.commit||null, luc:d.luc||null, may:d.may||null }),{ headers:{ 'content-type':'application/json', 'cache-control':'no-store' } }); }
   if(path==='/login' && method==='POST'){
     const email=chuoi(body.email,200).toLowerCase();
     const u=await env.DB.prepare(`SELECT * FROM users WHERE lower(email)=?`).bind(email).first();

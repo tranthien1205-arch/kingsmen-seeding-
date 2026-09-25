@@ -7,6 +7,20 @@ const MAN = [
   { key:'seeding',   ten:'Seeding hội nhóm',      ngan:'Seeding',   icon:'📣', ai:laXemMkt },
   { key:'may',       ten:'Máy',                   ngan:'Máy',       icon:'🤖', ai:laXemMkt },
 ];
+// (25/09) Chủ: "trên pc vẫn là ui cũ" — app một trang: tab mở từ trước giữ bản cũ và số cũ. Kiểm bản mới mỗi 2 phút + khi quay lại tab;
+// quay lại tab sau > 60 giây thì tải lại dữ liệu (số khớp giữa điện thoại và PC mà không phải F5).
+function BanMoi(){
+  const { refresh } = useApp(); const [ban,setBan]=useState(null); const [moi,setMoi]=useState(false); const banKhoi=useRef(null); const lanCuoi=useRef(Date.now());
+  const layBan=async()=>{ try{ const j=await (await fetch('/api/ban?_='+Date.now(),{cache:'no-store'})).json(); return j&&j.commit?j:null; }catch(e){ return null; } };
+  const kiem=async()=>{ const b=await layBan(); if(!b) return; if(!banKhoi.current){ banKhoi.current=b.commit; setBan(b); return; } if(b.commit!==banKhoi.current){ setMoi(true); setBan(b); } };
+  useEffect(()=>{ kiem(); const id=setInterval(kiem,120000); const f=()=>{ if(document.visibilityState==='hidden') return; kiem(); if(Date.now()-lanCuoi.current>60000){ lanCuoi.current=Date.now(); refresh(); } };
+    document.addEventListener('visibilitychange',f); window.addEventListener('focus',f); return ()=>{ clearInterval(id); document.removeEventListener('visibilitychange',f); window.removeEventListener('focus',f); }; },[]);
+  const gio=ban&&ban.luc?new Date(ban.luc).toLocaleString('vi-VN',{hour:'2-digit',minute:'2-digit',day:'2-digit',month:'2-digit'}):'';
+  return <>
+    {ban && <div className="fixed right-2 bottom-16 sm:bottom-2 z-40 text-[10px] text-ink-muted bg-white/80 border border-line rounded-full px-2 py-0.5 pointer-events-none tabular-nums" title="phiên bản đang chạy">v {moi?banKhoi.current:ban.commit} · {gio}</div>}
+    {moi && <div className="fixed left-1/2 -translate-x-1/2 z-50 bottom-24 sm:bottom-8 bg-ink text-white text-sm rounded-full shadow-lg px-4 py-2 flex items-center gap-3 whitespace-nowrap" role="status"><span>Có bản mới {ban.commit}</span><button className="rounded-full bg-white text-ink font-semibold px-3 py-1 text-xs" onClick={()=>location.reload()}>Tải lại</button></div>}
+  </>;
+}
 function Shell(){
   const { me, logout, db } = useApp();
   const mans = MAN.filter(m=>m.ai(me));
@@ -26,6 +40,7 @@ function Shell(){
     <span className={doc?'text-base':'text-lg leading-none'}>{m.icon}</span><span className={doc?'flex-1 text-left':''}>{doc?m.ten:m.ngan}</span>
     {m.key==='viec'&&soViec>0 && <span className={"rounded-full px-1.5 text-[10px] "+(page===m.key&&doc?'bg-white text-brand':'bg-rose-500 text-white')}>{soViec}</span>}</button>;
   return <div className="min-h-screen sm:flex">
+    <BanMoi/>
     <aside className="hidden sm:flex sm:flex-col w-60 shrink-0 bg-ink text-white p-4 sticky top-0 h-screen">
       <div className="flex items-center gap-2 mb-6"><div className="w-9 h-9 rounded-xl bg-brand grid place-items-center font-display font-black">K</div><div><div className="font-display font-extrabold leading-tight">Kingsmen</div><div className="text-[10px] text-white/60">Content OS · đợt {db.dot}</div></div></div>
       <nav className="space-y-1 flex-1">{mans.map(m=><NavBtn key={m.key} m={m} doc/>)}</nav>
