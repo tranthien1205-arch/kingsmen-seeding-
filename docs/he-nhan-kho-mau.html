@@ -1,0 +1,160 @@
+<title>Hệ nhãn và kho mẫu</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&family=Source+Serif+4:opsz,wght@8..60,600;8..60,700&display=swap">
+<style>
+:root{--paper:#F2F5F3;--card:#FFFFFF;--ink:#141E1B;--ink-2:#3D4E49;--muted:#68807A;--line:#D8E0DC;--line-2:#E9EEEC;--teal:#0C7B6F;--teal-soft:#E3F0ED;--gold:#B08D2E;--gold-soft:#F6EDD6;--leak:#A3372B;--leak-soft:#F7E5E1;--sky:#2B6CB0;--sky-soft:#E4EEF8;--shadow:0 1px 2px rgba(20,30,27,.05),0 8px 24px -16px rgba(20,30,27,.35)}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){color-scheme:dark;--paper:#121917;--card:#1A2320;--ink:#EEF3F1;--ink-2:#C5D1CC;--muted:#8FA39C;--line:#2C3935;--line-2:#233029;--teal:#4FB8A9;--teal-soft:#183630;--gold:#D6B45C;--gold-soft:#3A2F16;--leak:#E0786B;--leak-soft:#3B211D;--sky:#7FB0E8;--sky-soft:#1B2B3D;--shadow:none}}
+:root[data-theme="dark"]{color-scheme:dark;--paper:#121917;--card:#1A2320;--ink:#EEF3F1;--ink-2:#C5D1CC;--muted:#8FA39C;--line:#2C3935;--line-2:#233029;--teal:#4FB8A9;--teal-soft:#183630;--gold:#D6B45C;--gold-soft:#3A2F16;--leak:#E0786B;--leak-soft:#3B211D;--sky:#7FB0E8;--sky-soft:#1B2B3D;--shadow:none}
+*{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--ink);font:16px/1.62 "Be Vietnam Pro",system-ui,sans-serif}
+.wrap{max-width:1040px;margin:0 auto;padding-block:48px 96px;padding-inline:20px;display:flex;flex-direction:column;gap:44px}
+h1,h2,h3{font-family:"Source Serif 4",Georgia,serif;letter-spacing:-.015em;text-wrap:balance;margin:0}h1{font-size:clamp(30px,4.6vw,44px);line-height:1.12}h2{font-size:clamp(22px,3vw,28px);line-height:1.25}h3{font-size:18px;line-height:1.3}
+.eyebrow{font-size:11.5px;letter-spacing:.14em;text-transform:uppercase;font-weight:600;color:var(--teal)}.lead{font-size:19px;color:var(--ink-2);max-width:68ch;margin:0}.note{font-size:13.5px;color:var(--muted);margin:0}.col{max-width:68ch;margin:0}
+section{display:flex;flex-direction:column;gap:16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:4px;box-shadow:var(--shadow);padding:16px 18px}
+.tbl-wrap{overflow-x:auto}table{border-collapse:collapse;width:100%;min-width:640px;font-size:14px}th{background:var(--line-2);color:var(--muted);font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;text-align:left;padding:8px 10px;font-weight:600}td{padding:8px 10px;border-top:1px solid var(--line);vertical-align:top}td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
+.hot{color:var(--leak);font-weight:600}.cool{color:var(--teal);font-weight:600}
+figure{margin:0}.fig-box{background:var(--card);border:1px solid var(--line);border-radius:4px;padding:14px;overflow-x:auto}figcaption{font-size:13.5px;color:var(--muted);margin-top:8px;max-width:80ch}
+svg{width:100%;min-width:760px;height:auto;display:block}svg text{font-family:"Be Vietnam Pro",sans-serif;font-size:12px;fill:var(--ink)}svg .sub{font-size:10.5px;fill:var(--muted)}svg .b{fill:var(--card);stroke:var(--line)}svg .bt{fill:var(--teal-soft);stroke:var(--teal)}svg .bg{fill:var(--gold-soft);stroke:var(--gold)}svg .bs{fill:var(--sky-soft);stroke:var(--sky)}svg .bl{fill:var(--leak-soft);stroke:var(--leak)}svg .ar{fill:none;stroke:var(--muted);stroke-width:1.3;marker-end:url(#m)}svg .ad{fill:none;stroke:var(--muted);stroke-width:1.2;stroke-dasharray:4 3;marker-end:url(#m)}svg .mk{fill:var(--muted)}svg .gate{fill:var(--gold)}
+.final{border-left:3px solid var(--teal)}
+.ex{font-size:11px;letter-spacing:.12em;text-transform:uppercase;font-weight:600;color:var(--gold)}
+/* mô phỏng app */
+.app{background:#F6F8FA;border:1px solid var(--line);border-radius:6px;padding:14px;font-size:12.5px;color:#1f2a27;overflow-x:auto}
+.app *{font-family:"Be Vietnam Pro",system-ui,sans-serif}
+.app .in{min-width:820px;display:flex;flex-direction:column;gap:10px}
+.app .pn{background:#fff;border:1px solid #DDE3E0;border-radius:12px;padding:10px 12px}
+.app .ttl{font-weight:600;font-size:13px;color:#111}.app .mu{color:#6b7c77;font-size:11px}
+.app .tabs{display:flex;gap:6px}.app .tab{padding:4px 10px;border-radius:999px;background:#EEF2F0;font-size:11.5px}.app .tab.on{background:#0C7B6F;color:#fff}
+.app table{min-width:0;font-size:12px}.app th{background:#F1F4F2;font-size:10px}.app td{padding:6px 8px;border-top:1px solid #E6EBE8}
+.cell{display:flex;flex-direction:column;gap:2px}.pill{display:inline-block;border-radius:999px;padding:1px 7px;font-size:10px;font-weight:600;white-space:nowrap}
+.p0{background:#EEF1F4;color:#55606b}.p1{background:#E4EEF8;color:#2B6CB0}.p2{background:#F6EDD6;color:#8a6a12}.p3{background:#E3F0ED;color:#0C7B6F}.p4{background:#DDF3E6;color:#15803d}.pX{background:#F7E5E1;color:#A3372B}
+.bar{height:5px;border-radius:3px;background:#E8EDEB;overflow:hidden}.bar i{display:block;height:100%;background:#0C7B6F}
+.grid3{display:grid;grid-template-columns:1.6fr 1fr;gap:10px}.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}.kpi{border:1px solid #E1E7E4;border-radius:10px;padding:6px 8px}.kpi b{font-size:18px;display:block}
+.card-t{border:1px solid #E1E7E4;border-radius:10px;padding:8px;display:flex;gap:8px;align-items:flex-start}.sw{width:92px;height:52px;border-radius:6px;flex:none}
+.keys span{display:inline-block;border:1px solid #CBD5D1;border-radius:4px;padding:0 5px;font-family:ui-monospace,monospace;font-size:10.5px;margin-right:3px;background:#fff}
+@media (max-width:640px){.wrap{gap:36px}}
+</style>
+<div class="wrap">
+  <header style="display:flex;flex-direction:column;gap:12px"><div class="eyebrow">Kingsmen Content OS · đề xuất ADR-018 · hệ nhãn và kho mẫu · 25/09/2026</div>
+    <h1>Chưa tối ưu: nhãn nằm ba chỗ, không có bộ nhãn chung, người phải sửa qua nhiều màn</h1>
+    <p class="lead">Thiết kế lại quanh ba thứ: một bảng mẫu duy nhất, một bộ nhãn chung giữa người và máy, và Kho mẫu là nơi duy nhất người cân chỉnh. Thầy đọc cả video một lượt thay vì từng đoạn, đơn vị của video thành phẩm là shot của người dựng.</p>
+    <p class="note">Số đo lúc 10:30 ngày 25/09 trên dữ liệu thật. Chỗ nào là ước tính thì ghi rõ “ước tính, chưa đo”.</p>
+  </header>
+
+  <section><h2>Hiện trạng đo được</h2>
+    <div class="tbl-wrap"><table>
+      <tr><th>Chỉ số</th><th class="n">Số đo</th><th>Nói lên điều gì</th></tr>
+      <tr><td>Nhãn người đã gán (nhãn vàng khung hình)</td><td class="n hot">7</td><td>người gần như chưa tham gia được: chỗ làm việc rải rác, khó dùng</td></tr>
+      <tr><td>Mẫu lời thoại (câu ↔ nhóm cảnh)</td><td class="n">755</td><td>phần lớn chép bằng bộ nghe cũ, thầy báo 39/40 câu nghe sai</td></tr>
+      <tr><td>Video thành phẩm đã học · dữ liệu dòng thời gian</td><td class="n">76 · 572 KB</td><td>kho mẫu phải giải nén toàn bộ khối này mỗi lần mở</td></tr>
+      <tr><td>Video Terrazo TikTok: shot của người dựng · đoạn máy chia</td><td class="n hot">3,8 · 12,8</td><td>đơn vị hình không khớp đơn vị ghép và lời thoại</td></tr>
+      <tr><td>Video Drive: shot · đoạn</td><td class="n">22,1 · 14,6</td><td>như trên, lệch theo chiều ngược lại</td></tr>
+      <tr><td>Thầy Opus 5: token vào · ra · USD mỗi đoạn</td><td class="n">4.329 · 251 · 0,028</td><td>mỗi đoạn gửi lại cùng lời dặn, bộ nhãn, ví dụ</td></tr>
+      <tr><td>Q2 mỗi video TikTok: đọc hình · nghe · thầy</td><td class="n">234 · 67 · 22 giây</td><td>đọc hình chiếm phần lớn, chủ yếu để tìm ranh giới đoạn</td></tr>
+      <tr><td>Thầy và mô hình mở cùng nhóm cảnh</td><td class="n">63%</td><td>37% đoạn cần người, không thể xem hết bằng thẻ từng cái</td></tr>
+    </table></div></section>
+
+  <section><h2>Bảy chỗ chưa tối ưu và cách sửa</h2>
+    <div class="tbl-wrap"><table style="min-width:860px">
+      <tr><th>#</th><th>Chỗ chưa tối ưu</th><th>Hậu quả</th><th>Sửa</th></tr>
+      <tr><td>1</td><td><b>Nhãn nằm ba nơi</b>: dòng thời gian trong video, mẫu nhãn vàng, mẫu lời thoại</td><td>sửa một nơi phải nhớ sửa nơi kia; kho mẫu chậm dần theo số video</td><td><b>Một bảng mẫu</b>: mỗi đoạn hình / mỗi câu là một dòng, ba cột nhãn (mô hình mở · thầy · người), trạng thái có chỉ mục. Mọi màn đọc từ đây.</td></tr>
+      <tr><td>2</td><td><b>Không có bộ nhãn</b>: thầy tự đặt tên</td><td>một dụng cụ ba tên (“bàn gạt vàng”, “bay nhựa vàng”, “dao gạt”), không đếm, không học được</td><td><b>Bộ nhãn</b> theo trường và theo dòng; nhãn lưu theo mã, đổi tên / gộp một chỗ là đổi hết. Nhãn mới đi vào hàng đề xuất.</td></tr>
+      <tr><td>3</td><td><b>Ba đơn vị khác nhau</b> cho hình, lời, ghép</td><td>câu thoại không biết thuộc cảnh nào; ghép học trên đơn vị khác nhãn hình</td><td>Video thành phẩm: <b>đơn vị = shot</b> (chỗ cắt của người dựng). Footage thô: cửa sổ 3 giây gộp khi cùng nội dung. Câu thoại gắn theo shot.</td></tr>
+      <tr><td>4</td><td><b>Thầy đọc từng đoạn riêng</b></td><td>không thấy mạch video; lời dặn + bộ nhãn + ví dụ gửi lại mỗi đoạn; Q2 đứng chờ</td><td><b>Một lượt cho cả video</b> (các ảnh theo thứ tự), phần cố định đặt đầu và lưu đệm. Việc học không gấp → chạy <b>lô không đồng bộ</b> (giá lô bằng nửa giá thường), Q2 không chờ.</td></tr>
+      <tr><td>5</td><td><b>qwen đọc mọi dải 1,5 giây</b></td><td>234 giây mỗi video, phần lớn để dò ranh giới</td><td>Ranh giới lấy từ shot; qwen chỉ đọc 1 dải giữa mỗi đơn vị. Ước giảm 3–5 lần thời gian đọc hình (ước tính, chưa đo).</td></tr>
+      <tr><td>6</td><td><b>Người sửa ở nhiều màn</b>: thẻ Dạy máy, Kho mẫu, Nhãn hình cũ</td><td>7 nhãn sau hai ngày</td><td><b>Kho mẫu là chỗ làm việc duy nhất</b>: sửa theo trường, “đúng hết” một phím, chế độ duyệt tuần tự, sửa hàng loạt nhiều mẫu cùng lúc.</td></tr>
+      <tr><td>7</td><td><b>Đo chỉ theo nhóm cảnh</b></td><td>không biết thầy sai ở dụng cụ hay ở bước</td><td>Đo độ đúng <b>theo từng trường</b> cho thầy và mô hình mở; cổng huấn luyện theo trường.</td></tr>
+    </table></div></section>
+
+  <section><h2>Bộ nhãn chi tiết: mỗi mẫu có đủ bốn nhóm trường</h2>
+    <p class="col">Thầy điền hết các trường, chỉ được chọn trong bộ nhãn; thấy thứ chưa có tên thì ghi “đề xuất”. Người chỉ sửa trường sai. Trường “cố định” do hệ thống giữ; trường “mở rộng” lớn dần theo đề xuất đã duyệt.</p>
+    <div class="tbl-wrap"><table style="min-width:820px">
+      <tr><th>Nhóm</th><th>Trường</th><th>Kiểu</th><th>Phạm vi</th><th>Ví dụ</th></tr>
+      <tr><td rowspan="7"><b>Nội dung</b></td><td>Nhóm cảnh</td><td>cố định (8)</td><td>chung</td><td>Thi công, Bài test, Hoàn thiện…</td></tr>
+      <tr><td>Bước thi công</td><td>mở rộng</td><td>theo dòng</td><td>Finex: vệ sinh nền → lăn lót → cán bay răng → khò phá bọt</td></tr>
+      <tr><td>Bài test</td><td>mở rộng</td><td>theo dòng</td><td>đổ nước, cào dao, chà bàn chải</td></tr>
+      <tr><td>Hành động</td><td>mở rộng</td><td>chung</td><td>gạt, lăn, bơm, trộn, đổ, khò, lau, đo</td></tr>
+      <tr><td>Sản phẩm / vật liệu thấy</td><td>mở rộng</td><td>theo dòng</td><td>thùng Finex F300, bột màu, keo A+B</td></tr>
+      <tr><td>Dụng cụ</td><td>mở rộng</td><td>chung</td><td>bay răng, con lăn gai, súng bơm keo, máy khò</td></tr>
+      <tr><td>Vị trí · người trong khung</td><td>mở rộng · cố định</td><td>chung</td><td>sàn nhà tắm, ron bếp · thợ, chủ nhà, người dẫn</td></tr>
+      <tr><td rowspan="2"><b>Hình</b></td><td>Cỡ cảnh · góc máy</td><td>cố định</td><td>chung</td><td>cận thao tác · từ trên xuống</td></tr>
+      <tr><td>Chuyển động máy</td><td>cố định</td><td>chung</td><td>đứng yên, lia, theo tay, rung</td></tr>
+      <tr><td rowspan="2"><b>Chất lượng</b></td><td>Nét · rung · sáng</td><td>số đo máy</td><td>chung</td><td>người chỉ xác nhận dùng được / loại</td></tr>
+      <tr><td>Thẩm mỹ hoàn thiện</td><td>0–10</td><td>chỉ cảnh hoàn thiện</td><td>9: mạch đều, sạch, đáng làm cảnh chốt</td></tr>
+      <tr><td><b>Dùng cho</b></td><td>Vai trong video · mô tả</td><td>cố định · chữ</td><td>chung</td><td>cảnh chốt, minh hoạ lời, mở đầu, loại · “gạt Finex bằng bay răng vàng”</td></tr>
+    </table></div></section>
+
+  <section><h2>Nhãn hai chiều: người và máy cùng làm giàu bộ nhãn</h2>
+    <figure><div class="fig-box"><svg viewBox="0 0 980 250" role="img" aria-label="Máy học tạo mẫu; thầy và mô hình mở gán theo bộ nhãn; nhãn mới thành đề xuất; người cân chỉnh ở kho mẫu và duyệt đề xuất; bộ nhãn cập nhật dùng cho lượt sau; độ đúng theo trường mở cổng huấn luyện">
+      <defs><marker id="m" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="mk" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+      <rect class="b" x="10" y="30" width="160" height="64" rx="3"/><text x="22" y="54" style="font-weight:600">Máy học video</text><text class="sub" x="22" y="72">cắt shot · nghe · 1 dải/shot</text>
+      <rect class="bs" x="210" y="30" width="190" height="64" rx="3"/><text x="222" y="54" style="font-weight:600">Thầy + mô hình mở gán</text><text class="sub" x="222" y="72">theo bộ nhãn · cả video một lượt</text>
+      <rect class="bg" x="440" y="30" width="190" height="64" rx="3"/><text x="452" y="54" style="font-weight:600">Kho mẫu</text><text class="sub" x="452" y="72">người cân chỉnh theo trường</text>
+      <rect class="bt" x="670" y="30" width="140" height="64" rx="3"/><text x="682" y="54" style="font-weight:600">Đo theo trường</text><text class="sub" x="682" y="72">thầy · mở · người</text>
+      <rect class="bt" x="850" y="30" width="120" height="64" rx="3"/><text x="862" y="54" style="font-weight:600">Huấn luyện</text><text class="sub" x="862" y="72">mô hình mở</text>
+      <rect class="b" x="330" y="160" width="280" height="64" rx="3"/><text x="342" y="184" style="font-weight:600">Bộ nhãn (tab Dạy máy)</text><text class="sub" x="342" y="202">dùng · đề xuất · gộp · bỏ</text>
+      <path class="ar" d="M170,62 L208,62"/><path class="ar" d="M400,62 L438,62"/><path class="ar" d="M630,62 L668,62"/><path class="ar" d="M810,62 L848,62"/>
+      <path class="ad" d="M330,96 C330,130 380,140 400,158"/><text class="sub" x="210" y="128">máy đề xuất nhãn mới</text>
+      <path class="ad" d="M540,96 C540,130 520,140 510,158"/><text class="sub" x="548" y="128">người thêm / gộp nhãn</text>
+      <path class="ad" d="M330,192 C200,192 230,110 250,98"/><text class="sub" x="130" y="220">bộ nhãn mới dùng ngay lượt sau</text>
+    </svg></div><figcaption>Người không phải gán từ đầu: thầy điền, người chỉnh. Mỗi lần chỉnh vừa là nhãn vàng để chấm máy, vừa là ví dụ cho thầy ở lượt sau. Nhãn mới do máy đề xuất chỉ dùng được khi người duyệt.</figcaption></figure></section>
+
+  <section><h2>Dữ liệu: một nguồn cho mọi màn</h2>
+    <div class="tbl-wrap"><table>
+      <tr><th>Bảng</th><th>Một dòng là</th><th>Giữ gì</th></tr>
+      <tr><td><b>mau</b></td><td>một đơn vị hình (shot / cửa sổ footage) hoặc một câu thoại</td><td>nguồn, video, thời điểm, ảnh / đoạn âm thanh, dòng · <b>nhan_mo</b>, <b>nhan_thay</b>, <b>nhan_nguoi</b> (mỗi cột đủ các trường) · trạng thái (có chỉ mục) · phiên bản chống ghi đè khi hai máy cùng sửa</td></tr>
+      <tr><td><b>bo_nhan</b></td><td>một giá trị của một trường</td><td>trường, tên, dòng (trống = chung), trạng thái (dùng / đề xuất / đã gộp / bỏ), gộp vào đâu, ai đề xuất, số lần dùng</td></tr>
+      <tr><td>dòng thời gian trong video</td><td>—</td><td>thôi là nơi lưu nhãn; chỉ còn là bản đọc ra từ bảng mau để máy dựng dùng</td></tr>
+    </table></div>
+    <p class="col note">Chuyển dữ liệu cũ một lần: dòng thời gian và 755 mẫu lời thoại hiện có đổ vào bảng mau; 7 nhãn người thành cột người. Tên thầy đã dùng được gom thành đề xuất ban đầu của bộ nhãn để anh duyệt một lượt.</p></section>
+
+  <section><h2>Giao diện: Bộ não AI còn năm tab, mỗi tab một việc</h2>
+    <div class="tbl-wrap"><table>
+      <tr><th>Tab</th><th>Việc</th><th>Đổi so với hiện tại</th></tr>
+      <tr><td>🎯 Tổng quan</td><td>máy học tới đâu, độ đúng theo trường, việc cần quyết (bật phiên bản)</td><td>thêm độ đúng theo trường; việc cần quyết chuyển từ Dạy máy sang</td></tr>
+      <tr><td>📚 Kho mẫu</td><td><b>chỗ làm việc của người</b>: lọc, xem đủ trường của mở · thầy · người, sửa theo trường, duyệt tuần tự, sửa hàng loạt; nghe đoạn trích câu thoại</td><td>thẻ gán nhanh cũ thành chế độ “duyệt tuần tự” ở đây</td></tr>
+      <tr><td>🏷️ Bộ nhãn</td><td>định nghĩa nhãn theo trường và dòng; hàng đề xuất từ người và máy; chọn thầy</td><td>thay tab Dạy máy</td></tr>
+      <tr><td>🧠 Mô hình</td><td>bảng huấn luyện, danh mục mô hình, định tuyến</td><td>giữ</td></tr>
+      <tr><td>💰 Chi phí &amp; khoá</td><td>chi phí, khoá API</td><td>giữ</td></tr>
+    </table></div>
+    <div class="ex">Mô phỏng · một mẫu mở ra trong Kho mẫu · số liệu ví dụ</div>
+    <div class="app"><div class="in" style="min-width:760px">
+      <div class="pn"><div class="grid3" style="grid-template-columns:1fr 1.6fr">
+        <div><div style="height:130px;border-radius:10px;background:linear-gradient(90deg,#b45309 33%,#c2410c 33% 66%,#0369a1 66%)"></div><div class="mu" style="margin-top:4px">Finex · TikTok @vatlieumoifinex · shot 3 (giây 4,1–7,8) · ▶ nghe câu thoại</div><div class="mu">“Lần này em thử Finex F300 phủ trực tiếp lên nền cũ…”</div></div>
+        <div><table><tr><th>Trường</th><th>Mô hình mở</th><th>Thầy</th><th>Người</th></tr>
+          <tr><td>Nhóm cảnh</td><td>Thi công</td><td>Thi công</td><td>✓</td></tr>
+          <tr><td>Bước</td><td>Gạt / làm phẳng</td><td>Cán bay răng</td><td>✓</td></tr>
+          <tr><td>Dụng cụ</td><td>—</td><td><span class="pill p2">đề xuất</span> bay nhựa vàng</td><td><b>bay răng</b> (gộp)</td></tr>
+          <tr><td>Hành động</td><td>gạt</td><td>gạt, khò</td><td>✓</td></tr>
+          <tr><td>Cỡ cảnh · góc</td><td>cận</td><td>cận thao tác · từ trên</td><td>✓</td></tr>
+          <tr><td>Dùng cho</td><td>—</td><td>minh hoạ lời</td><td>✓</td></tr></table>
+          <div style="margin-top:6px;display:flex;gap:6px"><span class="tab on">Enter · đúng hết</span><span class="tab">sửa trường</span><span class="tab">✂ tách khung</span><span class="tab">→ mẫu kế</span></div></div>
+      </div></div></div></div>
+  </section>
+
+  <section><h2>Chi phí và thời gian</h2>
+    <div class="tbl-wrap"><table>
+      <tr><th>Hạng mục</th><th class="n">Hiện tại (đo)</th><th class="n">Sau thiết kế</th></tr>
+      <tr><td>Thầy mỗi video 8 đoạn</td><td class="n">0,22 USD</td><td class="n">khoảng 0,06–0,10 USD (ước tính: một lượt/video, lưu đệm phần cố định, giá lô bằng nửa)</td></tr>
+      <tr><td>Q2 đọc hình mỗi video</td><td class="n">234 giây</td><td class="n">khoảng 50–80 giây (ước tính: 1 dải/shot)</td></tr>
+      <tr><td>Q2 chờ thầy</td><td class="n">22 giây</td><td class="n">0 (thầy chạy lô riêng)</td></tr>
+      <tr><td>Người mỗi mẫu</td><td class="n">—</td><td class="n">1 phím nếu đúng hết; vài giây mỗi trường sai</td></tr>
+    </table></div>
+    <p class="col note">Nhãn chi tiết làm đầu ra của thầy dài hơn (nhiều trường). Số “sau thiết kế” sẽ đo lại trên 10 video đầu và báo trước khi chạy hết.</p></section>
+
+  <section><h2>Làm theo bốn đợt, đợt trước chạy ổn mới sang đợt sau</h2>
+    <div class="tbl-wrap"><table>
+      <tr><th>Đợt</th><th>Làm gì</th><th>Anh thấy gì</th></tr>
+      <tr><td><b>1</b></td><td>Bảng mau + bảng bộ nhãn, chuyển dữ liệu cũ; Kho mẫu đọc từ bảng; tab Bộ nhãn (gieo từ quy trình, bài test và tên thầy đã dùng)</td><td>Kho mẫu mở nhanh; duyệt bộ nhãn ban đầu một lượt</td></tr>
+      <tr><td><b>2</b></td><td>Thầy gán đủ trường, cả video một lượt, lưu đệm; đề xuất nhãn mới; shot làm đơn vị; qwen 1 dải/shot</td><td>mẫu mới có nhãn chi tiết; Q2 nhanh hơn</td></tr>
+      <tr><td><b>3</b></td><td>Kho mẫu sửa theo trường, “đúng hết”, duyệt tuần tự, sửa hàng loạt; đoạn trích câu thoại (âm thanh + ảnh + câu trước/sau)</td><td>chỗ làm việc duy nhất của người</td></tr>
+      <tr><td><b>4</b></td><td>Thầy chạy lô không đồng bộ; độ đúng theo trường; cổng huấn luyện theo trường; thầy đọc lại mẫu cũ (có hỏi trước chi phí)</td><td>chi phí thầy giảm; biết máy yếu ở trường nào</td></tr>
+    </table></div></section>
+
+  <section class="card final"><h3>Cần anh duyệt</h3>
+    <ol class="col" style="margin:8px 0 0;padding-left:20px;display:flex;flex-direction:column;gap:6px">
+      <li>Một bảng mẫu làm nguồn duy nhất; dòng thời gian chỉ còn là bản đọc ra.</li>
+      <li>Bộ nhãn bốn nhóm trường như bảng trên; tab Dạy máy đổi thành Bộ nhãn.</li>
+      <li>Video thành phẩm lấy shot làm đơn vị; footage thô dùng cửa sổ 3 giây.</li>
+      <li>Thầy đọc cả video một lượt, chạy lô không đồng bộ.</li>
+      <li>Kho mẫu là chỗ làm việc duy nhất của người. Làm đợt 1 trước.</li>
+    </ol></section>
+</div>
