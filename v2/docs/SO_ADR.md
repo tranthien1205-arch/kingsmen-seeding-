@@ -381,6 +381,11 @@ Người duyệt: Thiện · Trạng thái: ĐÃ DUYỆT (2026-09-24, "ok bạn 
 
 ## Changelog
 
+### 2026-09-25 · Dạy máy về Bộ não AI
+- Chủ: "mục dạy máy nên nằm trong bộ não và huấn luyện là 1 sub tab … những gì cần hỏi người thì đẩy qua sub tab này". Bỏ mục Dạy máy ở thanh bên; tab con 🎓 Dạy máy cạnh 🎯 Bàn huấn luyện (thay tab Nhãn hình), số trên tab = việc chờ người.
+- Tab gom MỌI việc máy hỏi người khi học: quyết định (kỹ năng có bản mới, phiên bản chờ duyệt, đề nghị định tuyến) + thẻ gán nhãn (khung hình, footage, câu thoại). `GET /hop-viec/dem` đếm thẻ chờ. Bàn huấn luyện giữ bảng đo nhận diện và lối sang Dạy máy. Thẻ ở Việc của tôi mở thẳng tab này.
+- Test seeding nuôi tài khoản: gửi lại nhịp tim Trạm sau khi cố định đồng hồ (chạy trước 10h VN thì "Trạm im").
+
 ### 2026-09-25 · Sửa ba lỗi đo được qua đêm
 - Đo đêm 24–25/09: Drive 36/36 xong; TikTok @vatlieuchuyendung 9/30; hai kênh TikTok còn lại bị đánh hỏng oan. Thời gian một video TikTok: tải 1–4 giây, đọc hình (qwen) 226–354 giây, ảnh + nghe từng shot 53–126 giây, thầy 17–57 giây → đọc hình chiếm phần lớn: GIỮ Q2, không tách sang Ngoc-Han. Thầy nhìn: 137 lượt 1,72 USD.
 - Luật 30 phút chỉ còn cho lệnh Trạm; lệnh máy con chỉ hỏng khi máy mất nhịp tim > 15 phút hoặc quá 12 giờ (trước đây máy khác hỏi lệnh là đánh hỏng lệnh Q2 đang giữ chờ).

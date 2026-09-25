@@ -88,24 +88,35 @@ function TheLoi() {
 }
 
 // hộp việc: ba loại thẻ, chỉ một loại mở một lúc (phím không lẫn nhau)
-function HopViec({ dongs }) {
-  const [loai, setLoai] = useState('hinh'); const [dong, setDong] = useState('');
+// hộp việc: ba loại thẻ, chỉ một loại mở một lúc (phím không lẫn nhau); số trên tab = thẻ đang chờ
+function HopViec({ dongs, dem }) {
+  const d = dem || {}; const [loai, setLoai] = useState(() => (d.k1 || !(d.k2 || d.k4)) ? 'hinh' : d.k4 ? 'loi' : 'source'); const [dong, setDong] = useState('');
   return <div className="space-y-2">
-    <Tabs size="sm" active={loai} onChange={setLoai} tabs={[{ key: 'hinh', label: 'K1 · Nhãn hình' }, { key: 'source', label: 'K2 · Source' }, { key: 'loi', label: 'K4 · Câu lời' }]} />
+    <Tabs size="sm" active={loai} onChange={setLoai} tabs={[{ key: 'hinh', label: 'Khung hình nói gì', count: d.k1 || null }, { key: 'source', label: 'Footage dùng được không', count: d.k2 || null }, { key: 'loi', label: 'Câu thoại nói gì', count: d.k4 || null }]} />
     {loai === 'hinh' && <GanNhanNhanh dong={dong} setDong={setDong} dongs={dongs} />}{loai === 'source' && <TheSource />}{loai === 'loi' && <TheLoi />}
   </div>;
 }
 
-// Màn riêng "Dạy máy" (thanh bên): chủ 25/09 "ui để người gán nhãn thế nào cho trực quan tôi chưa thấy" — hộp việc trước đây nằm cuối Máy › Bộ não AI.
-function DayMay({ go }) {
-  const { db } = useApp(); const a = db.ai_nao || {}; const d = a.do_chinh_xac_hinh || {};
+// Tab con "🎓 Dạy máy" trong Bộ não AI (chủ 25/09: "mục dạy máy nên nằm trong bộ não … những gì cần hỏi người thì đẩy qua sub tab này").
+// Một chỗ cho MỌI việc máy hỏi người khi học: (1) quyết định — bật phiên bản / kỹ năng mới, đề nghị định tuyến; (2) thẻ gán nhãn.
+function DayMay({ a, setTab, dem, taiDem }) {
+  const { me, goi, notify } = useApp(); const duoc = laGat(me); const [ly, setLy] = useState({}); const [busy, setBusy] = useState(false);
+  const pbs = (a.phien_ban || []).filter(p => p.trang_thai === 'CHO_DUYET'); const kn = (a.ky_nang || []).filter(k => k.trang_thai === 'MOI'); const dt = (a.dinh_tuyen || []).filter(x => x.de_nghi);
+  const quyet = async (p, q) => { if (q === 'tu-choi' && !(ly[p.id] || '').trim()) return notify('Từ chối phải ghi lý do', 'err'); setBusy(true); const r = await goi('/ai/phien-ban/' + p.id + '/' + q, { method: 'POST', body: { ly_do: ly[p.id] || '' } }); setBusy(false); if (r.ok) notify(q === 'duyet' ? 'Đã bật phiên bản' : 'Đã từ chối'); else notify(r.msg, 'err'); };
+  const batKN = async (k) => { setBusy(true); const r = await goi('/lop-hoc/bat', { method: 'POST', body: { tinh_nang: k.tinh_nang_chinh, phien_ban_id: k.ban_moi ? k.ban_moi.id : undefined } }); setBusy(false); if (r.ok) notify('Đã bật máy nhà cho ' + k.ten); else notify(r.msg, 'err'); };
+  const soQuyet = pbs.length + kn.length + dt.length; const d = dem || {};
   return <div className="space-y-3">
-    <PageHeader title="🎓 Dạy máy" sub="Máy đang học hiểu video của Kingsmen. Anh/chị chỉ cần xác nhận máy đúng hay sửa lại, mỗi thẻ vài giây." />
-    <div className="grid sm:grid-cols-3 gap-2 text-xs">
-      <Card pad="p-3"><div className="font-semibold text-ink mb-0.5">1 · Nhìn</div><div className="text-ink-muted">Mỗi thẻ là một khung hình, đoạn footage hoặc câu thoại, kèm điều máy đang hiểu.</div></Card>
-      <Card pad="p-3"><div className="font-semibold text-ink mb-0.5">2 · Bấm một phím</div><div className="text-ink-muted"><b>Enter</b> nếu máy đúng. Sai thì bấm số của lựa chọn đúng. Không rõ thì <b>0</b>, muốn bỏ qua thì <b>→</b>.</div></Card>
-      <Card pad="p-3"><div className="font-semibold text-ink mb-0.5">3 · Máy học</div><div className="text-ink-muted">Mỗi lần bấm vừa chấm máy, vừa dạy máy. Đã có {d.so_nhan || 0} nhãn hình. <button className="underline" onClick={() => go('may')}>Xem tiến độ ở Máy › Bộ não AI</button>.</div></Card>
-    </div>
-    <HopViec dongs={a.dong_san_pham || []} />
+    <Callout tone="info"><b>Dạy máy</b> là nơi duy nhất máy hỏi anh/chị trong lúc học. Phía trên là các <b>quyết định</b> (bật bản mới, đề nghị của máy). Phía dưới là <b>thẻ gán nhãn</b>: máy hoặc thầy Claude chưa chắc thì đẩy về đây. Mỗi thẻ bấm một phím: <b>Enter</b> nếu máy đúng, <b>số</b> để chọn đáp án khác, <b>0</b> nếu không rõ, <b>→</b> để bỏ qua. Tối đa {d.tran_phut || 20} phút mỗi ngày, hôm nay đã làm {d.phut_hom_nay ?? 0} phút.</Callout>
+    <Card pad="p-3"><div className="flex items-center gap-2 mb-1"><SectionTitle>Máy cần anh/chị quyết</SectionTitle><span className="text-[11px] text-ink-muted">{soQuyet ? soQuyet + ' việc' : 'không có việc nào'}</span></div>
+      {!soQuyet ? <div className="text-xs text-ink-muted">Máy chưa có bản mới hay đề nghị nào cần duyệt.</div> : <div className="divide-y divide-line text-xs">
+        {kn.map(k => <div key={'k' + k.id} className="py-2 flex items-center gap-2 flex-wrap"><Pill cls="bg-emerald-100 text-emerald-800">kỹ năng có bản mới</Pill><b className="text-ink">{k.icon} {k.ten}</b><span className="text-ink-muted">khớp người {k.ban_moi.diem}/100 (cách cũ {k.ban_moi.diem_truoc}) trên {k.ban_moi.n_kiem} mẫu kiểm</span>
+          {duoc && <div className="ml-auto flex gap-1"><Btn variant="brand" className="!py-1 !px-2 text-[11px]" onClick={() => batKN(k)} disabled={busy}>Bật bản mới</Btn><Btn variant="ghost" className="!py-1 !px-2 text-[11px]" onClick={() => setTab('lophoc')}>Xem thử</Btn></div>}</div>)}
+        {pbs.map(p => <div key={p.id} className="py-2 flex items-center gap-2 flex-wrap"><Pill cls="bg-amber-100 text-amber-800">phiên bản chờ duyệt</Pill><b className="text-ink">{p.tinh_nang} · {p.phien_ban}</b><span className="text-ink-muted">khớp người {p.danh_gia.diem}/100 trên {p.danh_gia.n_kiem} mẫu kiểm (cách cũ {p.danh_gia.diem_truoc}){p.pham_vi && p.pham_vi !== 'chung' ? ' · bản riêng ' + TEN_PV(p.pham_vi) : ''}</span>
+          {duoc && <div className="ml-auto flex gap-1 items-center"><Input className="!py-1 !px-2 text-[11px] !w-40" placeholder="lý do (khi từ chối)" value={ly[p.id] || ''} onChange={e => setLy({ ...ly, [p.id]: e.target.value })} /><Btn variant="ok" className="!py-1 !px-2 text-[11px]" onClick={() => quyet(p, 'duyet')} disabled={busy}>✓ Bật</Btn><Btn variant="ghost" className="!py-1 !px-2 text-[11px]" onClick={() => quyet(p, 'tu-choi')} disabled={busy}>✗ Từ chối</Btn></div>}</div>)}
+        {dt.map(x => <div key={'d' + x.tinh_nang} className="py-2 flex items-center gap-2 flex-wrap"><Pill cls="bg-sky-100 text-sky-800">máy đề nghị</Pill><b className="text-ink">{x.ten}</b><span className="text-ink-muted">đề nghị chuyển sang {x.de_nghi}</span><Btn variant="ghost" className="ml-auto !py-1 !px-2 text-[11px]" onClick={() => setTab('dinhtuyen')}>Xem ở Định tuyến</Btn></div>)}
+      </div>}
+    </Card>
+    <div className="flex items-center gap-2 flex-wrap"><SectionTitle>Thẻ gán nhãn</SectionTitle><span className="text-[11px] text-ink-muted">{(d.k1 || 0) + (d.k2 || 0) + (d.k4 || 0)} thẻ chờ · khung hình máy chưa chắc: {d.k1_can || 0}</span><Btn variant="ghost" className="ml-auto !py-1 !px-2 text-[11px]" onClick={taiDem}>Đếm lại</Btn></div>
+    <HopViec dongs={a.dong_san_pham || []} dem={d} />
   </div>;
 }

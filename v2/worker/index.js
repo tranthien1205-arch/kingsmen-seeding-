@@ -2319,6 +2319,13 @@ async function handleApi(request, env){
     return json({ db: await bootstrap(env,me), dung }); }
   // ADR-017 — Bàn huấn luyện: sáu làn × dòng sản phẩm, mỗi ô có chặng + số đo + điều còn thiếu; nguồn lực (máy, thầy, người)
   if(path==='/ban-huan-luyen' && method==='GET'){ if(!isStaff(me)) return json({error:'Không có quyền'},403); return json(await banHuanLuyen(env)); }
+  // Dạy máy (25/09, chủ: "những gì cần hỏi người thì đẩy qua sub tab này") — đếm thẻ đang chờ người, nhẹ, gọi khi mở Bộ não AI
+  if(path==='/hop-viec/dem' && method==='GET'){ if(!isStaff(me)) return json({error:'Không có quyền'},403);
+    let k1=0, k1_can=0, k2=0; const ft=(await env.DB.prepare(`SELECT phan_tich FROM tai_san WHERE phan_tich LIKE '%"timeline"%'`).all()).results, th=(await env.DB.prepare(`SELECT phan_tich FROM kho_thanh_pham WHERE phan_tich LIKE '%"timeline"%'`).all()).results;
+    for(const r of ft){ const pt=docJSON(r.phan_tich,{})||{}; for(const d of (pt.timeline||[])){ if(!d.nguoi&&!d.khong_ro){ k1++; if(d.can_xac_nhan) k1_can++; } if(!d.source_nguoi&&soDoSource(pt,d)) k2++; } }
+    for(const r of th){ const pt=docJSON(r.phan_tich,{})||{}; for(const d of (pt.timeline||[])) if(!d.nguoi&&!d.khong_ro){ k1++; if(d.can_xac_nhan) k1_can++; } }
+    const k4=so((await env.DB.prepare(`SELECT COUNT(*) n FROM mau_hoc_ai WHERE tinh_nang='doc_loi' AND dau_ra LIKE '%"thay"%' AND dau_ra NOT LIKE '%"nghe_sai":true%' AND (nhan IS NULL OR nhan NOT LIKE '%"NGUOI"%')`).first()||{}).n);
+    const tr=await hetTran(env,url); return json({ k1, k1_can, k2, k4, phut_hom_nay:tr.phut, tran_phut:tr.tran, het_tran:tr.het }); }
   // ADR-017 đợt B — K2: hàng đoạn footage để người quyết dùng/loại (gần ngưỡng trước, xen 1/4 ngẫu nhiên)
   if(path==='/source/hang' && method==='GET'){ if(!isStaff(me)) return json({error:'Không có quyền'},403); const hl=(await docCauHinh(env)).huan_luyen||{}; const ng=hl.source_nguong||{}; const tr=await hetTran(env,url);
     const ft=(await env.DB.prepare(`SELECT t.id,t.ten,t.media_url,t.phan_tich,sp.dong FROM tai_san t LEFT JOIN muc_noi_dung mu ON mu.id=t.muc_id LEFT JOIN san_pham sp ON sp.id=mu.san_pham_id WHERE t.phan_tich LIKE '%"timeline"%' AND t.phan_tich LIKE '%"doan":[{%' ORDER BY t.created_at DESC LIMIT 200`).all()).results;

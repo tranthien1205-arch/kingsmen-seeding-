@@ -5,7 +5,6 @@ const MAN = [
   { key:'dongchay',  ten:'Dòng chảy nội dung',    ngan:'Nội dung',  icon:'🔁', ai:laXemMkt },
   { key:'ketqua',    ten:'Kết quả & Báo cáo',     ngan:'Kết quả',   icon:'📈', ai:laXemMkt },
   { key:'seeding',   ten:'Seeding hội nhóm',      ngan:'Seeding',   icon:'📣', ai:laXemMkt },
-  { key:'daymay',    ten:'Dạy máy',               ngan:'Dạy máy',   icon:'🎓', ai:laXemMkt },
   { key:'may',       ten:'Máy',                   ngan:'Máy',       icon:'🤖', ai:laXemMkt },
 ];
 function Shell(){
@@ -21,7 +20,6 @@ function Shell(){
     case 'dongchay': return <DongChayNoiDung/>;
     case 'ketqua': return <KetQuaBaoCao/>;
     case 'seeding': return <SeedingHoiNhom/>;
-    case 'daymay': return <DayMay go={setPage}/>;
     case 'may': return <May/>;
     default: return <Empty>Chưa có màn này</Empty>; } };
   const NavBtn=({m, doc})=><button onClick={()=>setPage(m.key)} className={(doc?'w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm ':'flex-1 flex flex-col items-center py-1.5 text-[10px] ')+"font-semibold transition "+(page===m.key?(doc?'bg-brand text-white shadow-brand':'text-brand'):(doc?'text-white/70 hover:bg-white/10 hover:text-white':'text-ink-muted'))}>

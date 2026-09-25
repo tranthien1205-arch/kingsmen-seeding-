@@ -12,7 +12,7 @@ function OBan({ x, onClick, chon }) {
   return <button onClick={onClick} className={vien}><div className="space-y-0.5"><Pill cls={MAU_CHANG[x.chang]}>{TEN_CHANG[x.chang]}</Pill><div className="text-[10px] text-ink-muted leading-tight">{x.thieu}</div>{x.tien_do != null && <div className="h-1 rounded bg-slate-100 overflow-hidden"><div className="h-full bg-teal-600" style={{ width: Math.min(100, x.tien_do) + '%' }} /></div>}</div></button>;
 }
 
-function BanHuanLuyen({ a }) {
+function BanHuanLuyen({ a, setTab, dem, soQuyet }) {
   const { goi, notify } = useApp(); const [b, setB] = useState(null); const [chon, setChon] = useState(null); const [dongHV, setDongHV] = useState(''); const dongs = a.dong_san_pham || [];
   const tai = async () => { const r = await goi('/ban-huan-luyen'); if (r.ok) setB(r); else notify(r.msg, 'err'); };
   useEffect(() => { tai(); }, []);
@@ -50,7 +50,7 @@ function BanHuanLuyen({ a }) {
         <div className="text-[10px] text-ink-muted">Trung bình {tg.so_video} video gần nhất. Tải, cắt, nghe chiếm phần lớn thì mới đáng chuyển sang máy Ngoc-Han; đọc hình chiếm phần lớn thì giữ Q2.</div></div>
         : <div className="text-xs text-ink-muted">Chưa có số đo. Máy học ghi thời gian từng chặng từ lượt học tiếp theo.</div>}
     </Card>
-    <div className="flex items-center gap-2 flex-wrap"><SectionTitle>Hộp việc của anh/chị</SectionTitle><span className="text-[11px] text-ink-muted">hôm nay {ng.phut_hom_nay ?? 0} / {ng.tran_phut || '∞'} phút · thẻ nhãn hình, source, câu lời; so cặp thẩm mỹ và duyệt bản dựng thêm ở các đợt sau</span></div>
-    <HopViec dongs={dongs} />
+    <BangDoHinh d={a.do_chinh_xac_hinh || {}} />
+    <Card pad="p-3" className="cursor-pointer hover:border-brand" onClick={() => setTab('daymay')}><div className="flex items-center gap-2 flex-wrap"><span className="text-xl">🎓</span><div className="flex-1 text-xs"><b className="text-ink">Máy đang hỏi anh/chị:</b> {soQuyet || 0} việc cần quyết · {dem ? dem.k1 + dem.k2 + dem.k4 : '…'} thẻ gán nhãn. Hôm nay đã làm {ng.phut_hom_nay ?? 0} / {ng.tran_phut || '∞'} phút.</div><Btn variant="brand" className="!py-1 !px-3 text-[11px]" onClick={(e) => { e.stopPropagation(); setTab('daymay'); }}>Mở Dạy máy →</Btn></div></Card>
   </div>;
 }
