@@ -381,6 +381,10 @@ Người duyệt: Thiện · Trạng thái: ĐÃ DUYỆT (2026-09-24, "ok bạn 
 
 ## Changelog
 
+### 2026-09-25 · Ollama tắt sau khởi động lại
+- Đo 07:15: Q2 khởi động lại 06:29, nhịp tim báo ollama:false; video học sau đó không đọc hình (nhìn 0–2 giây) mà lệnh vẫn báo xong. Bộ nghe cả video đã chạy (76–86 giây/video).
+- `doc-khung.mjs`: `batOllama()` tự chạy `ollama serve` nền khi Ollama tắt, chờ ≤ 60 giây; `hoc-thanh-pham.mjs` ghi rõ "KHÔNG ĐỌC HÌNH" vào kết quả lệnh nếu vẫn không lên.
+
 ### 2026-09-25 · Dạy máy về Bộ não AI
 - Chủ: "mục dạy máy nên nằm trong bộ não và huấn luyện là 1 sub tab … những gì cần hỏi người thì đẩy qua sub tab này". Bỏ mục Dạy máy ở thanh bên; tab con 🎓 Dạy máy cạnh 🎯 Bàn huấn luyện (thay tab Nhãn hình), số trên tab = việc chờ người.
 - Tab gom MỌI việc máy hỏi người khi học: quyết định (kỹ năng có bản mới, phiên bản chờ duyệt, đề nghị định tuyến) + thẻ gán nhãn (khung hình, footage, câu thoại). `GET /hop-viec/dem` đếm thẻ chờ. Bàn huấn luyện giữ bảng đo nhận diện và lối sang Dạy máy. Thẻ ở Việc của tôi mở thẳng tab này.

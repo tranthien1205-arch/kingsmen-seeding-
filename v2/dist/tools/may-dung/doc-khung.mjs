@@ -23,7 +23,12 @@ export const TEN_NHOM = { BOI_CANH: "bối cảnh chung: công trình, không gi
 const BUOC_CHUNG = ["Chuẩn bị bề mặt", "Vệ sinh", "Pha trộn vật liệu", "Thi công chính", "Gạt / miết / làm phẳng", "Lau dọn"];
 const KHONG = "(không)";
 
-export async function coVL() { try { const r = await fetch(OLLAMA + "/api/tags"); if (!r.ok) return false; const j = await r.json(); const [ten, tag] = MO_HINH_VL.split(":"); return (j.models || []).some((m) => String(m.name || m.model).startsWith(ten) && String(m.name || m.model).includes(tag || "")); } catch { return false; } }
+async function ollamaSong() { try { const r = await fetch(OLLAMA + "/api/tags", { signal: AbortSignal.timeout(4000) }); return r.ok; } catch { return false; } }
+/** Ollama tắt (máy vừa khởi động lại, chưa ai mở app Ollama) → tự chạy "ollama serve" nền, chờ tối đa 60 giây. */
+export async function batOllama(log = () => {}) { if (await ollamaSong()) return true; if (/^https?:\/\/(?!127\.0\.0\.1|localhost)/.test(OLLAMA)) return false;
+  try { const { spawn } = await import("node:child_process"); const p = spawn("ollama", ["serve"], { detached: true, stdio: "ignore", windowsHide: true }); p.on("error", () => {}); p.unref(); log("  Ollama đang tắt — tự bật ollama serve"); } catch { return false; }
+  for (let i = 0; i < 20; i++) { await new Promise((x) => setTimeout(x, 3000)); if (await ollamaSong()) { log("  Ollama đã lên"); return true; } } log("  không bật được Ollama sau 60 giây"); return false; }
+export async function coVL(log) { await batOllama(log); try { const r = await fetch(OLLAMA + "/api/tags"); if (!r.ok) return false; const j = await r.json(); const [ten, tag] = MO_HINH_VL.split(":"); return (j.models || []).some((m) => String(m.name || m.model).startsWith(ten) && String(m.name || m.model).includes(tag || "")); } catch { return false; } }
 
 function schema(dsBuoc, dsTest) { return { type: "object", required: ["nhom", "buoc", "bai_test", "co_canh", "tham_my", "ro_net", "tu_tin", "mo_ta"], properties: {
   nhom: { type: "string", enum: NHOM }, buoc: { type: "string", enum: [...dsBuoc, KHONG] }, bai_test: dsTest.length ? { type: "string", enum: [...dsTest, KHONG] } : { type: "string" },
@@ -104,7 +109,7 @@ export async function docKhung(file, ctx = {}) {
 
 // lệnh phan_tich_footage {doc_khung:true, muc_id?, tai_san_id?, lai?} (phan-tich.mjs chuyển sang đây)
 export default async function chay({ app, goiApp, lenh, dir, log, may }) {
-  const ts = lenh.tham_so || {}; if (!(await coVL())) return { ok: false, msg: "máy này chưa có " + MO_HINH_VL + " trong Ollama (chạy: ollama pull " + MO_HINH_VL + ")" };
+  const ts = lenh.tham_so || {}; if (!(await coVL(log))) return { ok: false, msg: "máy này chưa có " + MO_HINH_VL + " trong Ollama (chạy: ollama pull " + MO_HINH_VL + ")" };
   const r = await goiApp("/hub/viec/doc_khung?muc_id=" + encodeURIComponent(ts.muc_id || "") + "&tai_san_id=" + encodeURIComponent(ts.tai_san_id || "") + (ts.lai ? "&lai=1" : "")); const ds = (r.d && r.d.viec) || [];
   if (!ds.length) return { ok: true, msg: "không có footage nào cần đọc" };
   const TH = join(dir, "doc-khung"); mkdirSync(TH, { recursive: true }); let tongThay = 0, tongKhop = 0, loiThay = null; let xong = 0, tongMs = 0, tongDai = 0, canXN = 0; const loi = [];

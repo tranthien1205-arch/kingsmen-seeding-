@@ -82,7 +82,7 @@ export default async function hoc({ app, goiApp, lenh, dir, log, script }) {
   let asr = null; for (const mh of [ts.whisper || process.env.WHISPER_MO_HINH || "onnx-community/whisper-small", "onnx-community/whisper-base"]) { try { const T = await import("@huggingface/transformers"); asr = await T.pipeline("automatic-speech-recognition", mh, { dtype: "q8" }); log("  whisper sẵn sàng:", mh); break; } catch (e) { log("  không nạp được", mh, String(e.message || e).slice(0, 60)); } }
   if (!asr) log("  không có whisper — bỏ lời thoại");
   // ---- M1 đọc hình video thành phẩm (máy có qwen2.5vl): mỗi shot mang nhóm cảnh / bước / bài test / thẩm mỹ → câu nói lúc đó ↔ cảnh (nguồn học M2)
-  let DK = null; try { const m = script ? await script("doc-khung") : null; if (m && (await m.coVL())) { DK = m; log("  mô hình nhìn sẵn sàng:", m.MO_HINH_VL); } } catch (e) { log("  không tải được doc-khung:", String(e.message || e).slice(0, 60)); }
+  let DK = null, khongNhin = ""; try { const m = script ? await script("doc-khung") : null; if (m && !(await m.coVL(log))) khongNhin = " · KHÔNG ĐỌC HÌNH: Ollama tắt hoặc thiếu " + m.MO_HINH_VL + " — bật Ollama rồi cho học lại"; if (m && !khongNhin) { DK = m; log("  mô hình nhìn sẵn sàng:", m.MO_HINH_VL); } } catch (e) { log("  không tải được doc-khung:", String(e.message || e).slice(0, 60)); }
   // nhãn theo đường dẫn thư mục (chủ đặt tên thư mục theo mục đích và nhãn hàng)
   const nhanDuong = (duong) => { const b = String(duong || "").toUpperCase(); return { muc_dich: /ECOMMERCE|BÁN HÀNG|BAN HANG|SALE|TEASER/.test(b) ? "BAN_HANG" : /CREATIVE|BRAND|ĐỊNH VỊ|DINH VI/.test(b) ? "BRAND" : null, dong: /FINEX/.test(b) ? "Finex" : /TERRAZ/.test(b) ? "Terrazo" : /RON/.test(b) ? "Keo chít mạch" : null }; };
   // ---- 2+3. từng video
@@ -127,5 +127,5 @@ export default async function hoc({ app, goiApp, lenh, dir, log, script }) {
       rmSync(KD, { recursive: true, force: true }); if (v.url) rmSync(f, { force: true });
     } catch (e) { loi.push(v.ten + ": " + String(e.message || e).slice(0, 80)); log("  ✗", v.ten, String(e.message || e).slice(0, 100)); }
   }
-  return { ok: xong > 0, msg: "học " + xong + "/" + video.length + " video thành phẩm · " + mau + " mẫu" + (gocKy.length ? " · " + gocKy.length + " clip gốc" : "") + (loi.length ? " · lỗi: " + loi.slice(0, 2).join(" · ") : "") };
+  return { ok: xong > 0, msg: "học " + xong + "/" + video.length + " video thành phẩm · " + mau + " mẫu" + khongNhin + (gocKy.length ? " · " + gocKy.length + " clip gốc" : "") + (loi.length ? " · lỗi: " + loi.slice(0, 2).join(" · ") : "") };
 }
