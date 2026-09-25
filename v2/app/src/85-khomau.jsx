@@ -17,13 +17,13 @@ const nhanNgan = (o) => o ? tenNhom(o.nhom) + (o.buoc ? ' · ' + o.buoc : '') + 
 function KhoMauAI({ a }) {
   const { goi, notify } = useApp(); const [kn, setKn] = useState('K1'); const [loc, setLoc] = useState({ tt: '', dong: '', nguon: '', q: '' }); const [trang, setTrang] = useState(1);
   const [kq, setKq] = useState(null); const [dang, setDang] = useState(false); const [mo, setMo] = useState(null);
-  const tai = async () => { setDang(true); const r = await goi('/kho-mau?kn=' + kn + '&trang=' + trang + '&n=30&tt=' + encodeURIComponent(loc.tt) + '&dong=' + encodeURIComponent(loc.dong) + '&nguon=' + loc.nguon + '&q=' + encodeURIComponent(loc.q)); setDang(false); if (r.ok) setKq(r); else notify(r.msg, 'err'); };
+  const tai = async () => { setDang(true); const knGoi = kn; const r = await goi('/kho-mau?kn=' + kn + '&trang=' + trang + '&n=30&tt=' + encodeURIComponent(loc.tt) + '&dong=' + encodeURIComponent(loc.dong) + '&nguon=' + loc.nguon + '&q=' + encodeURIComponent(loc.q)); setDang(false); if (r.ok) { if (r.kn === knGoi) setKq(r); } else notify(r.msg, 'err'); };
   useEffect(() => { tai(); }, [kn, trang, loc.tt, loc.dong, loc.nguon]);
   const doiLoc = (k, v) => { setTrang(1); setMo(null); setLoc({ ...loc, [k]: v }); };
   const ttCua = Object.keys(TT_MAU).filter(k => kq && kq.dem && kq.dem[k]);
   return <Card pad="p-3">
     <div className="flex items-center gap-2 flex-wrap mb-2"><SectionTitle>Kho mẫu</SectionTitle><span className="text-[11px] text-ink-muted">mọi nhãn của mô hình mở, thầy Claude và người · lọc rồi bấm một dòng để xem và sửa</span></div>
-    <Tabs size="sm" active={kn} onChange={(k) => { setKn(k); setTrang(1); setMo(null); setLoc({ tt: '', dong: '', nguon: '', q: '' }); }} tabs={[{ key: 'K1', label: 'Khung hình' }, { key: 'K2', label: 'Footage (chất lượng)' }, { key: 'K4', label: 'Câu thoại' }]} />
+    <Tabs size="sm" active={kn} onChange={(k) => { setKq(null); setKn(k); setTrang(1); setMo(null); setLoc({ tt: '', dong: '', nguon: '', q: '' }); }} tabs={[{ key: 'K1', label: 'Khung hình' }, { key: 'K2', label: 'Footage (chất lượng)' }, { key: 'K4', label: 'Câu thoại' }]} />
     {kq && <div className="flex gap-1 flex-wrap my-2">
       <button onClick={() => doiLoc('tt', '')} className={'rounded-full px-2 py-0.5 text-[11px] border ' + (!loc.tt ? 'border-ink font-semibold' : 'border-line')}>Tất cả · {kq.tong}</button>
       {ttCua.map(k => <button key={k} onClick={() => doiLoc('tt', k)} title={TT_MAU[k].mo} className={'rounded-full px-2 py-0.5 text-[11px] border ' + (loc.tt === k ? 'border-ink font-semibold ' : 'border-transparent ') + TT_MAU[k].cls}>{TT_MAU[k].ten} · {kq.dem[k]}</button>)}
@@ -43,8 +43,8 @@ function KhoMauAI({ a }) {
             <div className="rounded-md bg-slate-200 overflow-hidden aspect-video">{x.khung_url ? <img src={x.khung_url} alt="" className="w-full h-full object-cover" loading="lazy" /> : null}</div>
             <div className="min-w-0"><div className="text-ink truncate">{kn === 'K4' ? '“' + x.text + '”' : (x.mo_ta || '—')}</div><div className="text-[10px] text-ink-muted truncate">{x.ten}{x.tu != null ? ' · giây ' + x.tu + '–' + x.den : ''}{x.dong ? ' · ' + x.dong : ''}</div>
               <div className="md:hidden text-[10px] mt-0.5"><Pill cls={(TT_MAU[x.tt] || {}).cls}>{(TT_MAU[x.tt] || {}).ten}</Pill> <span className="text-ink-muted">{x.nguoi ? 'người: ' + nhanNgan(x.nguoi) : x.thay ? 'thầy: ' + nhanNgan(x.thay) : x.mo ? 'mở: ' + nhanNgan(x.mo) : ''}</span></div></div>
-            <div className="hidden md:block min-w-0 text-[11px]">{kn === 'K2' ? <span className="tabular-nums">nét {x.so_do.net} · rung {x.so_do.dong} · sáng {x.so_do.sang}</span> : kn === 'K4' ? nhanNgan(x.hinh) : nhanNgan(x.mo)}</div>
-            <div className="hidden md:block min-w-0 text-[11px]">{kn === 'K2' ? (x.may.dung ? 'dùng được' : 'loại · ' + x.may.ly_do.join(', ')) : x.thay ? <>{x.thay.nghe_sai ? 'nghe sai' : nhanNgan(x.thay)} <span className="text-ink-muted">· {x.thay.chac ?? ''}</span></> : '—'}</div>
+            <div className="hidden md:block min-w-0 text-[11px]">{kn === 'K2' ? (x.so_do ? <span className="tabular-nums">nét {x.so_do.net} · rung {x.so_do.dong} · sáng {x.so_do.sang}</span> : '—') : kn === 'K4' ? nhanNgan(x.hinh) : nhanNgan(x.mo)}</div>
+            <div className="hidden md:block min-w-0 text-[11px]">{kn === 'K2' ? (!x.may ? '—' : x.may.dung ? 'dùng được' : 'loại · ' + x.may.ly_do.join(', ')) : x.thay ? <>{x.thay.nghe_sai ? 'nghe sai' : nhanNgan(x.thay)} <span className="text-ink-muted">· {x.thay.chac ?? ''}</span></> : '—'}</div>
             <div className="hidden md:block min-w-0 text-[11px]">{x.nguoi ? (kn === 'K2' ? (x.nguoi.dung ? 'dùng được' : 'loại · ' + (x.nguoi.ly_do || []).join(', ')) : x.nguoi.nghe_sai ? 'nghe sai' : nhanNgan(x.nguoi)) : '—'}{x.phan ? <span className="text-ink-muted"> · gán từng khung</span> : null}</div>
             <div className="hidden md:block"><Pill cls={(TT_MAU[x.tt] || {}).cls}>{(TT_MAU[x.tt] || {}).ten}</Pill></div>
           </button>
