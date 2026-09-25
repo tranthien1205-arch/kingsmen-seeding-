@@ -20,14 +20,14 @@ test('016c: gán từng khung, mô tả đúng, bước mới vào quy trình', 
   let r = await api('/kho-thanh-pham/' + tp + '/doan/0', 'POST', { nhe: true, them_buoc: true, phan: [
     { nhom: 'THI_CONG', buoc: 'Cán vật liệu bằng bay răng', mo_ta: 'gạt Finex bằng bay răng vàng' }, { nhom: 'THI_CONG', buoc: 'Cán vật liệu bằng bay răng' }, { nhom: 'THI_CONG', buoc: 'Khò nhiệt phá bọt khí', mo_ta: 'dùng máy khò nhiệt' }] });
   assert.equal(r.s, 200); assert.equal(r.j.dung, false, 'máy nói bước chung → sai chi tiết');
-  const pt = JSON.parse(DB.raw.prepare(`SELECT phan_tich FROM kho_thanh_pham`).get().phan_tich); const d = pt.timeline[0];
+  const nguoi = () => JSON.parse(DB.raw.prepare(`SELECT nhan_nguoi FROM mau_doan WHERE id=?`).get('H:' + tp + ':0').nhan_nguoi); const d = nguoi();
   assert.equal(d.buoc, 'Cán vật liệu bằng bay răng', 'nhãn cả đoạn = nhóm/bước nhiều nhất'); assert.equal(d.phan.length, 3); assert.equal(d.phan[2].buoc, 'Khò nhiệt phá bọt khí');
-  assert.equal(DB.raw.prepare(`SELECT COUNT(*) n FROM mau_hoc_ai WHERE tinh_nang='nhan_khung'`).get().n, 3, 'mỗi khung một nhãn vàng');
+  assert.equal(d.mo_ta, 'gạt Finex bằng bay răng vàng', 'mô tả khung đầu thành mô tả đoạn'); assert.equal(DB.raw.prepare(`SELECT COUNT(*) n FROM bo_nhan WHERE truong='buoc' AND ten='Khò nhiệt phá bọt khí' AND trang_thai='DE_XUAT'`).get().n, 1, 'bước khung lẻ chưa có → đề xuất'); assert.equal(DB.raw.prepare(`SELECT COUNT(*) n FROM bo_nhan WHERE ten='Cán vật liệu bằng bay răng' AND trang_thai='DE_XUAT'`).get().n, 0, 'bước đã thêm vào quy trình → không còn đề xuất');
   const qt = DB.raw.prepare(`SELECT quy_trinh FROM san_pham WHERE dong='Finex'`).get().quy_trinh.split('\n'); assert.deepEqual(qt, ['Vệ sinh nền', 'Cán vật liệu bằng bay răng'], 'bước mới vào quy trình, không trùng');
   // gán lại đoạn: mẫu từng khung cũ bị thay
   r = await api('/kho-thanh-pham/' + tp + '/doan/0', 'POST', { nhe: true, nhom: 'THI_CONG', buoc: 'Cán vật liệu bằng bay răng', mo_ta: 'gạt Finex bằng bay răng vàng trên nền gạch cũ' });
-  assert.equal(DB.raw.prepare(`SELECT COUNT(*) n FROM mau_hoc_ai WHERE tinh_nang='nhan_khung'`).get().n, 1);
-  assert.equal(JSON.parse(DB.raw.prepare(`SELECT phan_tich FROM kho_thanh_pham`).get().phan_tich).timeline[0].mo_ta_nguoi, 'gạt Finex bằng bay răng vàng trên nền gạch cũ');
+  assert.equal(nguoi().phan, undefined, 'gán lại cả đoạn thì bỏ nhãn từng khung cũ');
+  assert.equal(nguoi().mo_ta, 'gạt Finex bằng bay răng vàng trên nền gạch cũ');
   // mô tả người viết thành ví dụ cho lần đọc hình sau
   const spId = DB.raw.prepare(`SELECT id FROM san_pham WHERE dong='Finex'`).get().id; const mucId = (await api('/muc', 'POST', { tieu_de: 'Cải tạo sàn', dinh_dang: 'VIDEO', san_pham_id: spId })).j.id;
   await may('/hub/tai-san', 'POST', { muc_id: mucId, ten: 'A.mp4', media_url: '/media/media/a.mp4', media_type: 'VIDEO', giay: 5 });

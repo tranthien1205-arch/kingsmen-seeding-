@@ -12,6 +12,7 @@ const api = async (p, method = 'GET', body) => { const r = await worker.fetch(ne
 const hubK = (k) => async (p, method = 'GET', body) => { const r = await worker.fetch(new Request('https://x/api' + p, { method, headers: { 'Content-Type': 'application/json', 'X-Hub-Key': k }, body: body ? JSON.stringify(body) : undefined }), env, { waitUntil() {} }); return { s: r.status, j: await r.json().catch(() => ({})) }; };
 const giai = (ma) => JSON.parse(Buffer.from(ma.slice(5).replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8'));
 
+Math.random = () => 0.99;   // kiểm ngẫu nhiên do máy chủ quyết — ghim
 test('017b: K2 source + K4 đọc lời', async () => {
   TOKEN = (await api('/login', 'POST', { email: 'admin@kingsmen.vn', password: 'admin123' })).j.token;
   const may = hubK(giai((await api('/may-ghep', 'POST', { ten: 'Q2' })).j.ma_ghep).khoa);
@@ -25,22 +26,24 @@ test('017b: K2 source + K4 đọc lời', async () => {
   let h = (await api('/source/hang')).j; assert.equal(h.con_lai, 40); assert.ok(Math.abs(h.hang[0].so_do.net - 0.55) < 0.03, 'gần ngưỡng 0,55 trước'); assert.ok(h.hang.some((x) => x.ngau_nhien));
   for (let i = 0; i < 40; i++) { const net = 0.8 - i * 0.01; const r = await api('/tai-san/' + ts + '/doan/' + i + '/source', 'POST', { dung: net >= 0.62, ly_do: net >= 0.62 ? [] : ['mờ', 'bịa'], giay: 3 }); assert.equal(r.s, 200); if (i === 29) assert.ok(r.j.hoc && r.j.hoc.ok, 'học ngưỡng khi đủ 30'); }
   const cfg = JSON.parse(DB.raw.prepare(`SELECT cau_hinh FROM module_config WHERE id='huan_luyen'`).get().cau_hinh).source_hoc; assert.ok(cfg.net >= 0.6 && cfg.net <= 0.64, 'ngưỡng học ≈ 0,62: ' + cfg.net); assert.ok(cfg.khop_pct >= cfg.khop_cu_pct, "ngưỡng học không kém ngưỡng cũ");
-  const mau = JSON.parse(DB.raw.prepare(`SELECT nhan FROM mau_hoc_ai WHERE tinh_nang='chat_luong_source' AND dau_vao LIKE '{"i":39,%'`).get().nhan); assert.deepEqual(mau.ly_do, ['mờ'], 'lý do lạ bị bỏ');
+  const mau = JSON.parse(DB.raw.prepare(`SELECT nguoi_source FROM mau_doan WHERE id=?`).get('H:' + ts + ':39').nguoi_source); assert.deepEqual(mau.ly_do, ['mờ'], 'lý do lạ bị bỏ');
   assert.equal((await api('/source/hang')).j.con_lai, 0);
   let b = (await api('/ban-huan-luyen')).j; assert.equal(b.o.K2.chung.so_do.vang, 40); assert.equal(b.nguon_luc.nguoi.phut_hom_nay, 2);
 
   // K4: 5 câu từ video đã air (nhãn hình từ shot)
   await may('/hub/thanh-pham', 'POST', { ten: 'v.mp4', nguon_id: 'v', nguon: 'TIKTOK', dai: 25, dong: 'Finex', shots: [0, 1, 2, 3, 4].map((i) => ({ t0: i * 5, t1: i * 5 + 5, loi: 'câu số ' + i + ' nói về thi công', nhom: 'THI_CONG', buoc: 'Trát', khung_url: '/media/media/s' + i + '.jpg' })) });
-  assert.equal(DB.raw.prepare(`SELECT COUNT(*) n FROM mau_hoc_ai WHERE tinh_nang='doc_loi'`).get().n, 5);
+  const L = (i) => DB.raw.prepare(`SELECT * FROM mau_doan WHERE loai='LOI' ORDER BY i`).all()[i];
+  assert.equal(DB.raw.prepare(`SELECT COUNT(*) n FROM mau_doan WHERE loai='LOI'`).get().n, 5); assert.equal(L(1).cau_truoc, 'câu số 0 nói về thi công', 'câu trước làm ngữ cảnh'); assert.equal(L(0).trang_thai, 'CHO_THAY');
   let r = await api('/doc-loi/thay', 'POST', {}); assert.equal(r.j.so, 5); assert.equal(GOI, 1, 'một lô 20 câu = một lần gọi');
   assert.equal((await api('/doc-loi/thay', 'POST', {})).j.so, 0, 'không đọc lại');
   assert.ok(DB.raw.prepare(`SELECT COUNT(*) n FROM ai_usage WHERE tinh_nang='hoc_doc_loi'`).get().n === 1);
-  h = (await api('/doc-loi/hang')).j; assert.equal(h.con_lai, 4, 'câu thầy báo nghe sai không vào hộp'); assert.equal(h.thay_nghe_sai, 1); assert.ok(h.hang.every((x) => !x.thay.nghe_sai));
-  assert.equal(h.hang[0].lech, true, 'thầy khác nhãn hình lên trước'); assert.equal(h.hang[0].thay.nhom, 'GIAI_PHAP');
-  const idSai = DB.raw.prepare(`SELECT id FROM mau_hoc_ai WHERE tinh_nang='doc_loi' AND dau_ra LIKE '%"nghe_sai":true%'`).get().id;
-  const c2 = h.hang.find((x) => x.thay.buoc === 'Trát'); assert.ok(c2, 'bước đúng danh sách giữ'); assert.ok(h.hang.every((x) => x.thay.buoc !== 'Bịa'), 'bước bịa bỏ'); assert.ok(h.hang.some((x) => x.khung_url), 'ảnh shot cùng câu');
-  r = await api('/mau/' + h.hang[0].id + '/doc-loi', 'POST', { nhom: 'GIAI_PHAP', giay: 4 }); assert.equal(r.j.dung, true);
-  r = await api('/mau/' + idSai + '/doc-loi', 'POST', { nghe_sai: true }); assert.equal(r.j.dung, false);
-  assert.equal((await api('/doc-loi/hang')).j.con_lai, 3);
+  assert.deepEqual([0, 1, 2, 3, 4].map((i) => L(i).trang_thai), ['THAY_CHOT', 'THAY_CHOT', 'KHONG_CHAC', 'NGHE_SAI', 'THAY_CHOT'], 'thầy chốt, chỉ câu thầy chưa chắc hỏi người');
+  h = (await api('/doc-loi/hang')).j; assert.equal(h.con_lai, 1, 'thầy chắc → không vào hộp'); assert.equal(h.thay_nghe_sai, 1); assert.ok(h.hang.every((x) => !x.thay.nghe_sai));
+  assert.equal(h.hang[0].thay.chac, 0.4); assert.equal(h.hang[0].khung_url, '/media/media/s2.jpg', 'ảnh shot cùng câu'); assert.equal(h.hang[0].cau_sau, 'câu số 3 nói về thi công');
+  assert.equal(JSON.parse(L(1).nhan_thay).buoc, 'Trát', 'bước đúng danh sách giữ'); assert.equal(DB.raw.prepare(`SELECT trang_thai FROM bo_nhan WHERE truong='buoc' AND ten='Bịa'`).get().trang_thai, 'DE_XUAT', 'bước lạ thành đề xuất');
+  r = await api('/mau-doan/' + encodeURIComponent(h.hang[0].id) + '/loi', 'POST', { nhom: 'THI_CONG', giay: 4, version: h.hang[0].version, text: 'câu số 2 nói về thi công keo', khop_hinh: true }); assert.equal(r.s, 200); assert.equal(r.j.dung, true);
+  assert.equal(L(2).text, 'câu số 2 nói về thi công keo', 'sửa chữ nghe sai'); assert.equal(JSON.parse(L(2).nhan_nguoi).text_goc, 'câu số 2 nói về thi công');
+  r = await api('/mau-doan/' + encodeURIComponent(L(3).id) + '/loi', 'POST', { nghe_sai: true }); assert.equal(r.j.dung, false);
+  assert.equal((await api('/doc-loi/hang')).j.con_lai, 0);
   b = (await api('/ban-huan-luyen')).j; assert.equal(b.o.K4.chung.so_do.vang, 2); assert.equal(b.o.K4.chung.so_do.thay_pct, 100); assert.equal(b.o.K4.chung.so_do.nghe_sai_pct, 50); assert.equal(b.o.K4.chung.so_do.thay_nghe_sai_pct, 20); assert.ok(b.o.K4.dong.Finex);
 });

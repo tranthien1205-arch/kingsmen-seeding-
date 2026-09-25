@@ -9,6 +9,7 @@ const api = async (p, method = 'GET', body) => { const r = await worker.fetch(ne
 const hubK = (k) => async (p, method = 'GET', body) => { const r = await worker.fetch(new Request('https://x/api' + p, { method, headers: { 'Content-Type': 'application/json', 'X-Hub-Key': k }, body: body ? JSON.stringify(body) : undefined }), env, { waitUntil() {} }); return { s: r.status, j: await r.json().catch(() => ({})) }; };
 const giai = (ma) => JSON.parse(Buffer.from(ma.slice(5).replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8'));
 
+Math.random = () => 0.99;
 test('017d: kho mẫu + dòng sản phẩm', async () => {
   TOKEN = (await api('/login', 'POST', { email: 'admin@kingsmen.vn', password: 'admin123' })).j.token;
   const may = hubK(giai((await api('/may-ghep', 'POST', { ten: 'Q2' })).j.ma_ghep).khoa);
@@ -19,14 +20,14 @@ test('017d: kho mẫu + dòng sản phẩm', async () => {
     { tu: 10, den: 15, nhom: 'KHAC' }, { tu: 15, den: 20, nhom: 'KHAC' }] });
   const tp = DB.raw.prepare(`SELECT id FROM kho_thanh_pham`).get().id;
   await api('/kho-thanh-pham/' + tp + '/doan/2', 'POST', { nhe: true, nhom: 'NGUOI_NOI', mo_ta: 'chủ nhà nói' }); await api('/kho-thanh-pham/' + tp + '/doan/3', 'POST', { khong_ro: true });
-  let k = (await api('/kho-mau?kn=K1')).j; assert.deepEqual(k.dem, { BAC: 1, LECH: 1, VANG: 1, KHONG_RO: 1 });
-  const lech = (await api('/kho-mau?kn=K1&tt=LECH')).j.hang[0]; assert.equal(lech.thay.ly_do, 'bề mặt xong'); assert.equal(lech.mo.nhom, 'THI_CONG'); assert.deepEqual(lech.quy_trinh, ['Trộn', 'Cán'], 'quy trình theo dòng để sửa bước');
+  let k = (await api('/kho-mau?kn=K1')).j; assert.deepEqual(k.dem, { THAY_CHOT: 2, VANG: 1, KHONG_RO: 1 }); assert.equal(k.can, 0);
+  const lech = (await api('/kho-mau?kn=K1&tt=THAY_CHOT&q=' + encodeURIComponent('bề mặt'))).j.hang[0]; assert.equal(lech.thay.ly_do, 'bề mặt xong'); assert.equal(lech.mo.nhom, 'THI_CONG'); assert.deepEqual(lech.quy_trinh, ['Trộn', 'Cán'], 'quy trình theo dòng để sửa bước');
   assert.equal((await api('/kho-mau?kn=K1&q=chủ nhà')).j.loc, 1, 'tìm theo mô tả người');
   // đổi tên dòng Terrazo → Terrazy: sản phẩm, video, mẫu, luật cùng đổi
   let d = (await api('/dong-san-pham')).j; assert.ok(d.dong.some((x) => x.dong === 'Terrazo' && x.video === 1 && x.san_pham === 1));
   const r = await api('/dong-san-pham/doi-ten', 'POST', { tu: 'Terrazo', sang: 'Terrazy' }); assert.equal(r.s, 200);
   assert.equal(DB.raw.prepare(`SELECT dong FROM san_pham`).get().dong, 'Terrazy'); assert.equal(DB.raw.prepare(`SELECT dong FROM kho_thanh_pham`).get().dong, 'Terrazy');
-  assert.equal(DB.raw.prepare(`SELECT COUNT(*) n FROM mau_hoc_ai WHERE dong='Terrazo'`).get().n, 0);
+  assert.equal(DB.raw.prepare(`SELECT COUNT(*) n FROM mau_hoc_ai WHERE dong='Terrazo'`).get().n, 0); assert.equal(DB.raw.prepare(`SELECT COUNT(*) n FROM mau_doan WHERE dong='Terrazy'`).get().n, 4, 'kho mẫu đổi dòng theo');
   assert.ok(r.j.anh_xa_dong.some((x) => x.chua === 'TERRAZ' && x.dong === 'Terrazy'), 'luật trỏ dòng mới');
   // máy học đọc luật; sửa luật từ app
   assert.equal((await api('/cau-hinh/huan_luyen', 'PUT', { cau_hinh: { anh_xa_dong: [{ chua: 'SAN TERRAZ', dong: 'Terrazy' }] } })).s, 200);

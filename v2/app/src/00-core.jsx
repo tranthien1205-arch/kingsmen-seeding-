@@ -26,14 +26,14 @@ function AppProvider({children}){
     const r = await fetch('/api'+path, { method, headers:{ 'Content-Type':'application/json', ...((tok||token)?{Authorization:'Bearer '+(tok||token)}:{}) }, body: body?JSON.stringify(body):undefined });
     const j = await r.json().catch(()=>({}));
     if(r.status===401 && path!=='/login'){ try{ localStorage.removeItem(TOKEN_KEY); }catch(e){} setToken(null); setDb(null); throw new Error(j.error||'Hết phiên — đăng nhập lại'); }
-    if(!r.ok) throw new Error(j.error||('Lỗi '+r.status));
+    if(!r.ok){ const e=new Error(j.error||('Lỗi '+r.status)); e.status=r.status; e.data=j; throw e; }
     return j;
   };
   useEffect(()=>{ if(!token){ setLoading(false); return; } setLoading(true);
     call('/bootstrap').then(r=>setDb(r.db)).catch(()=>{}).finally(()=>setLoading(false)); },[token]);
 
   // goi(): mọi thao tác đi qua đây — server trả {db} thì thay toàn bộ (một nguồn sự thật)
-  const goi = async (path, opts={}) => { try{ const r=await call(path, opts); if(r&&r.db) setDb(r.db); return {ok:true, ...r}; }catch(e){ return {ok:false, msg:e.message}; } };
+  const goi = async (path, opts={}) => { try{ const r=await call(path, opts); if(r&&r.db) setDb(r.db); return {ok:true, ...r}; }catch(e){ return {ok:false, msg:e.message, status:e.status, data:e.data}; } };
   const api = {
     db, me: db?db.me:null, loading, notify, goi, setDb,
     login: async (email,password)=>{ try{ const r=await call('/login',{method:'POST',body:{email,password}}); try{ localStorage.setItem(TOKEN_KEY,r.token); }catch(e){} setDb(r.db); setToken(r.token); return {ok:true}; }catch(e){ return {ok:false,msg:e.message}; } },

@@ -1,0 +1,279 @@
+// ===== ADR-018 — KHO MẪU · BỘ NHÃN · TỔNG QUAN (đúng bản mô phỏng docs/he-nhan-mo-phong.html) =====
+// Thầy chốt nhãn; người chỉ xem mẫu "Kiểm ngẫu nhiên" và "Thầy chưa chắc". Mọi nhãn đọc / ghi qua bảng mau_doan (một nguồn), có version chống đè.
+const TT18 = {
+  KIEM: { ten: 'Kiểm ngẫu nhiên', cls: 'bg-[#E3EEFA] text-[#1F5FA8]' },
+  KHONG_CHAC: { ten: 'Thầy chưa chắc', cls: 'bg-[#FBE4E1] text-[#A3372B]' },
+  THAY_CHOT: { ten: 'Thầy chốt', cls: 'bg-[#E7ECEF] text-[#3B4B55]' },
+  VANG: { ten: 'Người đã kiểm', cls: 'bg-[#FDF3D6] text-[#8A6410]' },
+  MO: { ten: 'Chỉ mô hình mở', cls: 'bg-[#DDF2EE] text-[#0C6B5E]' },
+  KHONG_RO: { ten: 'Hình không rõ', cls: 'bg-[#EEF1F2] text-[#607580]' },
+  NGHE_SAI: { ten: 'Nghe sai', cls: 'bg-[#EEF1F2] text-[#607580]' },
+  LUAT: { ten: 'Chỉ luật máy', cls: 'bg-[#DDF2EE] text-[#0C6B5E]' },
+  CHO_THAY: { ten: 'Chờ thầy', cls: 'bg-[#EEF1F2] text-[#607580]' },
+};
+const TRUONG18 = [
+  { k: 'nhom', ten: 'Nhóm cảnh', nhom: 'Nội dung', kieu: 'CO_DINH' }, { k: 'buoc', ten: 'Bước thi công', nhom: 'Nội dung', kieu: 'QUY_TRINH', khi: 'THI_CONG' },
+  { k: 'bai_test', ten: 'Bài test', nhom: 'Nội dung', kieu: 'QUY_TRINH', khi: 'THU_NGHIEM' }, { k: 'hanh_dong', ten: 'Hành động', nhom: 'Nội dung', kieu: 'MO_RONG', nhieu: 1 },
+  { k: 'vat_lieu', ten: 'Sản phẩm / vật liệu', nhom: 'Nội dung', kieu: 'MO_RONG', nhieu: 1, theo_dong: 1 }, { k: 'dung_cu', ten: 'Dụng cụ', nhom: 'Nội dung', kieu: 'MO_RONG', nhieu: 1 },
+  { k: 'vi_tri', ten: 'Vị trí', nhom: 'Nội dung', kieu: 'MO_RONG' }, { k: 'nguoi', ten: 'Người trong khung', nhom: 'Nội dung', kieu: 'CO_DINH' },
+  { k: 'co_canh', ten: 'Cỡ cảnh', nhom: 'Hình', kieu: 'CO_DINH' }, { k: 'goc_may', ten: 'Góc máy', nhom: 'Hình', kieu: 'CO_DINH' }, { k: 'chuyen_dong', ten: 'Chuyển động máy', nhom: 'Hình', kieu: 'CO_DINH' },
+  { k: 'tham_my', ten: 'Thẩm mỹ hoàn thiện', nhom: 'Chất lượng', kieu: 'SO', khi: 'HOAN_THIEN' }, { k: 'dung_cho', ten: 'Dùng cho', nhom: 'Dùng cho', kieu: 'CO_DINH' }, { k: 'mo_ta', ten: 'Mô tả', nhom: 'Dùng cho', kieu: 'CHU' },
+];
+const KIEU18 = (t) => t.kieu === 'CO_DINH' ? 'cố định' : t.kieu === 'QUY_TRINH' ? 'mở rộng · theo dòng' : t.kieu === 'SO' ? '0–10' : t.kieu === 'CHU' ? 'chữ tự do' : 'mở rộng' + (t.theo_dong ? ' · theo dòng' : '');
+const NGUON18 = { HE_THONG: 'hệ thống', THAY: 'thầy đề xuất', NGUOI: 'người', QUY_TRINH: 'quy trình sản phẩm' };
+const nhan18 = (o) => !o ? '—' : tenNhom(o.nhom) + (o.buoc ? ' · ' + o.buoc : '') + (o.bai_test ? ' · ' + o.bai_test : '');
+const khop18 = (a, b) => a && b && a.nhom === b.nhom && (a.buoc || null) === (b.buoc || null) && (a.bai_test || null) === (b.bai_test || null);
+const sachNhan18 = (o) => { const v = { ...(o || {}) }; ['chac', 'ly_do', 'model', 'ai', 'luc', 'phan', 'khong_ro', 'nghe_sai', 'hinh', 'khop_hinh', 'ngau_nhien', 'text_goc'].forEach((k) => delete v[k]); return v; };
+const giong18 = (a, b) => JSON.stringify(a == null || (Array.isArray(a) && !a.length) ? null : a) === JSON.stringify(b == null || (Array.isArray(b) && !b.length) ? null : b);
+
+// bộ nhãn dùng chung (một lần tải, làm mới sau khi sửa)
+let __bn18 = null; const __bnNghe = new Set();
+function useBoNhan() {
+  const { goi } = useApp(); const [bn, setBn] = useState(__bn18);
+  const tai = async () => { const r = await goi('/bo-nhan'); if (r.ok) { __bn18 = r; __bnNghe.forEach((f) => f(r)); } return r; };
+  useEffect(() => { __bnNghe.add(setBn); if (!__bn18) tai(); return () => { __bnNghe.delete(setBn); }; }, []);
+  return { bn, tai, dat: (r) => { __bn18 = r; __bnNghe.forEach((f) => f(r)); } };
+}
+function giaTri18(bn, f, dong) { if (f === 'nhom') return NHOM_HINH.map((n) => n.k); if (!bn) return [];
+  return bn.gia_tri.filter((x) => x.truong === f && x.trang_thai === 'DUNG' && (!dong || !x.dong || x.dong === dong)).map((x) => x.ma || x.ten).filter((v, i, a) => a.indexOf(v) === i); }
+function tenGt18(bn, f, v) { if (f === 'nhom') return tenNhom(v); if (f === 'co_canh' && bn) { const x = bn.gia_tri.find((y) => y.truong === 'co_canh' && y.ma === v); if (x) return x.ten; } return String(v); }
+function HienGt({ bn, f, v }) {
+  if (v == null || v === '' || (Array.isArray(v) && !v.length)) return <span className="text-ink-muted">—</span>;
+  if (f === 'mo_ta' || f === 'tham_my' || f === 'nhom') return <>{f === 'nhom' ? tenNhom(v) : String(v)}</>;
+  const co = giaTri18(bn, f, null); const ds = Array.isArray(v) ? v : [v];
+  return <>{ds.map((x, i) => <React.Fragment key={i}>{i ? ', ' : ''}{bn && !co.includes(x) ? <span className="border border-dashed border-[#E3B23C] bg-[#FFF9E8] rounded-md px-1 text-[11px]" title="chưa có trong bộ nhãn — đề xuất">{tenGt18(bn, f, x)} · đề xuất</span> : tenGt18(bn, f, x)}</React.Fragment>)}</>;
+}
+function useRong(px) { const [r, setR] = useState(() => typeof window !== 'undefined' && window.innerWidth >= px); useEffect(() => { const f = () => setR(window.innerWidth >= px); window.addEventListener('resize', f); return () => window.removeEventListener('resize', f); }, []); return r; }
+const Kbd = ({ children }) => <span className="font-mono bg-black/10 rounded px-1 mr-1 text-[11px]">{children}</span>;
+const nutCls = 'border border-line bg-white rounded-[10px] px-3 py-1.5 font-semibold text-xs disabled:opacity-40 disabled:cursor-not-allowed';
+
+// ===================== KHO MẪU =====================
+function KhoMau18({ onDoi }) {
+  const { goi, notify } = useApp(); const { bn } = useBoNhan(); const rong = useRong(900);
+  const [kn, setKn] = useState('K1'); const [tt, setTt] = useState('CAN'); const [dong, setDong] = useState(''); const [q, setQ] = useState(''); const [trang, setTrang] = useState(1);
+  const [kq, setKq] = useState(null); const [chon, setChon] = useState(null); const [tuanTu, setTuanTu] = useState(false); const [tick, setTick] = useState(() => new Set()); const [busy, setBusy] = useState(false);
+  const lucChon = useRef(Date.now()); const lanTai = useRef(0);
+  const tai = async (giu) => { const lan = ++lanTai.current; const r = await goi('/kho-mau?kn=' + kn + '&tt=' + tt + '&dong=' + encodeURIComponent(dong) + '&q=' + encodeURIComponent(q) + '&trang=' + trang + '&n=40');
+    if (lan !== lanTai.current) return; if (!r.ok) return notify(r.msg, 'err'); setKq(r); setChon((c) => (giu && c && r.hang.some((x) => x.id === c)) ? c : (giu && c ? c : (rong && r.hang[0] ? r.hang[0].id : null))); };
+  useEffect(() => { setKq(null); setChon(null); tai(false); }, [kn, tt, dong, trang]);
+  useEffect(() => { lucChon.current = Date.now(); }, [chon]);
+  const ds = (kq && kq.hang) || []; const m = ds.find((x) => x.id === chon) || null; const vt = ds.findIndex((x) => x.id === chon);
+  useEffect(() => { ds.slice(vt + 1, vt + 6).forEach((x) => { if (x.khung_url) { const im = new Image(); im.src = x.khung_url; } }); }, [chon, kq]);
+  const ke = (b = 1) => { const n = ds[vt + b]; if (n) setChon(n.id); else notify(b > 0 ? 'Hết mẫu trong bộ lọc' : 'Đang ở mẫu đầu', 'warn'); };
+  // lưu một mẫu → thay dòng bằng bản máy chủ trả về; mẫu không còn khớp bộ lọc thì rời danh sách; duyệt tuần tự thì sang mẫu kế
+  const sauLuu = (row, loiRow) => { const r0 = row || loiRow; if (!r0) return; const conKhop = !tt || (tt === 'CAN' ? (kn === 'K2' ? r0.tt_source === 'LUAT' : ['KIEM', 'KHONG_CHAC'].includes(r0.tt)) : (kn === 'K2' ? r0.tt_source : r0.tt) === tt);
+    const k2 = kn === 'K2' ? { ...r0, tt: r0.tt_source } : r0; const next = ds[vt + 1] || ds[vt - 1];
+    setKq((o) => o && { ...o, hang: conKhop ? o.hang.map((x) => x.id === r0.id ? { ...x, ...k2 } : x) : o.hang.filter((x) => x.id !== r0.id) });
+    if (!conKhop || tuanTu) setChon(next ? next.id : null); onDoi && onDoi(); tai(true); };
+  const guiLuu = async (duong, body, bao) => { if (busy) return; setBusy(true); const giay = Math.min(120, Math.round((Date.now() - lucChon.current) / 1000));
+    const r = await goi(duong, { method: 'POST', body: { ...body, version: m.version, giay } }); setBusy(false);
+    if (r.ok) { notify(bao); sauLuu(r.row); }
+    else if (r.status === 409 && r.data && r.data.row) { notify('Mẫu vừa được người khác sửa — đã nạp bản mới, xem lại rồi lưu', 'warn'); setKq((o) => o && { ...o, hang: o.hang.map((x) => x.id === m.id ? { ...x, ...r.data.row } : x) }); }
+    else notify(r.msg, 'err'); };
+  const id = m ? encodeURIComponent(m.id) : '';
+  const luuHinh = (nhan, bao) => guiLuu('/mau-doan/' + id, { nhan }, bao || 'Đã lưu nhãn người');
+  const dungHet = () => { if (!m) return; if (kn === 'K2') return; if (!m.thay) return notify('Mẫu chưa có nhãn thầy', 'err');
+    if (kn === 'K4') guiLuu('/mau-doan/' + id + '/loi', { nhom: m.thay.nhom, buoc: m.thay.buoc || null, bai_test: m.thay.bai_test || null }, 'Đã chốt theo thầy'); else luuHinh(sachNhan18(m.thay), 'Đã chốt theo thầy · nhãn vàng'); };
+  const khongRo = () => { if (!m) return; if (kn === 'K4') guiLuu('/mau-doan/' + id + '/loi', { nghe_sai: true }, 'Đã đánh dấu nghe sai'); else if (kn === 'K1') guiLuu('/mau-doan/' + id, { khong_ro: true }, 'Đã đánh dấu hình không rõ — không thành mẫu dạy'); };
+  const [nhomPhim, setNhomPhim] = useState(null);
+  useEffect(() => { const f = (e) => { if (/INPUT|SELECT|TEXTAREA/.test((e.target && e.target.tagName) || '') || e.ctrlKey || e.metaKey || e.altKey || !m) return;
+      if (e.key === 'ArrowRight') { e.preventDefault(); ke(1); } else if (e.key === 'ArrowLeft') { e.preventDefault(); ke(-1); }
+      else if (e.key === 'Enter' && kn !== 'K2') { e.preventDefault(); dungHet(); } else if (e.key === '0') { e.preventDefault(); khongRo(); }
+      else if (/^[1-8]$/.test(e.key) && kn === 'K1') setNhomPhim({ id: m.id, nhom: NHOM_HINH[+e.key - 1].k, t: Date.now() }); };
+    window.addEventListener('keydown', f); return () => window.removeEventListener('keydown', f); });
+  const hangLoat = async (body, bao) => { setBusy(true); const r = await goi('/mau-doan/hang-loat', { method: 'POST', body: { ids: [...tick], ...body } }); setBusy(false); if (r.ok) { notify(bao(r.so) + (r.bo ? ' · ' + r.bo + ' mẫu bỏ qua (vừa có người sửa)' : '')); setTick(new Set()); onDoi && onDoi(); tai(true); } else notify(r.msg, 'err'); };
+  const dem = (kq && kq.dem) || {}; const tong = (kq && kq.tong) || 0;
+  const chiTiet = m ? (kn === 'K2' ? <ChiTietK2 key={m.id} m={m} nguong={kq && kq.nguong} busy={busy} guiLuu={(b, bao) => guiLuu('/mau-doan/' + id + '/source', b, bao)} ke={ke} />
+    : kn === 'K4' ? <ChiTietK4 key={m.id} m={m} bn={bn} busy={busy} guiLuu={(b, bao) => guiLuu('/mau-doan/' + id + '/loi', b, bao)} dungHet={dungHet} khongRo={khongRo} ke={ke} />
+    : <ChiTietK1 key={m.id} m={m} bn={bn} busy={busy} luu={luuHinh} guiTach={(phan) => guiLuu('/mau-doan/' + id, { phan }, 'Đã lưu ' + phan.length + ' khung · ' + phan.length + ' nhãn vàng')} dungHet={dungHet} khongRo={khongRo} ke={ke} nhomPhim={nhomPhim && nhomPhim.id === m.id ? nhomPhim : null} />) : null;
+  const dongMau = (x) => { const t = x.tt; const tieuDe = kn === 'K4' ? '“' + (x.text || '') + '”' : kn === 'K2' ? x.ten : ((x.nguoi && x.nguoi.mo_ta) || (x.thay && x.thay.mo_ta) || (x.mo && x.mo.mo_ta) || x.mo_ta || '—');
+    return <div key={x.id}>
+      <div onClick={() => setChon(chon === x.id && !rong ? null : x.id)} className={'grid grid-cols-[22px_64px_minmax(0,1fr)_auto] gap-2 items-center px-2 py-[7px] border-t border-[#EEF3F4] first:border-t-0 cursor-pointer ' + (chon === x.id ? 'bg-[#EEF7F8] shadow-[inset_3px_0_0_#0E7C8C]' : 'hover:bg-[#F7FAFB]')}>
+        <input type="checkbox" checked={tick.has(x.id)} onClick={(e) => e.stopPropagation()} onChange={(e) => { const s = new Set(tick); e.target.checked ? s.add(x.id) : s.delete(x.id); setTick(s); }} disabled={kn !== 'K1'} />
+        <div className="rounded-lg aspect-video bg-slate-700 overflow-hidden">{x.khung_url ? <img src={x.khung_url} alt="" loading="lazy" className="w-full h-full object-cover" /> : null}</div>
+        <div className="min-w-0"><div className="truncate text-[13px] text-ink">{tieuDe}</div>
+          <div className="truncate text-[11px] text-ink-muted">{x.ten} · đoạn {(x.i || 0) + 1} · giây {x.tu}–{x.den}{x.dong ? ' · ' + x.dong : ''}</div>
+          {kn === 'K1' && <div className="text-[11px] truncate"><span className="text-ink-muted">{nhan18(x.nguoi && !x.nguoi.khong_ro ? x.nguoi : x.thay || x.mo)}</span>{x.mo && x.thay && !khop18(x.mo, x.thay) ? <span className="text-ink-muted"> · mở lệch (học trò)</span> : null}</div>}</div>
+        <Pill cls={(TT18[t] || {}).cls} className="!text-[11px] !px-2">{(TT18[t] || { ten: t || '—' }).ten}</Pill></div>
+      {!rong && chon === x.id && <div className="p-2 bg-[#F5FAFB]">{chiTiet}</div>}
+    </div>; };
+  return <Card pad="p-3" className="flex flex-col gap-3 !rounded-[14px] !shadow-none">
+    <div className="flex items-center gap-2 flex-wrap"><span className="font-bold text-sm text-ink">Kho mẫu</span><span className="text-xs text-ink-muted">chỗ làm việc của người: thầy và mô hình mở gán, anh/chị cân chỉnh</span>
+      <label className="ml-auto flex items-center gap-1.5 text-xs cursor-pointer"><input type="checkbox" checked={tuanTu} onChange={(e) => { setTuanTu(e.target.checked); if (e.target.checked && tt !== 'CAN') setTt('CAN'); }} /> Duyệt tuần tự</label></div>
+    <Tabs size="sm" active={kn} onChange={(k) => { setKn(k); setTt('CAN'); setTick(new Set()); setTrang(1); }} tabs={[{ key: 'K1', label: 'Khung hình' }, { key: 'K4', label: 'Câu thoại' }, { key: 'K2', label: 'Footage chất lượng' }]} />
+    <div className="flex items-center gap-2 flex-wrap">
+      <button onClick={() => { setTt('CAN'); setTrang(1); }} className={'rounded-full border px-2.5 py-0.5 text-xs font-bold ' + (tt === 'CAN' ? 'border-ink' : 'border-line bg-white')}>⚑ Cần người · {kq ? kq.can : '…'}</button>
+      <button onClick={() => { setTt(''); setTrang(1); }} className={'rounded-full border px-2.5 py-0.5 text-xs ' + (!tt ? 'border-ink font-bold' : 'border-line bg-white')}>Tất cả · {kq ? tong : '…'}</button>
+      {Object.keys(TT18).filter((k) => dem[k]).map((k) => <button key={k} onClick={() => { setTt(k); setTrang(1); }} className={'rounded-full border px-2.5 py-0.5 text-xs bg-white ' + (tt === k ? 'border-ink font-bold' : 'border-line')}><Pill cls={TT18[k].cls} className="!text-[11px]">{TT18[k].ten}</Pill> {dem[k]}</button>)}
+      <input className="ml-auto border border-line rounded-lg px-2 py-1 text-xs w-44 min-w-0" placeholder="tìm mô tả, câu, nhãn…" value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { setTrang(1); tai(false); } }} />
+      <select className="border border-line rounded-lg px-2 py-1 text-xs bg-white min-w-0" value={dong} onChange={(e) => { setDong(e.target.value); setTrang(1); }}><option value="">mọi dòng</option>{((kq && kq.dongs) || []).map((d) => <option key={d} value={d}>{d}</option>)}</select></div>
+    <div className="grid gap-3 items-start min-[900px]:grid-cols-[minmax(0,1.05fr)_minmax(0,1.25fr)]">
+      <div className="min-w-0">
+        {tuanTu && <div className="rounded-[14px] border border-line bg-[#F5FAFB] p-3 text-xs mb-2">Đang duyệt tuần tự <b>{vt + 1}/{ds.length}</b> mẫu {tt === 'CAN' ? '“Cần người”' : tt ? '“' + ((TT18[tt] || {}).ten || tt) + '”' : ''}. Phím: <kbd className="font-mono text-[11px] border border-line border-b-2 rounded px-1 bg-white">Enter</kbd> đúng hết theo thầy · <kbd className="font-mono text-[11px] border border-line border-b-2 rounded px-1 bg-white">1</kbd>–<kbd className="font-mono text-[11px] border border-line border-b-2 rounded px-1 bg-white">8</kbd> đổi nhóm cảnh · <kbd className="font-mono text-[11px] border border-line border-b-2 rounded px-1 bg-white">0</kbd> không rõ · <kbd className="font-mono text-[11px] border border-line border-b-2 rounded px-1 bg-white">→</kbd> mẫu kế · <kbd className="font-mono text-[11px] border border-line border-b-2 rounded px-1 bg-white">←</kbd> mẫu trước.</div>}
+        <div className="border border-line rounded-xl overflow-hidden bg-white">{!kq ? <div className="p-4 text-ink-muted text-sm">Đang tải…</div> : ds.length ? ds.map(dongMau) : <div className="p-4 text-ink-muted text-sm">{tt === 'CAN' ? 'Không còn mẫu nào cần người — thầy đã chốt hết.' : 'Không có mẫu nào.'}</div>}</div>
+        {kq && kq.so_trang > 1 && <div className="flex gap-1 justify-end mt-2 items-center text-[11px] text-ink-muted">trang {kq.trang}/{kq.so_trang}<button className={nutCls} disabled={trang <= 1} onClick={() => setTrang(trang - 1)}>← Trước</button><button className={nutCls} disabled={trang >= kq.so_trang} onClick={() => setTrang(trang + 1)}>Sau →</button></div>}
+        {tick.size > 0 && <ThanhHangLoat bn={bn} n={tick.size} busy={busy} onThay={() => hangLoat({ lay_thay: true }, (n) => 'Đã chấp nhận nhãn thầy cho ' + n + ' mẫu')} onDat={(f, v) => hangLoat({ truong: f, gia_tri: v }, (n) => 'Đã đặt ' + (TRUONG18.find((x) => x.k === f) || {}).ten + ' = ' + v + ' cho ' + n + ' mẫu')} onBo={() => setTick(new Set())} />}
+      </div>
+      {rong && <div className="min-w-0">{chiTiet || <Card pad="p-3" className="!shadow-none text-ink-muted text-sm">Bấm một mẫu để xem và sửa.</Card>}</div>}
+    </div>
+  </Card>;
+}
+function ThanhHangLoat({ bn, n, busy, onThay, onDat, onBo }) {
+  const [f, setF] = useState('dung_cho'); const gt = giaTri18(bn, f, null); const [v, setV] = useState(''); useEffect(() => { setV(gt[0] || ''); }, [f, bn]);
+  return <div className="sticky bottom-0 bg-[#0F2A33] text-white rounded-xl px-2.5 py-2 flex gap-2 items-center flex-wrap mt-2 text-xs z-10">
+    <b>{n} mẫu đã chọn</b><button className={nutCls + ' text-ink'} disabled={busy} onClick={onThay}>Chấp nhận nhãn thầy cho cả {n}</button><span className="text-[11px]">hoặc đặt</span>
+    <select className="border border-line rounded-lg px-2 py-1 bg-white text-ink min-w-0" value={f} onChange={(e) => setF(e.target.value)}>{TRUONG18.filter((x) => !['mo_ta', 'tham_my', 'nhom'].includes(x.k)).map((x) => <option key={x.k} value={x.k}>{x.ten}</option>)}</select><span>=</span>
+    <select className="border border-line rounded-lg px-2 py-1 bg-white text-ink min-w-0 max-w-[160px]" value={v} onChange={(e) => setV(e.target.value)}>{gt.map((x) => <option key={x} value={x}>{tenGt18(bn, f, x)}</option>)}</select>
+    <button className={nutCls + ' !bg-[#0E7C8C] !border-[#0E7C8C] text-white'} disabled={busy || !v} onClick={() => onDat(f, v)}>Áp dụng</button><button className={nutCls + ' text-ink'} onClick={onBo}>Bỏ chọn</button></div>;
+}
+function AnhDoan({ url, lon, onDai }) {
+  return <div className={'rounded-xl overflow-hidden bg-slate-800 ' + (lon ? 'aspect-[16/5.5]' : 'aspect-video')}>{url ? <img src={url} alt="" className="w-full h-full object-contain" onLoad={(e) => onDai && onDai(e.target.naturalWidth / Math.max(1, e.target.naturalHeight) > 2.4)} /> : <div className="h-full flex items-center justify-center text-white/60 text-xs">chưa có ảnh đoạn</div>}</div>;
+}
+function LyDoHoi({ m }) {
+  if (m.tt === 'KIEM') return <div className="text-xs bg-[#E3EEFA] text-[#1F5FA8] rounded-lg px-2.5 py-1.5">Mẫu <b>kiểm ngẫu nhiên</b>: thầy đã chốt, anh/chị xem để đo thầy đúng bao nhiêu. Đúng thì Enter.</div>;
+  if (m.tt === 'KHONG_CHAC') return <div className="text-xs bg-[#FBE4E1] text-[#A3372B] rounded-lg px-2.5 py-1.5"><b>Thầy chưa chắc</b> (chắc {m.thay && m.thay.chac}) sau khi tự xem lại{m.thay && m.thay.ly_do ? ': ' + m.thay.ly_do : ''}</div>;
+  if (m.tt === 'THAY_CHOT') return <div className="text-xs text-ink-muted">Thầy đã chốt (chắc {m.thay && m.thay.chac}). Không cần anh/chị xem; chỉ sửa nếu thấy sai.</div>;
+  return null;
+}
+function OSua({ f, v, setV, bn, dong }) {
+  const [moi, setMoi] = useState(false); const val = v[f.k]; const cls = 'border border-line rounded-lg px-2 py-1 text-xs bg-white min-w-0';
+  if (f.k === 'mo_ta') return <input className={cls + ' w-full'} value={val || ''} onChange={(e) => setV({ ...v, mo_ta: e.target.value })} />;
+  if (f.k === 'tham_my') return <select className={cls} value={val == null ? '' : val} onChange={(e) => setV({ ...v, tham_my: e.target.value === '' ? null : +e.target.value })}><option value="">—</option>{[...Array(11).keys()].map((i) => <option key={i} value={i}>{i}</option>)}</select>;
+  if (f.k === 'nhom') return <select className={cls} value={val || ''} onChange={(e) => setV({ ...v, nhom: e.target.value })}>{NHOM_HINH.map((n) => <option key={n.k} value={n.k}>{n.ten}</option>)}</select>;
+  const ds = giaTri18(bn, f.k, f.k === 'buoc' || f.k === 'bai_test' || f.k === 'vat_lieu' ? dong : null);
+  if (f.nhieu) { const cur = Array.isArray(val) ? val : val ? [val] : []; const all = [...new Set([...cur, ...ds])];
+    return <div className="flex flex-wrap gap-1 items-center">{all.map((x) => { const on = cur.includes(x); return <button key={x} type="button" onClick={() => setV({ ...v, [f.k]: on ? cur.filter((y) => y !== x) : [...cur, x] })} className={'rounded-full border px-2 py-px text-[11px] ' + (on ? 'border-ink font-bold bg-white' : 'border-line bg-white text-ink-muted')}><HienGt bn={bn} f={f.k} v={x} /></button>; })}
+      <input className={cls + ' w-[90px]'} placeholder="＋ khác" onKeyDown={(e) => { const t = e.target.value.trim(); if (e.key === 'Enter' && t) { setV({ ...v, [f.k]: [...new Set([...cur, t])] }); e.target.value = ''; } }} onBlur={(e) => { const t = e.target.value.trim(); if (t) { setV({ ...v, [f.k]: [...new Set([...cur, t])] }); e.target.value = ''; } }} /></div>; }
+  return <div><select className={cls + ' max-w-full'} value={val || ''} onChange={(e) => { if (e.target.value === '__moi') return setMoi(true); setV({ ...v, [f.k]: e.target.value || null }); }}><option value="">—</option>{[...new Set([...(val ? [val] : []), ...ds])].map((x) => <option key={x} value={x}>{tenGt18(bn, f.k, x)}</option>)}{f.kieu !== 'CO_DINH' && <option value="__moi">＋ giá trị khác…</option>}</select>
+    {moi && <input autoFocus className={cls + ' w-full mt-1'} placeholder="tên nhãn mới rồi Enter" onKeyDown={(e) => { const t = e.target.value.trim(); if (e.key === 'Enter') { if (t) setV({ ...v, [f.k]: t }); setMoi(false); } if (e.key === 'Escape') setMoi(false); }} />}</div>;
+}
+function ChiTietK1({ m, bn, busy, luu, guiTach, dungHet, khongRo, ke, nhomPhim }) {
+  const goc = sachNhan18(m.nguoi && !m.nguoi.khong_ro ? m.nguoi : m.thay || m.mo || { nhom: 'KHAC' });
+  const [v, setV] = useState(goc); const [dai, setDai] = useState(false); const [tach, setTach] = useState(null); const pc = useRong(640);
+  useEffect(() => { if (nhomPhim) setV((o) => ({ ...o, nhom: nhomPhim.nhom })); }, [nhomPhim && nhomPhim.t]);
+  const hien = TRUONG18.filter((f) => !f.khi || [v.nhom, m.thay && m.thay.nhom, m.mo && m.mo.nhom].includes(f.khi));
+  const th = m.thay || {}; const mo = m.mo || {};
+  return <Card pad="p-3" className="flex flex-col gap-3 !rounded-[14px] !shadow-none">
+    {tach ? <><div className="grid grid-cols-3 gap-1">{[0, 1, 2].map((k) => <div key={k} className="min-w-0"><KhungCat url={m.khung_url} k={k} />
+        <select className="border border-line rounded-lg px-1 py-1 text-xs bg-white w-full mt-1" value={tach[k].nhom} onChange={(e) => setTach(tach.map((y, j) => j === k ? { ...y, nhom: e.target.value } : y))}>{NHOM_HINH.map((n) => <option key={n.k} value={n.k}>{n.ten}</option>)}</select>
+        <select className="border border-line rounded-lg px-1 py-1 text-xs bg-white w-full mt-1" value={tach[k].buoc || ''} onChange={(e) => setTach(tach.map((y, j) => j === k ? { ...y, buoc: e.target.value || null } : y))}><option value="">(bước)</option>{giaTri18(bn, 'buoc', m.dong).map((b) => <option key={b} value={b}>{b}</option>)}</select>
+        <select className="border border-line rounded-lg px-1 py-1 text-xs bg-white w-full mt-1" value={(tach[k].dung_cu || [])[0] || ''} onChange={(e) => setTach(tach.map((y, j) => j === k ? { ...y, dung_cu: e.target.value ? [e.target.value] : [] } : y))}><option value="">(dụng cụ)</option>{giaTri18(bn, 'dung_cu').map((b) => <option key={b} value={b}>{b}</option>)}</select></div>)}</div>
+      <div className="flex gap-2 items-center flex-wrap"><button className={nutCls + ' !bg-[#0E7C8C] !border-[#0E7C8C] text-white'} disabled={busy} onClick={() => guiTach(tach)}>Lưu 3 khung</button><button className={nutCls} onClick={() => setTach(null)}>Huỷ</button><span className="text-[11px] text-ink-muted">nhãn cả đoạn = nhóm/bước nhiều nhất; mỗi khung là một nhãn vàng riêng</span></div></>
+      : <><AnhDoan url={m.khung_url} lon onDai={setDai} />{dai && <div className="flex gap-2 items-center flex-wrap"><button className={nutCls} onClick={() => setTach([0, 1, 2].map(() => ({ nhom: v.nhom, buoc: v.buoc || null, dung_cu: [] })))}>✂ Ba khung khác nội dung? Gán từng khung</button><span className="text-[11px] text-ink-muted">dải 3 khung liên tiếp, cách 0,5 giây</span></div>}</>}
+    <LyDoHoi m={m} />
+    <div className="text-[11px] text-ink-muted">{m.ten}{m.nguon === 'THANH_PHAM' ? ' · video đã đăng' : ' · footage'} · đoạn {(m.i || 0) + 1} · giây {m.tu}–{m.den}{m.dong ? ' · ' + m.dong : ''}{th.ly_do ? <> · <span className="text-[#1F5FA8]">thầy: {th.ly_do} (chắc {th.chac})</span></> : null}{m.link ? <> · <a className="underline" href={m.link} target="_blank" rel="noreferrer">mở bài đăng</a></> : null}{m.media_url ? <> · <a className="underline" href={m.media_url + '#t=' + m.tu} target="_blank" rel="noreferrer">▶ phát đoạn clip</a></> : null}</div>
+    {!pc ? <div className="flex flex-col divide-y divide-[#EEF3F4] border border-[#EEF3F4] rounded-xl">{hien.map((f) => { const a = mo[f.k], b = th[f.k]; const lech = !giong18(a, b) && (a != null || b != null) && f.k !== 'mo_ta'; const doi = !giong18(v[f.k], b);   /* điện thoại: từng trường xếp dọc, ô sửa rộng hết màn */
+        return <div key={f.k} className={'px-2 py-2 text-xs ' + (doi ? 'bg-[#FFFBEA]' : '')}><div className="flex items-center gap-2"><b>{f.ten}</b>{b != null && doi ? <button className={nutCls + ' !px-1.5 !py-0.5 ml-auto'} onClick={() => setV({ ...v, [f.k]: JSON.parse(JSON.stringify(b)) })}>↩ thầy</button> : null}</div>
+          <div className={'text-[11px] my-1 rounded px-1 ' + (lech ? 'bg-[#FFF6F4]' : '')}><span className="text-ink-muted">mở: </span><HienGt bn={bn} f={f.k} v={a} /><span className="text-ink-muted"> · thầy: </span><HienGt bn={bn} f={f.k} v={b} /></div><OSua f={f} v={v} setV={setV} bn={bn} dong={m.dong} /></div>; })}</div>
+    : <div className="overflow-x-auto"><table className="w-full border-collapse text-xs min-w-[560px]"><thead><tr className="text-left">{['Trường', 'Mô hình mở (học trò)', 'Thầy (chốt)', 'Người (kiểm)', ''].map((h, i) => <th key={i} className="text-[10px] tracking-[.06em] uppercase text-ink-muted bg-[#F5F8F9] px-2 py-1.5 font-bold">{h}</th>)}</tr></thead>
+      <tbody>{hien.map((f) => { const a = mo[f.k], b = th[f.k]; const lech = !giong18(a, b) && (a != null || b != null) && f.k !== 'mo_ta'; const doi = !giong18(v[f.k], b);
+        return <tr key={f.k}><td className="border-t border-[#EEF3F4] px-2 py-1.5 align-middle"><b>{f.ten}</b><div className="text-[11px] text-ink-muted">{f.nhom}</div></td>
+          <td className={'border-t border-[#EEF3F4] px-2 py-1.5 ' + (lech ? 'bg-[#FFF6F4]' : '')}><HienGt bn={bn} f={f.k} v={a} /></td><td className={'border-t border-[#EEF3F4] px-2 py-1.5 ' + (lech ? 'bg-[#FFF6F4]' : '')}><HienGt bn={bn} f={f.k} v={b} /></td>
+          <td className={'border-t border-[#EEF3F4] px-2 py-1.5 ' + (doi ? 'bg-[#FFFBEA]' : '')}><OSua f={f} v={v} setV={setV} bn={bn} dong={m.dong} /></td>
+          <td className="border-t border-[#EEF3F4] px-2 py-1.5">{b != null && doi ? <button className={nutCls + ' !px-1.5 !py-0.5'} title="lấy giá trị của thầy" onClick={() => setV({ ...v, [f.k]: JSON.parse(JSON.stringify(b)) })}>↩ thầy</button> : null}</td></tr>; })}</tbody></table></div>}
+    <div className="flex gap-2 flex-wrap"><button className={nutCls + ' !bg-[#15803D] !border-[#15803D] text-white'} disabled={busy || !m.thay} onClick={dungHet}><Kbd>Enter</Kbd>Đúng hết theo thầy</button>
+      <button className={nutCls + ' !bg-[#0E7C8C] !border-[#0E7C8C] text-white'} disabled={busy} onClick={() => luu(v)}>Lưu nhãn người</button><button className={nutCls} disabled={busy} onClick={khongRo}><Kbd>0</Kbd>Hình không rõ</button><button className={nutCls} onClick={() => ke(1)}><Kbd>→</Kbd>Mẫu kế</button></div>
+    {m.nguoi && m.nguoi.ai && <div className="text-[11px] text-ink-muted">Người đã chốt: {m.nguoi.ai}{m.nguoi.luc ? ' · ' + fmtDate(m.nguoi.luc) : ''}. Sửa và lưu lại sẽ thay nhãn cũ (máy vẫn so với nhãn gốc của nó).{m.nguoi.phan ? ' Đã gán từng khung: ' + m.nguoi.phan.filter(Boolean).map((p) => 'khung ' + (p.k + 1) + ' ' + nhan18(p)).join(' · ') : ''}</div>}
+    <div className="text-[11px] text-ink-muted">Ô vàng = anh/chị đổi khác thầy. Gõ giá trị chưa có trong bộ nhãn thì thành <span className="border border-dashed border-[#E3B23C] bg-[#FFF9E8] rounded-md px-1">đề xuất</span>, chờ duyệt ở tab Bộ nhãn.</div>
+  </Card>;
+}
+function ChiTietK4({ m, bn, busy, guiLuu, dungHet, khongRo, ke }) {
+  const th = m.thay || {}; const hinh = m.hinh || {}; const goc = m.nguoi && !m.nguoi.nghe_sai ? m.nguoi : th;
+  const [v, setV] = useState({ nhom: goc.nhom || hinh.nhom || 'KHAC', buoc: goc.buoc || null, text: m.text || '' }); const [khop, setKhop] = useState(null); const [moi, setMoi] = useState(false);
+  const au = useRef(null); const [phat, setPhat] = useState(false); const [tien, setTien] = useState(0);
+  const cot = useMemo(() => [...Array(48)].map((_, i) => 20 + Math.abs(Math.sin(i * 1.7 + (m.i || 0))) * 80), [m.id]);
+  const khopHinh = khop == null ? hinh.nhom === v.nhom : khop; const ds = giaTri18(bn, 'buoc', m.dong);
+  const cls = 'border border-line rounded-lg px-2 py-1 text-xs bg-white min-w-0';
+  return <Card pad="p-3" className="flex flex-col gap-3 !rounded-[14px] !shadow-none">
+    <div className="flex gap-2.5 items-stretch flex-wrap"><div className="w-[130px] flex-none"><AnhDoan url={m.khung_url} /><div className="text-[11px] text-ink-muted mt-1">khung lúc câu chạy</div></div>
+      <div className="flex-1 min-w-[200px]"><div className="flex items-center gap-1.5 flex-wrap"><button className={nutCls + ' !bg-[#0E7C8C] !border-[#0E7C8C] text-white !px-2.5 !py-1'} disabled={!m.am_url} onClick={() => { const a = au.current; if (!a) return; if (a.paused) { a.play(); } else a.pause(); }}>{phat ? '⏸' : '▶'} Nghe đoạn trích</button>
+        <span className="text-[11px] text-ink-muted">giây {m.tu}–{m.den}{m.am_url ? '' : ' · chưa có đoạn trích — máy lưu khi học lại video'}{m.link ? <> · <a className="underline" href={m.link} target="_blank" rel="noreferrer">mở bài đăng</a></> : null}</span></div>
+        {m.am_url && <audio ref={au} src={m.am_url} preload="none" onPlay={() => setPhat(true)} onPause={() => setPhat(false)} onEnded={() => { setPhat(false); setTien(0); }} onTimeUpdate={(e) => setTien(e.target.currentTime / Math.max(0.1, e.target.duration || 1))} />}
+        <div className="flex items-end gap-[2px] h-[34px] mt-1.5">{cot.map((h, i) => <i key={i} className={'flex-1 rounded-sm ' + (phat && i / 48 < tien ? 'bg-[#0E7C8C]' : 'bg-[#BFD7DC]')} style={{ height: h + '%' }} />)}</div></div></div>
+    {m.cau_truoc && <div className="px-2 py-1.5 rounded-lg text-xs text-ink-muted">… {m.cau_truoc}</div>}
+    <div className="px-2 py-1.5 rounded-lg bg-[#EEF7F8] border border-[#CFE7EA]"><div className="text-[11px] text-ink-muted">Câu máy chép (sửa được nếu nghe sai chữ)</div><input className={cls + ' w-full !text-sm'} value={v.text} onChange={(e) => setV({ ...v, text: e.target.value })} /></div>
+    {m.cau_sau && <div className="px-2 py-1.5 rounded-lg text-xs text-ink-muted">{m.cau_sau} …</div>}
+    <LyDoHoi m={m} />
+    <div className="overflow-x-auto"><table className="w-full border-collapse text-xs min-w-[480px]"><thead><tr className="text-left">{['Trường', 'Hình lúc câu chạy', 'Thầy đọc câu', 'Người (chốt)'].map((h) => <th key={h} className="text-[10px] tracking-[.06em] uppercase text-ink-muted bg-[#F5F8F9] px-2 py-1.5 font-bold">{h}</th>)}</tr></thead><tbody>
+      <tr><td className="border-t border-[#EEF3F4] px-2 py-1.5"><b>Câu nói về</b></td><td className={'border-t border-[#EEF3F4] px-2 py-1.5 ' + (hinh.nhom !== th.nhom ? 'bg-[#FFF6F4]' : '')}>{tenNhom(hinh.nhom)}</td><td className={'border-t border-[#EEF3F4] px-2 py-1.5 ' + (hinh.nhom !== th.nhom ? 'bg-[#FFF6F4]' : '')}>{th.nhom ? tenNhom(th.nhom) : '—'}{th.nghe_sai ? ' · thầy báo nghe sai' : ''}</td>
+        <td className="border-t border-[#EEF3F4] px-2 py-1.5"><select className={cls} value={v.nhom} onChange={(e) => setV({ ...v, nhom: e.target.value })}>{NHOM_HINH.map((n) => <option key={n.k} value={n.k}>{n.ten}</option>)}</select></td></tr>
+      <tr><td className="border-t border-[#EEF3F4] px-2 py-1.5"><b>Bước / bài test</b></td><td className="border-t border-[#EEF3F4] px-2 py-1.5">{hinh.buoc || hinh.bai_test || '—'}</td><td className="border-t border-[#EEF3F4] px-2 py-1.5"><HienGt bn={bn} f="buoc" v={th.buoc || th.bai_test} /></td>
+        <td className="border-t border-[#EEF3F4] px-2 py-1.5"><select className={cls + ' max-w-full'} value={v.buoc || ''} onChange={(e) => { if (e.target.value === '__moi') return setMoi(true); setV({ ...v, buoc: e.target.value || null }); }}><option value="">—</option>{[...new Set([...(v.buoc ? [v.buoc] : []), ...ds])].map((x) => <option key={x} value={x}>{x}</option>)}<option value="__moi">＋ giá trị khác…</option></select>
+          {moi && <input autoFocus className={cls + ' w-full mt-1'} placeholder="tên bước mới rồi Enter" onKeyDown={(e) => { const t = e.target.value.trim(); if (e.key === 'Enter') { if (t) setV({ ...v, buoc: t }); setMoi(false); } }} />}</td></tr>
+      <tr><td className="border-t border-[#EEF3F4] px-2 py-1.5"><b>Lời khớp hình không</b></td><td colSpan={3} className="border-t border-[#EEF3F4] px-2 py-1.5"><label className="text-xs mr-3"><input type="radio" checked={khopHinh} onChange={() => setKhop(true)} /> khớp</label><label className="text-xs"><input type="radio" checked={!khopHinh} onChange={() => setKhop(false)} /> lời nói trước / sau cảnh</label> <span className="text-[11px] text-ink-muted">— dạy máy ghép lời với cảnh</span></td></tr>
+    </tbody></table></div>
+    <div className="flex gap-2 flex-wrap"><button className={nutCls + ' !bg-[#15803D] !border-[#15803D] text-white'} disabled={busy || !m.thay} onClick={dungHet}><Kbd>Enter</Kbd>Thầy đúng</button>
+      <button className={nutCls + ' !bg-[#0E7C8C] !border-[#0E7C8C] text-white'} disabled={busy} onClick={() => guiLuu({ nhom: v.nhom, buoc: v.nhom === 'THU_NGHIEM' ? null : v.buoc, bai_test: v.nhom === 'THU_NGHIEM' ? v.buoc : null, text: v.text, khop_hinh: khopHinh }, 'Đã lưu câu')}>Lưu</button>
+      <button className={nutCls} disabled={busy} onClick={khongRo}><Kbd>0</Kbd>Máy nghe sai cả câu</button><button className={nutCls} onClick={() => ke(1)}><Kbd>→</Kbd>Câu kế</button></div>
+    <div className="text-[11px] text-ink-muted">Sửa chữ chép sai cũng là dạy: máy gom các lỗi hay gặp (“FnX” → Finex) thành luật sửa thuật ngữ.</div>
+  </Card>;
+}
+function ChiTietK2({ m, nguong, busy, guiLuu, ke }) {
+  const sd = m.so_do || {}; const ng = { net: 0.55, dong: 0.25, sang0: 0.15, sang1: 0.92, ...(nguong || {}) }; const may = m.may || { dung: true, ly_do: [] }; const nguoi = m.nguoi_source || null;
+  const Vach = ({ t, x, lo, hi, tot }) => <div className="flex items-center gap-2 text-xs"><span className="w-11 text-ink-muted">{t}</span><div className="flex-1 h-2 bg-[#EDF2F3] rounded relative"><i className="absolute left-0 top-0 bottom-0 rounded" style={{ width: Math.min(100, (x || 0) * 100) + '%', background: tot ? '#0E7C8C' : '#A3372B' }} /><b className="absolute -top-[3px] -bottom-[3px] w-[2px] bg-ink" style={{ left: lo * 100 + '%' }} />{hi ? <b className="absolute -top-[3px] -bottom-[3px] w-[2px] bg-ink" style={{ left: hi * 100 + '%' }} /> : null}</div><span className="w-10 text-right tabular-nums">{x}</span></div>;
+  return <Card pad="p-3" className="flex flex-col gap-3 !rounded-[14px] !shadow-none"><AnhDoan url={m.khung_url} lon />
+    <div className="text-[11px] text-ink-muted">{m.ten} · giây {m.tu}–{m.den}{m.dong ? ' · ' + m.dong : ''}{m.media_url ? <> · <a className="underline" href={m.media_url + '#t=' + m.tu} target="_blank" rel="noreferrer">▶ phát đoạn clip</a></> : null}</div>
+    <div className="flex flex-col gap-1.5"><Vach t="Nét" x={sd.net} lo={ng.net} tot={sd.net >= ng.net} /><Vach t="Rung" x={sd.dong} lo={ng.dong} tot={sd.dong <= ng.dong} /><Vach t="Sáng" x={sd.sang} lo={ng.sang0} hi={ng.sang1} tot={sd.sang >= ng.sang0 && sd.sang <= ng.sang1} /></div>
+    <div className="text-xs">Luật máy: <b className={may.dung ? 'text-[#15803D]' : 'text-[#A3372B]'}>{may.dung ? 'dùng được' : 'loại · ' + may.ly_do.join(', ')}</b>{nguoi ? <> · Người: <b>{nguoi.dung ? 'dùng được' : 'loại · ' + (nguoi.ly_do || []).join(', ')}</b></> : null}</div>
+    <div className="flex gap-2 flex-wrap"><button className={nutCls + ' !bg-[#15803D] !border-[#15803D] text-white'} disabled={busy} onClick={() => guiLuu({ dung: true, ly_do: [] }, 'Đã quyết: dùng được')}>Dùng được</button>{['mờ', 'rung', 'tối', 'cháy sáng', 'che khuất', 'bố cục xấu'].map((l) => <button key={l} className={nutCls} disabled={busy} onClick={() => guiLuu({ dung: false, ly_do: [l] }, 'Đã quyết: loại · ' + l)}>Loại · {l}</button>)}<button className={nutCls} onClick={() => ke(1)}><Kbd>→</Kbd>Đoạn kế</button></div>
+    <div className="text-[11px] text-ink-muted">Vạch đen là ngưỡng hiện tại. Đủ 30 lần quyết, máy dò lại ngưỡng khớp ý người nhất.</div></Card>;
+}
+
+// ===================== BỘ NHÃN =====================
+function BoNhan18() {
+  const { me, goi, notify } = useApp(); const duoc = laGat(me); const { bn, tai, dat } = useBoNhan(); const [f, setF] = useState('dung_cu'); const [busy, setBusy] = useState(false);
+  const [doi, setDoi] = useState({}); const [them, setThem] = useState(''); const [themDong, setThemDong] = useState('');
+  useEffect(() => { tai(); }, []);
+  if (!bn) return <Card pad="p-3"><Empty>Đang tải bộ nhãn…</Empty></Card>;
+  const TR = (bn.truong || TRUONG18).find((x) => x.k === f) || { ten: 'Dòng sản phẩm' }; const trTen = (k) => ((bn.truong || TRUONG18).find((x) => x.k === k) || {}).ten || k;
+  const lam = async (duong, body, bao) => { if (!duoc) return notify('Chỉ Trưởng MKT / Admin', 'err'); setBusy(true); const r = await goi(duong, { method: 'POST', body }); setBusy(false); if (r.ok) { dat(r); notify(bao(r)); } else notify(r.msg, 'err'); };
+  const ds = bn.gia_tri.filter((x) => x.truong === f); const dongs = bn.dongs || [];
+  const coGt = (k) => bn.gia_tri.some((x) => x.truong === k) || ['buoc', 'bai_test', 'hanh_dong', 'vat_lieu', 'dung_cu', 'vi_tri'].includes(k);
+  const th = 'text-[10px] tracking-[.06em] uppercase text-ink-muted bg-[#F5F8F9] px-2 py-1.5 font-bold text-left'; const td = 'border-t border-[#EEF3F4] px-2 py-1.5 align-middle';
+  return <div className="flex flex-col gap-3">
+    <Card pad="p-3" className="flex flex-col gap-3 !rounded-[14px] !shadow-none"><div className="flex items-center gap-2 flex-wrap"><span className="font-bold text-sm">Hàng đề xuất</span><span className="text-xs text-ink-muted">{bn.de_xuat.length} nhãn mới từ thầy và người, chưa được dùng chính thức. Duyệt thì thành nhãn chuẩn; gộp thì mọi mẫu đang dùng chuyển sang nhãn đích.</span></div>
+      {bn.de_xuat.length ? <div className="overflow-x-auto"><table className="w-full border-collapse text-xs min-w-[640px]"><thead><tr><th className={th}>Trường</th><th className={th}>Nhãn đề xuất</th><th className={th}>Nguồn</th><th className={th + ' !text-right'}>Mẫu dùng</th><th className={th}>Quyết</th></tr></thead>
+        <tbody>{bn.de_xuat.map((v) => <tr key={v.id}><td className={td}>{trTen(v.truong)}{v.dong ? ' · ' + v.dong : ''}</td><td className={td}><span className="border border-dashed border-[#E3B23C] bg-[#FFF9E8] rounded-md px-1.5 text-[11px]">{v.ten}</span></td>
+          <td className={td}>{v.nguon === 'THAY' ? <Pill cls="bg-[#E3EEFA] text-[#1F5FA8]" className="!text-[11px]">thầy</Pill> : <Pill cls="bg-[#FDF3D6] text-[#8A6410]" className="!text-[11px]">người</Pill>}</td><td className={td + ' text-right tabular-nums'}>{v.so_mau}</td>
+          <td className={td}><div className="flex gap-1 items-center flex-wrap"><button className={nutCls + ' !bg-[#15803D] !border-[#15803D] text-white !px-2 !py-0.5'} disabled={busy} onClick={() => lam('/bo-nhan/' + v.id + '/duyet', {}, () => 'Đã duyệt “' + v.ten + '” thành nhãn chuẩn')}>Duyệt</button>
+            <select className="border border-line rounded-lg px-1.5 py-0.5 text-xs bg-white min-w-0 max-w-[150px]" value="" disabled={busy} onChange={(e) => { const d = e.target.value; if (d) lam('/bo-nhan/' + v.id + '/gop', { vao: d }, (r) => 'Đã gộp “' + v.ten + '” vào “' + d + '” — ' + r.mau_chuyen + ' mẫu chuyển theo'); }}><option value="">Gộp vào…</option>{giaTri18(bn, v.truong, v.dong).map((x) => <option key={x} value={x}>{tenGt18(bn, v.truong, x)}</option>)}</select>
+            <button className={nutCls + ' !px-2 !py-0.5'} disabled={busy} onClick={() => lam('/bo-nhan/' + v.id + '/bo', {}, () => 'Đã bỏ “' + v.ten + '”')}>Bỏ</button></div></td></tr>)}</tbody></table></div> : <div className="text-xs text-ink-muted">Không còn đề xuất nào.</div>}</Card>
+    <div className="grid gap-3 min-[760px]:grid-cols-[220px_minmax(0,1fr)]">
+      <Card pad="p-1.5" className="!rounded-[14px] !shadow-none min-w-0">{['Nội dung', 'Hình', 'Chất lượng', 'Dùng cho'].filter((n) => (bn.truong || TRUONG18).some((x) => x.nhom === n && coGt(x.k))).map((n) => <div key={n}><div className="text-[11px] text-ink-muted px-2.5 pt-1.5 pb-0.5 uppercase tracking-[.06em]">{n}</div>
+        {(bn.truong || TRUONG18).filter((x) => x.nhom === n && coGt(x.k)).map((x) => <div key={x.k} onClick={() => setF(x.k)} className={'flex justify-between gap-2 px-2.5 py-[7px] rounded-[9px] cursor-pointer text-[13px] ' + (f === x.k ? 'bg-[#E0F2F4] font-bold' : 'hover:bg-[#F2F6F7]')}><span>{x.ten}</span><span className="text-[11px] text-ink-muted">{bn.gia_tri.filter((y) => y.truong === x.k && y.trang_thai === 'DUNG').length}</span></div>)}</div>)}
+        <div className="text-[11px] text-ink-muted px-2.5 pt-1.5 pb-0.5 uppercase tracking-[.06em]">Phạm vi</div><div onClick={() => setF('__dong')} className={'flex justify-between gap-2 px-2.5 py-[7px] rounded-[9px] cursor-pointer text-[13px] ' + (f === '__dong' ? 'bg-[#E0F2F4] font-bold' : 'hover:bg-[#F2F6F7]')}><span>Dòng sản phẩm</span><span className="text-[11px] text-ink-muted">{dongs.length}</span></div></Card>
+      <div className="min-w-0">{f === '__dong' ? <DongSanPham /> : <Card pad="p-3" className="flex flex-col gap-3 !rounded-[14px] !shadow-none">
+        <div className="flex items-center gap-2 flex-wrap"><span className="font-bold text-sm">{TR.ten}</span><Pill cls="bg-[#E7ECEF] text-[#3B4B55]" className="!text-[11px]">{KIEU18(TR)}</Pill><span className="text-xs text-ink-muted">{TR.k === 'buoc' ? 'thứ tự bước theo dòng — lấy từ quy trình sản phẩm; máy dùng để kiểm đảo bước' : TR.k === 'bai_test' ? 'lấy từ bài test của sản phẩm' : ''}</span></div>
+        <div className="overflow-x-auto"><table className="w-full border-collapse text-xs min-w-[520px]"><thead><tr><th className={th}>Nhãn</th><th className={th}>Phạm vi</th><th className={th}>Nguồn</th><th className={th + ' !text-right'}>Mẫu dùng</th><th className={th}></th></tr></thead>
+          <tbody>{ds.map((v) => <tr key={v.id}><td className={td}>{doi[v.id] != null ? <input autoFocus className="border border-line rounded-lg px-2 py-0.5 text-xs w-40" value={doi[v.id]} onChange={(e) => setDoi({ ...doi, [v.id]: e.target.value })} onKeyDown={(e) => { if (e.key === 'Enter' && doi[v.id].trim()) { lam('/bo-nhan/' + v.id + '/doi-ten', { ten: doi[v.id].trim() }, (r) => 'Đã đổi tên — ' + r.mau_chuyen + ' mẫu đổi theo'); setDoi({ ...doi, [v.id]: null }); } if (e.key === 'Escape') setDoi({ ...doi, [v.id]: null }); }} /> : v.ten}</td>
+            <td className={td}>{v.dong || 'chung'}</td><td className={td + ' text-[11px] text-ink-muted'}>{NGUON18[v.nguon] || v.nguon}</td><td className={td + ' text-right tabular-nums'}>{v.so_mau}</td>
+            <td className={td}>{TR.kieu === 'MO_RONG' && duoc ? <button className={nutCls + ' !px-2 !py-0.5'} onClick={() => setDoi({ ...doi, [v.id]: v.ten })}>Đổi tên</button> : TR.kieu === 'QUY_TRINH' ? <span className="text-[11px] text-ink-muted">sửa ở Danh mục sản phẩm</span> : null}</td></tr>)}</tbody></table></div>
+        {TR.kieu === 'CO_DINH' || TR.kieu === 'SO' || TR.kieu === 'CHU' ? <div className="text-[11px] text-ink-muted">Trường cố định: hệ thống giữ, không thêm giá trị.</div>
+          : duoc && <div className="flex gap-2 items-center flex-wrap"><input className="border border-line rounded-lg px-2 py-1 text-xs min-w-0" placeholder={'＋ nhãn mới cho ' + TR.ten.toLowerCase()} value={them} onChange={(e) => setThem(e.target.value)} />
+            {(TR.kieu === 'QUY_TRINH' || TR.theo_dong) && <select className="border border-line rounded-lg px-2 py-1 text-xs bg-white" value={themDong} onChange={(e) => setThemDong(e.target.value)}>{TR.kieu !== 'QUY_TRINH' && <option value="">chung</option>}{TR.kieu === 'QUY_TRINH' && <option value="">chọn dòng…</option>}{dongs.map((d) => <option key={d} value={d}>{d}</option>)}</select>}
+            <button className={nutCls + ' !bg-[#0E7C8C] !border-[#0E7C8C] text-white'} disabled={busy || !them.trim()} onClick={() => { lam('/bo-nhan', { truong: f, ten: them.trim(), dong: themDong }, () => 'Đã thêm “' + them.trim() + '”'); setThem(''); }}>Thêm</button></div>}
+      </Card>}</div></div>
+    <ChonThay />
+  </div>;
+}
+
+// ===================== TỔNG QUAN =====================
+function TongQuan18({ a, setTab }) {
+  const { goi } = useApp(); const [d, setD] = useState(null); useEffect(() => { goi('/do-chinh-xac').then((r) => { if (r.ok) setD(r); }); }, []);
+  const pctN = (x, n) => n ? Math.round(x / n * 100) : null;
+  const Bar = ({ x }) => x == null ? <span className="text-[11px] text-ink-muted">chưa đo</span> : <div className="flex items-center gap-2"><div className="flex-1 max-w-[160px] h-2 bg-[#EDF2F3] rounded relative"><i className="absolute left-0 top-0 bottom-0 rounded" style={{ width: x + '%', background: x >= 80 ? '#15803D' : x >= 65 ? '#B45309' : '#A3372B' }} /></div><span className="w-[34px] text-right tabular-nums text-xs">{x}%</span></div>;
+  if (!d) return <Card pad="p-3"><Empty>Đang tính…</Empty></Card>;
+  const dm = d.dem || {}; const phaiXem = dm.hinh ? Math.round(dm.k1 / dm.hinh * 100) : 0; const yeu = d.truong_yeu || [];
+  const th = 'text-[10px] tracking-[.06em] uppercase text-ink-muted bg-[#F5F8F9] px-2 py-1.5 font-bold text-left'; const td = 'border-t border-[#EEF3F4] px-2 py-1.5 align-middle';
+  return <div className="flex flex-col gap-3">
+    <div className="grid grid-cols-2 min-[760px]:grid-cols-4 gap-2">{[[dm.hinh_thay_chot || 0, 'mẫu hình thầy đã chốt'], [phaiXem + '%', 'mẫu người phải xem (kiểm ngẫu nhiên + thầy chưa chắc: ' + (dm.k1 || 0) + '/' + (dm.hinh || 0) + ')'], [dm.hinh_vang || 0, 'mẫu người đã kiểm'], [d.so_de_xuat || 0, 'nhãn đề xuất chờ duyệt']].map(([x, t], i) => <Card key={i} pad="p-3" className="!rounded-[14px] !shadow-none"><b className="text-[22px] block tabular-nums">{x}</b><span className="text-[11px] text-ink-muted">{t}</span></Card>)}</div>
+    <Card pad="p-3" className="flex flex-col gap-3 !rounded-[14px] !shadow-none"><div className="flex items-center gap-2 flex-wrap"><span className="font-bold text-sm">Độ đúng theo từng trường</span><span className="text-xs text-ink-muted">đo trên {d.so_nhan} nhãn người · cổng huấn luyện 80%</span></div>
+      <div className="overflow-x-auto"><table className="w-full border-collapse text-xs min-w-[600px]"><thead><tr><th className={th}>Trường</th><th className={th + ' !text-right'}>Mẫu kiểm</th><th className={th}>Thầy đúng</th><th className={th}>Mô hình mở đúng</th><th className={th}>Tỉ lệ kiểm</th><th className={th}>Cổng học trò</th></tr></thead>
+        <tbody>{TRUONG18.filter((t) => t.k !== 'mo_ta').map((t) => { const x = (d.theo_truong || {})[t.k] || { so: 0 }; const tp = pctN(x.thay_dung, x.thay_so), mp = pctN(x.mo_dung, x.mo_so);
+          return <tr key={t.k}><td className={td}><b>{t.ten}{t.k === 'tham_my' ? ' (±1)' : ''}</b></td><td className={td + ' text-right tabular-nums'}>{x.so}</td><td className={td}><Bar x={tp} /></td><td className={td}><Bar x={mp} /></td>
+            <td className={td}>{yeu.includes(t.k) ? <Pill cls={TT18.KHONG_CHAC.cls} className="!text-[11px]">tăng 20%</Pill> : <span className="text-[11px] text-ink-muted">8%</span>}</td>
+            <td className={td}>{mp != null && mp >= 80 && x.mo_so >= 30 ? <Pill cls={TT18.MO.cls} className="!text-[11px]">mở huấn luyện</Pill> : x.so < 30 ? <span className="text-[11px] text-ink-muted">cần {30 - x.so} nhãn nữa</span> : <Pill cls="bg-[#FBE4E1] text-[#A3372B]" className="!text-[11px]">mở chưa đạt</Pill>}</td></tr>; })}</tbody></table></div>
+      <div className="text-[11px] text-ink-muted">{yeu.length ? <>Đọc bảng: thầy đúng dưới 85% ở <b>{yeu.map((k) => (TRUONG18.find((t) => t.k === k) || {}).ten).join(', ')}</b> → máy tự tăng tỉ lệ kiểm các trường này lên 20%; trường thầy chắc thì chỉ kiểm 8%.</> : 'Trường nào thầy đúng dưới 85% (tính khi có ≥ 20 mẫu kiểm) thì máy tự tăng tỉ lệ kiểm trường đó lên 20%; còn lại kiểm 8%.'}</div></Card>
+    <ViecCanQuyet a={a} setTab={setTab} soDeXuat={d.so_de_xuat || 0} />
+  </div>;
+}

@@ -102,7 +102,7 @@ export async function docKhung(file, ctx = {}) {
         // (25/09, chủ: "thầy giải thích gần như chính xác → nâng vai trò thầy làm chủ đạo, thay vì đẩy cho người")
         // Nhãn thầy là nhãn làm việc. Mô hình mở lệch thầy chỉ là thông tin đo học trò, KHÔNG đẩy cho người.
         // Người chỉ xem: thầy tự báo chưa chắc (< 0,6) hoặc mẫu kiểm ngẫu nhiên ~8% (để đo độ đúng của thầy).
-        d.nguon_nhan = khop ? "THAY_KHOP" : "THAY"; d.tu_tin = th.chac || 0.7; d.kiem_ngau_nhien = Math.random() < 0.08; d.can_xac_nhan = (th.chac || 0) < 0.6 || d.kiem_ngau_nhien; });
+        d.nguon_nhan = khop ? "THAY_KHOP" : "THAY"; d.tu_tin = th.chac || 0.7; d.can_xac_nhan = (th.chac || 0) < 0.6; /* ADR-018: mẫu kiểm ngẫu nhiên do app quyết */ });
       if (loiThay && /ngân sách|tắt|ANTHROPIC/i.test(loiThay)) break; }
     log("  thầy đọc", soThay + "/" + doan.length, "đoạn · khớp mô hình mở", soKhop + (loiThay ? " · " + loiThay : "")); }
   for (const d of doan) { delete d._anh; delete d._url; }

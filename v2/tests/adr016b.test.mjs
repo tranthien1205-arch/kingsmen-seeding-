@@ -13,6 +13,7 @@ const api = async (p, method = 'GET', body) => { const r = await worker.fetch(ne
 const hubK = (k) => async (p, method = 'GET', body) => { const r = await worker.fetch(new Request('https://x/api' + p, { method, headers: { 'Content-Type': 'application/json', 'X-Hub-Key': k }, body: body ? JSON.stringify(body) : undefined }), env, { waitUntil() {} }); return { s: r.status, j: await r.json().catch(() => ({})) }; };
 const giai = (ma) => JSON.parse(Buffer.from(ma.slice(5).replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8'));
 
+Math.random = () => 0.99;
 test('016b: thầy Claude đọc đoạn, nhãn đóng, chi phí mục học, hết ngân sách dừng lô, bảng đo tách thầy / mô hình mở', async () => {
   TOKEN = (await api('/login', 'POST', { email: 'admin@kingsmen.vn', password: 'admin123' })).j.token;
   const may = hubK(giai((await api('/may-ghep', 'POST', { ten: 'Q2' })).j.ma_ghep).khoa);
@@ -22,7 +23,7 @@ test('016b: thầy Claude đọc đoạn, nhãn đóng, chi phí mục học, h�
   assert.equal(r.s, 200); const kq = r.j.kq; assert.equal(kq.length, 4);
   const ok = kq.filter((x) => x.ok); assert.equal(ok.length, 2, 'nhãn lạ + ảnh ngoài kho bị loại');
   assert.ok(ok.some((x) => x.nhan.buoc === 'Bơm keo vào ron' && x.nhan.tham_my === null), 'bước đúng danh sách, thẩm mỹ -1 → null');
-  assert.ok(ok.some((x) => x.nhan.nhom === 'THI_CONG' && x.nhan.buoc === null), 'bước bịa → null');
+  assert.ok(ok.some((x) => x.nhan.nhom === 'THI_CONG' && x.nhan.buoc === 'Bước bịa'), 'ADR-018: bước ngoài quy trình giữ lại'); assert.equal(DB.raw.prepare(`SELECT trang_thai, nguon FROM bo_nhan WHERE truong='buoc' AND ten='Bước bịa'`).get().trang_thai, 'DE_XUAT', '…thành đề xuất cho người duyệt ở Bộ nhãn');
   assert.equal(kq[3].loi, 'không thấy ảnh đoạn');
   const u = DB.raw.prepare(`SELECT COUNT(*) n, SUM(chi_phi_usd) usd FROM ai_usage WHERE tinh_nang='hoc_nhan_khung'`).get(); assert.equal(u.n, 3); assert.ok(u.usd > 0, 'chi phí có giá');
   // hết ngân sách học → cả lô dừng, không gọi thêm
@@ -36,7 +37,7 @@ test('016b: thầy Claude đọc đoạn, nhãn đóng, chi phí mục học, h�
   const sp = (await api('/danh-muc/san_pham', 'POST', { ma: 'K', ten: 'Keo', dong: 'Keo', quy_trinh: qt.join('\n') })).j.id;
   const muc = (await api('/muc', 'POST', { tieu_de: 'x', dinh_dang: 'VIDEO', san_pham_id: sp })).j.id;
   const ts = (await may('/hub/tai-san', 'POST', { muc_id: muc, ten: 'A.mp4', media_url: '/media/media/a.mp4', media_type: 'VIDEO', giay: 6 })).j.id;
-  await may('/hub/doc-khung', 'POST', { tai_san_id: ts, timeline: [{ tu: 0, den: 3, nhom: 'THI_CONG', buoc: 'Gạt phẳng', can_xac_nhan: true, nguon_nhan: 'THAY', mo: { nhom: 'HOAN_THIEN', chac: 1 }, thay: { nhom: 'THI_CONG', buoc: 'Gạt phẳng', chac: 0.6, model: 'claude-sonnet-4-5', ly_do: 'tay cầm bay' } }, { tu: 3, den: 6, nhom: 'HOAN_THIEN', can_xac_nhan: false, nguon_nhan: 'THAY', mo: { nhom: 'THI_CONG' }, thay: { nhom: 'HOAN_THIEN', chac: 0.9 } }] });
+  await may('/hub/doc-khung', 'POST', { tai_san_id: ts, timeline: [{ tu: 0, den: 3, nhom: 'THI_CONG', buoc: 'Gạt phẳng', can_xac_nhan: true, nguon_nhan: 'THAY', mo: { nhom: 'HOAN_THIEN', chac: 1 }, thay: { nhom: 'THI_CONG', buoc: 'Gạt phẳng', chac: 0.55, model: 'claude-sonnet-4-5', ly_do: 'tay cầm bay' } }, { tu: 3, den: 6, nhom: 'HOAN_THIEN', can_xac_nhan: false, nguon_nhan: 'THAY', mo: { nhom: 'THI_CONG' }, thay: { nhom: 'HOAN_THIEN', chac: 0.9 } }] });
   assert.equal((await api('/nhan-hinh/hang')).j.hang.length, 1, 'thầy chắc mà lệch mô hình mở → KHÔNG đẩy cho người');
   const h = (await api('/nhan-hinh/hang')).j.hang[0]; assert.equal(h.thay.ly_do, 'tay cầm bay'); assert.equal(h.mo.nhom, 'HOAN_THIEN');
   await api('/tai-san/' + ts + '/doan/0', 'POST', { nhom: 'THI_CONG', buoc: 'Gạt phẳng', nhe: true });

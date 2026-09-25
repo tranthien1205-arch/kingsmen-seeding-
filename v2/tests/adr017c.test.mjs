@@ -26,5 +26,5 @@ test('017c: hàng lệnh máy con + video một cảnh', async () => {
   let r = await q2('/hub/thanh-pham', 'POST', { ten: 'x.mp4', nguon_id: 'x', nguon: 'TIKTOK', dai: 5, shots: [{ t0: 0, t1: 5, loi: 'một câu nói đủ dài', nhom: 'NGUOI_NOI' }] }); assert.equal(r.s, 400, 'không cờ → vẫn đòi 2 shot');
   r = await q2('/hub/thanh-pham', 'POST', { ten: 'x.mp4', nguon_id: 'x', nguon: 'TIKTOK', dai: 5, mot_canh: true, shots: [{ t0: 0, t1: 5, loi: 'một câu nói đủ dài', nhom: 'NGUOI_NOI' }] }); assert.equal(r.s, 200);
   assert.equal(DB.raw.prepare(`SELECT COUNT(*) n FROM mau_hoc_ai WHERE tinh_nang='ghep_canh'`).get().n, 0);
-  assert.equal(DB.raw.prepare(`SELECT COUNT(*) n FROM mau_hoc_ai WHERE tinh_nang='doc_loi'`).get().n, 1);
+  assert.equal(DB.raw.prepare(`SELECT COUNT(*) n FROM mau_doan WHERE loai='LOI'`).get().n, 1, 'ADR-018: câu lời vào kho mẫu');
 });

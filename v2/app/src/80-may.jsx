@@ -99,13 +99,11 @@ function MayGhepCard(){
 // ===== ADR-009 — BỘ NÃO AI: mô hình · định tuyến (API → BÓNG → MỞ) · huấn luyện · chi phí theo mô hình =====
 const LOAI_MH={NGON_NGU:'Ngôn ngữ',NHIN:'Nhìn',NGHE:'Nghe',TTS:'Giọng đọc',ANH:'Ảnh'}; const MUC_AI={API:['API / quy tắc','bg-slate-100 text-ink'],BONG:['BÓNG (mở chạy song song)','bg-amber-100 text-amber-800'],MO:['MỞ (mô hình mở tự làm)','bg-emerald-100 text-emerald-800']};
 function BoNaoAI(){
-  const { db } = useApp(); const [tab,setTab]=useState(()=>{ const t=window.__tabNao||'ban'; delete window.__tabNao; return t; }); const a=db.ai_nao||{};
-  const { goi } = useApp(); const [dem,setDem]=useState(null); const taiDem=async()=>{ const r=await goi('/hop-viec/dem'); if(r.ok) setDem(r); }; useEffect(()=>{ taiDem(); },[tab]);
-  const soQuyet=(a.phien_ban||[]).filter(x=>x.trang_thai==='CHO_DUYET').length+(a.ky_nang||[]).filter(k=>k.trang_thai==='MOI').length+(a.dinh_tuyen||[]).filter(d=>d.de_nghi).length; const soThe=dem?(dem.k1+dem.k2+dem.k4):0;
+  const { db, goi } = useApp(); const [tab,setTab]=useState(()=>{ const t=window.__tabNao||'kho'; delete window.__tabNao; return ({ban:'tong',daymay:'kho'})[t]||t; }); const a=db.ai_nao||{};
+  const [dem,setDem]=useState(null); const taiDem=async()=>{ const r=await goi('/hop-viec/dem'); if(r.ok) setDem(r); }; useEffect(()=>{ taiDem(); },[tab]);
   return <div className="space-y-3">
-    {tab==='ban'&&<Callout tone="info"><b>Bộ não AI</b> = danh mục mô hình (API trả tiền + mô hình mở chạy trên máy ghép) và <b>định tuyến</b> theo từng tính năng. Mỗi tính năng đi ba mức như bộ quyền bước: <b>API</b> (thầy) → <b>BÓNG</b> (mô hình mở chạy song song, chỉ để chấm) → <b>MỞ</b> (mô hình mở tự làm, API dự phòng). Máy chấm điểm và đề nghị; Trưởng MKT/Admin gạt. Kho mẫu = mọi lượt gọi + phán quyết của người; đầu nhìn (chọn cảnh) huấn luyện từ mẫu người chấm trên máy ghép, người duyệt phiên bản mới bật.</Callout>}
-    <Tabs size="sm" active={tab} onChange={setTab} tabs={[{key:'ban',label:'🎯 Tổng quan'},{key:'daymay',label:'🎓 Dạy máy',count:(soQuyet+soThe)||null},{key:'kho',label:'📚 Kho mẫu'},{key:'mohinh',label:'🧠 Mô hình',count:(a.dinh_tuyen||[]).filter(d=>d.de_nghi).length||null},{key:'chiphi',label:'💰 Chi phí & khoá',count:(db.khoa_api||[]).filter(t=>!t.co).length||null}]}/>
-    {tab==='ban'&&<TongQuanNao a={a} setTab={setTab} dem={dem} soQuyet={soQuyet}/>}{tab==='daymay'&&<DayMay a={a} setTab={setTab} dem={dem} taiDem={taiDem}/>}{tab==='kho'&&<KhoNao a={a}/>}{tab==='mohinh'&&<MoHinhNao a={a}/>}{tab==='chiphi'&&<ChiPhiNao a={a}/>}
+    <Tabs size="sm" active={tab} onChange={setTab} tabs={[{key:'tong',label:'🎯 Tổng quan'},{key:'kho',label:'📚 Kho mẫu',count:dem?((dem.k1+dem.k4)||null):null},{key:'bonhan',label:'🏷️ Bộ nhãn',count:dem&&dem.de_xuat?dem.de_xuat:null},{key:'mohinh',label:'🧠 Mô hình',count:(a.dinh_tuyen||[]).filter(d=>d.de_nghi).length||null},{key:'chiphi',label:'💰 Chi phí & khoá',count:(db.khoa_api||[]).filter(t=>!t.co).length||null}]}/>
+    {tab==='tong'&&<TongQuan18 a={a} setTab={setTab}/>}{tab==='kho'&&<KhoMau18 onDoi={taiDem}/>}{tab==='bonhan'&&<BoNhan18/>}{tab==='mohinh'&&<MoHinhNao a={a} setTab={setTab}/>}{tab==='chiphi'&&<ChiPhiNao a={a}/>}
   </div>;
 }
 // Khoá API dán ngay trên app (chủ 24/09) — Admin; thử với nhà cung cấp trước khi lưu; không bao giờ hiện lại giá trị

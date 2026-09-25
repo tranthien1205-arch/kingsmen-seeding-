@@ -381,6 +381,16 @@ Người duyệt: Thiện · Trạng thái: ĐÃ DUYỆT (2026-09-24, "ok bạn 
 
 ## Changelog
 
+### 2026-09-25 · ADR-018 làm thật: kho mẫu một nguồn + bộ nhãn hai chiều
+- Chủ: "cần xử lý mọi liên đới với nhau… hoạt động liên hoàn như một cỗ máy" · "ui cần chính xác theo mô phỏng".
+- **Dữ liệu** (`worker/mau.js`): bảng `mau_doan` là nguồn duy nhất của nhãn (mỗi đoạn hình HINH / câu thoại LOI một dòng: nhãn mô hình mở, thầy, người, quyết định chất lượng footage; trạng thái có chỉ mục; `version` → 409 khi hai máy cùng sửa). Bảng `bo_nhan` (giá trị mở rộng + đề xuất). Nhãn không còn nằm trong `phan_tich.timeline`; màn và máy dựng đọc dòng thời gian từ kho mẫu (`timelineCua`).
+- **Chuyển dữ liệu cũ** một lần (cờ `module_config.mau_doan`): timeline + nhãn người + cờ kiểm + source + mẫu `doc_loi` → `mau_doan`, rồi xoá mẫu `nhan_khung / doc_loi / chat_luong_source` ở `mau_hoc_ai`. Sao lưu D1 trước khi deploy ở `D:/OS MKT/sao-luu-d1/2026-09-25-truoc-adr018/`.
+- **Thầy** gán đủ 14 trường theo Bộ nhãn; giá trị chưa có → đề xuất (nguồn THAY / NGUOI) → Duyệt / Gộp (mọi mẫu chuyển theo) / Đổi tên / Bỏ; duyệt bước → vào quy trình sản phẩm. Tỉ lệ kiểm do app quyết: 8%, lên 20% khi thầy đúng < 85% ở một trường (≥ 20 mẫu).
+- Học lại giữ id video, nhãn người bám đúng đơn vị (ranh giới đổi → nhãn cũ giữ dạng hết hiệu lực). Xoá video xoá mẫu; đổi tên dòng đổi cả kho mẫu.
+- **Máy Q2**: `hoc-thanh-pham` cắt đoạn trích ≤ 12 s mp3 cho mỗi câu thoại (`am_url`); `doc-khung` bỏ cờ kiểm tự chọn.
+- **Giao diện** (`86-nhanmau.jsx`, theo mô phỏng): Tổng quan (4 số + độ đúng từng trường + việc cần quyết) · Kho mẫu (Khung hình / Câu thoại / Footage; ⚑ Cần người; bảng Mô hình mở | Thầy | Người | ↩ thầy; tách 3 khung; Duyệt tuần tự Enter / 1–8 / 0 / → / ←; sửa hàng loạt; nghe đoạn trích) · Bộ nhãn (hàng đề xuất, trường theo nhóm, dòng sản phẩm, chọn thầy) · Mô hình (bàn huấn luyện, tiến trình, video đã học, danh mục, định tuyến) · Chi phí & khoá. Tab Dạy máy cũ gộp vào Kho mẫu. Điện thoại: trường xếp dọc.
+- Test `tests/adr018.test.mjs` (chuyển dữ liệu, bộ nhãn, hàng loạt, tỉ lệ kiểm) + cập nhật 014/016/016b/016c/017/017b/017c/017d · 123 test qua.
+
 ### 2026-09-25 · Gán nhãn trên PC
 - Chủ: "tối ưu ui dạy trên pc sao cho trực quan và thao tác người kiểm tra xử lý dễ dàng nhanh chóng". Ba cột vừa một màn 1440×900: hàng thẻ (đã làm · tiếp theo) | ảnh lớn + dải thời gian cả video (`tl_video`) | bảng quyết định (thầy gán + lý do, nút Đúng lớn, nhóm, bước, mô tả, tách khung). Lưu lạc quan (sang thẻ kế ~0,16 giây, lỗi thì thẻ quay lại hàng), tải sẵn ảnh 5 thẻ kế; phím Enter/1–8/1–9/Esc/M/T/0/→/←/?. Dạy máy: thầy + việc cần quyết thu thành một dòng; khung giải thích Bộ não AI chỉ ở Tổng quan. Kiểm bằng trình duyệt tự động: không lỗi, không tràn ở 390px.
 

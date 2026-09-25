@@ -52,6 +52,6 @@ function BanHuanLuyen({ a, setTab, dem, soQuyet }) {
         : <div className="text-xs text-ink-muted">Chưa có số đo. Máy học ghi thời gian từng chặng từ lượt học tiếp theo.</div>}
     </Card>
     <BangDoHinh d={a.do_chinh_xac_hinh || {}} />
-    <Card pad="p-3" className="cursor-pointer hover:border-brand" onClick={() => setTab('daymay')}><div className="flex items-center gap-2 flex-wrap"><span className="text-xl">🎓</span><div className="flex-1 text-xs"><b className="text-ink">Máy đang hỏi anh/chị:</b> {soQuyet || 0} việc cần quyết · {dem ? dem.k1 + dem.k2 + dem.k4 : '…'} thẻ gán nhãn. Hôm nay đã làm {ng.phut_hom_nay ?? 0} / {ng.tran_phut || '∞'} phút.</div><Btn variant="brand" className="!py-1 !px-3 text-[11px]" onClick={(e) => { e.stopPropagation(); setTab('daymay'); }}>Mở Dạy máy →</Btn></div></Card>
+    <Card pad="p-3" className="cursor-pointer hover:border-brand" onClick={() => setTab('kho')}><div className="flex items-center gap-2 flex-wrap"><span className="text-xl">🎓</span><div className="flex-1 text-xs"><b className="text-ink">Người kiểm ở Kho mẫu:</b> thầy chốt nhãn, anh/chị chỉ xem mẫu kiểm ngẫu nhiên và mẫu thầy chưa chắc ({(ng.doan_chua_gan ?? 0)} đoạn chưa có nhãn người). Hôm nay đã làm {ng.phut_hom_nay ?? 0} / {ng.tran_phut || '∞'} phút.</div><Btn variant="brand" className="!py-1 !px-3 text-[11px]" onClick={(e) => { e.stopPropagation(); setTab('kho'); }}>Mở Kho mẫu →</Btn></div></Card>
   </div>;
 }
