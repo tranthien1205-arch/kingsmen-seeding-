@@ -99,7 +99,10 @@ export async function docKhung(file, ctx = {}) {
       lo.forEach((d, i) => { const x = kq[i]; if (!x || !x.ok) { if (x && x.loi) loiThay = x.loi; return; } const th = { ...x.nhan, model: x.model }; soThay++;
         const khop = d.mo.nhom === th.nhom && (d.mo.buoc || null) === (th.buoc || null) && (d.mo.bai_test || null) === (th.bai_test || null); if (khop) soKhop++;
         d.thay = th; d.nhom = th.nhom; d.buoc = th.buoc; d.bai_test = th.bai_test; if (th.tham_my != null) d.tham_my = th.tham_my; if (th.mo_ta) d.mo_ta = th.mo_ta;
-        d.nguon_nhan = khop ? "THAY_KHOP" : "THAY"; d.tu_tin = khop ? Math.max(0.85, th.chac || 0) : Math.min(0.5, th.chac || 0.5); d.can_xac_nhan = !khop || (th.chac || 0) < 0.7; });
+        // (25/09, chủ: "thầy giải thích gần như chính xác → nâng vai trò thầy làm chủ đạo, thay vì đẩy cho người")
+        // Nhãn thầy là nhãn làm việc. Mô hình mở lệch thầy chỉ là thông tin đo học trò, KHÔNG đẩy cho người.
+        // Người chỉ xem: thầy tự báo chưa chắc (< 0,6) hoặc mẫu kiểm ngẫu nhiên ~8% (để đo độ đúng của thầy).
+        d.nguon_nhan = khop ? "THAY_KHOP" : "THAY"; d.tu_tin = th.chac || 0.7; d.kiem_ngau_nhien = Math.random() < 0.08; d.can_xac_nhan = (th.chac || 0) < 0.6 || d.kiem_ngau_nhien; });
       if (loiThay && /ngân sách|tắt|ANTHROPIC/i.test(loiThay)) break; }
     log("  thầy đọc", soThay + "/" + doan.length, "đoạn · khớp mô hình mở", soKhop + (loiThay ? " · " + loiThay : "")); }
   for (const d of doan) { delete d._anh; delete d._url; }

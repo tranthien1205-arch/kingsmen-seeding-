@@ -35,7 +35,7 @@ svg{width:100%;min-width:760px;height:auto;display:block}svg text{font-family:"B
 <div class="wrap">
   <header style="display:flex;flex-direction:column;gap:12px"><div class="eyebrow">Kingsmen Content OS · đề xuất ADR-018 · hệ nhãn và kho mẫu · 25/09/2026</div>
     <h1>Chưa tối ưu: nhãn nằm ba chỗ, không có bộ nhãn chung, người phải sửa qua nhiều màn</h1>
-    <p class="lead">Thiết kế lại quanh ba thứ: một bảng mẫu duy nhất, một bộ nhãn chung giữa người và máy, và Kho mẫu là nơi duy nhất người cân chỉnh. Thầy đọc cả video một lượt thay vì từng đoạn, đơn vị của video thành phẩm là shot của người dựng.</p>
+    <p class="lead"><b>Thầy làm chủ đạo</b>: thầy gán đủ trường và nhãn của thầy dùng ngay; người chỉ kiểm mẫu ngẫu nhiên và chỗ thầy tự báo chưa chắc. Thiết kế lại quanh ba thứ: một bảng mẫu duy nhất, một bộ nhãn chung giữa người và máy, và Kho mẫu là nơi duy nhất người cân chỉnh. Thầy đọc cả video một lượt thay vì từng đoạn, đơn vị của video thành phẩm là shot của người dựng.</p>
     <p class="note">Số đo lúc 10:30 ngày 25/09 trên dữ liệu thật. Chỗ nào là ước tính thì ghi rõ “ước tính, chưa đo”.</p>
   </header>
 
@@ -52,6 +52,16 @@ svg{width:100%;min-width:760px;height:auto;display:block}svg text{font-family:"B
       <tr><td>Thầy và mô hình mở cùng nhóm cảnh</td><td class="n">63%</td><td>37% đoạn cần người, không thể xem hết bằng thẻ từng cái</td></tr>
     </table></div></section>
 
+  <section><h2>Vai trò: thầy chốt nhãn, mô hình mở học, người kiểm</h2>
+    <p class="col">Trên các video đã học, lời giải thích của thầy (Claude Opus 5) phần lớn đúng. 63% khớp giữa thầy và mô hình mở chủ yếu do mô hình mở — học trò — còn sai; đẩy mọi chỗ lệch cho người là phí công người. Vì vậy nhãn thầy là nhãn làm việc; người chỉ xem phần nhỏ được chọn có lý do.</p>
+    <div class="tbl-wrap"><table>
+      <tr><th>Vai</th><th>Làm gì</th><th>Khi nào hỏi người</th></tr>
+      <tr><td><b>Thầy</b> (Claude)</td><td>gán đủ mọi trường, kèm lý do; đọc cả video một lượt để nhất quán; tự xem lại lượt hai ở mức suy nghĩ cao cho đoạn chưa chắc; tạm dùng nhãn mới nó đề xuất</td><td>chỉ khi sau lượt tự xem lại vẫn chắc dưới 0,6</td></tr>
+      <tr><td><b>Mô hình mở</b> (học trò)</td><td>gán song song để đo và để học; lệch thầy là thông tin đo, không thành việc của người</td><td>không bao giờ</td></tr>
+      <tr><td><b>Người</b></td><td>kiểm mẫu ngẫu nhiên để đo thầy đúng bao nhiêu theo từng trường; duyệt / gộp nhãn mới trong Bộ nhãn; sửa khi thấy sai</td><td>mẫu kiểm ngẫu nhiên khoảng 8%; trường nào thầy đúng dưới 85% thì tự tăng tỉ lệ kiểm trường đó</td></tr>
+    </table></div>
+    <p class="col note">Đã áp dụng ngay cho hệ thống đang chạy (25/09): hàng việc của người chỉ còn đoạn thầy chưa chắc và mẫu kiểm ngẫu nhiên; đoạn thầy chắc mà lệch mô hình mở không còn đẩy cho người.</p></section>
+
   <section><h2>Bảy chỗ chưa tối ưu và cách sửa</h2>
     <div class="tbl-wrap"><table style="min-width:860px">
       <tr><th>#</th><th>Chỗ chưa tối ưu</th><th>Hậu quả</th><th>Sửa</th></tr>
@@ -60,7 +70,7 @@ svg{width:100%;min-width:760px;height:auto;display:block}svg text{font-family:"B
       <tr><td>3</td><td><b>Ba đơn vị khác nhau</b> cho hình, lời, ghép</td><td>câu thoại không biết thuộc cảnh nào; ghép học trên đơn vị khác nhãn hình</td><td>Video thành phẩm: <b>đơn vị = shot</b> (chỗ cắt của người dựng). Footage thô: cửa sổ 3 giây gộp khi cùng nội dung. Câu thoại gắn theo shot.</td></tr>
       <tr><td>4</td><td><b>Thầy đọc từng đoạn riêng</b></td><td>không thấy mạch video; lời dặn + bộ nhãn + ví dụ gửi lại mỗi đoạn; Q2 đứng chờ</td><td><b>Một lượt cho cả video</b> (các ảnh theo thứ tự), phần cố định đặt đầu và lưu đệm. Việc học không gấp → chạy <b>lô không đồng bộ</b> (giá lô bằng nửa giá thường), Q2 không chờ.</td></tr>
       <tr><td>5</td><td><b>qwen đọc mọi dải 1,5 giây</b></td><td>234 giây mỗi video, phần lớn để dò ranh giới</td><td>Ranh giới lấy từ shot; qwen chỉ đọc 1 dải giữa mỗi đơn vị. Ước giảm 3–5 lần thời gian đọc hình (ước tính, chưa đo).</td></tr>
-      <tr><td>6</td><td><b>Người sửa ở nhiều màn</b>: thẻ Dạy máy, Kho mẫu, Nhãn hình cũ</td><td>7 nhãn sau hai ngày</td><td><b>Kho mẫu là chỗ làm việc duy nhất</b>: sửa theo trường, “đúng hết” một phím, chế độ duyệt tuần tự, sửa hàng loạt nhiều mẫu cùng lúc.</td></tr>
+      <tr><td>6</td><td><b>Người sửa ở nhiều màn</b>: thẻ Dạy máy, Kho mẫu, Nhãn hình cũ</td><td>7 nhãn sau hai ngày</td><td><b>Thầy chốt, người kiểm</b>: người chỉ nhận mẫu kiểm ngẫu nhiên và mẫu thầy chưa chắc; Kho mẫu là chỗ duy nhất để xem và sửa (theo trường, “đúng hết” một phím, duyệt tuần tự, sửa hàng loạt).</td></tr>
       <tr><td>7</td><td><b>Đo chỉ theo nhóm cảnh</b></td><td>không biết thầy sai ở dụng cụ hay ở bước</td><td>Đo độ đúng <b>theo từng trường</b> cho thầy và mô hình mở; cổng huấn luyện theo trường.</td></tr>
     </table></div></section>
 
@@ -95,7 +105,7 @@ svg{width:100%;min-width:760px;height:auto;display:block}svg text{font-family:"B
       <path class="ad" d="M330,96 C330,130 380,140 400,158"/><text class="sub" x="210" y="128">máy đề xuất nhãn mới</text>
       <path class="ad" d="M540,96 C540,130 520,140 510,158"/><text class="sub" x="548" y="128">người thêm / gộp nhãn</text>
       <path class="ad" d="M330,192 C200,192 230,110 250,98"/><text class="sub" x="130" y="220">bộ nhãn mới dùng ngay lượt sau</text>
-    </svg></div><figcaption>Người không phải gán từ đầu: thầy điền, người chỉnh. Mỗi lần chỉnh vừa là nhãn vàng để chấm máy, vừa là ví dụ cho thầy ở lượt sau. Nhãn mới do máy đề xuất chỉ dùng được khi người duyệt.</figcaption></figure></section>
+    </svg></div><figcaption>Thầy chốt nhãn; người chỉ kiểm phần được chọn. Người không phải gán từ đầu: thầy điền, người chỉnh. Mỗi lần chỉnh vừa là nhãn vàng để chấm máy, vừa là ví dụ cho thầy ở lượt sau. Nhãn mới do máy đề xuất chỉ dùng được khi người duyệt.</figcaption></figure></section>
 
   <section><h2>Dữ liệu: một nguồn cho mọi màn</h2>
     <div class="tbl-wrap"><table>
@@ -136,6 +146,8 @@ svg{width:100%;min-width:760px;height:auto;display:block}svg text{font-family:"B
       <tr><td>Thầy mỗi video 8 đoạn</td><td class="n">0,22 USD</td><td class="n">khoảng 0,06–0,10 USD (ước tính: một lượt/video, lưu đệm phần cố định, giá lô bằng nửa)</td></tr>
       <tr><td>Q2 đọc hình mỗi video</td><td class="n">234 giây</td><td class="n">khoảng 50–80 giây (ước tính: 1 dải/shot)</td></tr>
       <tr><td>Q2 chờ thầy</td><td class="n">22 giây</td><td class="n">0 (thầy chạy lô riêng)</td></tr>
+      <tr><td>Phần mẫu người phải xem</td><td class="n">37% (mọi chỗ lệch mô hình mở)</td><td class="n">khoảng 10–15% (kiểm ngẫu nhiên 8% + thầy chưa chắc; ước tính)</td></tr>
+      <tr><td>Thầy tự xem lại đoạn chưa chắc</td><td class="n">—</td><td class="n">thêm chi phí cho phần nhỏ đoạn, đổi lại người đỡ việc</td></tr>
       <tr><td>Người mỗi mẫu</td><td class="n">—</td><td class="n">1 phím nếu đúng hết; vài giây mỗi trường sai</td></tr>
     </table></div>
     <p class="col note">Nhãn chi tiết làm đầu ra của thầy dài hơn (nhiều trường). Số “sau thiết kế” sẽ đo lại trên 10 video đầu và báo trước khi chạy hết.</p></section>
@@ -155,6 +167,7 @@ svg{width:100%;min-width:760px;height:auto;display:block}svg text{font-family:"B
       <li>Bộ nhãn bốn nhóm trường như bảng trên; tab Dạy máy đổi thành Bộ nhãn.</li>
       <li>Video thành phẩm lấy shot làm đơn vị; footage thô dùng cửa sổ 3 giây.</li>
       <li>Thầy đọc cả video một lượt, chạy lô không đồng bộ.</li>
+      <li>Thầy chốt nhãn; người kiểm ngẫu nhiên và xem chỗ thầy chưa chắc (đã áp dụng cho hệ thống đang chạy).</li>
       <li>Kho mẫu là chỗ làm việc duy nhất của người. Làm đợt 1 trước.</li>
     </ol></section>
 </div>

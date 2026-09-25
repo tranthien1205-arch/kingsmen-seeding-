@@ -117,7 +117,7 @@ function DayMay({ a, setTab, dem, taiDem }) {
         {dt.map(x => <div key={'d' + x.tinh_nang} className="py-2 flex items-center gap-2 flex-wrap"><Pill cls="bg-sky-100 text-sky-800">máy đề nghị</Pill><b className="text-ink">{x.ten}</b><span className="text-ink-muted">đề nghị chuyển sang {x.de_nghi}</span><Btn variant="ghost" className="ml-auto !py-1 !px-2 text-[11px]" onClick={() => setTab('mohinh')}>Xem ở Mô hình</Btn></div>)}
       </div>}
     </Card>
-    <div className="flex items-center gap-2 flex-wrap"><SectionTitle>Thẻ gán nhãn</SectionTitle><span className="text-[11px] text-ink-muted">{(d.k1 || 0) + (d.k2 || 0) + (d.k4 || 0)} thẻ chờ · khung hình máy chưa chắc: {d.k1_can || 0}</span><Btn variant="ghost" className="ml-auto !py-1 !px-2 text-[11px]" onClick={taiDem}>Đếm lại</Btn></div>
+    <div className="flex items-center gap-2 flex-wrap"><SectionTitle>Thẻ gán nhãn</SectionTitle><span className="text-[11px] text-ink-muted">{(d.k1 || 0) + (d.k2 || 0) + (d.k4 || 0)} thẻ chờ · khung hình thầy chưa chắc: {d.k1_can || 0} · mẫu kiểm ngẫu nhiên: {(d.k1 || 0) - (d.k1_can || 0)}</span><Btn variant="ghost" className="ml-auto !py-1 !px-2 text-[11px]" onClick={taiDem}>Đếm lại</Btn></div>
     <HopViec dongs={a.dong_san_pham || []} dem={d} />
   </div>;
 }

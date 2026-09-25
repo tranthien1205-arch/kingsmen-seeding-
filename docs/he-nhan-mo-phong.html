@@ -17,7 +17,7 @@ button,input,select{font:inherit;color:inherit}
 .st{font-weight:700;font-size:14px}.mu{color:var(--mut)}.xs{font-size:11px}.s12{font-size:12px}
 .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.gap{display:flex;flex-direction:column;gap:12px}
 .pill{display:inline-block;border-radius:99px;padding:1px 8px;font-size:11px;font-weight:600;white-space:nowrap}
-.t-VANG{background:var(--vang);color:var(--vang-i)}.t-BAC{background:var(--bac);color:var(--bac-i)}.t-LECH{background:var(--lech);color:var(--lech-i)}.t-THAY{background:var(--thay);color:var(--thay-i)}.t-MO{background:var(--mo);color:var(--mo-i)}.t-KHONG_RO,.t-NGHE_SAI{background:#EEF1F2;color:#607580}
+.t-KIEM{background:var(--thay);color:var(--thay-i)}.t-KHONG_CHAC{background:var(--lech);color:var(--lech-i)}.t-THAY_CHOT{background:var(--bac);color:var(--bac-i)}.t-VANG{background:var(--vang);color:var(--vang-i)}.t-BAC{background:var(--bac);color:var(--bac-i)}.t-LECH{background:var(--lech);color:var(--lech-i)}.t-THAY{background:var(--thay);color:var(--thay-i)}.t-MO{background:var(--mo);color:var(--mo-i)}.t-KHONG_RO,.t-NGHE_SAI{background:#EEF1F2;color:#607580}
 .chip{border:1px solid var(--line);background:#fff;border-radius:99px;padding:2px 10px;font-size:12px;cursor:pointer}.chip.on{border-color:var(--ink);font-weight:700}
 .btn{border:1px solid var(--line);background:#fff;border-radius:10px;padding:6px 12px;font-weight:600;cursor:pointer;font-size:12px}
 .btn.pri{background:var(--brand);border-color:var(--brand);color:#fff}.btn.ok{background:var(--ok);border-color:var(--ok);color:#fff}.btn:disabled{opacity:.4;cursor:not-allowed}
@@ -52,7 +52,7 @@ select.in,input.in{border:1px solid var(--line);border-radius:8px;padding:5px 8p
 kbd{font-family:ui-monospace,monospace;font-size:11px;border:1px solid var(--line);border-bottom-width:2px;border-radius:4px;padding:0 4px;background:#fff}
 </style>
 <div class="gt">
-  <div class="lead"><b>Mô phỏng thiết kế ADR-018</b>, bấm thử được. Dữ liệu là <b>ví dụ</b> dựng theo các video Finex và Terrazo đã học, không phải số thật; bấm lưu chỉ đổi trong trang này. Thử: mở tab <b>Kho mẫu</b>, bấm một mẫu “Bất đồng”, sửa trường Dụng cụ; bật <b>Duyệt tuần tự</b> rồi dùng phím <kbd>Enter</kbd> <kbd>→</kbd>; tick vài mẫu để <b>sửa hàng loạt</b>; sang <b>Bộ nhãn</b> duyệt hoặc gộp đề xuất.</div>
+  <div class="lead"><b>Mô phỏng thiết kế ADR-018 · thầy chủ đạo</b>, bấm thử được. Thầy chốt nhãn; người chỉ xem mẫu <b>Kiểm ngẫu nhiên</b> và <b>Thầy chưa chắc</b>. Dữ liệu là <b>ví dụ</b> dựng theo các video Finex và Terrazo đã học, không phải số thật; bấm lưu chỉ đổi trong trang này. Thử: mở tab <b>Kho mẫu</b>, bấm một mẫu “Bất đồng”, sửa trường Dụng cụ; bật <b>Duyệt tuần tự</b> rồi dùng phím <kbd>Enter</kbd> <kbd>→</kbd>; tick vài mẫu để <b>sửa hàng loạt</b>; sang <b>Bộ nhãn</b> duyệt hoặc gộp đề xuất.</div>
   <div class="hd"><h1>🧠 Bộ não AI</h1><span class="mu">Máy › Bộ não AI</span></div>
   <div class="tabs" id="tabs"></div>
   <div id="man" style="margin-top:12px"></div>
@@ -102,7 +102,7 @@ let MAU=[
  {id:2,kn:'K1',ten:'Đừng mua FnX khi chưa biết khối lượng.mp4',kenh:'@santerrazotuphang',dong:'Terrazo',nguon:'TikTok',tu:0,den:3,shot:1,anh:['#7c2d12'],cap:['đổ xô'],
   mo:V({nhom:'THI_CONG',hanh_dong:['đổ'],co_canh:'trung cảnh',dung_cho:'minh hoạ lời'}),
   thay:V({nhom:'HOAN_THIEN',hanh_dong:['đổ'],vat_lieu:['bột màu xám'],dung_cu:['xô trộn'],vi_tri:'sàn nhà tắm',nguoi:'thợ',co_canh:'trung cảnh',goc_may:'ngang mắt',chuyen_dong:'đứng yên',dung_cho:'mở đầu (hook)',mo_ta:'Thợ nghiêng xô đổ vật liệu lỏng xuống nền gạch hoa văn',chac:0.55,ly_do:'nền đã phủ một phần'}),nguoi:null},
- {id:3,kn:'K1',ten:'Đừng mua FnX khi chưa biết khối lượng.mp4',kenh:'@santerrazotuphang',dong:'Terrazo',nguon:'TikTok',tu:6,den:15,shot:2,anh:['#334155'],cap:['đồ hoạ đo'],
+ {id:3,kiem:1,kn:'K1',ten:'Đừng mua FnX khi chưa biết khối lượng.mp4',kenh:'@santerrazotuphang',dong:'Terrazo',nguon:'TikTok',tu:6,den:15,shot:2,anh:['#334155'],cap:['đồ hoạ đo'],
   mo:V({nhom:'THI_CONG',co_canh:'cận'}),
   thay:V({nhom:'KHAC',hanh_dong:['đo'],dung_cu:['thước dây'],vi_tri:'nhà vệ sinh',nguoi:'không có',co_canh:'chữ / đồ hoạ',goc_may:'từ trên xuống',chuyen_dong:'đứng yên',dung_cho:'minh hoạ lời',mo_ta:'Đồ hoạ đo chiều dài, chiều rộng nền nhà vệ sinh để tính diện tích',chac:0.9,ly_do:'chữ và mũi tên đồ hoạ'}),nguoi:null},
  {id:4,kn:'K1',ten:'Đừng mua FnX khi chưa biết khối lượng.mp4',kenh:'@santerrazotuphang',dong:'Terrazo',nguon:'TikTok',tu:15,den:19.5,shot:3,anh:['#475569','#57534e','#44403c'],cap:['rót nước','khuấy','đổ'],
@@ -112,7 +112,7 @@ let MAU=[
   mo:V({nhom:'THI_CONG',co_canh:'trung cảnh'}),
   thay:V({nhom:'HOAN_THIEN',hanh_dong:['cầm sản phẩm'],vi_tri:'nhà vệ sinh',nguoi:'thợ',co_canh:'trung cảnh',goc_may:'ngang mắt',chuyen_dong:'đứng yên',tham_my:8,dung_cho:'cảnh chốt',mo_ta:'Thợ ngồi xổm sờ nền xám đã phủ hoàn thiện',chac:0.8}),
   nguoi:V({nhom:'HOAN_THIEN',hanh_dong:['cầm sản phẩm'],vi_tri:'nhà vệ sinh',nguoi:'thợ',co_canh:'trung cảnh',goc_may:'ngang mắt',chuyen_dong:'đứng yên',tham_my:7,dung_cho:'cảnh chốt',mo_ta:'Thợ sờ nền Terrazo đã hoàn thiện, bề mặt đều',ai:'Thiện',luc:'09:42 25/09'})},
- {id:6,kn:'K1',ten:'Làm đúng ngay từ đầu.mp4',kenh:'Drive · BRAND',dong:'Keo chít mạch',nguon:'Drive',tu:12,den:15.2,shot:5,anh:['#0f766e'],cap:['mạch keo'],
+ {id:6,kiem:1,kn:'K1',ten:'Làm đúng ngay từ đầu.mp4',kenh:'Drive · BRAND',dong:'Keo chít mạch',nguon:'Drive',tu:12,den:15.2,shot:5,anh:['#0f766e'],cap:['mạch keo'],
   mo:V({nhom:'HOAN_THIEN',co_canh:'cận',tham_my:8,dung_cho:'cảnh chốt'}),
   thay:V({nhom:'HOAN_THIEN',vat_lieu:['keo A+B'],vi_tri:'ron bếp',nguoi:'không có',co_canh:'cận',goc_may:'sát mặt phẳng',chuyen_dong:'lia',tham_my:9,dung_cho:'cảnh chốt',mo_ta:'Cận mạch keo trắng đều trên ron gạch bếp',chac:0.9}),nguoi:null},
  {id:7,kn:'K1',ten:'Finex S100 cho nhà tắm.mp4',kenh:'@vatlieuchuyendung',dong:'Finex',nguon:'TikTok',tu:8,den:14,shot:3,anh:['#1e3a8a','#1d4ed8','#1e40af'],cap:['đổ nước','nước đọng','khô'],
@@ -125,7 +125,7 @@ let MAU=[
  {id:21,kn:'K4',ten:'Finex F300 phủ nền cũ.mp4',kenh:'@vatlieumoifinex',dong:'Finex',nguon:'TikTok',tu:4.1,den:7.8,shot:3,anh:['#b45309'],cap:['gạt bay'],
   truoc:'Vần sàn này em muốn cải tạo từ lâu rồi nhưng cứ nghĩ đến chuyện đục phá nền cũ là em lại ngại.',text:'Lần này em quyết định thử Finex F300 để phủ trực tiếp lên trên nền hiện tại.',sau:'Không cần phải tháo bỏ toàn bộ lớp gạch bên dưới.',
   hinh:V({nhom:'THI_CONG',buoc:'Cán bay răng'}),thay:V({nhom:'GIAI_PHAP',vat_lieu:['thùng Finex F300'],chac:0.8}),nguoi:null},
- {id:22,kn:'K4',ten:'Đừng mua FnX khi chưa biết khối lượng.mp4',kenh:'@santerrazotuphang',dong:'Terrazo',nguon:'TikTok',tu:6,den:15,shot:2,anh:['#334155'],cap:['đồ hoạ đo'],
+ {id:22,kiem:1,kn:'K4',ten:'Đừng mua FnX khi chưa biết khối lượng.mp4',kenh:'@santerrazotuphang',dong:'Terrazo',nguon:'TikTok',tu:6,den:15,shot:2,anh:['#334155'],cap:['đồ hoạ đo'],
   truoc:'Đừng mua Finex khi mà chưa biết chắc khối lượng mình cần.',text:'Cách đơn giản nhất là anh chị đo chiều dài, nhân chiều rộng để ra diện tích.',sau:'Sau đó nhân với định mức trên bao bì.',
   hinh:V({nhom:'KHAC'}),thay:V({nhom:'THI_CONG',buoc:'Đo diện tích tính vật tư',chac:0.6}),nguoi:null},
  {id:23,kn:'K4',ten:'Làm đúng ngay từ đầu.mp4',kenh:'Drive · BRAND',dong:'Keo chít mạch',nguon:'Drive',tu:3,den:9,shot:2,anh:['#0f766e'],cap:['mạch keo'],
@@ -138,21 +138,22 @@ let MAU=[
 ];
 const NGUONG={net:.55,dong:.25,sang0:.15,sang1:.92};
 // ===== TRẠNG THÁI =====
-const TT={VANG:'Người đã gán',BAC:'Thầy + mở khớp',LECH:'Bất đồng',THAY:'Chỉ thầy',MO:'Chỉ mô hình mở',NGHE_SAI:'Nghe sai',LUAT:'Chỉ luật máy',CHO_THAY:'Chờ thầy'};
+const TT={KIEM:'Kiểm ngẫu nhiên',KHONG_CHAC:'Thầy chưa chắc',THAY_CHOT:'Thầy chốt',VANG:'Người đã kiểm',MO:'Chỉ mô hình mở',NGHE_SAI:'Nghe sai',LUAT:'Chỉ luật máy',CHO_THAY:'Chờ thầy'};
 const khop=(a,b)=>a&&b&&a.nhom===b.nhom&&(a.buoc||null)===(b.buoc||null)&&(a.bai_test||null)===(b.bai_test||null);
-function ttCua(m){ if(m.kn==='K2') return m.nguoi?'VANG':'LUAT'; if(m.nguoi) return 'VANG'; if(m.kn==='K4') return m.thay?(khop(m.hinh,m.thay)||m.hinh.nhom===m.thay.nhom?'BAC':'LECH'):'CHO_THAY'; return m.thay&&m.mo?(khop(m.thay,m.mo)?'BAC':'LECH'):m.thay?'THAY':'MO'; }
+function ttCua(m){ if(m.kn==='K2') return m.nguoi?'VANG':'LUAT'; if(m.nguoi) return 'VANG'; if(!m.thay) return m.kn==='K4'?'CHO_THAY':'MO'; if(m.kiem) return 'KIEM'; if((m.thay.chac||0)<0.6) return 'KHONG_CHAC'; return 'THAY_CHOT'; }
 const tenNhom=k=>(NHOM.find(n=>n[0]===k)||[k,k||'—'])[1];
 const nhan=o=>!o?'—':tenNhom(o.nhom)+(o.buoc?' · '+o.buoc:'')+(o.bai_test?' · '+o.bai_test:'');
-let S={tab:'kho',kn:'K1',tt:'',dong:'',chon:null,tuanTu:false,tick:new Set(),truong:'dung_cu',sua:null,tach:null,phat:0,thay:'claude-opus-5'};
+let S={tab:'kho',kn:'K1',tt:'CAN',dong:'',chon:null,tuanTu:false,tick:new Set(),truong:'dung_cu',sua:null,tach:null,phat:0,thay:'claude-opus-5'};
 const $=s=>document.querySelector(s); const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 function bao(t){ const x=$('#toast'); x.textContent=t; x.classList.add('on'); clearTimeout(bao.t); bao.t=setTimeout(()=>x.classList.remove('on'),1800); }
 const deXuatN=()=>Object.values(BN).flat().filter(v=>v.tt==='DE_XUAT').length;
 // ===== KHUNG =====
-function veTabs(){ const t=[['tong','🎯 Tổng quan'],['kho','📚 Kho mẫu',MAU.filter(m=>['LECH','THAY'].includes(ttCua(m))).length],['bonhan','🏷️ Bộ nhãn',deXuatN()],['mohinh','🧠 Mô hình'],['chiphi','💰 Chi phí & khoá']];
+function veTabs(){ const t=[['tong','🎯 Tổng quan'],['kho','📚 Kho mẫu',MAU.filter(m=>['KIEM','KHONG_CHAC'].includes(ttCua(m))).length],['bonhan','🏷️ Bộ nhãn',deXuatN()],['mohinh','🧠 Mô hình'],['chiphi','💰 Chi phí & khoá']];
   $('#tabs').innerHTML=t.map(([k,l,c])=>`<button class="${S.tab===k?'on':''}" data-tab="${k}">${l}${c?`<span class="c">${c}</span>`:''}</button>`).join(''); }
 function ve(){ veTabs(); const m=$('#man'); m.innerHTML=S.tab==='kho'?veKho():S.tab==='bonhan'?veBoNhan():S.tab==='tong'?veTong():`<div class="card mu">Giữ như hiện tại (${S.tab==='mohinh'?'bảng huấn luyện, danh mục mô hình, định tuyến':'chi phí theo mô hình, khoá API'}). Không đổi trong thiết kế này.</div>`; }
 // ===== KHO MẪU =====
-function dsLoc(){ return MAU.filter(m=>m.kn===S.kn&&(!S.tt||ttCua(m)===S.tt)&&(!S.dong||m.dong===S.dong)); }
+const canNguoi=m=>['KIEM','KHONG_CHAC'].includes(ttCua(m));
+function dsLoc(){ return MAU.filter(m=>m.kn===S.kn&&(!S.tt||(S.tt==='CAN'?canNguoi(m):ttCua(m)===S.tt))&&(!S.dong||m.dong===S.dong)); }
 function anhHtml(m,lon){ return `<div class="anh ${lon?'lon':''}" style="background:linear-gradient(135deg,${m.anh[0]},${m.anh[m.anh.length-1]})">${esc(m.cap[0])}${m.anh.length>1?' · dải 3 khung':''}</div>`; }
 function veKho(){ const ds=dsLoc(); const all=MAU.filter(m=>m.kn===S.kn); const dem={}; all.forEach(m=>{const t=ttCua(m);dem[t]=(dem[t]||0)+1;});
   if(S.chon&&!ds.find(m=>m.id===S.chon)) S.chon=null; if(!S.chon&&ds.length&&innerWidth>900) S.chon=ds[0].id;
@@ -161,14 +162,14 @@ function veKho(){ const ds=dsLoc(); const all=MAU.filter(m=>m.kn===S.kn); const 
    <div class="row"><span class="st">Kho mẫu</span><span class="mu s12">chỗ làm việc của người: thầy và mô hình mở gán, anh/chị cân chỉnh</span>
      <label class="row s12" style="margin-left:auto;gap:6px"><input type="checkbox" id="tuantu" ${S.tuanTu?'checked':''}> Duyệt tuần tự</label></div>
    <div class="tabs sm">${[['K1','Khung hình'],['K4','Câu thoại'],['K2','Footage chất lượng']].map(([k,l])=>`<button class="${S.kn===k?'on':''}" data-kn="${k}">${l}</button>`).join('')}</div>
-   <div class="row"><button class="chip ${!S.tt?'on':''}" data-tt="">Tất cả · ${all.length}</button>${Object.keys(TT).filter(k=>dem[k]).map(k=>`<button class="chip ${S.tt===k?'on':''} " data-tt="${k}"><span class="pill t-${k}" style="padding:0 6px">${TT[k]}</span> ${dem[k]}</button>`).join('')}
+   <div class="row"><button class="chip ${S.tt==='CAN'?'on':''}" data-tt="CAN" style="font-weight:700">⚑ Cần người · ${all.filter(canNguoi).length}</button><button class="chip ${!S.tt?'on':''}" data-tt="">Tất cả · ${all.length}</button>${Object.keys(TT).filter(k=>dem[k]).map(k=>`<button class="chip ${S.tt===k?'on':''} " data-tt="${k}"><span class="pill t-${k}" style="padding:0 6px">${TT[k]}</span> ${dem[k]}</button>`).join('')}
      <select class="in" id="locdong" style="margin-left:auto"><option value="">mọi dòng</option>${dongs.map(d=>`<option ${S.dong===d?'selected':''}>${d}</option>`).join('')}</select></div>
    <div class="kho">
-     <div>${S.tuanTu?`<div class="card s12" style="background:#F5FAFB">Đang duyệt tuần tự <b>${ds.findIndex(m=>m.id===S.chon)+1}/${ds.length}</b> mẫu ${S.tt?'“'+TT[S.tt]+'”':''}. Phím: <kbd>Enter</kbd> đúng hết theo thầy · <kbd>1</kbd>–<kbd>8</kbd> đổi nhóm cảnh · <kbd>0</kbd> không rõ · <kbd>→</kbd> mẫu kế · <kbd>←</kbd> mẫu trước.</div>`:''}
+     <div>${S.tuanTu?`<div class="card s12" style="background:#F5FAFB">Đang duyệt tuần tự <b>${ds.findIndex(m=>m.id===S.chon)+1}/${ds.length}</b> mẫu ${S.tt==='CAN'?'“Cần người”':S.tt?'“'+TT[S.tt]+'”':''}. Phím: <kbd>Enter</kbd> đúng hết theo thầy · <kbd>1</kbd>–<kbd>8</kbd> đổi nhóm cảnh · <kbd>0</kbd> không rõ · <kbd>→</kbd> mẫu kế · <kbd>←</kbd> mẫu trước.</div>`:''}
       <div class="ds">${ds.map(m=>{const t=ttCua(m); return `<div class="dong ${S.chon===m.id?'on':''}" data-chon="${m.id}"><input type="checkbox" data-tick="${m.id}" ${S.tick.has(m.id)?'checked':''} onclick="event.stopPropagation()">${anhHtml(m)}
         <div style="min-width:0"><div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${m.kn==='K4'?'“'+esc(m.text)+'”':m.kn==='K2'?esc(m.ten):esc((m.nguoi&&m.nguoi.mo_ta)||(m.thay&&m.thay.mo_ta)||(m.mo&&m.mo.mo_ta)||'')}</div>
         <div class="mu xs" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(m.ten)} · ${m.shot?'shot '+m.shot+' · ':''}giây ${m.tu}–${m.den} · ${m.dong}</div>
-        ${m.kn==='K1'?`<div class="xs">${t==='LECH'?`<span class="bad">mở: ${nhan(m.mo)}</span> · <span style="color:var(--thay-i)">thầy: ${nhan(m.thay)}</span>`:`<span class="mu">${nhan(m.nguoi||m.thay||m.mo)}</span>`}</div>`:''}</div>
+        ${m.kn==='K1'?`<div class="xs"><span class="mu">${nhan(m.nguoi||m.thay||m.mo)}</span>${m.mo&&m.thay&&!khop(m.mo,m.thay)?' · <span class="mu">mở lệch (học trò)</span>':''}</div>`:''}</div>
         <span class="pill t-${t}">${TT[t]}</span></div>`}).join('')||'<div class="mu" style="padding:16px">Không có mẫu nào.</div>'}</div>
       ${S.tick.size?veBatch():''}</div>
      <div>${S.chon?veChiTiet(MAU.find(m=>m.id===S.chon)):'<div class="card mu">Bấm một mẫu để xem và sửa.</div>'}</div>
@@ -176,14 +177,15 @@ function veKho(){ const ds=dsLoc(); const all=MAU.filter(m=>m.kn===S.kn); const 
 function giaTri(f,dong){ return (BN[f]||[]).filter(v=>v.tt==='DUNG'&&(!v.dong||!dong||v.dong===dong)).map(v=>v.ma||v.ten); }
 function hienGt(f,v){ if(v==null||v===''||(Array.isArray(v)&&!v.length)) return '<span class="mu">—</span>'; if(f==='nhom') return tenNhom(v); const ds=Array.isArray(v)?v:[v];
   return ds.map(x=>{ const d=(BN[f]||[]).find(y=>y.ten===x); return d&&d.tt==='DE_XUAT'?`<span class="de" title="chưa có trong bộ nhãn — đề xuất">${esc(x)} · đề xuất</span>`:esc(x); }).join(', '); }
+function lyDoHoi(m){ const t=ttCua(m); return t==='KIEM'?'<div class="s12" style="background:var(--thay);color:var(--thay-i);border-radius:8px;padding:6px 10px">Mẫu <b>kiểm ngẫu nhiên</b>: thầy đã chốt, anh/chị xem để đo thầy đúng bao nhiêu. Đúng thì Enter.</div>':t==='KHONG_CHAC'?'<div class="s12" style="background:var(--lech);color:var(--lech-i);border-radius:8px;padding:6px 10px"><b>Thầy chưa chắc</b> (chắc '+m.thay.chac+') sau khi tự xem lại: '+esc(m.thay.ly_do||'')+'</div>':t==='THAY_CHOT'?'<div class="s12 mu">Thầy đã chốt (chắc '+m.thay.chac+'). Không cần anh/chị xem; chỉ sửa nếu thấy sai.</div>':''; }
 function veChiTiet(m){ if(m.kn==='K2') return veK2(m); if(m.kn==='K4') return veK4(m);
   const cuoi=S.sua&&S.sua.id===m.id?S.sua.v:JSON.parse(JSON.stringify(m.nguoi||m.thay||m.mo)); if(!S.sua||S.sua.id!==m.id) S.sua={id:m.id,v:cuoi};
   const v=S.sua.v; const hien=TRUONG.filter(f=>!f.khi||[v.nhom,m.thay&&m.thay.nhom,m.mo&&m.mo.nhom].includes(f.khi));
   const la3=m.anh.length===3;
   return `<div class="card gap">
     ${S.tach&&S.tach.id===m.id?veTach(m):`${anhHtml(m,true)}${la3?`<div class="row"><button class="btn" data-tach="${m.id}">✂ Ba khung khác nội dung? Gán từng khung</button><span class="mu xs">dải 3 khung: ${m.cap.join(' · ')}</span></div>`:''}`}
-    <div class="mu xs">${esc(m.ten)} · ${esc(m.kenh)} · shot ${m.shot} · giây ${m.tu}–${m.den} · ${m.dong}${m.thay&&m.thay.ly_do?` · <span style="color:var(--thay-i)">thầy: ${esc(m.thay.ly_do)} (chắc ${m.thay.chac})</span>`:''}</div>
-    <div class="tbl"><table class="bang" style="min-width:560px"><tr><th>Trường</th><th>Mô hình mở</th><th>Thầy</th><th>Người (chốt)</th><th></th></tr>
+    ${lyDoHoi(m)}<div class="mu xs">${esc(m.ten)} · ${esc(m.kenh)} · shot ${m.shot} · giây ${m.tu}–${m.den} · ${m.dong}${m.thay&&m.thay.ly_do?` · <span style="color:var(--thay-i)">thầy: ${esc(m.thay.ly_do)} (chắc ${m.thay.chac})</span>`:''}</div>
+    <div class="tbl"><table class="bang" style="min-width:560px"><tr><th>Trường</th><th>Mô hình mở (học trò)</th><th>Thầy (chốt)</th><th>Người (kiểm)</th><th></th></tr>
       ${hien.map(f=>{ const a=m.mo&&m.mo[f.k], b=m.thay&&m.thay[f.k]; const lech=JSON.stringify(a||null)!==JSON.stringify(b||null)&&(a||b)&&f.k!=='mo_ta'; const doi=JSON.stringify(v[f.k]||null)!==JSON.stringify((m.thay||{})[f.k]||null);
         return `<tr class="${lech?'lech':''}"><td><b>${f.ten}</b><div class="mu xs">${f.nhom}</div></td><td class="mo">${hienGt(f.k,a)}</td><td class="th">${hienGt(f.k,b)}</td><td class="${doi?'nguoi-sua':''}">${oSua(f,v,m)}</td><td>${b!=null&&doi?`<button class="btn" style="padding:2px 6px" data-lay="${f.k}" title="lấy giá trị của thầy">↩ thầy</button>`:''}</td></tr>`; }).join('')}
     </table></div>
@@ -246,17 +248,17 @@ function veDong(){ return `<div class="row"><span class="st">Dòng sản phẩm<
   ${[['FINEX','Finex'],['TERRAZ','Terrazo'],['KEO CHIT MACH','Keo chít mạch'],['vatlieumoifinex','Finex']].map(([a,b])=>`<div class="row" style="gap:4px;max-width:420px"><input class="in" value="${a}" style="flex:1"> → <input class="in" value="${b}" style="flex:1"><button class="btn" style="padding:2px 6px">✕</button></div>`).join('')}`; }
 // ===== TỔNG QUAN =====
 function veTong(){ const vg=MAU.filter(m=>m.nguoi&&m.kn==='K1'); const hang=[['Nhóm cảnh',42,88,64],['Bước thi công',31,71,38],['Bài test',9,78,11],['Hành động',42,90,55],['Dụng cụ',38,62,20],['Vật liệu',35,80,30],['Vị trí',40,85,48],['Cỡ cảnh',42,93,70],['Góc máy',42,90,61],['Dùng cho',40,74,35],['Thẩm mỹ (±1)',12,58,33]];
-  return `<div class="gap"><div class="kpi">${[['214','mẫu hình đã có thầy + mở'],['42','nhãn người (vàng)'],['37%','mẫu bất đồng chờ người'],['6','nhãn đề xuất chờ duyệt']].map(([a,b])=>`<div class="card"><b>${a}</b><span class="mu xs">${b}</span></div>`).join('')}</div>
+  return `<div class="gap"><div class="kpi">${[['214','mẫu hình thầy đã chốt'],['12%','mẫu người phải xem (kiểm 8% + thầy chưa chắc 4%)'],['42','mẫu người đã kiểm'],['6','nhãn đề xuất chờ duyệt']].map(([a,b])=>`<div class="card"><b>${a}</b><span class="mu xs">${b}</span></div>`).join('')}</div>
    <div class="card gap"><div class="row"><span class="st">Độ đúng theo từng trường</span><span class="mu s12">đo trên nhãn người, riêng mẫu ngẫu nhiên · ví dụ minh hoạ · cổng huấn luyện 80%</span></div>
-    <div class="tbl"><table class="bang" style="min-width:600px"><tr><th>Trường</th><th class="num">Nhãn người</th><th>Thầy đúng</th><th>Mô hình mở đúng</th><th>Cổng</th></tr>${hang.map(([t,n,a,b])=>`<tr><td><b>${t}</b></td><td class="num">${n}</td><td>${barPct(a)}</td><td>${barPct(b)}</td><td>${b>=80?'<span class="pill t-MO">mở huấn luyện</span>':n<30?'<span class="mu xs">cần '+(30-n)+' nhãn nữa</span>':'<span class="pill t-LECH">mở chưa đạt</span>'}</td></tr>`).join('')}</table></div>
-    <div class="mu xs">Đọc bảng: thầy yếu ở <b>Dụng cụ</b> và <b>Thẩm mỹ</b> → Kho mẫu tự đẩy mẫu có hai trường này lên đầu hàng duyệt.</div></div>
+    <div class="tbl"><table class="bang" style="min-width:600px"><tr><th>Trường</th><th class="num">Mẫu kiểm</th><th>Thầy đúng</th><th>Mô hình mở đúng</th><th>Tỉ lệ kiểm</th><th>Cổng học trò</th></tr>${hang.map(([t,n,a,b])=>`<tr><td><b>${t}</b></td><td class="num">${n}</td><td>${barPct(a)}</td><td>${barPct(b)}</td><td>${a<85?'<span class="pill t-KHONG_CHAC">tăng 20%</span>':'<span class="mu xs">8%</span>'}</td><td>${b>=80?'<span class="pill t-MO">mở huấn luyện</span>':n<30?'<span class="mu xs">cần '+(30-n)+' nhãn nữa</span>':'<span class="pill t-LECH">mở chưa đạt</span>'}</td></tr>`).join('')}</table></div>
+    <div class="mu xs">Đọc bảng: thầy đúng dưới 85% ở <b>Bước</b>, <b>Dụng cụ</b>, <b>Vật liệu</b>, <b>Dùng cho</b>, <b>Thẩm mỹ</b> → máy tự tăng tỉ lệ kiểm các trường này lên 20%; trường thầy chắc thì chỉ kiểm 8%.</div></div>
    <div class="card gap"><span class="st">Việc cần quyết</span><div class="s12">• Phiên bản <b>ghep_canh v20260924</b> khớp người 60/100 (cách cũ 53) — <button class="btn ok" style="padding:2px 8px">Bật</button> <button class="btn" style="padding:2px 8px">Từ chối</button></div><div class="s12">• 6 nhãn đề xuất chờ duyệt — <button class="btn" style="padding:2px 8px" data-tab="bonhan">Mở Bộ nhãn</button></div></div></div>`; }
 function barPct(x){ return `<div class="bar"><div class="tr" style="max-width:160px"><i style="width:${x}%;background:${x>=80?'var(--ok)':x>=65?'var(--warn)':'var(--lech-i)'}"></i></div><span class="num" style="width:34px">${x}%</span></div>`; }
 // ===== TƯƠNG TÁC =====
 function luuNguoi(m,v){ m.nguoi={...v,ai:'Thiện',luc:new Date().toLocaleTimeString('vi-VN',{hour:'2-digit',minute:'2-digit'})+' hôm nay'}; S.sua=null; S.tach=null; }
 function ke(buoc=1){ const ds=dsLoc(); const i=ds.findIndex(m=>m.id===S.chon); const n=ds[i+buoc]; if(n){S.chon=n.id;S.sua=null;S.tach=null;} else bao(buoc>0?'Hết mẫu trong bộ lọc':'Đang ở mẫu đầu'); }
 document.addEventListener('click',e=>{ const t=e.target.closest('[data-tab],[data-kn],[data-tt],[data-chon],[data-dunghet],[data-luu],[data-khongro],[data-ke],[data-lay],[data-tach],[data-huytach],[data-luutach],[data-phat],[data-nghesai],[data-k2],[data-batchthay],[data-batchdat],[data-bochon],[data-truong],[data-duyet],[data-bo],[data-themnhan]'); if(!t) return; const d=t.dataset;
-  if(d.tab){S.tab=d.tab;} else if(d.kn){S.kn=d.kn;S.tt='';S.chon=null;S.sua=null;S.tick.clear();} else if(d.tt!=null&&t.classList.contains('chip')){S.tt=d.tt;S.chon=null;S.sua=null;}
+  if(d.tab){S.tab=d.tab;} else if(d.kn){S.kn=d.kn;S.tt='CAN';S.chon=null;S.sua=null;S.tick.clear();} else if(d.tt!=null&&t.classList.contains('chip')){S.tt=d.tt;S.chon=null;S.sua=null;}
   else if(d.chon){S.chon=+d.chon;S.sua=null;S.tach=null;}
   else if(d.dunghet){ const m=MAU.find(x=>x.id==d.dunghet); luuNguoi(m,JSON.parse(JSON.stringify(m.thay))); bao('Đã chốt theo thầy · nhãn vàng'); if(S.tuanTu) ke(); }
   else if(d.luu){ const m=MAU.find(x=>x.id==d.luu); luuNguoi(m,S.sua.v); bao('Đã lưu nhãn người'); if(S.tuanTu) ke(); }
@@ -275,7 +277,7 @@ document.addEventListener('click',e=>{ const t=e.target.closest('[data-tab],[dat
   else if(d.themnhan){ const ten=$('#themNhan').value.trim(); if(!ten) return bao('Gõ tên nhãn'); BN[d.themnhan].push({ten,dong:$('#themDong').value||null,tt:'DUNG',nguon:'NGUOI',lan:0}); bao('Đã thêm “'+ten+'”'); }
   ve(); });
 document.addEventListener('change',e=>{ const t=e.target; const d=t.dataset;
-  if(t.id==='tuantu'){ S.tuanTu=t.checked; if(S.tuanTu&&!S.tt) S.tt='LECH'; S.chon=null; S.sua=null; }
+  if(t.id==='tuantu'){ S.tuanTu=t.checked; if(S.tuanTu) S.tt='CAN'; S.chon=null; S.sua=null; }
   else if(t.id==='locdong'){ S.dong=t.value; S.chon=null; }
   else if(d.tick){ const id=+d.tick; t.checked?S.tick.add(id):S.tick.delete(id); }
   else if(t.id==='batchF'){ S.batchF=t.value; }

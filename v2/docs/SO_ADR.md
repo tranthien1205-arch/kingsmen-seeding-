@@ -381,6 +381,10 @@ Người duyệt: Thiện · Trạng thái: ĐÃ DUYỆT (2026-09-24, "ok bạn 
 
 ## Changelog
 
+### 2026-09-25 · Thầy làm chủ đạo
+- Chủ: "thầy (Opus) giải thích gần như chính xác → nâng vai trò thầy làm chủ đạo để gán nhãn chi tiết nhiều hơn thay vì đẩy cho người". Nhãn thầy là nhãn làm việc; mô hình mở lệch thầy chỉ để đo học trò. Hàng việc của người chỉ còn đoạn thầy chắc < 0,6 và mẫu kiểm ngẫu nhiên ~8% (`kiem_ngau_nhien`, dùng để đo độ đúng thầy không lệch). Đoạn chưa có thầy đọc không vào hàng (sẽ học lại).
+- Bản vẽ ADR-018 và mô phỏng cập nhật theo vai trò mới (tỉ lệ kiểm tự tăng ở trường thầy đúng < 85%).
+
 ### 2026-09-25 · Gom Bộ não AI · Kho mẫu · Dòng sản phẩm · phiên bản app
 - Chủ: "trên pc vẫn là ui cũ" → tab mở từ trước giữ bản cũ: `GET /api/ban` (từ sổ deploy) + góc phải dưới hiện phiên bản; kiểm 2 phút/lần và khi quay lại tab, có bản mới thì báo "Tải lại"; quay lại tab sau 1 phút tự tải lại dữ liệu. Kiểm thật bằng trình duyệt tự động ở 1280 và 390 px.
 - Chủ: "hệ thống lại ui của tất cả sub tab bộ não AI … gom gọn" → 8 tab còn 5: 🎯 Tổng quan (bàn làn × dòng, kỹ năng, phiên bản, tiến trình, nhật ký) · 🎓 Dạy máy · 📚 Kho mẫu (kho mẫu mới, dòng sản phẩm, nạp video, video đã học) · 🧠 Mô hình (bảng huấn luyện, mô hình, định tuyến) · 💰 Chi phí & khoá.

@@ -36,7 +36,8 @@ test('016b: thầy Claude đọc đoạn, nhãn đóng, chi phí mục học, h�
   const sp = (await api('/danh-muc/san_pham', 'POST', { ma: 'K', ten: 'Keo', dong: 'Keo', quy_trinh: qt.join('\n') })).j.id;
   const muc = (await api('/muc', 'POST', { tieu_de: 'x', dinh_dang: 'VIDEO', san_pham_id: sp })).j.id;
   const ts = (await may('/hub/tai-san', 'POST', { muc_id: muc, ten: 'A.mp4', media_url: '/media/media/a.mp4', media_type: 'VIDEO', giay: 6 })).j.id;
-  await may('/hub/doc-khung', 'POST', { tai_san_id: ts, timeline: [{ tu: 0, den: 3, nhom: 'THI_CONG', buoc: 'Gạt phẳng', can_xac_nhan: true, nguon_nhan: 'THAY', mo: { nhom: 'HOAN_THIEN', chac: 1 }, thay: { nhom: 'THI_CONG', buoc: 'Gạt phẳng', chac: 0.6, model: 'claude-sonnet-4-5', ly_do: 'tay cầm bay' } }] });
+  await may('/hub/doc-khung', 'POST', { tai_san_id: ts, timeline: [{ tu: 0, den: 3, nhom: 'THI_CONG', buoc: 'Gạt phẳng', can_xac_nhan: true, nguon_nhan: 'THAY', mo: { nhom: 'HOAN_THIEN', chac: 1 }, thay: { nhom: 'THI_CONG', buoc: 'Gạt phẳng', chac: 0.6, model: 'claude-sonnet-4-5', ly_do: 'tay cầm bay' } }, { tu: 3, den: 6, nhom: 'HOAN_THIEN', can_xac_nhan: false, nguon_nhan: 'THAY', mo: { nhom: 'THI_CONG' }, thay: { nhom: 'HOAN_THIEN', chac: 0.9 } }] });
+  assert.equal((await api('/nhan-hinh/hang')).j.hang.length, 1, 'thầy chắc mà lệch mô hình mở → KHÔNG đẩy cho người');
   const h = (await api('/nhan-hinh/hang')).j.hang[0]; assert.equal(h.thay.ly_do, 'tay cầm bay'); assert.equal(h.mo.nhom, 'HOAN_THIEN');
   await api('/tai-san/' + ts + '/doan/0', 'POST', { nhom: 'THI_CONG', buoc: 'Gạt phẳng', nhe: true });
   const d = (await api('/bootstrap')).j.db.ai_nao.do_chinh_xac_hinh; assert.deepEqual(d.thay, { so: 1, dung_nhom: 1 }); assert.deepEqual(d.mo, { so: 1, dung_nhom: 0 });
