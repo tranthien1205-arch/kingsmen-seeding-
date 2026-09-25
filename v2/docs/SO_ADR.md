@@ -381,6 +381,12 @@ Người duyệt: Thiện · Trạng thái: ĐÃ DUYỆT (2026-09-24, "ok bạn 
 
 ## Changelog
 
+### 2026-09-25 · Gom Bộ não AI · Kho mẫu · Dòng sản phẩm · phiên bản app
+- Chủ: "trên pc vẫn là ui cũ" → tab mở từ trước giữ bản cũ: `GET /api/ban` (từ sổ deploy) + góc phải dưới hiện phiên bản; kiểm 2 phút/lần và khi quay lại tab, có bản mới thì báo "Tải lại"; quay lại tab sau 1 phút tự tải lại dữ liệu. Kiểm thật bằng trình duyệt tự động ở 1280 và 390 px.
+- Chủ: "hệ thống lại ui của tất cả sub tab bộ não AI … gom gọn" → 8 tab còn 5: 🎯 Tổng quan (bàn làn × dòng, kỹ năng, phiên bản, tiến trình, nhật ký) · 🎓 Dạy máy · 📚 Kho mẫu (kho mẫu mới, dòng sản phẩm, nạp video, video đã học) · 🧠 Mô hình (bảng huấn luyện, mô hình, định tuyến) · 💰 Chi phí & khoá.
+- Chủ: "kho mẫu thầy và mô hình mở chấm pass cũng cần lưu để tôi kiểm tra cập nhật" → `GET /kho-mau` (kỹ năng K1/K2/K4; trạng thái VANG/BAC/LECH/THAY/MO/KHONG_RO/NGHE_SAI/CHO_THAY/LUAT; lọc dòng, nguồn, tìm; phân trang), sửa trực tiếp qua đúng các đường gán nhãn của Dạy máy.
+- Chủ: "định nghĩa các dòng đang bị sai thì tuỳ chỉnh thế nào ở đâu" → Kho mẫu › Dòng sản phẩm: `GET /dong-san-pham`, `POST /dong-san-pham/doi-ten` (đổi/gộp ở san_pham, kho_thanh_pham, mau_hoc_ai, luật); luật nhận dòng `huan_luyen.anh_xa_dong` sửa được, máy học đọc qua `/hub/cau-hinh-hoc` (bỏ luật cứng /RON/ khớp nhầm). Test `adr017d`.
+
 ### 2026-09-25 · Gán nhãn chi tiết + thầy Opus 5
 - Chủ (gán trên điện thoại): "3 ảnh nhưng 2 nội dung" → nút ✂ Gán từng khung (dải 3 khung cắt riêng bằng CSS, mỗi khung một nhãn vàng, nhãn đoạn = nhóm nhiều nhất, lưu `phan`); ô Mô tả đúng (thành ví dụ cho mô hình mở và thầy); ＋ Bước/bài test khác, tuỳ chọn thêm vào quy trình chuẩn của dòng.
 - Chủ: "thay đổi mô hình thầy nâng cấp hơn để tôi đỡ chỉnh" → thầy mặc định Claude Opus 5 (effort vừa, suy nghĩ thích ứng, dự phòng server khi bị từ chối), thầy xem 12 nhãn người sửa gần nhất (cùng dòng trước). Chọn mô hình / mức suy nghĩ / trần USD ở đầu tab Dạy máy (`ai.thay_nhin_model`, `thay_nhin_effort`, `ngan_sach_thay_usd`). Bảng giá thêm Opus 5, Sonnet 5, Fable 5.1.

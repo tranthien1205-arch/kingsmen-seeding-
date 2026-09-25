@@ -85,7 +85,11 @@ export default async function hoc({ app, goiApp, lenh, dir, log, script }) {
   // ---- M1 đọc hình video thành phẩm (máy có qwen2.5vl): mỗi shot mang nhóm cảnh / bước / bài test / thẩm mỹ → câu nói lúc đó ↔ cảnh (nguồn học M2)
   let DK = null, khongNhin = ""; try { const m = script ? await script("doc-khung") : null; if (m && !(await m.coVL(log))) khongNhin = " · KHÔNG ĐỌC HÌNH: Ollama tắt hoặc thiếu " + m.MO_HINH_VL + " — bật Ollama rồi cho học lại"; if (m && !khongNhin) { DK = m; log("  mô hình nhìn sẵn sàng:", m.MO_HINH_VL); } } catch (e) { log("  không tải được doc-khung:", String(e.message || e).slice(0, 60)); }
   // nhãn theo đường dẫn thư mục (chủ đặt tên thư mục theo mục đích và nhãn hàng)
-  const nhanDuong = (duong) => { const b = String(duong || "").toUpperCase(); return { muc_dich: /ECOMMERCE|BÁN HÀNG|BAN HANG|SALE|TEASER/.test(b) ? "BAN_HANG" : /CREATIVE|BRAND|ĐỊNH VỊ|DINH VI/.test(b) ? "BRAND" : null, dong: /FINEX/.test(b) ? "Finex" : /TERRAZ/.test(b) ? "Terrazo" : /RON/.test(b) ? "Keo chít mạch" : null }; };
+  // (25/09) luật nhận dòng lấy từ app (Bộ não AI › Kho mẫu › Dòng sản phẩm) — trước viết cứng ở đây, /RON/ khớp nhầm mọi tên có "RON"
+  let AX = []; try { const r = await goiApp("/hub/cau-hinh-hoc"); AX = ((r.d && r.d.anh_xa_dong) || []).filter((x) => x && x.chua && x.dong); } catch {}
+  const boDau = (x) => String(x || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/gi, "d").toUpperCase();
+  const nhanDuong = (duong) => { const b = String(duong || "").toUpperCase(), b0 = boDau(duong); const ax = AX.find((x) => b0.includes(boDau(x.chua)));
+    return { muc_dich: /ECOMMERCE|BÁN HÀNG|BAN HANG|SALE|TEASER/.test(b) ? "BAN_HANG" : /CREATIVE|BRAND|ĐỊNH VỊ|DINH VI/.test(b) ? "BRAND" : null, dong: ax ? ax.dong : AX.length ? null : /FINEX/.test(b) ? "Finex" : /TERRAZ/.test(b) ? "Terrazo" : null }; };
   // ---- 2+3. từng video
   let xong = 0, mau = 0; const loi = [];
   for (const v of video) {

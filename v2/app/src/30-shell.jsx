@@ -17,8 +17,8 @@ function BanMoi(){
     document.addEventListener('visibilitychange',f); window.addEventListener('focus',f); return ()=>{ clearInterval(id); document.removeEventListener('visibilitychange',f); window.removeEventListener('focus',f); }; },[]);
   const gio=ban&&ban.luc?new Date(ban.luc).toLocaleString('vi-VN',{hour:'2-digit',minute:'2-digit',day:'2-digit',month:'2-digit'}):'';
   return <>
-    {ban && <div className="fixed right-2 bottom-16 sm:bottom-2 z-40 text-[10px] text-ink-muted bg-white/80 border border-line rounded-full px-2 py-0.5 pointer-events-none tabular-nums" title="phiên bản đang chạy">v {moi?banKhoi.current:ban.commit} · {gio}</div>}
-    {moi && <div className="fixed left-1/2 -translate-x-1/2 z-50 bottom-24 sm:bottom-8 bg-ink text-white text-sm rounded-full shadow-lg px-4 py-2 flex items-center gap-3 whitespace-nowrap" role="status"><span>Có bản mới {ban.commit}</span><button className="rounded-full bg-white text-ink font-semibold px-3 py-1 text-xs" onClick={()=>location.reload()}>Tải lại</button></div>}
+    {ban && <div className="fixed right-2 bottom-16 sm:bottom-2 z-40 text-[10px] text-ink-muted bg-white/80 border border-line rounded-full px-2 py-0.5 pointer-events-none tabular-nums" title="phiên bản đang chạy">v {String(moi?banKhoi.current:ban.commit).slice(0,7)} · {gio}</div>}
+    {moi && <div className="fixed left-1/2 -translate-x-1/2 z-50 bottom-24 sm:bottom-8 bg-ink text-white text-sm rounded-full shadow-lg px-4 py-2 flex items-center gap-3 whitespace-nowrap" role="status"><span>Có bản mới {String(ban.commit).slice(0,7)}</span><button className="rounded-full bg-white text-ink font-semibold px-3 py-1 text-xs" onClick={()=>location.reload()}>Tải lại</button></div>}
   </>;
 }
 function Shell(){
