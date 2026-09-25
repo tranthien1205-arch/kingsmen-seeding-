@@ -381,6 +381,11 @@ Người duyệt: Thiện · Trạng thái: ĐÃ DUYỆT (2026-09-24, "ok bạn 
 
 ## Changelog
 
+### 2026-09-25 · Gán nhãn chi tiết + thầy Opus 5
+- Chủ (gán trên điện thoại): "3 ảnh nhưng 2 nội dung" → nút ✂ Gán từng khung (dải 3 khung cắt riêng bằng CSS, mỗi khung một nhãn vàng, nhãn đoạn = nhóm nhiều nhất, lưu `phan`); ô Mô tả đúng (thành ví dụ cho mô hình mở và thầy); ＋ Bước/bài test khác, tuỳ chọn thêm vào quy trình chuẩn của dòng.
+- Chủ: "thay đổi mô hình thầy nâng cấp hơn để tôi đỡ chỉnh" → thầy mặc định Claude Opus 5 (effort vừa, suy nghĩ thích ứng, dự phòng server khi bị từ chối), thầy xem 12 nhãn người sửa gần nhất (cùng dòng trước). Chọn mô hình / mức suy nghĩ / trần USD ở đầu tab Dạy máy (`ai.thay_nhin_model`, `thay_nhin_effort`, `ngan_sach_thay_usd`). Bảng giá thêm Opus 5, Sonnet 5, Fable 5.1.
+- Test `adr016c`, `adr016d`.
+
 ### 2026-09-25 · Ollama tắt sau khởi động lại
 - Đo 07:15: Q2 khởi động lại 06:29, nhịp tim báo ollama:false; video học sau đó không đọc hình (nhìn 0–2 giây) mà lệnh vẫn báo xong. Bộ nghe cả video đã chạy (76–86 giây/video).
 - `doc-khung.mjs`: `batOllama()` tự chạy `ollama serve` nền khi Ollama tắt, chờ ≤ 60 giây; `hoc-thanh-pham.mjs` ghi rõ "KHÔNG ĐỌC HÌNH" vào kết quả lệnh nếu vẫn không lên.
