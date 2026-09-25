@@ -33,7 +33,7 @@ const khoangCach = (a, b) => { let s = 0; for (let i = 0; i < 256; i++) { const 
 const THUAT_NGU = [
   [/\b(kings?man|kinsmen|kín ?s ?men|kin ?smen|kim ?man|kis+man|king ?s ?men)\b/gi, "Kingsmen"],
   [/\b(e ?bu ?(ci|si|xi|xy|xi)|evu ?xy|ê ?pô ?xi|epoxi)\b/gi, "epoxy"],
-  [/\b(finess|finnex|finex|phanx|phinx|phinex|phoenix|phi ?nex|fi ?nex)\b/gi, "Finex"],
+  [/\b(fnx|fn ?x|finess|finnex|finex|phanx|phinx|phinex|phoenix|phi ?nex|fi ?nex)\b/gi, "Finex"],
   [/\b(kêu|kéo|keo|kiêu) (chích|chít|chết|chứt|chiếc|chịch) (mạch|mặt|mặc)\b/gi, "keo chít mạch"],
   [/(^|[\s,.])(đường|màu|phần|khe|mạch) (rôn|rồn|rõn|rốn|gion|jones|rôm)(?=$|[\s,.?!])/gi, "$1$2 ron"],   // \b không nhận chữ có dấu
   [/\bron(?= epoxy)/gi, "ron"],
