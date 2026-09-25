@@ -33,6 +33,7 @@ const khoangCach = (a, b) => { let s = 0; for (let i = 0; i < 256; i++) { const 
 const THUAT_NGU = [
   [/\b(kings?man|kinsmen|kín ?s ?men|kin ?smen|kim ?man|kis+man|king ?s ?men)\b/gi, "Kingsmen"],
   [/\b(e ?bu ?(ci|si|xi|xy|xi)|evu ?xy|ê ?pô ?xi|epoxi)\b/gi, "epoxy"],
+  [/\b(finess|finnex|finex|phanx|phinx|phinex|phoenix|phi ?nex|fi ?nex)\b/gi, "Finex"],
   [/\b(kêu|kéo|keo|kiêu) (chích|chít|chết|chứt|chiếc|chịch) (mạch|mặt|mặc)\b/gi, "keo chít mạch"],
   [/(^|[\s,.])(đường|màu|phần|khe|mạch) (rôn|rồn|rõn|rốn|gion|jones|rôm)(?=$|[\s,.?!])/gi, "$1$2 ron"],   // \b không nhận chữ có dấu
   [/\bron(?= epoxy)/gi, "ron"],
@@ -106,7 +107,8 @@ export default async function hoc({ app, goiApp, lenh, dir, log, script }) {
       if (shots.length < 2) { motCanh = true; shots = []; for (let t = 0; t < dai - 0.5; t += 5) shots.push({ t0: +t.toFixed(2), t1: +Math.min(dai, t + 5).toFixed(2) }); log("  ·", v.ten, "một cảnh — chia", shots.length, "đoạn 5 giây, chỉ học nhìn + nghe"); }
       const KD = join(TH, "k_" + xong); mkdirSync(KD, { recursive: true });
       let cau = []; if (asr) { try { const a = amThanh16k(f); if (a && a.length > 16000) { const o = await asr(a, { chunk_length_s: 30, stride_length_s: 5, return_timestamps: true, language: "vi", task: "transcribe" }); cau = (o.chunks || []).map((c) => ({ t0: +(c.timestamp && c.timestamp[0]) || 0, t1: +(c.timestamp && c.timestamp[1]) || +(c.timestamp && c.timestamp[0]) + 2, text: suaThuatNgu(String(c.text || "").trim()) })).filter((c) => c.text); } } catch (e) { log("  nghe cả video lỗi:", String(e.message || e).slice(0, 60)); } }
-      const loiCua = (t0, t1) => cau.filter((c) => Math.min(t1, c.t1) - Math.max(t0, c.t0) > 0.3 * Math.max(0.5, Math.min(c.t1 - c.t0, t1 - t0))).map((c) => c.text).join(" ").slice(0, 300);
+      const giaoCau = cau.map((c) => { let best = -1, bo = 0; shots.forEach((sh, i) => { const o = Math.min(sh.t1, c.t1) - Math.max(sh.t0, c.t0); if (o > bo) { bo = o; best = i; } }); return best; });   // mỗi câu về đúng một shot
+      const loiCua = (t0, t1) => { const i = shots.findIndex((sh) => sh.t0 === t0 && sh.t1 === t1); return cau.filter((c, j) => giaoCau[j] === i).map((c) => c.text).join(" ").slice(0, 300); };
       bam("nghe");
       for (let i = 0; i < shots.length; i++) {
         const s = shots[i]; const giua = (s.t0 + s.t1) / 2; const kf = join(KD, i + ".jpg");
