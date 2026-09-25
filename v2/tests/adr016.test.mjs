@@ -20,7 +20,7 @@ test('016: hàng đợi nhãn vàng + gán nhãn hai nguồn + bảng đo', asyn
   const ts = (await may('/hub/tai-san', 'POST', { muc_id: mucId, ten: 'A.mp4', media_url: '/media/media/a.mp4', media_type: 'VIDEO', giay: 9 })).j.id;
   await may('/hub/doc-khung', 'POST', { tai_san_id: ts, timeline: [
     { tu: 0, den: 3, nhom: 'THI_CONG', buoc: 'Trát', tu_tin: 1, can_xac_nhan: true, kiem_ngau_nhien: true, thay: { nhom: 'THI_CONG', chac: 0.9 }, khung_url: '/media/k0.jpg' },
-    { tu: 3, den: 4.5, nhom: 'THI_CONG', buoc: 'Lăn lót', tu_tin: 0.5, can_xac_nhan: true, thay: { nhom: 'THI_CONG', buoc: 'Lăn lót', chac: 0.5 }, khung_url: '/media/k1.jpg' },
+    { tu: 3, den: 4.5, nhom: 'THI_CONG', buoc: 'Lăn lót', tu_tin: 0.5, can_xac_nhan: true, thay: { nhom: 'THI_CONG', buoc: 'Lăn lót', chac: 0.45 }, khung_url: '/media/k1.jpg' },
     { tu: 4.5, den: 9, nhom: 'HOAN_THIEN', tu_tin: 0.9, can_xac_nhan: true, kiem_ngau_nhien: true, thay: { nhom: 'THI_CONG', chac: 0.9 }, khung_url: 'javascript:x' }] });
   // video thành phẩm: dòng thời gian lưu được, đoạn không có ảnh riêng lấy ảnh shot gần nhất
   const tpBody = { ten: 'dinh-vi.mp4', nguon_id: 'drv1', nguon: 'DRIVE', dai: 10, dong: 'Finex', shots: [{ t0: 0, t1: 5, khung_url: '/media/s0.jpg' }, { t0: 5, t1: 10, khung_url: '/media/s1.jpg' }],

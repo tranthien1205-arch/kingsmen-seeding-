@@ -19,7 +19,7 @@ test('018a: chuyển dữ liệu cũ vào mau_doan — nhãn người, thầy, k
   await api('/danh-muc/san_pham', 'POST', { ma: 'F', ten: 'Finex', dong: 'Finex', quy_trinh: 'Lăn lót\nTrát' });
   // dữ liệu kiểu cũ (trước 018): nhãn nằm trong phan_tich.timeline, mẫu nhan_khung / doc_loi / chat_luong_source ở mau_hoc_ai
   const tl = [{ tu: 0, den: 3, nhom: 'THI_CONG', buoc: 'Trát', nguoi: 'Thiện', nguoi_luc: '2026-09-25T01:00:00Z', may: { nhom: 'THI_CONG', buoc: 'Lăn lót' }, thay: { nhom: 'THI_CONG', buoc: 'Trát', chac: 0.8 }, mo_ta_nguoi: 'trát lớp 2', source_nguoi: { dung: false, ly_do: ['mờ'] } },
-    { tu: 3, den: 6, nhom: 'HOAN_THIEN', thay: { nhom: 'HOAN_THIEN', chac: 0.5 }, mo: { nhom: 'THI_CONG' }, can_xac_nhan: true, kiem_ngau_nhien: false }, { tu: 6, den: 9, khong_ro: true, nguoi: 'Thiện' }];
+    { tu: 3, den: 6, nhom: 'HOAN_THIEN', thay: { nhom: 'HOAN_THIEN', chac: 0.4 }, mo: { nhom: 'THI_CONG' }, can_xac_nhan: true, kiem_ngau_nhien: false }, { tu: 6, den: 9, khong_ro: true, nguoi: 'Thiện' }];
   DB.raw.prepare(`INSERT INTO kho_thanh_pham (id, ten, nguon, nguon_id, dai, so_shot, phan_tich, created_at, dong, link) VALUES ('tp1','v.mp4','TIKTOK','v',9,2,?, '2026-09-24', 'Finex', 'https://tt/v')`).run(JSON.stringify({ shots: [{ t0: 0, t1: 9, loi: 'trát lớp hai' }], timeline: tl }));
   DB.raw.prepare(`INSERT INTO mau_hoc_ai (id, tinh_nang, doi_tuong, doi_tuong_id, dau_vao, dau_ra, nhan, dong, created_at, cham_at, cham_boi) VALUES ('m1','doc_loi','kho_thanh_pham','tp1',?,?,?,'Finex','2026-09-24','2026-09-25','Thiện')`).run(JSON.stringify({ text: 'trát lớp hai cho phẳng', dai: 4, vi_tri: 0 }), JSON.stringify({ thay: { nhom: 'THI_CONG', chac: 0.9 } }), JSON.stringify({ nhom: 'THI_CONG', buoc: 'Trát', nguon: 'NGUOI', hinh: { nhom: 'THI_CONG' } }));
   DB.raw.prepare(`INSERT INTO mau_hoc_ai (id, tinh_nang, doi_tuong, doi_tuong_id, dau_vao, nhan, created_at) VALUES ('m2','nhan_khung','kho_thanh_pham','tp1','{"i":0,"ngau_nhien":true}','{}','2026-09-24')`).run();
@@ -90,4 +90,28 @@ test('018c: tỉ lệ kiểm tự tăng khi thầy yếu ở một trường', a
   assert.equal(DB.raw.prepare(`SELECT trang_thai FROM mau_doan WHERE id=?`).get('H:' + tp2 + ':0').trang_thai, 'THAY_CHOT', 'không có trường yếu → 8%');
   assert.equal(DB.raw.prepare(`SELECT trang_thai FROM mau_doan WHERE id=?`).get('H:' + tp2 + ':1').trang_thai, 'KIEM', 'có trường thầy yếu → 20%');
   Math.random = () => 0.99;
+});
+
+test('018d: bản xem 360p cho video đã đăng + /media tua được (206)', async () => {
+  const DB = taoD1(); env = taoEnv(DB); TOKEN = (await api('/login', 'POST', { email: 'admin@kingsmen.vn', password: 'admin123' })).j.token;
+  const may = hubK(giai((await api('/may-ghep', 'POST', { ten: 'Q2' })).j.ma_ghep).khoa); await may('/hub/trang_thai', 'POST', { may: 'Q2', ffmpeg: true, kha_nang: ['dung_video'] });
+  const body = { ten: 'a.mp4', nguon_id: 'a.mp4', nguon: 'TIKTOK', link: 'https://www.tiktok.com/@x/video/1', dai: 10, shots: [{ t0: 0, t1: 5, loi: 'câu một đủ dài' }, { t0: 5, t1: 10 }], timeline: [{ tu: 0, den: 10, nhom: 'KHAC', thay: { nhom: 'KHAC', chac: 0.9 } }] };
+  await may('/hub/thanh-pham', 'POST', body); await may('/hub/thanh-pham', 'POST', { ...body, ten: 'b.mp4', nguon_id: 'b.mp4', proxy_url: '/media/media/b360.mp4' });
+  const tp = (n) => DB.raw.prepare(`SELECT id, proxy_url FROM kho_thanh_pham WHERE nguon_id=?`).get(n);
+  assert.equal(tp('b.mp4').proxy_url, '/media/media/b360.mp4'); assert.equal(DB.raw.prepare(`SELECT COUNT(*) n FROM mau_doan WHERE doi_tuong_id=? AND media_url='/media/media/b360.mp4'`).get(tp('b.mp4').id).n, 2, 'đoạn hình + câu thoại đều có bản xem');
+  // video cũ chưa có bản xem → giao máy Q2 một lệnh chỉ tạo bản xem
+  const g = await api('/kho-thanh-pham/tao-proxy', 'POST', {}); assert.equal(g.j.so, 1); const l = JSON.parse(DB.raw.prepare(`SELECT tham_so FROM tram_lenh WHERE viec='hoc_thanh_pham'`).get().tham_so);
+  assert.equal(l.chi_proxy, true); assert.equal(l.ds_proxy[0].link, 'https://www.tiktok.com/@x/video/1');
+  assert.equal((await may('/hub/thanh-pham/proxy', 'POST', { nguon_id: 'a.mp4', proxy_url: '/media/media/a360.mp4' })).j.so_mau, 2);
+  assert.equal((await api('/kho-mau?kn=K4&tt=')).j.hang.find((x) => x.doi_tuong_id === tp('a.mp4').id).media_url, '/media/media/a360.mp4');
+  // học lại giữ bản xem
+  await may('/hub/thanh-pham', 'POST', { ...body, lam_lai: true }); assert.equal(tp('a.mp4').proxy_url, '/media/media/a360.mp4');
+  // cron tự giao lệnh bản xem cho video còn thiếu (không trùng khi đang có lệnh, không lặp trong 6 giờ)
+  await may('/hub/thanh-pham', 'POST', { ...body, ten: 'c.mp4', nguon_id: 'c.mp4', link: 'https://www.tiktok.com/@x/video/3' }); DB.raw.prepare("UPDATE tram_lenh SET trang_thai='XONG'").run();
+  const cron = async () => { let p; await worker.scheduled({}, env, { waitUntil: (x) => { p = x; } }); await p; };
+  await cron(); await cron(); const ls = DB.raw.prepare("SELECT tham_so FROM tram_lenh WHERE trang_thai='CHO'").all(); assert.equal(ls.length, 1, 'một lệnh'); assert.deepEqual(JSON.parse(ls[0].tham_so).ds_proxy.map((x) => x.nguon_id), ['c.mp4']);
+  // /media trả 206 khi có Range
+  const buf = new Uint8Array(1000); env.MEDIA.get = async (k, o) => ({ body: buf.slice(100, 200), size: 1000, range: o && o.range ? { offset: 100, length: 100 } : undefined, httpMetadata: { contentType: 'video/mp4' } });
+  const r = await worker.fetch(new Request('https://x/media/media/a360.mp4', { headers: { Range: 'bytes=100-199' } }), env, { waitUntil() {} });
+  assert.equal(r.status, 206); assert.equal(r.headers.get('content-range'), 'bytes 100-199/1000'); assert.equal(r.headers.get('accept-ranges'), 'bytes');
 });

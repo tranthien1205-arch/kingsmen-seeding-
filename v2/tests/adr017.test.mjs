@@ -19,7 +19,7 @@ test('017a: bàn huấn luyện, trần thầy, trần phút, thời gian chặn
   const may = hubK(giai((await api('/may-ghep', 'POST', { ten: 'Q2' })).j.ma_ghep).khoa);
   await may('/hub/trang_thai', 'POST', { may: 'Q2', ffmpeg: true, ollama: true, gpu: 'RTX 3070 Ti, 8192 MiB', kha_nang: ['dung_video', 'mo_hinh'], dang_lam: 'hoc_thanh_pham' });
   await api('/danh-muc/san_pham', 'POST', { ma: 'F', ten: 'Finex', dong: 'Finex', quy_trinh: 'Lăn lót\nTrát' });
-  const tl = (n) => Array.from({ length: n }, (_, i) => ({ tu: i * 2, den: i * 2 + 2, nhom: 'THI_CONG', mo: { nhom: i % 2 ? 'HOAN_THIEN' : 'THI_CONG' }, thay: { nhom: 'THI_CONG', chac: i % 2 ? 0.5 : 0.9 }, can_xac_nhan: !!(i % 2), khung_url: '/media/media/k' + i + '.jpg' }));
+  const tl = (n) => Array.from({ length: n }, (_, i) => ({ tu: i * 2, den: i * 2 + 2, nhom: 'THI_CONG', mo: { nhom: i % 2 ? 'HOAN_THIEN' : 'THI_CONG' }, thay: { nhom: 'THI_CONG', chac: i % 2 ? 0.4 : 0.9 }, can_xac_nhan: !!(i % 2), khung_url: '/media/media/k' + i + '.jpg' }));
   let r = await may('/hub/thanh-pham', 'POST', { ten: 'a.mp4', nguon_id: 'a', nguon: 'TIKTOK', dai: 20, dong: 'Finex', shots: [{ t0: 0, t1: 10, loi: 'lăn lớp lót trước khi trát' }, { t0: 10, t1: 20 }], timeline: tl(10), thoi_gian: { tai: 12.3, cat: 4, nghe: 30, anh_shot: 20, nhin: 150, thay: 25 } });
   assert.equal(r.s, 200);
   const pt = JSON.parse(DB.raw.prepare(`SELECT phan_tich FROM kho_thanh_pham`).get().phan_tich); assert.equal(pt.thoi_gian.nhin, 150); assert.equal(pt.may, 'Q2');

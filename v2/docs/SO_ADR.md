@@ -381,6 +381,12 @@ Người duyệt: Thiện · Trạng thái: ĐÃ DUYỆT (2026-09-24, "ok bạn 
 
 ## Changelog
 
+### 2026-09-25 · Xem / nghe đúng đoạn mẫu · thầy chắc theo nhóm cảnh · danh sách hẹp
+- Chủ: "câu thoại và footage chưa nghe và xem được" · "câu mô tả rất đúng nhưng trạng thái chưa chắc rất nhiều, thầy có thể gán" · "bảng người kiểm bị hẹp; cột danh sách chỉ còn tên mẫu".
+- `/media` trả 206 theo Range (trước trả cả file → trình duyệt không tua được giữa clip). Bản xem 360p cho video đã đăng (`kho_thanh_pham.proxy_url`, gắn `media_url` cho mọi mẫu của video): máy Q2 tạo khi học, video cũ tạo bù bằng lệnh `hoc_thanh_pham {chi_proxy}` (tìm file đã tải trên ổ trước, không nghe / nhìn / thầy lại); cron tự giao khi còn thiếu (≤ 6 giờ / lần). Đo thử: video 20 giây → bản xem 224 KB, 6–10 giây.
+- Kho mẫu: ▶ xem đúng đoạn [tu, den] ngay trong khung (khung hình, câu thoại khi chưa có đoạn trích, footage), tới cuối đoạn tự dừng. Cột danh sách 300px: ảnh nhỏ + tên mẫu + chấm trạng thái (rê chuột xem chi tiết); phần sửa rộng ra.
+- Thầy: `chac` = chắc về nhóm cảnh, bước chấm riêng `chac_buoc`; chỉ hỏi người khi `chac` < 0,5. Đo trên prod: 85/86 mẫu 0,55–0,6 không có bước — thầy trừ điểm vì quy trình dòng thiếu bước, nhóm cảnh vẫn đúng. Chuyển lần 2: chấm lại trạng thái + gieo 8% mẫu kiểm cho mẫu thầy chốt cũ để đo thầy.
+
 ### 2026-09-25 · ADR-018 làm thật: kho mẫu một nguồn + bộ nhãn hai chiều
 - Chủ: "cần xử lý mọi liên đới với nhau… hoạt động liên hoàn như một cỗ máy" · "ui cần chính xác theo mô phỏng".
 - **Dữ liệu** (`worker/mau.js`): bảng `mau_doan` là nguồn duy nhất của nhãn (mỗi đoạn hình HINH / câu thoại LOI một dòng: nhãn mô hình mở, thầy, người, quyết định chất lượng footage; trạng thái có chỉ mục; `version` → 409 khi hai máy cùng sửa). Bảng `bo_nhan` (giá trị mở rộng + đề xuất). Nhãn không còn nằm trong `phan_tich.timeline`; màn và máy dựng đọc dòng thời gian từ kho mẫu (`timelineCua`).

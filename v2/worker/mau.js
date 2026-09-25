@@ -26,6 +26,7 @@ export const CO_DINH = { nguoi: ['không có', 'thợ', 'chủ nhà', 'người 
 const GIEO = { hanh_dong: ['gạt', 'lăn', 'bơm', 'trộn', 'đổ', 'khò', 'lau', 'đo', 'nói', 'cầm sản phẩm', 'cắt', 'quét'], dung_cu: ['bay răng', 'con lăn', 'súng bơm keo', 'máy khò', 'thước dây', 'xô trộn', 'máy trộn'],
   vi_tri: ['sàn nhà tắm', 'sàn phòng khách', 'ron gạch', 'bếp', 'tường', 'cầu thang', 'sân thượng', 'ngoài trời'], vat_lieu: [] };
 const TT_CAN = ['KHONG_CHAC', 'KIEM'];
+const CHAC_TOI_THIEU = 0.5;   // thầy tự chấm nhóm cảnh dưới mức này mới hỏi người
 const COT = 'id,loai,nguon,doi_tuong_id,i,tu,den,dong,ten,link,media_url,khung_url,am_url,text,cau_truoc,cau_sau,so_do,nhan_mo,nhan_thay,nhan_hinh,nhan_nguoi,nguoi_source,trang_thai,tt_source,kiem,chac,hieu_luc,version,nguoi_ten,nguoi_luc,nguoi_giay,created_at,updated_at';
 
 export function taoMau(H) {
@@ -47,7 +48,10 @@ export function taoMau(H) {
     if (!(await env.DB.prepare(`SELECT 1 x FROM bo_nhan LIMIT 1`).first())) { const st = [];
       for (const [t, ds] of Object.entries(GIEO)) for (const v of ds) st.push(env.DB.prepare(`INSERT OR IGNORE INTO bo_nhan (id,truong,ten,dong,trang_thai,nguon,created_at,updated_at) VALUES (?,?,?,'',?,?,?,?)`).bind(uid('bn'), t, v, 'DUNG', 'HE_THONG', nowISO(), nowISO()));
       if (st.length) await env.DB.batch(st); }
-    const cu = await env.DB.prepare(`SELECT cau_hinh FROM module_config WHERE id='mau_doan'`).first(); if (!cu || (P(cu.cau_hinh) || {}).v < 1) await chuyenCu(env);
+    const cu = await env.DB.prepare(`SELECT cau_hinh FROM module_config WHERE id='mau_doan'`).first(); const v0 = (cu && (P(cu.cau_hinh) || {}).v) || 0; if (v0 < 1) await chuyenCu(env);
+    if (v0 < 2) { await env.DB.batch([env.DB.prepare(`UPDATE mau_doan SET trang_thai='THAY_CHOT' WHERE trang_thai='KHONG_CHAC' AND chac>=?`).bind(CHAC_TOI_THIEU),
+      env.DB.prepare(`UPDATE mau_doan SET kiem=1, trang_thai='KIEM' WHERE loai='HINH' AND hieu_luc=1 AND trang_thai='THAY_CHOT' AND kiem=0 AND abs(random()) % 100 < 8`),
+      env.DB.prepare(`INSERT OR REPLACE INTO module_config (id, cau_hinh, updated_at, updated_by_name) VALUES ('mau_doan', ?, ?, 'Máy')`).bind(JSON.stringify({ v: 2, luc: nowISO() }), nowISO())]); }
   }
 
   // ---------- bộ nhãn ----------
@@ -70,7 +74,7 @@ export function taoMau(H) {
     { const v = chuoi(o.co_canh, 30); r.co_canh = CO_CANH.includes(v) ? v : (Object.entries(TEN_CO_CANH).find(([, t]) => cf(t) === cf(v)) || [null])[0]; }
     r.tham_my = o.tham_my == null || o.tham_my === '' || Number(o.tham_my) < 0 ? null : Math.max(0, Math.min(10, so(o.tham_my)));
     r.mo_ta = chuoi(o.mo_ta, 200) || null;
-    if (o.chac != null) r.chac = +Math.max(0, Math.min(1, so(o.chac))).toFixed(2); if (o.ly_do) r.ly_do = chuoi(o.ly_do, 160); if (o.model) r.model = chuoi(o.model, 60); if (o.nghe_sai) r.nghe_sai = true;
+    if (o.chac != null) r.chac = +Math.max(0, Math.min(1, so(o.chac))).toFixed(2); if (o.chac_buoc != null) r.chac_buoc = +Math.max(0, Math.min(1, so(o.chac_buoc))).toFixed(2); if (o.ly_do) r.ly_do = chuoi(o.ly_do, 160); if (o.model) r.model = chuoi(o.model, 60); if (o.nghe_sai) r.nghe_sai = true;
     return r; }
   async function ghiDeXuat(env, ds) { if (!ds.length) return; const st = [];
     for (const d of ds) st.push(env.DB.prepare(`INSERT OR IGNORE INTO bo_nhan (id,truong,ten,dong,trang_thai,nguon,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?)`).bind(uid('bn'), d.truong, chuoi(d.ten, 80), d.dong || '', 'DE_XUAT', d.nguon, nowISO(), nowISO()));
@@ -78,8 +82,8 @@ export function taoMau(H) {
 
   // ---------- trạng thái (tính ra từ các cột nhãn, lưu để có chỉ mục) ----------
   function tinhTT(r) { const ng = P(r.nhan_nguoi), th = P(r.nhan_thay);
-    if (r.loai === 'LOI') { if (ng) return ng.nghe_sai ? 'NGHE_SAI' : 'VANG'; if (!th) return 'CHO_THAY'; if (th.nghe_sai) return 'NGHE_SAI'; if (r.kiem) return 'KIEM'; return so(th.chac, 0.7) < 0.6 ? 'KHONG_CHAC' : 'THAY_CHOT'; }
-    if (ng) return ng.khong_ro ? 'KHONG_RO' : 'VANG'; if (!th) return 'MO'; if (r.kiem) return 'KIEM'; return so(th.chac, 0.7) < 0.6 ? 'KHONG_CHAC' : 'THAY_CHOT'; }
+    if (r.loai === 'LOI') { if (ng) return ng.nghe_sai ? 'NGHE_SAI' : 'VANG'; if (!th) return 'CHO_THAY'; if (th.nghe_sai) return 'NGHE_SAI'; if (r.kiem) return 'KIEM'; return so(th.chac, 0.7) < CHAC_TOI_THIEU ? 'KHONG_CHAC' : 'THAY_CHOT'; }
+    if (ng) return ng.khong_ro ? 'KHONG_RO' : 'VANG'; if (!th) return 'MO'; if (r.kiem) return 'KIEM'; return so(th.chac, 0.7) < CHAC_TOI_THIEU ? 'KHONG_CHAC' : 'THAY_CHOT'; }
   const tinhTS = (r) => r.nguoi_source ? 'VANG' : r.so_do ? 'LUAT' : null;
 
   // ---------- độ đúng theo trường (tính từ nhãn người) → tỉ lệ kiểm tự điều chỉnh ----------
@@ -125,19 +129,19 @@ export function taoMau(H) {
   async function capNhatSoDo(env, tai_san_id, pt) { await dam(env); const rows = (await env.DB.prepare(`SELECT id, tu, den, nguoi_source FROM mau_doan WHERE doi_tuong_id=? AND loai='HINH'`).bind(tai_san_id).all()).results; if (!rows.length) return;
     await env.DB.batch(rows.map((r) => { const sd = soDoSource(pt, r); return env.DB.prepare(`UPDATE mau_doan SET so_do=?, tt_source=?, updated_at=? WHERE id=?`).bind(J(sd), r.nguoi_source ? 'VANG' : sd ? 'LUAT' : null, nowISO(), r.id); })); }
   // câu thoại: mỗi shot có lời là một đơn vị; câu trước / sau làm ngữ cảnh; nhãn hình lúc câu chạy từ shot
-  async function upsertLoi(env, { doi_tuong_id, dong, ten, link, shots, cu }) { await dam(env);
+  async function upsertLoi(env, { doi_tuong_id, dong, ten, link, media_url, shots, cu }) { await dam(env);
     const bn = await boNhan(env); const cuRows = (await env.DB.prepare(`SELECT * FROM mau_doan WHERE doi_tuong_id=? AND loai='LOI'`).bind(doi_tuong_id).all()).results; const byId = Object.fromEntries(cuRows.map((r) => [r.id, r]));
     const ds = (Array.isArray(shots) ? shots : []).map((s, j) => ({ ...s, j })).filter((s) => chuoi(s.loi).length >= 4); const st = []; const now = nowISO(); const giu = new Set();
     ds.forEach((s, k) => { const id = cu ? s.id : 'L:' + doi_tuong_id + ':' + s.j; giu.add(id); const o = byId[id]; const text = chuoi(s.loi, 400); const cung = o && o.text === text;
       const hinh = sach(s.hinh || { nhom: s.nhom, buoc: s.buoc, bai_test: s.bai_test }, bn, dong, null, null);
       const th = cu ? (s.thay ? sach(s.thay, bn, dong, null, null) : null) : (cung ? P(o.nhan_thay) : null);
       const ng = cu ? s.nguoi || null : (cung ? P(o.nhan_nguoi) : null);
-      const r = { id, loai: 'LOI', nguon: 'THANH_PHAM', doi_tuong_id, i: s.j, tu: +so(s.t0).toFixed(2), den: +so(s.t1).toFixed(2), dong: dong || null, ten: ten || null, link: link || null, khung_url: s.khung_url || null, am_url: s.am_url || null, text,
+      const r = { id, loai: 'LOI', nguon: 'THANH_PHAM', media_url: media_url || (o && o.media_url) || null, doi_tuong_id, i: s.j, tu: +so(s.t0).toFixed(2), den: +so(s.t1).toFixed(2), dong: dong || null, ten: ten || null, link: link || null, khung_url: s.khung_url || null, am_url: s.am_url || null, text,
         cau_truoc: k > 0 ? chuoi(ds[k - 1].loi, 300) : null, cau_sau: k < ds.length - 1 ? chuoi(ds[k + 1].loi, 300) : null, nhan_hinh: J(hinh), nhan_thay: J(th), nhan_nguoi: J(ng), kiem: cu ? (s.kiem ? 1 : 0) : cung ? o.kiem : (Math.random() < 0.08 ? 1 : 0), version: o ? so(o.version, 1) + 1 : 1 };
       r.chac = th ? th.chac : null; r.trang_thai = tinhTT(r);
-      st.push(env.DB.prepare(`INSERT INTO mau_doan (id,loai,nguon,doi_tuong_id,i,tu,den,dong,ten,link,khung_url,am_url,text,cau_truoc,cau_sau,nhan_hinh,nhan_thay,nhan_nguoi,trang_thai,kiem,chac,hieu_luc,version,nguoi_ten,nguoi_luc,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,?,?,?,?,?)
-        ON CONFLICT(id) DO UPDATE SET tu=excluded.tu, den=excluded.den, dong=excluded.dong, ten=excluded.ten, link=excluded.link, khung_url=excluded.khung_url, am_url=excluded.am_url, text=excluded.text, cau_truoc=excluded.cau_truoc, cau_sau=excluded.cau_sau, nhan_hinh=excluded.nhan_hinh, nhan_thay=excluded.nhan_thay, nhan_nguoi=excluded.nhan_nguoi, trang_thai=excluded.trang_thai, kiem=excluded.kiem, chac=excluded.chac, hieu_luc=1, version=excluded.version, updated_at=excluded.updated_at`)
-        .bind(r.id, 'LOI', 'THANH_PHAM', doi_tuong_id, r.i, r.tu, r.den, r.dong, r.ten, r.link, r.khung_url, r.am_url, r.text, r.cau_truoc, r.cau_sau, r.nhan_hinh, r.nhan_thay, r.nhan_nguoi, r.trang_thai, r.kiem, r.chac, r.version, cu ? s.cham_boi || null : (cung ? o.nguoi_ten : null), cu ? s.cham_at || null : (cung ? o.nguoi_luc : null), o ? o.created_at : (cu ? s.created_at || now : now), now)); });
+      st.push(env.DB.prepare(`INSERT INTO mau_doan (id,loai,nguon,doi_tuong_id,i,tu,den,dong,ten,link,media_url,khung_url,am_url,text,cau_truoc,cau_sau,nhan_hinh,nhan_thay,nhan_nguoi,trang_thai,kiem,chac,hieu_luc,version,nguoi_ten,nguoi_luc,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,?,?,?,?,?)
+        ON CONFLICT(id) DO UPDATE SET tu=excluded.tu, den=excluded.den, dong=excluded.dong, ten=excluded.ten, link=excluded.link, media_url=excluded.media_url, khung_url=excluded.khung_url, am_url=excluded.am_url, text=excluded.text, cau_truoc=excluded.cau_truoc, cau_sau=excluded.cau_sau, nhan_hinh=excluded.nhan_hinh, nhan_thay=excluded.nhan_thay, nhan_nguoi=excluded.nhan_nguoi, trang_thai=excluded.trang_thai, kiem=excluded.kiem, chac=excluded.chac, hieu_luc=1, version=excluded.version, updated_at=excluded.updated_at`)
+        .bind(r.id, 'LOI', 'THANH_PHAM', doi_tuong_id, r.i, r.tu, r.den, r.dong, r.ten, r.link, r.media_url, r.khung_url, r.am_url, r.text, r.cau_truoc, r.cau_sau, r.nhan_hinh, r.nhan_thay, r.nhan_nguoi, r.trang_thai, r.kiem, r.chac, r.version, cu ? s.cham_boi || null : (cung ? o.nguoi_ten : null), cu ? s.cham_at || null : (cung ? o.nguoi_luc : null), o ? o.created_at : (cu ? s.created_at || now : now), now)); });
     if (!cu) for (const o of cuRows) if (!giu.has(o.id)) st.push(o.nhan_nguoi ? env.DB.prepare(`UPDATE mau_doan SET hieu_luc=0, updated_at=? WHERE id=?`).bind(now, o.id) : env.DB.prepare(`DELETE FROM mau_doan WHERE id=?`).bind(o.id));
     if (st.length) await env.DB.batch(st); return { so: ds.length }; }
   async function xoaTheoDoiTuong(env, id) { await dam(env); await env.DB.prepare(`DELETE FROM mau_doan WHERE doi_tuong_id=?`).bind(id).run(); }
@@ -287,9 +291,9 @@ export function taoMau(H) {
       'hanh_dong (mảng): ' + L(ds('hanh_dong')) + '\n' + 'vat_lieu (mảng, sản phẩm / vật liệu thấy được): ' + L(ds('vat_lieu')) + '\n' + 'dung_cu (mảng): ' + L(ds('dung_cu')) + '\n' + 'vi_tri: ' + L(ds('vi_tri')) + '\n' +
       'nguoi: ' + CO_DINH.nguoi.join(' | ') + '\n' + 'co_canh (một mã): ' + Object.entries(TEN_CO_CANH).map(([k, v]) => k + ' = ' + v).join('; ') + '\n' + 'goc_may: ' + CO_DINH.goc_may.join(' | ') + '\n' + 'chuyen_dong: ' + CO_DINH.chuyen_dong.join(' | ') + '\n' + 'dung_cho: ' + CO_DINH.dung_cho.join(' | ') + '\n' +
       'tham_my (0–10, chỉ khi thấy bề mặt / mạch hoàn thiện, không thì -1): 0–3 bẩn, lem · 4–6 đang thi công · 7–8 xong nhưng chưa sạch / chưa đều · 9–10 đều, sạch, đáng làm cảnh chốt.\n' +
-      'chac 0–1: bạn chắc bao nhiêu về nhom + buoc/bai_test. Có thể là hai nhóm, hoặc hình không rõ, thì ghi dưới 0,6.\n' +
+      'chac 0–1: bạn chắc bao nhiêu về NHÓM CẢNH (nhom). Chỉ ghi dưới 0,5 khi hình không rõ hoặc thật sự có thể là nhóm khác; KHÔNG trừ chac vì bước thi công không có trong danh sách — chuyện đó chấm riêng ở chac_buoc (0–1).\n' +
       (vd && vd.length ? 'Người của Kingsmen đã sửa những lần trước — làm theo đúng cách gán và cách gọi tên này:\n' + vd.slice(0, 12).map((v) => '- ' + chuoi(v, 220)).join('\n') + '\n' : '') +
-      'Chỉ trả MỘT JSON: {"nhom":"…","buoc":null,"bai_test":null,"hanh_dong":[],"vat_lieu":[],"dung_cu":[],"vi_tri":null,"nguoi":"…","co_canh":"…","goc_may":"…","chuyen_dong":"…","tham_my":-1,"dung_cho":"…","chac":0.8,"mo_ta":"≤ 20 chữ tiếng Việt có dấu, đúng thứ nhìn thấy","ly_do":"≤ 15 chữ vì sao chọn nhóm này"}';
+      'Chỉ trả MỘT JSON: {"nhom":"…","buoc":null,"bai_test":null,"hanh_dong":[],"vat_lieu":[],"dung_cu":[],"vi_tri":null,"nguoi":"…","co_canh":"…","goc_may":"…","chuyen_dong":"…","tham_my":-1,"dung_cho":"…","chac":0.8,"chac_buoc":0.7,"mo_ta":"≤ 20 chữ tiếng Việt có dấu, đúng thứ nhìn thấy","ly_do":"≤ 15 chữ vì sao chọn nhóm này"}';
     const t0 = Date.now(); let res, j; try { res = await fetch('https://api.anthropic.com/v1/messages', { method: 'POST', headers: { 'content-type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01', ...(doiMoi ? { 'anthropic-beta': 'server-side-fallback-2026-07-01' } : {}) },
       body: JSON.stringify({ model, max_tokens: doiMoi ? 5000 : 700, ...(doiMoi ? { output_config: { effort: chuoi(ai.thay_nhin_effort, 10) || 'medium' }, fallbacks: 'default' } : {}), messages: [{ role: 'user', content: [...anh, { type: 'text', text: loi }] }] }) }); j = await res.json().catch(() => ({})); } catch (e) { return { ok: false, loi: String(e.message || e).slice(0, 120) }; }
     await ghiAIUsage(env, { provider: 'anthropic', model: chuoi(j && j.model, 60) || model, tinh_nang: 'hoc_nhan_khung', tokens_vao: so(j.usage && j.usage.input_tokens), tokens_ra: so(j.usage && j.usage.output_tokens), ok: !!res.ok, ms: Date.now() - t0, loi: res.ok ? null : String((j.error && j.error.message) || res.status).slice(0, 200), muc: 'API' });
