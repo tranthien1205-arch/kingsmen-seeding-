@@ -164,6 +164,7 @@ export function taoMau(H) {
         if (v.hanh === 'doi_ten_duyet') { const a = await suaBoNhan(env, me, v.id, 'doi-ten', { ten: v.ten }); kq.push([v.id, 'đổi tên ' + (await trangThai(a))]); const b = await suaBoNhan(env, me, v.id, 'duyet', {}); kq.push([v.id, 'duyệt ' + (await trangThai(b))]); }
         else { const a = await suaBoNhan(env, me, v.id, v.hanh === 'gop' ? 'gop' : v.hanh === 'bo' ? 'bo' : 'duyet', { vao: v.vao }); kq.push([v.id, v.hanh + ' ' + (await trangThai(a))]); } }
       else if (v.loai === 'dong') { const a = await datDong(env, me, { doi_tuong_ids: [v.doi_tuong_id], dong: v.dong }); kq.push([v.doi_tuong_id, 'dòng ' + (await trangThai(a))]); }
+      else if (v.loai === 'loi') { const a = await luuLoi(env, me, v.mau_id, v.nghe_sai ? { nghe_sai: true } : { nhom: v.nhom, buoc: v.buoc || null, bai_test: v.bai_test || null }); kq.push([v.mau_id, 'lời ' + (await trangThai(a))]); }
       else if (v.loai === 'nhan') { const a = await luuHinh(env, me, v.mau_id, v.khong_ro ? { khong_ro: true } : { nhan: v.nhan }); kq.push([v.mau_id, 'nhãn ' + (await trangThai(a))]); }
     } catch (e) { kq.push([v.id || v.mau_id || v.doi_tuong_id, 'lỗi ' + String(e.message || e).slice(0, 80)]); } }
     const con = ds.slice(150); const now = nowISO(); const cu = await env.DB.prepare(`SELECT cau_hinh FROM module_config WHERE id='viec_thay_chu_kq'`).first(); const lich = ((cu && P(cu.cau_hinh)) || { lan: [] }).lan || [];

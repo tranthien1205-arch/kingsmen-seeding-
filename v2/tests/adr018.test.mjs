@@ -224,7 +224,7 @@ test('018i: tự gán dòng theo vật liệu thầy thấy + hàng việc thay 
   const dx = DB.raw.prepare(`SELECT id, ten FROM bo_nhan WHERE trang_thai='DE_XUAT' AND truong='dung_cu'`).get(); const idC = DB.raw.prepare(`SELECT id FROM kho_thanh_pham WHERE nguon_id='c'`).get().id;
   DB.raw.prepare(`INSERT OR REPLACE INTO module_config (id, cau_hinh, updated_at) VALUES ('viec_thay_chu', ?, '')`).run(JSON.stringify({ viec: [
     { loai: 'bo_nhan', id: dx.id, hanh: 'doi_ten_duyet', ten: 'máy đo màu ron' }, { loai: 'dong', doi_tuong_id: idC, dong: 'Terrazy' },
-    { loai: 'nhan', mau_id: 'H:' + idC + ':0', nhan: { nhom: 'THI_CONG', buoc: 'Tạo nhám', dung_cu: ['máy mài sàn'] } }] }));
+    { loai: 'nhan', mau_id: 'H:' + idC + ':0', nhan: { nhom: 'THI_CONG', buoc: 'Tạo nhám', dung_cu: ['máy mài sàn'] } }, { loai: 'loi', mau_id: 'khong-co', nhom: 'KHAC' }] }));
   await cron();
   assert.ok(DB.raw.prepare(`SELECT 1 x FROM bo_nhan WHERE truong='dung_cu' AND ten='máy đo màu ron' AND trang_thai='DUNG'`).get(), 'tạo tên chuẩn mới rồi duyệt');
   assert.deepEqual(JSON.parse(DB.raw.prepare(`SELECT nhan_thay FROM mau_doan WHERE id=?`).get('H:' + idC + ':1').nhan_thay).dung_cu, ['máy đo màu ron'], 'mẫu đổi theo tên mới');
