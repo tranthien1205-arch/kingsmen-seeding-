@@ -388,6 +388,17 @@ Người duyệt: Thiện · Trạng thái: ĐÃ DUYỆT (2026-09-24, "ok bạn 
 - Việc "lệnh học bị đánh HONG sau 30 phút" đã sửa từ 25/09 (nhịp tim > 15 phút / 12 giờ) — không đổi thêm.
 - Ảnh hưởng dữ liệu: không đổi bảng; lệnh học mới ít link hơn (bỏ trùng). Test: adr011 thêm link trùng (mã cũ hỏng 1/3, mã mới đạt), may-dung-khoi-dong thêm 1 ca.
 
+### 2026-09-26 · ADR-020 đợt 1 — trục video
+- Chủ duyệt ADR-020 ("ok"). Cột mới: kho_thanh_pham.truc (JSON 4 trục + nguồn THAY/NGUOI), mau_doan.goc_quay, tai_san.goc_quay / nhom_canh.
+- thayGanTruc (mau.js, cron 8 video / 15 phút):
+  - Haiku đọc lời thoại (bỏ câu nghe sai) + mô tả từng đoạn thầy đã viết (chỉ chữ, rẻ).
+  - Trả 4 trục + góc quay từng đoạn; mã ngoài bộ cố định thì null.
+  - Tính chung ngân sách thầy (tinh_nang hoc_gan_truc).
+- Footage gốc: góc quay + loại cảnh lấy từ tên thư mục con (POV, cận & trung, vấn đề, thi công, hoàn thiện, test, quay sản phẩm, CTA / outro); điền bù mỗi lần bootstrap.
+- GET /do-phu-truc; POST /kho-thanh-pham/:id/truc (người sửa thắng).
+- Nguồn học có tab 📊 Độ phủ trục: mỗi dòng × trục × giá trị. Xanh ≥ 15 video, vàng có nhưng thiếu, trắng chưa có. Danh sách video hiện trục.
+- Test ADR-020 (adr019).
+
 ### 2026-09-26 · Đánh giá video nháp: Đạt / Không đạt
 - Chủ: "video ko đạt bấm loại không được". Nút Loại ở Kho video vẫn chạy (đã kiểm trên app thật); chỗ thiếu là việc "Xem & duyệt video nháp" và popup thẻ › Sản xuất.
 - DanhGiaVideo (60-dongchay.jsx) dùng ở Việc của tôi và tab Sản xuất: xem video tại chỗ; ✓ Đạt (su_dung CHON); ✕ Không đạt chọn lý do (sai cảnh / thiếu hình / giọng / nhịp / chữ / khác) + ghi chú + "giao máy dựng lại ngay"; ↺ Đánh giá lại.

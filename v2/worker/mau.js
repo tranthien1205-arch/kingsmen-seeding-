@@ -176,14 +176,53 @@ export function taoMau(H) {
     lich.unshift({ luc: now, so: kq.length, loi: kq.filter((x) => !/ 200|bỏ qua/.test(x[1])).length, kq: kq.slice(0, 300) });
     await env.DB.batch([env.DB.prepare(`INSERT OR REPLACE INTO module_config (id, cau_hinh, updated_at, updated_by_name) VALUES ('viec_thay_chu', ?, ?, 'Claude')`).bind(JSON.stringify({ viec: con }), now), env.DB.prepare(`INSERT OR REPLACE INTO module_config (id, cau_hinh, updated_at, updated_by_name) VALUES ('viec_thay_chu_kq', ?, ?, 'Claude')`).bind(JSON.stringify({ lan: lich.slice(0, 20) }), now)]);
     await logAudit(env, me, 'Claude duyệt / gán thay chủ', 'mau_doan', kq.length + ' việc', kq.slice(0, 20).map((x) => x.join(': ')).join(' · ')); return { so: kq.length }; }
+  // ===== ADR-020 TRỤC VIDEO (duyệt 26/09): 4 trục cấp video + góc quay từng đoạn; một mô hình chung, trục là điều kiện; nhóm < 15 video gộp về chung
+  const TRUC = {
+    muc_dich: { ten: 'Mục đích', gt: { QUANG_CAO: 'quảng cáo chuyển đổi', THUONG_HIEU: 'thương hiệu', BAN_HANG_HANG_NGAY: 'bán hàng hằng ngày', HUONG_DAN: 'hướng dẫn thi công', CHUNG_MINH: 'chứng minh / test', PHAN_HOI: 'phản hồi khách / công trình' } },
+    cau_truc: { ten: 'Cấu trúc', gt: { VAN_DE_GIAI_PHAP: 'vấn đề → giải pháp', TRUOC_SAU: 'trước / sau', TUNG_BUOC: 'từng bước', THU_NGHIEM: 'thử nghiệm', KE_CHUYEN: 'kể chuyện', DANH_SACH: 'danh sách' } },
+    mo_dau: { ten: 'Kiểu mở đầu', gt: { CAU_HOI: 'câu hỏi', KET_QUA_TRUOC: 'khoe kết quả trước', LOI_HAY_GAP: 'lỗi hay gặp', CON_SO: 'con số', HANH_DONG_MANH: 'hành động mạnh', CAM_XUC: 'cảm xúc' } },
+    phong_cach: { ten: 'Phong cách', gt: { NGUOI_NOI: 'người nói', LONG_TIENG: 'lồng tiếng', CHU_VA_NHAC: 'chữ + nhạc', AM_THANH_THAT: 'âm thanh thi công thật', TREND: 'trend' } },
+  };
+  const GOC_QUAY = { CAN_CHI_TIET: 'cận chi tiết', TRUNG: 'trung', TOAN_CANH: 'toàn cảnh', POV: 'POV (góc thợ)', TREN_XUONG: 'từ trên xuống', SPLIT_TRUOC_SAU: 'chia đôi trước / sau' };
+  const NGUONG_TRUC = 15;
+  // thầy gán trục: đọc lời thoại + mô tả từng đoạn thầy đã viết (chữ, không ảnh — rẻ), Haiku; tính vào ngân sách thầy
+  async function thayGanTruc(env, toiDa = 8) { await dam(env); const cfg = await docCauHinh(env); const ai = cfg.ai || {}; const hl = cfg.huan_luyen || {}; if (ai.thay_nhin === false || hl.thay_truc === false) return { ok: false, tat: true };
+    const key = env.ANTHROPIC_API_KEY; if (!key) return { ok: false, loi: 'chưa có ANTHROPIC_API_KEY' };
+    if (so(ai.ngan_sach_thay_usd) > 0) { const da = (await env.DB.prepare(`SELECT COALESCE(SUM(chi_phi_usd),0) usd FROM ai_usage WHERE thang=? AND tinh_nang IN ('hoc_nhan_khung','hoc_doc_loi','hoc_gan_truc')`).bind(thangHienTai()).first()) || {}; if (so(da.usd) >= so(ai.ngan_sach_thay_usd)) return { ok: false, loi: 'Hết ngân sách thầy tháng này' }; }
+    const vs = (await env.DB.prepare(`SELECT id, ten, kenh, dong, luot_xem, doanh_thu FROM kho_thanh_pham WHERE truc IS NULL AND EXISTS (SELECT 1 FROM mau_doan m WHERE m.doi_tuong_id=kho_thanh_pham.id AND m.loai='HINH' AND m.nhan_thay IS NOT NULL) ORDER BY created_at DESC LIMIT ?`).bind(Math.max(1, Math.min(30, toiDa))).all()).results; if (!vs.length) return { ok: true, so: 0 };
+    const model = chuoi(hl.thay_truc_model, 60) || 'claude-haiku-4-5-20251001'; let xong = 0, loi = null; const dsGt = (o) => Object.entries(o).map(([k, v]) => k + ' (' + v + ')').join('; ');
+    for (const v of vs) { const doan = (await env.DB.prepare(`SELECT i, tu, den, nhan_thay FROM mau_doan WHERE doi_tuong_id=? AND loai='HINH' AND hieu_luc=1 ORDER BY i LIMIT 40`).bind(v.id).all()).results; const loiThoai = (await env.DB.prepare(`SELECT text FROM mau_doan WHERE doi_tuong_id=? AND loai='LOI' AND hieu_luc=1 AND trang_thai<>'NGHE_SAI' ORDER BY i LIMIT 40`).bind(v.id).all()).results.map((x) => x.text).filter(Boolean);
+      const p = 'Bạn là biên tập viên video của Kingsmen (vật liệu xây dựng' + (v.dong ? ', dòng ' + v.dong : '') + '). Phân loại video thành phẩm dưới đây theo 4 trục, và góc quay từng đoạn.\n' +
+        'TRỤC (chọn ĐÚNG MỘT mã mỗi trục, không chắc thì null):\n' + Object.entries(TRUC).map(([k, t]) => '- ' + k + ' — ' + t.ten + ': ' + dsGt(t.gt)).join('\n') + '\n- góc quay từng đoạn: ' + dsGt(GOC_QUAY) + '\n\n' +
+        'VIDEO: ' + (v.ten || '') + (v.kenh ? ' · kênh ' + v.kenh : '') + '\nLỜI THOẠI (máy nghe, có thể sai chữ): ' + (loiThoai.join(' / ').slice(0, 2500) || '(không có lời — có thể chữ + nhạc)') + '\nCÁC ĐOẠN (mô tả hình do thầy viết):\n' +
+        doan.map((d) => { const t = P(d.nhan_thay) || {}; return '#' + d.i + ' ' + (+d.tu).toFixed(1) + '–' + (+d.den).toFixed(1) + 's: ' + (t.nhom || '') + ' — ' + String(t.mo_ta || '').slice(0, 160); }).join('\n') +
+        '\n\nTrả về DUY NHẤT JSON: {"muc_dich":"MÃ|null","cau_truc":"MÃ|null","mo_dau":"MÃ|null","phong_cach":"MÃ|null","chac":0..1,"doan":[{"i":số,"goc":"MÃ|null"}]}';
+      const t0 = Date.now(); let res, j; try { res = await fetch('https://api.anthropic.com/v1/messages', { method: 'POST', headers: { 'content-type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01' }, body: JSON.stringify({ model, max_tokens: 1500, messages: [{ role: 'user', content: p }] }) }); j = await res.json().catch(() => ({})); } catch (e) { loi = String(e.message || e).slice(0, 100); break; }
+      await ghiAIUsage(env, { provider: 'anthropic', model, tinh_nang: 'hoc_gan_truc', tokens_vao: so(j.usage && j.usage.input_tokens), tokens_ra: so(j.usage && j.usage.output_tokens), ok: !!res.ok, ms: Date.now() - t0, loi: res.ok ? null : String((j.error && j.error.message) || res.status).slice(0, 200), muc: 'API' });
+      if (!res.ok) { loi = String((j.error && j.error.message) || res.status).slice(0, 100); break; }
+      const txt = ((j.content || []).find((c) => c.type === 'text') || {}).text || ''; let o = null; try { o = JSON.parse(txt.slice(txt.indexOf('{'), txt.lastIndexOf('}') + 1)); } catch { o = null; } if (!o) continue;
+      const truc = { nguon: 'THAY', model, luc: nowISO(), chac: Math.max(0, Math.min(1, +o.chac || 0)) }; for (const k of Object.keys(TRUC)) truc[k] = TRUC[k].gt[o[k]] ? o[k] : null;
+      const st = [env.DB.prepare(`UPDATE kho_thanh_pham SET truc=? WHERE id=?`).bind(J(truc), v.id)]; for (const d of (Array.isArray(o.doan) ? o.doan : [])) if (GOC_QUAY[d.goc]) st.push(env.DB.prepare(`UPDATE mau_doan SET goc_quay=? WHERE id=? AND goc_quay IS NULL`).bind(d.goc, 'H:' + v.id + ':' + Math.round(so(d.i))));
+      await env.DB.batch(st); xong++; }
+    return { ok: true, so: xong, loi }; }
+  // Độ phủ trục theo dòng: số video mỗi giá trị (≥ ngưỡng = dùng được làm điều kiện), góc quay đoạn thành phẩm + footage kho
+  async function doPhuTruc(env) { await dam(env); const vs = (await env.DB.prepare(`SELECT id, dong, truc FROM kho_thanh_pham`).all()).results; const out = {};
+    const o = (d) => out[d] = out[d] || { tong: 0, da_gan: 0, truc: Object.fromEntries(Object.keys(TRUC).map((k) => [k, {}])), goc_doan: {}, goc_footage: {} };
+    for (const v of vs) { const x = o(v.dong || '(chưa có dòng)'); x.tong++; const t = P(v.truc); if (!t) continue; x.da_gan++; for (const k of Object.keys(TRUC)) if (t[k]) x.truc[k][t[k]] = (x.truc[k][t[k]] || 0) + 1; }
+    for (const r of (await env.DB.prepare(`SELECT dong, goc_quay, COUNT(*) n FROM mau_doan WHERE loai='HINH' AND hieu_luc=1 AND goc_quay IS NOT NULL GROUP BY dong, goc_quay`).all()).results) o(r.dong || '(chưa có dòng)').goc_doan[r.goc_quay] = so(r.n);
+    for (const r of (await env.DB.prepare(`SELECT mu.dong, t.goc_quay, COUNT(*) n FROM tai_san t JOIN muc_noi_dung mu ON mu.id=t.muc_id WHERE t.loai='FOOTAGE' AND t.goc_quay IS NOT NULL GROUP BY mu.dong, t.goc_quay`).all()).results) o(r.dong || '(chưa có dòng)').goc_footage[r.goc_quay] = so(r.n);
+    return { truc: TRUC, goc_quay: GOC_QUAY, nguong: NGUONG_TRUC, dong: out }; }
+  async function suaTruc(env, me, id, body) { if (!isStaff(me)) return json({ error: 'Không có quyền' }, 403); const v = await env.DB.prepare(`SELECT id, truc FROM kho_thanh_pham WHERE id=?`).bind(id).first(); if (!v) return json({ error: 'Không có video' }, 404);
+    const t = { ...(P(v.truc) || {}), nguon: 'NGUOI', nguoi: me.ho_ten, luc: nowISO() }; for (const k of Object.keys(TRUC)) if (body[k] !== undefined) t[k] = TRUC[k].gt[body[k]] ? body[k] : null;
+    await env.DB.prepare(`UPDATE kho_thanh_pham SET truc=? WHERE id=?`).bind(J(t), v.id).run(); await logAudit(env, me, 'sửa trục video', 'kho_thanh_pham', v.id, JSON.stringify(Object.fromEntries(Object.keys(TRUC).map((k) => [k, t[k]])))); return json({ ok: true, truc: t }); }
   // NGUỒN HỌC: gom video đã học theo nguồn (kênh / thư mục / ngành) + footage theo mục; mỗi nguồn: video, mẫu, dòng, ảnh, thầy, người, lời, bản xem, lần học cuối, chuỗi nạp lại
   async function nguonHoc(env) { await dam(env);
     const tk = {}; for (const r of (await env.DB.prepare(`SELECT doi_tuong_id d, SUM(loai='HINH') hinh, SUM(loai='HINH' AND khung_url IS NOT NULL) anh, SUM(loai='HINH' AND nhan_thay IS NOT NULL) thay, SUM(nhan_nguoi IS NOT NULL) nguoi, SUM(loai='LOI') loi, SUM(trang_thai='NGHE_SAI') nghe_sai FROM mau_doan WHERE hieu_luc=1 GROUP BY doi_tuong_id`).all()).results) tk[r.d] = r;
     const kd = ((await docCauHinh(env)).kalodata || {}).nganh || []; const nhom = {};
     const cong = (key, base, v, dong, cuoi, banXem) => { const g = nhom[key] = nhom[key] || { ...base, so_video: 0, dong: {}, hinh: 0, anh: 0, thay: 0, nguoi: 0, loi: 0, nghe_sai: 0, ban_xem: 0, cuoi: '', video: [] }; const t = tk[v.id] || {};
       g.so_video++; g.dong[dong || '(chưa có)'] = (g.dong[dong || '(chưa có)'] || 0) + 1; for (const k of ['hinh', 'anh', 'thay', 'nguoi', 'loi', 'nghe_sai']) g[k] += so(t[k]); if (banXem) g.ban_xem++; if (String(cuoi) > g.cuoi) g.cuoi = String(cuoi);
-      g.video.push({ id: v.id, ten: v.ten, dong: dong || null, hinh: so(t.hinh), thay: so(t.thay), cuoi }); };
-    for (const v of (await env.DB.prepare(`SELECT id, ten, nguon, kenh, thu_muc, dong, proxy_url, created_at FROM kho_thanh_pham`).all()).results) { const tm = String(v.thu_muc || ''); let key, base;
+      g.video.push({ id: v.id, ten: v.ten, dong: dong || null, hinh: so(t.hinh), thay: so(t.thay), cuoi, truc: P(v.truc) }); };
+    for (const v of (await env.DB.prepare(`SELECT id, ten, nguon, kenh, thu_muc, dong, proxy_url, created_at, truc FROM kho_thanh_pham`).all()).results) { const tm = String(v.thu_muc || ''); let key, base;
       if (v.nguon === 'DRIVE') { const m = tm.match(/^drive:([^/]+)(?:\/([^/]+))?/) || []; key = 'DRIVE|' + (m[1] || '') + '|' + (m[2] || ''); base = { loai: 'DRIVE', ten: m[2] || 'thư mục gốc', phu: 'Drive · ' + (m[1] || '').slice(0, 10) + '…', nap: m[1] ? 'https://drive.google.com/drive/folders/' + m[1] : null }; }
       else if (v.nguon === 'KALODATA') { const ng = tm.split(/[\\/]/).pop() || 'kalodata'; const ten = (kd.find((x) => String(x).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') === ng) || ng); key = 'KALODATA|' + ng; base = { loai: 'KALODATA', ten: 'Ngành ' + ten, phu: 'Kalodata · video bán chạy của nhiều kênh', nap: kd.includes(ten) ? ten : null }; }
       else if (v.nguon === 'REELS') { const k = v.kenh || 'fb/?'; key = 'REELS|' + k; base = { loai: 'REELS', ten: k.replace(/^fb\//, 'facebook.com/'), phu: 'Reels của fanpage Facebook', nap: 'https://www.facebook.com/' + k.replace(/^fb\//, '') }; }
@@ -605,8 +644,10 @@ export function taoMau(H) {
     if (path === '/do-chinh-xac' && method === 'GET') { if (!isStaff(me)) return json({ error: 'Không có quyền' }, 403); const d = await doChinhXac(env); const tl = await tiLeKiem(env); const dx = await env.DB.prepare(`SELECT COUNT(*) n FROM bo_nhan WHERE trang_thai='DE_XUAT'`).first(); return json({ ...d, truong_yeu: tl.yeu, dem: await dem(env), so_de_xuat: so((dx || {}).n), bu: await tinhBu(env) }); }
     if (path === '/thay/doc-bu' && method === 'POST') { if (!canGat(me)) return json({ error: 'Chỉ Trưởng MKT/Admin' }, 403); const r = await thayDocBu(env, so(body.so) || 12); return json({ ...r, bu: await tinhBu(env) }); }
     if (path === '/bo-nhan/tu-phang' && method === 'POST') { if (!canGat(me)) return json({ error: 'Chỉ Trưởng MKT/Admin' }, 403); const d = chuoi(body.dong, 80); if (!d) return json({ error: 'Chọn dòng' }, 400); await napTuPhang(env, d); return json({ ok: true, ...(await dsBoNhan(env)) }); }
+    if (path === '/do-phu-truc' && method === 'GET') { if (!isStaff(me)) return json({ error: 'Không có quyền' }, 403); return json(await doPhuTruc(env)); }
+    if ((m = path.match(/^\/kho-thanh-pham\/([^/]+)\/truc$/)) && method === 'POST') return suaTruc(env, me, m[1], body);
     if (path === '/nguon-hoc' && method === 'GET') { if (!isStaff(me)) return json({ error: 'Không có quyền' }, 403); return json(await nguonHoc(env)); }
     if (path === '/thay/bu' && method === 'GET') { if (!isStaff(me)) return json({ error: 'Không có quyền' }, 403); return json(await tinhBu(env)); }
     return null; }
-  return { dam, api, dsDongChuan, tuGanDong, chayViecThayChu, chuanHoaBuoc, napTuPhang, thayDocBu, tinhBu, hubThayDoc, upsertHinh, upsertLoi, capNhatSoDo, xoaTheoDoiTuong, timelineCua, viDu, doChinhXac, dem, phutNguoi, thayDocLoi, hocNguong, boNhan, TRUONG };
+  return { dam, api, dsDongChuan, thayGanTruc, doPhuTruc, TRUC, GOC_QUAY, tuGanDong, chayViecThayChu, chuanHoaBuoc, napTuPhang, thayDocBu, tinhBu, hubThayDoc, upsertHinh, upsertLoi, capNhatSoDo, xoaTheoDoiTuong, timelineCua, viDu, doChinhXac, dem, phutNguoi, thayDocLoi, hocNguong, boNhan, TRUONG };
 }

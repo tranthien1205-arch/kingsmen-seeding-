@@ -102,3 +102,19 @@ test('đánh giá video nháp: không đạt + lý do → loại, đóng việc 
   assert.equal(DB.raw.prepare(`SELECT trang_thai FROM cong_viec WHERE loai='DUYET_VIDEO_NHAP' AND doi_tuong_id=?`).get(nd).trang_thai, 'XONG', 'việc tự đóng');
   assert.ok(r.j.dung_lai && r.j.dung_lai.ok, 'giao dựng lại'); const ct = JSON.parse(DB.raw.prepare(`SELECT chi_tiet FROM noi_dung WHERE id=?`).get(nd).chi_tiet); assert.equal(ct.video_url, undefined); assert.equal(ct.video_bi_loai[0].ly_do, 'sai cảnh');
 });
+test('ADR-020: thầy gán 4 trục + góc quay đoạn; footage lấy góc quay từ tên thư mục; độ phủ theo dòng; người sửa trục', async () => {
+  const DB = taoD1(); env = taoEnv(DB); TOKEN = (await api('/login', 'POST', { email: 'admin@kingsmen.vn', password: 'admin123' })).j.token;
+  const may = hubK(giai((await api('/may-ghep', 'POST', { ten: 'Q2' })).j.ma_ghep).khoa);
+  await may('/hub/thanh-pham', 'POST', { ten: 'k.mp4', nguon_id: 'k', nguon: 'TIKTOK', dong: 'Keo chít mạch', dai: 6, shots: [{ t0: 0, t1: 3 }, { t0: 3, t1: 6 }], timeline: [0, 1].map((i) => ({ tu: i * 3, den: i * 3 + 3, nhom: 'THI_CONG', thay: { nhom: 'THI_CONG', mo_ta: 'cận cảnh bơm keo', chac: 0.9 } })) });
+  const vid = DB.raw.prepare(`SELECT id FROM kho_thanh_pham WHERE nguon_id='k'`).get().id;
+  TRA.push(JSON.stringify({ muc_dich: 'HUONG_DAN', cau_truc: 'TUNG_BUOC', mo_dau: 'CAU_HOI', phong_cach: 'KHONG_CO', chac: 0.8, doan: [{ i: 0, goc: 'CAN_CHI_TIET' }, { i: 1, goc: 'BAY' }] }));
+  const r = await (await import('../worker/mau.js')).taoMau; void r;
+  let p; await worker.scheduled({}, env, { waitUntil: (x) => { p = x; } }); await p;
+  const t = JSON.parse(DB.raw.prepare(`SELECT truc FROM kho_thanh_pham WHERE id=?`).get(vid).truc || 'null');
+  assert.ok(t, 'đã gán trục'); assert.equal(t.muc_dich, 'HUONG_DAN'); assert.equal(t.phong_cach, null, 'mã lạ → null');
+  assert.equal(DB.raw.prepare(`SELECT goc_quay FROM mau_doan WHERE id=?`).get('H:' + vid + ':0').goc_quay, 'CAN_CHI_TIET'); assert.equal(DB.raw.prepare(`SELECT goc_quay FROM mau_doan WHERE id=?`).get('H:' + vid + ':1').goc_quay, null);
+  const dp = (await api('/do-phu-truc')).j; assert.equal(dp.dong['Keo chít mạch'].truc.muc_dich.HUONG_DAN, 1); assert.equal(dp.dong['Keo chít mạch'].goc_doan.CAN_CHI_TIET, 1);
+  assert.equal((await api('/kho-thanh-pham/' + vid + '/truc', 'POST', { phong_cach: 'NGUOI_NOI' })).j.truc.phong_cach, 'NGUOI_NOI');
+  const m = (await api('/muc', 'POST', { tieu_de: 'kho', dinh_dang: 'VIDEO' })).j.id; await may('/hub/tai-san', 'POST', { muc_id: m, ten: 'a.mp4', thu_muc: '/6. POV', media_url: '/media/a.mp4', media_type: 'VIDEO', nguon: 'DRIVE' });
+  await api('/bootstrap'); assert.equal(DB.raw.prepare(`SELECT goc_quay FROM tai_san WHERE ten='a.mp4'`).get().goc_quay, 'POV');
+});

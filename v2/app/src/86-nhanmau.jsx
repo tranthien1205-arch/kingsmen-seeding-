@@ -383,7 +383,7 @@ function NguonHoc({ a }) {
   const MenuNguon = ({ g }) => { const laFt = g.loai === 'FOOTAGE'; return <div className="rounded-xl bg-[#EFF4F6] p-2 flex flex-col gap-2 text-xs">
         {!laFt && duoc && g.video.length > 0 && <div className="flex gap-1.5 items-center flex-wrap"><span className="text-ink-muted">Gán dòng cả nguồn</span><select className="border border-line rounded-lg px-1.5 py-1 bg-white min-w-0 flex-1" value={dongChon[g.key] || ''} onChange={(e) => setDongChon({ ...dongChon, [g.key]: e.target.value })}><option value="">chọn dòng…</option>{d.dongs.map((x) => <option key={x} value={x}>{x}</option>)}</select>{dongChon[g.key] && <button className="rounded-lg bg-[#0E7C8C] text-white px-2.5 py-1 font-semibold" disabled={busy} onClick={() => ganDong(g)}>Gán {g.video.length} video</button>}</div>}
         {g.video.length > 0 && <button className="text-left font-semibold text-[#0E7C8C]" onClick={() => setMo(mo === g.key ? null : g.key)}>{mo === g.key ? '▾ Ẩn danh sách' : '▸ Xem ' + g.video.length + ' ' + (laFt ? 'clip' : 'video')}</button>}
-        {mo === g.key && <div className="rounded-lg bg-white border border-line p-2 max-h-64 overflow-auto">{g.video.map((v) => <div key={v.id} className="flex items-center gap-2 py-1 border-b border-[#D9E3E7] last:border-0"><span className="flex-1 min-w-0 truncate">{v.ten}</span><span className="text-ink-muted tabular-nums whitespace-nowrap">{v.hinh} đoạn</span></div>)}</div>}
+        {mo === g.key && <div className="rounded-lg bg-white border border-line p-2 max-h-64 overflow-auto">{g.video.map((v) => <div key={v.id} className="flex items-center gap-2 py-1 border-b border-[#D9E3E7] last:border-0"><span className="flex-1 min-w-0 truncate">{v.ten}</span>{v.truc && <span className="text-[11px] text-[#0E7C8C] truncate max-w-[45%]" title="trục ADR-020">{[v.truc.muc_dich, v.truc.cau_truc, v.truc.mo_dau, v.truc.phong_cach].filter(Boolean).join(' · ')}</span>}<span className="text-ink-muted tabular-nums whitespace-nowrap">{v.hinh} đoạn</span></div>)}</div>}
         {(g.thu_muc_drive || []).length > 0 && <div className="text-ink-muted break-all">Thư mục: {g.thu_muc_drive.map((u) => <a key={u} className="underline mr-2" href={u} target="_blank" rel="noreferrer">{u.split('/').pop().slice(0, 12)}…</a>)}</div>}
         {g.nap && /^https?:/.test(g.nap) && !g.thu_muc_drive && <a className="underline text-[#0E7C8C] break-all" href={g.nap} target="_blank" rel="noreferrer">Mở nguồn gốc ↗</a>}
         {duoc && !laFt && g.video.length > 0 && <button className={'self-start rounded-lg border px-2.5 py-1 font-semibold ' + (xoa === g.key ? 'bg-rose-600 border-rose-600 text-white' : 'border-rose-200 text-rose-700 bg-white')} disabled={busy} onClick={() => loaiNguon(g)}>{xoa === g.key ? 'Bấm lần nữa: loại ' + g.video.length + ' video và mẫu' : 'Loại nguồn khỏi kho học'}</button>}
@@ -422,7 +422,7 @@ function NguonHoc({ a }) {
       {menu === g.key && <tr><td colSpan={10} className="px-2.5 pb-2.5"><MenuNguon g={g} /></td></tr>}</React.Fragment>; })}</tbody></table></div>;
   const KieuXem = () => <div className="inline-flex rounded-full border border-line bg-white p-0.5 text-xs">{[['bang', '▦ Bảng'], ['the', '▢ Thẻ']].map(([k, t]) => <button key={k} onClick={() => setKieu(k)} className={'rounded-full px-2.5 py-0.5 ' + (xemBang === (k === 'bang') ? 'bg-ink text-white font-semibold' : '')}>{t}</button>)}</div>;
   const trangThaiLenh = (s) => ({ CHO: ['chờ máy', 'bg-slate-100 text-ink'], DA_GUI: ['đang chạy', 'bg-sky-100 text-sky-800'], XONG: ['xong', 'bg-emerald-100 text-emerald-800'], HONG: ['lỗi', 'bg-rose-100 text-rose-700'], HUY: ['huỷ', 'bg-slate-100 text-ink-muted'] })[s] || [s, 'bg-slate-100'];
-  const TABS = [['tp', '🎬 Thành phẩm', tp.length], ['ft', '📦 Footage gốc', ft.length], ['kd', '📈 Kalodata', (d.kalodata && d.kalodata.nganh.length) || 0], ['lenh', '🕘 Việc học', d.lenh.filter((l) => ['CHO', 'DA_GUI'].includes(l.trang_thai)).length]];
+  const TABS = [['tp', '🎬 Thành phẩm', tp.length], ['ft', '📦 Footage gốc', ft.length], ['truc', '📊 Độ phủ trục', 0], ['kd', '📈 Kalodata', (d.kalodata && d.kalodata.nganh.length) || 0], ['lenh', '🕘 Việc học', d.lenh.filter((l) => ['CHO', 'DA_GUI'].includes(l.trang_thai)).length]];
   return <div className="flex flex-col gap-3">
     <Card pad="p-4" className="!rounded-[16px] !shadow-none flex flex-col gap-3">
       <div className="flex items-start gap-3 flex-wrap"><div className="flex-1 min-w-[220px]"><div className="font-bold text-[17px]">Nguồn học của máy</div>
@@ -441,8 +441,27 @@ function NguonHoc({ a }) {
       {!dsTp.length && <Card pad="p-4"><Empty>Không có nguồn nào khớp bộ lọc.</Empty></Card>}</>}
     {tab === 'ft' && <><div className="text-[12px] text-ink-muted px-1">Footage gốc là nguyên liệu để máy dựng video mới: mỗi dòng một kho, thư mục con theo cảnh / góc quay được giữ làm nhãn. Nạp thêm bằng ＋ Thêm nguồn › thư mục Drive › Footage gốc.</div>
       <div className="flex justify-end"><KieuXem /></div>{xemBang ? (ft.length > 0 && <BangNguon ds={ft} />) : <div className="grid grid-cols-1 min-[760px]:grid-cols-2 min-[1280px]:grid-cols-3 gap-3">{ft.map((g) => <TheNguon key={g.key} g={g} />)}</div>}{!ft.length && <Card pad="p-4"><Empty>Chưa có kho footage nào.</Empty></Card>}</>}
+    {tab === 'truc' && <DoPhuTruc />}
     {tab === 'kd' && d.kalodata && <KalodataNguon kd={d.kalodata} duoc={duoc} dongs={d.dongs} onDoi={tai} />}
     {tab === 'lenh' && <Card pad="p-3" className="!rounded-[14px] !shadow-none"><div className="flex flex-col gap-1.5">{!d.lenh.length && <span className="text-xs text-ink-muted">Chưa giao máy việc học nào.</span>}{d.lenh.map((l) => { const [t, c] = trangThaiLenh(l.trang_thai); const ts = l.tham_so || {}; return <div key={l.id} className="flex gap-2 items-start text-[12px] rounded-lg border border-line/70 px-2.5 py-1.5"><Pill cls={c} className="!text-[11px] shrink-0">{t}</Pill><span className="flex-1 min-w-0 break-words">{l.viec === 'hoc_thanh_pham' ? (ts.chi_proxy ? 'Tạo bản xem + ảnh bù' : 'Học video ' + (ts.nguon || '') + (ts.kenh ? ' ' + ts.kenh : '')) : l.viec === 'phan_tich_footage' ? 'Đọc footage' : l.viec === 'nap_drive' ? 'Nạp footage Drive' : 'Trạm tải / quét'}{ts.so ? ' · ' + ts.so + ' video' : ''}{l.ket_qua ? <span className="text-ink-muted"> — {String(l.ket_qua).slice(0, 160)}</span> : null}</span><span className="text-ink-muted whitespace-nowrap text-[11px]">{fmtDate(l.created_at)}</span></div>; })}</div></Card>}
+  </div>;
+}
+// ADR-020 — Độ phủ trục: mỗi dòng, mỗi trục, mỗi giá trị bao nhiêu video (≥ ngưỡng = dùng được làm điều kiện khi học / làm video)
+function DoPhuTruc() {
+  const { goi, notify } = useApp(); const [d, setD] = useState(null);
+  useEffect(() => { goi('/do-phu-truc').then((r) => { if (r.ok) setD(r); else notify(r.msg, 'err'); }); }, []);
+  if (!d) return <Card pad="p-3"><Empty>Đang tính độ phủ…</Empty></Card>;
+  const mau = (n) => n >= d.nguong ? 'bg-[#0E7C8C] text-white border-[#0E7C8C]' : n > 0 ? 'bg-[#FFF9E8] text-[#8A6410] border-[#E3B23C]' : 'bg-white text-ink-muted border-line';
+  const Hang = ({ ten, gt, dem }) => <div className="flex gap-2 items-start py-1.5 border-t border-[#D9E3E7] first:border-0"><span className="w-28 shrink-0 text-[12px] font-semibold pt-0.5">{ten}</span><div className="flex gap-1 flex-wrap flex-1">{Object.entries(gt).map(([k, t]) => { const n = dem[k] || 0; return <span key={k} className={'rounded-md border px-1.5 py-0.5 text-[11px] ' + mau(n)} title={k}>{t} <b className="tabular-nums">{n}</b></span>; })}</div></div>;
+  const dongs = Object.entries(d.dong).sort((a, b) => b[1].tong - a[1].tong);
+  return <div className="flex flex-col gap-3">
+    <div className="text-[12px] text-ink-muted px-1">Thầy tự gán 4 trục cho mỗi video thành phẩm và góc quay cho từng đoạn (8 video / 15 phút); footage gốc lấy góc quay từ tên thư mục. Ô <b className="text-[#0E7C8C]">xanh</b> = đủ {d.nguong} video, dùng được làm điều kiện; ô <b className="text-[#8A6410]">vàng</b> = có nhưng chưa đủ; ô trắng = chưa có — cần thêm nguồn.</div>
+    <div className="grid grid-cols-1 min-[1100px]:grid-cols-2 gap-3">{dongs.map(([dong, x]) => <Card key={dong} pad="p-3" className="!rounded-[14px] !shadow-none">
+      <div className="flex items-baseline gap-2 mb-1.5"><span className="font-bold text-[14px]">{dong}</span><span className="text-[11px] text-ink-muted">{x.tong} video · đã gán trục {x.da_gan}</span></div>
+      {Object.entries(d.truc).map(([k, t]) => <Hang key={k} ten={t.ten} gt={t.gt} dem={x.truc[k] || {}} />)}
+      <Hang ten="Góc quay (đoạn)" gt={d.goc_quay} dem={x.goc_doan} />
+      {Object.keys(x.goc_footage).length > 0 && <Hang ten="Góc quay footage" gt={d.goc_quay} dem={x.goc_footage} />}
+    </Card>)}</div>
   </div>;
 }
 // Kalodata trong Nguồn học: ngành đang theo dõi (thêm / bỏ), tự quét hằng tuần, quét ngay, top N, dòng, mục đích — trước đây nằm ở tab khác
