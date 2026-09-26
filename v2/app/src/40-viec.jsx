@@ -39,7 +39,7 @@ function ViecCuaToi({go}){
     {laXemMkt(me) && <div>
       <SectionTitle className="mb-2">Máy hôm nay</SectionTitle>
       <Card pad="p-3">{runsHomNay.length===0 ? <div className="text-sm text-ink-muted">Máy chưa chạy lượt nào hôm nay (giờ chạy: {((db.module_config||{}).may||{}).gio_chay}h). Xem <LinkBtn onClick={()=>go('may')}>màn Máy</LinkBtn>.</div>
-        : <div className="divide-y divide-line">{runsHomNay.slice(0,6).map(r=><div key={r.id} className="py-1.5 flex gap-2 text-[12px]"><span>{r.ok?'✓':'✗'}</span><span className="text-slate-400 shrink-0">{String(r.at).slice(11,16)}</span><span className="font-semibold text-ink shrink-0">{r.agent}</span><span className="text-ink-muted min-w-0 flex-1 truncate">{r.tom_tat}</span>{r.thu&&<Pill>thử</Pill>}</div>)}</div>}</Card>
+        : <div className="divide-y divide-line">{runsHomNay.slice(0,6).map(r=><div key={r.id} className="py-1.5 flex gap-2 text-[12px]"><span>{r.ok?'✓':'✗'}</span><span className="text-slate-500 shrink-0">{String(r.at).slice(11,16)}</span><span className="font-semibold text-ink shrink-0">{r.agent}</span><span className="text-ink-muted min-w-0 flex-1 truncate">{r.tom_tat}</span>{r.thu&&<Pill>thử</Pill>}</div>)}</div>}</Card>
     </div>}
   </div>;
 }

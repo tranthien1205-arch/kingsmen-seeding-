@@ -5,11 +5,11 @@ const TEN_SO_DO = { cau: 'câu có lời', luat_khop_pct: '% ngưỡng hiện t�
 const TEN_TG = { tai: 'Tải', cat: 'Cắt shot', nghe: 'Nghe lời', anh_shot: 'Ảnh + dò gốc', nhin: 'Đọc hình (qwen)', thay: 'Thầy Claude' };
 
 function OBan({ x, onClick, chon }) {
-  if (!x) return <span className="text-[10px] text-ink-muted px-1.5">theo chung</span>;
+  if (!x) return <span className="text-[11px] text-ink-muted px-1.5">theo chung</span>;
   const vien = 'text-left w-full rounded-lg px-1.5 py-1 hover:bg-slate-50 ' + (chon ? 'ring-1 ring-ink' : '');
-  if (x.cho) return <button onClick={onClick} className={vien}><Pill cls="bg-rose-100 text-rose-700">{x.thieu}</Pill>{x.ghi_chu && <div className="text-[10px] text-ink-muted mt-0.5">{x.ghi_chu}</div>}</button>;
-  if (x.chua_lam) return <button onClick={onClick} className={vien}><Pill>{x.thieu}</Pill><div className="text-[10px] text-ink-muted mt-0.5">{Object.entries(x.so_do || {}).map(([k, v]) => (TEN_SO_DO[k] || k) + ': ' + v).join(' · ')}</div></button>;
-  return <button onClick={onClick} className={vien}><div className="space-y-0.5"><Pill cls={MAU_CHANG[x.chang]}>{TEN_CHANG[x.chang]}</Pill><div className="text-[10px] text-ink-muted leading-tight">{x.thieu}</div>{x.tien_do != null && <div className="h-1 rounded bg-slate-100 overflow-hidden"><div className="h-full bg-teal-600" style={{ width: Math.min(100, x.tien_do) + '%' }} /></div>}</div></button>;
+  if (x.cho) return <button onClick={onClick} className={vien}><Pill cls="bg-rose-100 text-rose-700">{x.thieu}</Pill>{x.ghi_chu && <div className="text-[11px] text-ink-muted mt-0.5">{x.ghi_chu}</div>}</button>;
+  if (x.chua_lam) return <button onClick={onClick} className={vien}><Pill>{x.thieu}</Pill><div className="text-[11px] text-ink-muted mt-0.5">{Object.entries(x.so_do || {}).map(([k, v]) => (TEN_SO_DO[k] || k) + ': ' + v).join(' · ')}</div></button>;
+  return <button onClick={onClick} className={vien}><div className="space-y-0.5"><Pill cls={MAU_CHANG[x.chang]}>{TEN_CHANG[x.chang]}</Pill><div className="text-[11px] text-ink-muted leading-tight">{x.thieu}</div>{x.tien_do != null && <div className="h-1 rounded bg-slate-100 overflow-hidden"><div className="h-full bg-teal-600" style={{ width: Math.min(100, x.tien_do) + '%' }} /></div>}</div></button>;
 }
 
 function BanHuanLuyen({ a, setTab, dem, soQuyet }) {
@@ -36,19 +36,19 @@ function BanHuanLuyen({ a, setTab, dem, soQuyet }) {
       <div className="overflow-x-auto"><table className="w-full text-xs min-w-[760px]">
         <thead><tr className="text-left text-ink-muted"><th className="px-2 py-1 w-40">Làn</th><th className="px-2 py-1">Chung</th>{b.dongs.map(d => <th key={d} className="px-2 py-1">{d}</th>)}</tr></thead>
         <tbody>{b.lan.map(l => <tr key={l.k} className="border-t border-line/60 align-top">
-          <td className="px-2 py-1.5"><b className="text-ink">{l.k} · {l.ten}</b><div className="text-[10px] text-ink-muted">đợt {l.dot}{l.cho ? ' · cần ' + l.cho.join(' + ') : ''}</div></td>
+          <td className="px-2 py-1.5"><b className="text-ink">{l.k} · {l.ten}</b><div className="text-[11px] text-ink-muted">đợt {l.dot}{l.cho ? ' · cần ' + l.cho.join(' + ') : ''}</div></td>
           <td className="px-1 py-1"><OBan x={b.o[l.k].chung} chon={chon && chon.k === l.k && !chon.dong} onClick={() => setChon({ k: l.k })} /></td>
           {b.dongs.map(d => <td key={d} className="px-1 py-1"><OBan x={(b.o[l.k].dong || {})[d]} chon={chon && chon.k === l.k && chon.dong === d} onClick={() => setChon({ k: l.k, dong: d })} /></td>)}
         </tr>)}</tbody></table></div>
       {oChon && <div className="mt-2 rounded-xl border border-line p-2 text-xs">
         <div className="font-semibold text-ink mb-1">{chon.k} · {chon.dong || 'Chung'} {oChon.chang ? <Pill cls={MAU_CHANG[oChon.chang]}>{TEN_CHANG[oChon.chang]}</Pill> : null}</div>
         <div className="text-ink-muted mb-1">Cổng tiếp: {oChon.thieu}</div>
-        {oChon.so_do && <div className="grid grid-cols-2 sm:grid-cols-4 gap-1">{Object.entries(TEN_SO_DO).filter(([k]) => k in oChon.so_do).map(([k, t]) => <div key={k} className="rounded-lg bg-slate-50 px-2 py-1"><div className="font-bold tabular-nums text-ink">{oChon.so_do[k] == null ? '—' : oChon.so_do[k] + (/pct/.test(k) ? '%' : '')}</div><div className="text-[10px] text-ink-muted">{t}</div></div>)}</div>}
+        {oChon.so_do && <div className="grid grid-cols-2 sm:grid-cols-4 gap-1">{Object.entries(TEN_SO_DO).filter(([k]) => k in oChon.so_do).map(([k, t]) => <div key={k} className="rounded-lg bg-slate-50 px-2 py-1"><div className="font-bold tabular-nums text-ink">{oChon.so_do[k] == null ? '—' : oChon.so_do[k] + (/pct/.test(k) ? '%' : '')}</div><div className="text-[11px] text-ink-muted">{t}</div></div>)}</div>}
       </div>}
     </Card>
     <Card pad="p-3"><SectionTitle className="mb-1">Máy học mất thời gian ở đâu</SectionTitle>
       {tg ? <div className="space-y-1 text-xs">{Object.entries(TEN_TG).filter(([k]) => tg[k] != null).map(([k, t]) => <div key={k} className="flex items-center gap-2"><span className="w-32 text-ink-muted">{t}</span><div className="flex-1 h-2 rounded bg-slate-100 overflow-hidden"><div className="h-full bg-teal-600" style={{ width: (tg[k] / tongTg * 100) + '%' }} /></div><span className="w-20 text-right tabular-nums">{tg[k]} giây</span></div>)}
-        <div className="text-[10px] text-ink-muted">Trung bình {tg.so_video} video gần nhất. Tải, cắt, nghe chiếm phần lớn thì mới đáng chuyển sang máy Ngoc-Han; đọc hình chiếm phần lớn thì giữ Q2.</div></div>
+        <div className="text-[11px] text-ink-muted">Trung bình {tg.so_video} video gần nhất. Tải, cắt, nghe chiếm phần lớn thì mới đáng chuyển sang máy Ngoc-Han; đọc hình chiếm phần lớn thì giữ Q2.</div></div>
         : <div className="text-xs text-ink-muted">Chưa có số đo. Máy học ghi thời gian từng chặng từ lượt học tiếp theo.</div>}
     </Card>
     <BangDoHinh d={a.do_chinh_xac_hinh || {}} />

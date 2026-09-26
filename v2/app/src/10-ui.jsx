@@ -14,12 +14,12 @@ function Field({label, children, hint, required, className=''}){
     {children}{hint && <div className="text-[11px] text-ink-muted mt-1">{hint}</div>}
   </label>;
 }
-const inputCls = "w-full px-3.5 py-2.5 rounded-xl border border-line text-sm text-ink placeholder:text-slate-400 focus:outline-none focus:ring-4 focus:ring-brand/15 focus:border-brand bg-white transition disabled:bg-slate-50";
+const inputCls = "w-full px-3.5 py-2.5 rounded-xl border border-line text-sm text-ink placeholder:text-slate-500 focus:outline-none focus:ring-4 focus:ring-brand/15 focus:border-brand bg-white transition disabled:bg-slate-50";
 function Input(p){ return <input {...p} className={inputCls+" "+(p.className||'')}/>; }
 function PasswordInput({className, ...p}){
   const [hien,setHien]=useState(false);
   return <div className="relative"><input {...p} type={hien?'text':'password'} className={inputCls+" pr-11 "+(className||'')}/>
-    <button type="button" tabIndex={-1} onMouseDown={e=>e.preventDefault()} onClick={()=>setHien(v=>!v)} className="absolute right-1 top-1/2 -translate-y-1/2 px-2.5 py-1.5 rounded-lg text-base text-slate-400 hover:text-ink">{hien?'🙈':'👁️'}</button></div>;
+    <button type="button" tabIndex={-1} onMouseDown={e=>e.preventDefault()} onClick={()=>setHien(v=>!v)} className="absolute right-1 top-1/2 -translate-y-1/2 px-2.5 py-1.5 rounded-lg text-base text-slate-500 hover:text-ink">{hien?'🙈':'👁️'}</button></div>;
 }
 function Textarea(p){ return <textarea {...p} className={inputCls+" "+(p.className||'')}/>; }
 function Select({children, ...p}){ return <select {...p} className={inputCls+" "+(p.className||'')}>{children}</select>; }
@@ -37,9 +37,9 @@ function Tabs({tabs, active, onChange, size, className=''}){
   const sm = size==='sm';
   return <div className={"flex gap-1 bg-slate-100 p-1 rounded-xl overflow-x-auto no-scrollbar "+(sm?'w-fit max-w-full ':'')+className}>
     {tabs.map(t=><button key={t.key} onClick={()=>onChange(t.key)} className={(sm?'px-3 py-1 text-xs ':'px-3 py-1.5 text-sm ')+"rounded-lg font-semibold whitespace-nowrap transition "+(active===t.key?'bg-white shadow-card text-ink':'text-ink-muted hover:text-ink')}>
-      {t.label}{t.count!=null && <span className={"ml-1.5 px-1.5 rounded-full "+(sm?'text-[10px] ':'text-xs ')+(active===t.key?'bg-brand text-white':'bg-slate-200 text-ink-muted')}>{t.count}</span>}</button>)}</div>;
+      {t.label}{t.count!=null && <span className={"ml-1.5 px-1.5 rounded-full "+(sm?'text-[11px] ':'text-xs ')+(active===t.key?'bg-brand text-white':'bg-slate-200 text-ink-muted')}>{t.count}</span>}</button>)}</div>;
 }
-function Pill({cls='bg-slate-100 text-ink-muted', children, className=''}){ return <span className={"inline-flex items-center rounded-full font-semibold whitespace-nowrap text-[10px] px-1.5 py-0.5 "+cls+" "+className}>{children}</span>; }
+function Pill({cls='bg-slate-100 text-ink-muted', children, className=''}){ return <span className={"inline-flex items-center rounded-full font-semibold whitespace-nowrap text-[11px] px-1.5 py-0.5 "+cls+" "+className}>{children}</span>; }
 function Card({children, className='', pad='p-4', onClick}){ return <div onClick={onClick} className={"bg-white rounded-2xl border border-line shadow-card "+pad+" "+className}>{children}</div>; }
 function SectionTitle({children, className=''}){ return <div className={"text-sm font-semibold text-ink "+className}>{children}</div>; }
 const CALLOUT = { warn:'rounded-2xl border border-amber-200 bg-amber-50 p-3 text-[11px] text-amber-800 leading-relaxed', danger:'rounded-2xl border border-rose-200 bg-rose-50 p-3 text-[11px] text-rose-700 leading-relaxed',

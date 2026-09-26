@@ -26,7 +26,7 @@ function BangDoHinh({ d }) {
   ];
   return <Card pad="p-3"><SectionTitle className="mb-1">Máy nhìn đúng đến đâu</SectionTitle>
     <div className="text-[11px] text-ink-muted mb-2">Đo trên nhãn người, không dùng số máy tự khai. Footage: {phanTram((nguon.FOOTAGE || {}).dung_nhom, (nguon.FOOTAGE || {}).so)} trên {(nguon.FOOTAGE || {}).so || 0} · Video thành phẩm: {phanTram((nguon.THANH_PHAM || {}).dung_nhom, (nguon.THANH_PHAM || {}).so)} trên {(nguon.THANH_PHAM || {}).so || 0}.</div>
-    <div className="grid grid-cols-2 lg:grid-cols-5 gap-2 mb-3">{o.map(([t, v, g, c]) => <div key={t} className="rounded-xl border border-line p-2"><div className={'text-2xl font-bold tabular-nums ' + c}>{v}</div><div className="text-[11px] font-semibold text-ink">{t}</div><div className="text-[10px] text-ink-muted">{g}</div></div>)}</div>
+    <div className="grid grid-cols-2 lg:grid-cols-5 gap-2 mb-3">{o.map(([t, v, g, c]) => <div key={t} className="rounded-xl border border-line p-2"><div className={'text-2xl font-bold tabular-nums ' + c}>{v}</div><div className="text-[11px] font-semibold text-ink">{t}</div><div className="text-[11px] text-ink-muted">{g}</div></div>)}</div>
     {(d.so_nhan || 0) === 0 ? <div className="text-xs text-ink-muted">Chưa có nhãn nào. Bắt đầu ở khung gán nhãn bên dưới.</div> :
       <div className="grid md:grid-cols-3 gap-3 text-xs">
         <div><div className="font-semibold text-ink mb-1">Theo nhóm (nhãn người)</div>
@@ -35,7 +35,7 @@ function BangDoHinh({ d }) {
           {(d.nham || []).length ? <table className="w-full"><tbody>{d.nham.map((x, i) => <tr key={i} className="border-t border-line/60"><td className="py-0.5">máy nói <b>{tenNhom(x.may)}</b></td><td>thật là <b>{tenNhom(x.nguoi)}</b></td><td className="text-right tabular-nums">{x.so}</td></tr>)}</tbody></table> : <div className="text-ink-muted">Chưa thấy nhầm.</div>}</div>
         <div><div className="font-semibold text-ink mb-1">Máy tự khai chắc — có đúng không</div>
           <table className="w-full"><tbody>{(d.muc_tin || []).map(x => <tr key={x.ten} className="border-t border-line/60"><td className="py-0.5">tự khai {x.ten}</td><td className="text-right tabular-nums text-ink-muted">{x.so}</td><td className="text-right tabular-nums font-semibold">{phanTram(x.dung_nhom, x.so)}</td></tr>)}</tbody></table>
-          <div className="text-[10px] text-ink-muted mt-1">Nếu dòng "≥ 0,9" không cao hơn hẳn các dòng dưới thì số tự khai vô nghĩa, phải hiệu chỉnh.</div></div>
+          <div className="text-[11px] text-ink-muted mt-1">Nếu dòng "≥ 0,9" không cao hơn hẳn các dòng dưới thì số tự khai vô nghĩa, phải hiệu chỉnh.</div></div>
       </div>}
   </Card>;
 }
@@ -48,5 +48,5 @@ function DaiVideo({ tl, dai, tu, den }) {
   return <div className="mt-2"><div className="relative h-4 rounded bg-slate-100 overflow-hidden" role="img" aria-label="dải thời gian cả video theo nhóm cảnh">
     {tl.map((y, j) => { const n = NHOM_HINH.find(z => z.k === y[2]); const dang = Math.abs(y[0] - tu) < 0.01 && Math.abs(y[1] - den) < 0.01;
       return <div key={j} title={y[0] + '–' + y[1] + 's · ' + tenNhom(y[2]) + (y[3] ? ' · người đã kiểm' : '')} className="absolute top-0 bottom-0" style={{ left: (y[0] / het * 100) + '%', width: Math.max(0.6, (y[1] - y[0]) / het * 100) + '%', background: n ? n.mau : '#94a3b8', opacity: dang ? 1 : 0.45, outline: dang ? '2px solid #0f172a' : 'none', outlineOffset: '-2px' }}>{y[3] ? <span className="absolute right-0.5 top-0 text-[8px] text-white">✓</span> : null}</div>; })}
-  </div><div className="flex justify-between text-[10px] text-ink-muted mt-0.5"><span>0s</span><span>đang xem: giây {tu}–{den} (viền đậm)</span><span>{Math.round(het)}s</span></div></div>;
+  </div><div className="flex justify-between text-[11px] text-ink-muted mt-0.5"><span>0s</span><span>đang xem: giây {tu}–{den} (viền đậm)</span><span>{Math.round(het)}s</span></div></div>;
 }
