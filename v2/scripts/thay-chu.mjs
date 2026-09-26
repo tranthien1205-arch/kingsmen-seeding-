@@ -7,9 +7,10 @@
 //   node scripts/thay-chu.mjs gui_duyet nd_xxx                        gửi duyệt bài nháp / bị trả lại
 //   node scripts/thay-chu.mjs tra_lai dy_xxx "lý do"                  trả lại bài đang chờ duyệt (bắt buộc lý do)
 //   node scripts/thay-chu.mjs hoc_tiktok <@kênh | link> ["Dòng"] [BRAND|BAN_HANG]  Trạm tải video kênh TikTok (≤ 60) rồi máy học
+//   node scripts/thay-chu.mjs hoc_reels <link fanpage> ["Dòng"] [BRAND|BAN_HANG]  Trạm đọc Reels fanpage rồi máy học
 //   node scripts/thay-chu.mjs nap_footage <link thư mục Drive> "Dòng"  nạp footage gốc vào kho footage của dòng
 import { spawnSync } from "node:child_process"; import { writeFileSync, rmSync } from "node:fs"; import { join } from "node:path"; import { tmpdir } from "node:os"; import { fileURLToPath } from "node:url";
-const DB = "kingsmen-content-os-db"; const LOAI = ["chay_agent", "dung", "gui_duyet", "tra_lai", "nap_footage", "hoc_tiktok"];
+const DB = "kingsmen-content-os-db"; const LOAI = ["chay_agent", "dung", "gui_duyet", "tra_lai", "nap_footage", "hoc_tiktok", "hoc_reels"];
 // wrangler qua npx: ĐỌC bằng --command (trả về hàng; câu đọc chỉ dùng nháy đơn nên bọc nháy kép an toàn), GHI bằng --file (JSON có nháy kép)
 const GOC = fileURLToPath(new URL("..", import.meta.url));
 const chay = (thamSo) => { const r = spawnSync("npx", ["wrangler", "d1", "execute", DB, "--remote", "--json", ...thamSo], { encoding: "utf8", shell: true, cwd: GOC, maxBuffer: 64 * 1024 * 1024 });
@@ -27,7 +28,7 @@ if (!lenh || lenh === "xem") {
   process.exit(0);
 }
 if (!LOAI.includes(lenh)) { console.error("Lệnh không cho phép. Chỉ: " + LOAI.join(", ")); process.exit(2); }
-const moi = lenh === "hoc_tiktok" ? { loai: lenh, kenh: a, dong: b || undefined, muc_dich: d || undefined, toi_da: 60 } : lenh === "nap_footage" ? { loai: lenh, link: a, dong: b } : lenh === "chay_agent" ? { loai: lenh, agent: a } : lenh === "tra_lai" ? { loai: lenh, duyet_id: a, ly_do: b } : { loai: lenh, noi_dung_id: a };
+const moi = lenh === "hoc_reels" ? { loai: lenh, link: a, dong: b || undefined, muc_dich: d || undefined, toi_da: 60 } : lenh === "hoc_tiktok" ? { loai: lenh, kenh: a, dong: b || undefined, muc_dich: d || undefined, toi_da: 60 } : lenh === "nap_footage" ? { loai: lenh, link: a, dong: b } : lenh === "chay_agent" ? { loai: lenh, agent: a } : lenh === "tra_lai" ? { loai: lenh, duyet_id: a, ly_do: b } : { loai: lenh, noi_dung_id: a };
 if (!a || ((lenh === "tra_lai" || lenh === "nap_footage") && !b)) { console.error("Thiếu tham số — xem đầu file"); process.exit(2); }
 const ds = ((doc("lenh_thay_chu") || {}).lenh || []); ds.push({ ...moi, luc: new Date().toISOString(), boi: "Claude" });
 d1Ghi(`INSERT INTO module_config (id,cau_hinh,updated_at,updated_by_name) VALUES ('lenh_thay_chu',${sqlChuoi(JSON.stringify({ lenh: ds }))},${sqlChuoi(new Date().toISOString())},'Claude') ON CONFLICT(id) DO UPDATE SET cau_hinh=excluded.cau_hinh, updated_at=excluded.updated_at, updated_by_name=excluded.updated_by_name`);

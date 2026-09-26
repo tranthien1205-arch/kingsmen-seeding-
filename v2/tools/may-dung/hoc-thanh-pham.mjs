@@ -54,7 +54,7 @@ export default async function hoc({ app, goiApp, lenh, dir, log, script }) {
   // 25/09: chế độ chỉ tạo bản xem 360p cho video đã học (không nghe / nhìn / thầy lại) — tìm file đã tải trên ổ trước, không có mới tải
   const timFile = (ten, th = join(dir, "thanh-pham"), sau = 0) => { if (!existsSync(th) || sau > 3) return null; for (const n of readdirSync(th)) { const p = join(th, n); let st; try { st = statSync(p); } catch { continue; } if (st.isFile() && n === ten && st.size > 50000) return p; if (st.isDirectory()) { const x = timFile(ten, p, sau + 1); if (x) return x; } } return null; };
   if (Array.isArray(ts.ds_proxy)) { thuMuc = "bản xem"; const TAI = join(dir, "thanh-pham", "proxy-tai"); mkdirSync(TAI, { recursive: true });
-    for (const x of ts.ds_proxy) { const idTT = (String(x.link || "").match(/\/video\/(\d+)/) || [])[1]; const them = { nguon_id: x.nguon_id, app_id: x.id, can_proxy: x.can_proxy !== false, doan: Array.isArray(x.doan) ? x.doan : [] };
+    for (const x of ts.ds_proxy) { const idTT = (String(x.link || "").match(/\/(?:video|reel|reels)\/(\d+)/) || [])[1]; const them = { nguon_id: x.nguon_id, app_id: x.id, can_proxy: x.can_proxy !== false, doan: Array.isArray(x.doan) ? x.doan : [] };
       if (String(x.nguon).toUpperCase() === "FOOTAGE" && x.media_url) video.push({ id: x.id, ten: x.ten || x.id, url: x.media_url, ...them });   // footage đã ở kho app: tải về cắt ảnh đoạn
       else if (idTT) { const ten = idTT + ".mp4"; video.push({ id: ten, ten, link: x.link, f: timFile(ten) || join(TAI, ten), ...them }); }
       else if (String(x.nguon).toUpperCase() === "DRIVE") video.push({ id: x.nguon_id, ten: x.ten, drive: true, ...them });
@@ -69,7 +69,7 @@ export default async function hoc({ app, goiApp, lenh, dir, log, script }) {
     const slug = String(ts.kenh || nguon).replace(/^kalodata:/, "").replace(/^@/, "").replace(/[^a-z0-9_.-]/gi, "_").slice(0, 60) || "khac";
     thuMuc = join(dir, "thanh-pham", nguon.toLowerCase(), slug); mkdirSync(thuMuc, { recursive: true });
     const daThay = new Set();   // 26/09: lệnh cũ có một video lặp 2–4 lần (30 link / 10 video) → mỗi lần lặp tốn ~6 phút đọc hình mà 0 mẫu mới
-    for (const x of ts.links) { const id = (String(x.link).match(/\/video\/(\d+)/) || [])[1]; if (!id || daThay.has(id)) continue; daThay.add(id); const ten = id + ".mp4"; video.push({ id: ten, ten, link: x.link, play: (x.meta && x.meta.play) || null, f: join(thuMuc, ten) }); meta[ten] = { ...(x.meta || {}), link: x.link }; }
+    for (const x of ts.links) { const id = (String(x.link).match(/\/(?:video|reel|reels)\/(\d+)/) || [])[1];   /* 26/09: + Reels Facebook (yt-dlp tải) */ if (!id || daThay.has(id)) continue; daThay.add(id); const ten = id + ".mp4"; video.push({ id: ten, ten, link: x.link, play: (x.meta && x.meta.play) || null, f: join(thuMuc, ten) }); meta[ten] = { ...(x.meta || {}), link: x.link }; }
     try { writeFileSync(join(thuMuc, "_meta.json"), JSON.stringify(meta, null, 1)); } catch {}
   } else if (Array.isArray(ts.video) && ts.video.length) {
     // 24/09 (gom về một máy): Trạm tải xong đẩy video lên kho app → máy học lấy về từ app, không cần chung ổ với Trạm

@@ -78,3 +78,13 @@ test('lệnh hoc_tiktok: Trạm im thì bỏ và ghi lý do; dòng lạ thì b�
   const kq = JSON.parse(DB.raw.prepare(`SELECT cau_hinh FROM module_config WHERE id='lenh_thay_chu_kq'`).get().cau_hinh).lan[0].kq.map((x) => x.join(': ')).join(' | ');
   assert.match(kq, /keokingsmen\.com.*bỏ: Trạm văn phòng đang im/); assert.match(kq, /@abc: bỏ: dòng không có trong Bộ nhãn/);
 });
+test('Reels Facebook: Trạm gửi danh sách reel → máy học nhận lệnh hoc_thanh_pham nguồn REELS (bỏ trùng, bỏ link lạ); ô nạp nhận link fanpage', async () => {
+  const DB = taoD1(); env = taoEnv(DB); TOKEN = (await api('/login', 'POST', { email: 'admin@kingsmen.vn', password: 'admin123' })).j.token;
+  const may = hubK(giai((await api('/may-ghep', 'POST', { ten: 'Q2' })).j.ma_ghep).khoa); await may('/hub/trang_thai', 'POST', { may: 'Q2', kha_nang: ['dung_video'] });
+  assert.equal((await api('/lop-hoc/nap', 'POST', { nap: 'https://www.facebook.com/KeoKingsmen', chi_nhan: true })).j.loai, 'REELS');
+  assert.equal((await api('/lop-hoc/nap', 'POST', { nap: 'https://www.facebook.com/KeoKingsmen' })).s, 409, 'Trạm im → báo rõ');
+  const r = (await may('/hub/reels-da-tai', 'POST', { trang: 'KeoKingsmen', links: [{ link: 'https://www.facebook.com/reel/111', meta: { luot_xem: 1200 } }, { link: 'https://www.facebook.com/reel/111' }, { link: 'https://www.facebook.com/reel/222' }, { link: 'https://example.com/x' }] })).j;
+  assert.equal(r.giao, true); assert.equal(r.so, 2);
+  const ts = JSON.parse(DB.raw.prepare(`SELECT tham_so FROM tram_lenh WHERE id=?`).get(r.lenh_id).tham_so); assert.equal(ts.nguon, 'REELS'); assert.equal(ts.kenh, 'fb/KeoKingsmen'); assert.equal(ts.links[0].meta.luot_xem, 1200);
+  assert.equal((await may('/hub/reels-da-tai', 'POST', { trang: 'KeoKingsmen', links: [], loi: 'checkpoint' })).j.giao, false);
+});

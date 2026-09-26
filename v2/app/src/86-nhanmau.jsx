@@ -354,7 +354,7 @@ function HangDeXuat({ bn, busy, lam, trTen, duoc }) {
   </Card>;
 }
 // ===================== NGUỒN HỌC (26/09, chủ: "cần có ui quản lý nguồn dữ liệu học") =====================
-const LOAI_NGUON = { TIKTOK: ['🎵', 'Kênh TikTok'], DRIVE: ['📁', 'Thư mục Drive'], KALODATA: ['📈', 'Kalodata'], LOCAL: ['💻', 'Thư mục máy dựng'], FOOTAGE: ['🎥', 'Footage quay'] };
+const LOAI_NGUON = { TIKTOK: ['🎵', 'Kênh TikTok'], REELS: ['📘', 'Reels Facebook'], DRIVE: ['📁', 'Thư mục Drive'], KALODATA: ['📈', 'Kalodata'], LOCAL: ['💻', 'Thư mục máy dựng'], FOOTAGE: ['🎥', 'Footage quay'] };
 function NguonHoc({ a }) {
   const { goi, notify, me } = useApp(); const duoc = laGat(me); const [d, setD] = useState(null); const [loai, setLoai] = useState(''); const [mo, setMo] = useState(null); const [busy, setBusy] = useState(false); const [dongChon, setDongChon] = useState({}); const pc = useRong(900);
   const tai = async () => { const r = await goi('/nguon-hoc'); if (r.ok) setD(r); else notify(r.msg, 'err'); }; useEffect(() => { tai(); }, []);

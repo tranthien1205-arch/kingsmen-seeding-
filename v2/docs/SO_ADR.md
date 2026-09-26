@@ -388,6 +388,15 @@ Người duyệt: Thiện · Trạng thái: ĐÃ DUYỆT (2026-09-24, "ok bạn 
 - Việc "lệnh học bị đánh HONG sau 30 phút" đã sửa từ 25/09 (nhịp tim > 15 phút / 12 giờ) — không đổi thêm.
 - Ảnh hưởng dữ liệu: không đổi bảng; lệnh học mới ít link hơn (bỏ trùng). Test: adr011 thêm link trùng (mã cũ hỏng 1/3, mã mới đạt), may-dung-khoi-dong thêm 1 ca.
 
+### 2026-09-26 · Reels Facebook vào kho thành phẩm
+- Chủ: fanpage facebook.com/KeoKingsmen (link chia sẻ), Reels "khác" TikTok.
+- Luồng:
+  - Ô nạp nhận link Facebook (loai REELS). hangTaiReels giải link /share/ ra trang, xếp module_config.tai_reels, rồi lệnh Trạm chay_agent content_os/tai_reels.
+  - Trạm (masfico-insight/may content-os-tai-reels.mjs) đọc facebook.com/<trang>/reels bằng hồ sơ facebook (vai kiem): link /reel/<id> + lượt xem. Chỉ đọc; checkpoint thì báo, không vượt.
+  - /hub/reels-da-tai: bỏ trùng và link lạ, rồi hoc_thanh_pham {nguon REELS, kenh fb/<trang>, links} cho máy mạnh nhất. Máy học nhận link /reel/<id>, tải bằng yt-dlp.
+- Nguồn học có nhóm 📘 Reels Facebook. Lệnh AI thay chủ hoc_reels {link, dong, muc_dich}.
+- Test Reels (adr019).
+
 ### 2026-09-26 · Lệnh AI thay chủ hoc_tiktok
 - Chủ gửi kênh brand @keokingsmen.com. Nút của người và lệnh AI dùng chung một hàm hangTaiTikTok (xếp kênh cho Trạm tải qua phiên đăng nhập, rồi máy học).
 - Lệnh hoc_tiktok {kenh, dong, muc_dich, toi_da ≤ 60}: Trạm im hoặc dòng lạ thì bỏ và ghi lý do.
