@@ -9,9 +9,10 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { createHash } from "node:crypto";
 import { spawnSync, spawn } from "node:child_process";
 import os from "node:os";
+import { Worker } from "node:worker_threads";
 
 export const DIR = dirname(fileURLToPath(import.meta.url));
-const BAN = "1.7";
+const BAN = "1.8";
 // việc app giao → script phát từ app (ADR-008/009): máy chỉ chạy script đúng hash app xác nhận
 const VIEC_SCRIPT = { dung_video: "dung-video", mo_hinh_bong: "mo-hinh", mo_hinh_chay: "mo-hinh", huan_luyen: "huan-luyen", loc_footage: "loc-footage", nap_drive: "nap-drive", phan_tich_footage: "phan-tich", hoc_thanh_pham: "hoc-thanh-pham" };   // nap_drive: nạp footage từ thư mục Drive (24/09) · phan_tich_footage / hoc_thanh_pham: ADR-010
 const coTransformers = existsSync(join(DIR, "node_modules", "@huggingface", "transformers"));
@@ -63,7 +64,7 @@ async function layScript(ten) {
 const DANG_LAM_F = join(DIR, "dang-lam.json");
 const LAN_TOI_DA = 3;   // chính lệnh làm sập máy con thì thôi sau 3 lần, báo hỏng
 async function chayLenh(l, lan = 1) {
-  dangLam = l.viec + " " + (l.tham_so && l.tham_so.noi_dung_id || ""); const ts = JSON.stringify(l.tham_so || {});
+  dangLam = l.viec + " " + (l.tham_so && l.tham_so.noi_dung_id || ""); baoDangLam(dangLam); const ts = JSON.stringify(l.tham_so || {});
   log("▶ lệnh", l.id, l.viec, ts.length > 300 ? ts.slice(0, 300) + "… (" + ts.length + " ký tự)" : ts, lan > 1 ? "· làm tiếp lần " + lan : "");
   try { writeFileSync(DANG_LAM_F, JSON.stringify({ id: l.id, viec: l.viec, tham_so: l.tham_so || {}, lan, bat_dau: new Date().toISOString() })); } catch {}
   let ok = false, msg = "";
@@ -76,7 +77,7 @@ async function chayLenh(l, lan = 1) {
     const kq = await mod.default({ app: APP, goiApp, lenh: l, dir: join(DIR, "out"), log, ban: BAN, may: os.hostname(), script: napScript });
     ok = !!(kq && kq.ok); msg = (kq && kq.msg) || "";
   } catch (e) { ok = false; msg = String(e.message || e).slice(0, 380); log("  ✗", msg); }
-  dangLam = "";
+  dangLam = ""; baoDangLam("");
   await goiApp("/hub/lenh_xong", { method: "POST", body: JSON.stringify({ id: l.id, ok, msg: (lan > 1 ? "(làm tiếp sau khởi động lại) " : "") + msg }) }).catch(() => {});
   try { rmSync(DANG_LAM_F, { force: true }); } catch {}
   log(ok ? "  ✓ xong" : "  ✗ hỏng", msg);
@@ -117,7 +118,7 @@ function giuKhoa() {
     if (laNode && cu) { loi("Máy con tiến trình " + d.pid + " không làm mới khoá từ " + d.luc + " (treo) — dừng nó và nhận thay"); spawnSync("taskkill", ["/PID", String(d.pid), "/T", "/F"], { windowsHide: true }); }
   }
   const ghi = () => { try { writeFileSync(KHOA_F, JSON.stringify({ pid: process.pid, luc: new Date().toISOString(), nen: args.includes("--nen"), may: os.hostname() })); } catch {} };
-  ghi(); setInterval(ghi, 60000).unref();
+  ghi();   /* (1.8) làm mới mỗi phút ở luồng nhịp (xem batNhip) — luồng chính bận spawnSync vẫn không làm khoá cũ */
   process.on("exit", () => { try { const k = JSON.parse(readFileSync(KHOA_F, "utf8")); if (k.pid === process.pid) rmSync(KHOA_F, { force: true }); } catch {} });
   for (const s of ["SIGINT", "SIGTERM", "SIGBREAK"]) process.on(s, () => process.exit(0));
 }
@@ -132,12 +133,44 @@ function giuThuc() {
   try { const c = spawn("powershell.exe", ["-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-Command", ps], { stdio: "ignore", windowsHide: true }); c.on("error", (e) => log("giữ máy thức lỗi:", e.message)); c.unref(); log("Giữ máy thức khi máy con chạy (không ngủ đông lúc rảnh)"); } catch (e) { log("giữ máy thức lỗi:", e.message); }
 }
 if (!args.includes("--mot-lan")) giuThuc();
+// (1.8) NHỊP TIM Ở LUỒNG RIÊNG: lệnh học gọi ffmpeg bằng spawnSync (tới 15 phút) chặn luồng chính → trước đây app tưởng máy tắt
+// (sự cố 26/09 Q2 "mất liên lạc" khi đang làm). Luồng nhịp tự gửi /hub/trang_thai 2 phút/lần và làm mới khoá dang-chay.json mỗi phút;
+// luồng chính chỉ báo "đang làm gì" (postMessage) — tin gửi trước khi bị chặn vẫn tới.
+function batNhip() {
+  const code = `const { parentPort, workerData: W } = require("node:worker_threads"); const fs = require("node:fs"); let dangLam = "";
+parentPort.on("message", (m) => { dangLam = String(m || ""); });
+const coOllama = async () => { try { const p = await fetch("http://localhost:11434/api/tags", { signal: AbortSignal.timeout(1500) }); return p.ok; } catch { return false; } };
+async function nhip() { try { const ol = await coOllama(); const kn = [...(W.ffmpeg ? ["dung_video"] : []), ...((W.transformers || ol) ? ["mo_hinh"] : []), ...(W.transformers ? ["huan_luyen"] : [])];
+  await fetch(W.url + "/hub/trang_thai", { method: "POST", signal: AbortSignal.timeout(20000), headers: { "Content-Type": "application/json", "X-Hub-Key": W.khoa }, body: JSON.stringify({ may: W.may, ban: W.ban, gio_may: new Date().toLocaleString("vi-VN"), ffmpeg: W.ffmpeg, gpu: W.gpu, ollama: ol, kha_nang: kn, dang_lam: dangLam }) }); } catch {} }
+function khoa() { if (!W.khoaF) return; try { const k = JSON.parse(fs.readFileSync(W.khoaF, "utf8")); if (k.pid !== W.pid) return; k.luc = new Date().toISOString(); fs.writeFileSync(W.khoaF, JSON.stringify(k)); } catch {} }
+setInterval(nhip, 120000); setInterval(khoa, 60000);`;
+  try { const w = new Worker(code, { eval: true, workerData: { url: APP.url.replace(/\/+$/, ""), khoa: APP.khoa, may: os.hostname(), ban: BAN, ffmpeg: ffmpegOk, gpu, transformers: coTransformers, khoaF: args.includes("--mot-lan") ? null : KHOA_F, pid: process.pid } });
+    w.on("error", (e) => { loi("luồng nhịp tim lỗi — về nhịp trên luồng chính:", e.message); setInterval(nhipTim, 120000); }); w.unref(); baoDangLam = (x) => { try { w.postMessage(x); } catch {} }; return w; }
+  catch (e) { loi("không mở được luồng nhịp tim:", e.message); return setInterval(nhipTim, 120000); } }
+let baoDangLam = () => {};
+// (1.8) TỰ CẬP NHẬT: máy con hỏi app bản may-dung.mjs mới nhất (cùng nguồn với script việc, qua HTTPS), bản mới hơn thì kiểm cú pháp
+// (node --check), giữ bản cũ ở may-dung.mjs.cu rồi thoát — CHAY-NEN.bat / BAT-DAU.bat chạy lại bằng bản mới. Chỉ làm khi không có lệnh dở.
+// Tắt: --khong-cap-nhat. Không bao giờ hạ bản.
+const soBan = (b) => String(b || "0").split(".").map((x) => parseInt(x, 10) || 0);
+const moiHon = (a, b) => { const x = soBan(a), y = soBan(b); for (let i = 0; i < Math.max(x.length, y.length); i++) { if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) > (y[i] || 0); } return false; };
+async function tuCapNhat() {
+  try { const goc = new URL(APP.url).origin; const r = await fetch(goc + "/tools/may-dung/may-dung.mjs", { signal: AbortSignal.timeout(30000) }); if (!r.ok) return;
+    const ma = await r.text(); const banMoi = (ma.match(/const BAN = "([0-9.]+)"/) || [])[1]; if (!banMoi || !moiHon(banMoi, BAN)) return;
+    const tam = join(DIR, "may-dung.moi.mjs"); writeFileSync(tam, ma); const k = spawnSync(process.execPath, ["--check", tam], { encoding: "utf8", windowsHide: true, timeout: 30000 });
+    if (k.status !== 0) { loi("Bản máy con " + banMoi + " trên app lỗi cú pháp — giữ bản " + BAN + ": " + String(k.stderr || "").slice(0, 200)); rmSync(tam, { force: true }); return; }
+    const f = join(DIR, "may-dung.mjs"); writeFileSync(f + ".cu", readFileSync(f)); renameSync(tam, f);
+    log("Đã cập nhật máy con " + BAN + " → " + banMoi + " — khởi động lại bằng bản mới"); process.exit(0);
+  } catch (e) { log("hỏi bản máy con mới lỗi:", String(e.message || e).slice(0, 120)); } }
 // app chưa lên (dev server khởi động lại, mất mạng) → chờ 30 giây rồi thử lại, không thoát
 let ping = await goiApp("/hub/ping"); while (!ping.ok) { log("Chưa nối được app (" + (ping.status || "mạng") + "): " + ((ping.d && ping.d.error) || "") + " — thử lại sau 30 giây"); await new Promise((x) => setTimeout(x, 30000)); ping = await goiApp("/hub/ping"); }
 log("Máy dựng '" + APP.may_ten + "' (" + os.hostname() + ") đã nối " + APP.url + " · app v" + ping.d.ban + " · ffmpeg " + (ffmpegOk ? "có" : "KHÔNG") + " · AI nhìn " + (coTransformers ? "có" : "chưa (npm install)") + (gpu ? " · GPU " + gpu : ""));
 await nhipTim();
+if (!args.includes("--mot-lan") && !args.includes("--khong-cap-nhat") && !existsSync(DANG_LAM_F)) await tuCapNhat();
 // (1.5) nhịp tim bật TRƯỚC khi làm tiếp lệnh dở: lệnh học dài vài giờ, không có nhịp tim thì app tưởng máy tắt và đánh hỏng lệnh máy đang giữ
-const nhipTimDinhKy = args.includes("--mot-lan") ? null : setInterval(nhipTim, 120000);
+const nhipTimDinhKy = args.includes("--mot-lan") ? null : batNhip();
 await lamTiepLenhDo();
 if (args.includes("--mot-lan")) { const n = await motLuot(); log("xong", n, "lệnh"); process.exit(0); }
-for (;;) { try { await motLuot(); } catch (e) { log("lỗi vòng lặp:", e.message); } await new Promise((x) => setTimeout(x, 30000)); }
+let lanKiemBan = Date.now();
+for (;;) { try { await motLuot(); } catch (e) { log("lỗi vòng lặp:", e.message); }
+  if (!args.includes("--khong-cap-nhat") && Date.now() - lanKiemBan > 3 * 3600e3) { lanKiemBan = Date.now(); await tuCapNhat(); }   // rảnh thì 3 giờ hỏi bản mới một lần
+  await new Promise((x) => setTimeout(x, 30000)); }

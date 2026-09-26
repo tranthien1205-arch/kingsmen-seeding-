@@ -64,7 +64,7 @@ test('may-dung.mjs 1.4: nhớ lệnh đang làm (dang-lam.json), khởi động 
   assert.match(MAY, /writeFileSync\(DANG_LAM_F,/);
   assert.match(MAY, /rmSync\(DANG_LAM_F, \{ force: true \}\)/);
   assert.match(MAY, /const LAN_TOI_DA = 3/);
-  assert.match(MAY, /await nhipTim\(\);[\s\S]{0,300}setInterval\(nhipTim, 120000\);\s*\r?\nawait lamTiepLenhDo\(\);/, '1.5: nhịp tim định kỳ bật trước khi làm tiếp lệnh dở');
+  assert.match(MAY, /await nhipTim\(\);[\s\S]{0,400}const nhipTimDinhKy = [^\n]*batNhip\(\);\s*\r?\nawait lamTiepLenhDo\(\);/, '1.5: nhịp tim định kỳ bật trước khi làm tiếp lệnh dở (1.8: ở luồng riêng)');
   assert.match(MAY, /ts\.length > 300 \? ts\.slice\(0, 300\)/);
 });
 
@@ -97,4 +97,16 @@ test('1.7 giữ máy thức khi máy con chạy (26/09: Q2 ngủ đông lúc r�
   assert.match(MAY, /const BAN = "1\.[7-9]"/);
   assert.match(MAY, /SetThreadExecutionState/); assert.match(MAY, /0x80000001/); assert.match(MAY, /Get-Process -Id " \+ process\.pid/);
   assert.match(MAY, /--cho-ngu/); assert.ok(!/powercfg/i.test(MAY), 'không đổi cài đặt nguồn của máy');
+});
+
+test('1.8 nhịp tim ở luồng riêng (spawnSync không chặn) + tự cập nhật từ app (kiểm cú pháp, giữ bản cũ, không hạ bản)', async () => {
+  assert.match(MAY, /const BAN = "1\.([8-9]|\d\d)"/);
+  assert.match(MAY, /import \{ Worker \} from "node:worker_threads"/); assert.match(MAY, /new Worker\(code, \{ eval: true/);
+  assert.match(MAY, /setInterval\(nhip, 120000\); setInterval\(khoa, 60000\);/, 'luồng nhịp gửi nhịp tim + làm mới khoá');
+  assert.match(MAY, /baoDangLam\(dangLam\)/);
+  assert.match(MAY, /"may-dung\.moi\.mjs"/, 'file tạm phải đuôi .mjs để node --check đọc được (lỗi thử 26/09)');
+  assert.match(MAY, /\["--check", tam\]/); assert.match(MAY, /f \+ "\.cu"/); assert.match(MAY, /--khong-cap-nhat/);
+  assert.match(MAY, /!existsSync\(DANG_LAM_F\)\) await tuCapNhat\(\)/, 'không cập nhật khi còn lệnh dở');
+  const m = MAY.match(/const soBan = [^\n]+\n(const moiHon = [^\n]+)/); assert.ok(m); const moiHon = new Function('soBan', m[1].replace('const moiHon = ', 'return ') + ';')((b) => String(b || '0').split('.').map((x) => parseInt(x, 10) || 0));
+  assert.equal(moiHon('1.8', '1.7'), true); assert.equal(moiHon('1.10', '1.9'), true); assert.equal(moiHon('1.7', '1.8'), false); assert.equal(moiHon('1.8', '1.8'), false);
 });

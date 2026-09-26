@@ -381,6 +381,14 @@ Người duyệt: Thiện · Trạng thái: ĐÃ DUYỆT (2026-09-24, "ok bạn 
 
 ## Changelog
 
+### 2026-09-26 · Máy con 1.8: nhịp tim ở luồng riêng + tự cập nhật
+- Nhịp tim (`/hub/trang_thai` 2 phút) và làm mới khoá `dang-chay.json` (1 phút) chạy ở `worker_threads`. Lệnh học gọi ffmpeg bằng `spawnSync` (tới 15 phút) không còn làm app tưởng máy tắt. Luồng chính báo "đang làm" bằng `postMessage`.
+- Tự cập nhật: lúc khởi động (nếu không có lệnh dở) và mỗi 3 giờ khi rảnh, máy con tải `/tools/may-dung/may-dung.mjs` từ app. Bản mới hơn (so số, không hạ bản) → `node --check` → giữ bản cũ ở `may-dung.mjs.cu` → thoát 0, rồi CHAY-NEN.bat / BAT-DAU.bat chạy lại bằng bản mới. Tắt bằng `--khong-cap-nhat`. Từ 1.8 về sau không cần chạy lại bộ cài trên máy con.
+- Kiểm thật trên máy Ngoc-Han (app thử 5181):
+  - Chặn luồng chính 200 giây → nhịp tim vẫn tới lúc 08:41:55 và 08:43:55, khoá làm mới mỗi phút.
+  - Bản ghi 1.7 → tự lên 1.8, còn `.cu`, lần chạy sau không cập nhật lại.
+  - Lần thử đầu lỗi vì file tạm đuôi `.moi` → `node --check` không đọc; đổi sang `may-dung.moi.mjs`.
+
 ### 2026-09-26 · Máy con 1.7 giữ máy thức
 - Chủ: "máy q2 vẫn bị ngủ đông". Máy con chạy thì một PowerShell ẩn gọi `SetThreadExecutionState(ES_CONTINUOUS|ES_SYSTEM_REQUIRED)` mỗi 30 giây và tự thoát khi tiến trình máy con mất → máy không ngủ / ngủ đông lúc rảnh, màn hình vẫn tắt; không đổi cài đặt nguồn. Tắt bằng `--cho-ngu`.
 - Cũng 26/09: `cai-chay-nen.ps1` bản đầu mất dấu gạch ngược (`C:may-dung`) → sửa, tự dò thư mục máy con (`MAY_CON_DIR`, C:/D:, thư mục người dùng, Desktop, Downloads).
