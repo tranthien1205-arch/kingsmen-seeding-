@@ -87,7 +87,7 @@ const CONFIG_MAC_DINH = {
   // ADR-017: bàn huấn luyện. tran_phut_ngay: hộp việc của người đóng khi đã làm đủ N phút trong ngày (bấm "làm thêm" vẫn được)
   // source_nguong: ngưỡng K2 ban đầu (ước lượng) — máy tự học lại khi có ≥ 30 lần người quyết. thay_loi: Claude Haiku gán nhãn câu lời theo cron.
   // anh_xa_dong: tên thư mục / kênh CHỨA chuỗi này (không phân biệt hoa thường) → dòng sản phẩm; máy học đọc luật này mỗi lượt
-  huan_luyen:{ anh_xa_dong:[{chua:'FINEX',dong:'Finex'},{chua:'TERRAZ',dong:'Terrazo'},{chua:'KEO CHIT MACH',dong:'Keo chít mạch'},{chua:'KEO CHÍT MẠCH',dong:'Keo chít mạch'}], tran_phut_ngay:20, k1_gom_chung:300, k1_gom_dong:100, k1_vang_chung:200, k1_vang_dong:60, k2_gom:100, k2_vang:50, k4_gom:150, k4_vang:100, thay_loi:true, thay_loi_model:'claude-haiku-4-5-20251001',
+  huan_luyen:{ anh_xa_dong:[{chua:'FINEX',dong:'Finex'},{chua:'TERRAZ',dong:'Terrazy'},{chua:'KEO CHIT MACH',dong:'Keo chít mạch'},{chua:'KEO CHÍT MẠCH',dong:'Keo chít mạch'}], tran_phut_ngay:20, k1_gom_chung:300, k1_gom_dong:100, k1_vang_chung:200, k1_vang_dong:60, k2_gom:100, k2_vang:50, k4_gom:150, k4_vang:100, thay_loi:true, thay_loi_model:'claude-haiku-4-5-20251001',
     source_nguong:{ net:0.55, dong:0.25, sang0:0.15, sang1:0.92 } },
   // ADR-002: gom trend/ý tưởng. tu_khoa_nganh rỗng = nhận tất cả (dễ ngập rác — người trong nghề tự khai);
   // nguong_tu_duyet: điểm máy ≥ ngưỡng và không rủi ro claim thì tự duyệt KHI B1 ở mức AI_TU_LAM

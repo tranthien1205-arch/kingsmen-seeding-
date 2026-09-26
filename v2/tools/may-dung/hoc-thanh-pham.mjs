@@ -100,7 +100,7 @@ export default async function hoc({ app, goiApp, lenh, dir, log, script }) {
   let AX = []; try { const r = await goiApp("/hub/cau-hinh-hoc"); AX = ((r.d && r.d.anh_xa_dong) || []).filter((x) => x && x.chua && x.dong); } catch {}
   const boDau = (x) => String(x || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/gi, "d").toUpperCase();
   const nhanDuong = (duong) => { const b = String(duong || "").toUpperCase(), b0 = boDau(duong); const ax = AX.find((x) => b0.includes(boDau(x.chua)));
-    return { muc_dich: /ECOMMERCE|BÁN HÀNG|BAN HANG|SALE|TEASER/.test(b) ? "BAN_HANG" : /CREATIVE|BRAND|ĐỊNH VỊ|DINH VI/.test(b) ? "BRAND" : null, dong: ax ? ax.dong : AX.length ? null : /FINEX/.test(b) ? "Finex" : /TERRAZ/.test(b) ? "Terrazo" : null }; };
+    return { muc_dich: /ECOMMERCE|BÁN HÀNG|BAN HANG|SALE|TEASER/.test(b) ? "BAN_HANG" : /CREATIVE|BRAND|ĐỊNH VỊ|DINH VI/.test(b) ? "BRAND" : null, dong: ax ? ax.dong : AX.length ? null : /FINEX/.test(b) ? "Finex" : /TERRAZ/.test(b) ? "Terrazy" : null }; };
   // ---- 2+3. từng video
   let xong = 0, mau = 0; const loi = [];
   for (const v of video) {

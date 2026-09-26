@@ -4,6 +4,7 @@
 // nhãn người, quyết định chất lượng footage; trạng thái có chỉ mục; version chống đè khi hai máy cùng sửa (409).
 // Dòng thời gian trong video KHÔNG còn giữ nhãn — mọi màn / máy đọc ra từ đây (timelineCua). Bộ nhãn: trường cố định ở hằng số,
 // trường mở rộng + đề xuất ở bảng bo_nhan; bước thi công / bài test vẫn lấy nguồn là quy trình của sản phẩm (một chỗ).
+import { CHUAN, quyVe, BAI_TEST_SAN } from './bo-nhan-chuan.js';
 export const TRUONG = [
   { k: 'nhom', ten: 'Nhóm cảnh', nhom: 'Nội dung', kieu: 'CO_DINH' },
   { k: 'buoc', ten: 'Bước thi công', nhom: 'Nội dung', kieu: 'QUY_TRINH', khi: 'THI_CONG' },
@@ -34,7 +35,7 @@ export const QT_TU_PHANG = [
   { ten: 'Lăn gai chỉnh bề mặt', mo_ta: 'con lăn gai lăn trên lớp phủ còn ướt để chỉnh phẳng, phá bọt khí, lăn 3–4 lần' },
   { ten: 'Bảo vệ chờ khô', mo_ta: 'sàn đã phủ xong để khô, không đi lại (khô mặt 6–12 giờ, đi nhẹ 12–24 giờ, dùng sau 48 giờ)' },
 ];
-const KIEN_THUC_TU_PHANG = 'Lỗi thường gặp của sàn tự phẳng (nhóm VAN_DE khi thấy): phồng rộp, bong tróc do nền ẩm (độ ẩm nền trên 8% thì chưa thi công được) hoặc bê tông chưa đủ 28 ngày; nứt lớp phủ, thất thoát vật liệu do không trám vá khuyết điểm; chỗ khô chỗ không do trộn sai tỉ lệ hoặc khuấy không đều; nổi / rỗ bọt khí do lăn gai quá ít. Gạch bóng trơn bắt buộc phải tạo nhám.';
+const KIEN_THUC_TU_PHANG = 'Terrazy (cao cấp) và Finex (trung cấp) đều là sàn epoxy tự phẳng hiệu ứng terrazzo của Kingsmen, cùng quy trình thi công, chỉ khác phân khúc — nhận dòng qua bao bì / chữ trên thùng. Lỗi thường gặp của sàn tự phẳng (nhóm VAN_DE khi thấy): phồng rộp, bong tróc do nền ẩm (độ ẩm nền trên 8% thì chưa thi công được) hoặc bê tông chưa đủ 28 ngày; nứt lớp phủ, thất thoát vật liệu do không trám vá khuyết điểm; chỗ khô chỗ không do trộn sai tỉ lệ hoặc khuấy không đều; nổi / rỗ bọt khí do lăn gai quá ít. Gạch bóng trơn bắt buộc phải tạo nhám.';
 const GIEO_TU_PHANG = { dung_cu: ['máy đo độ ẩm', 'máy mài sàn', 'máy hút bụi', 'dao trét', 'lưỡi nhám xếp', 'con lăn', 'cọ quét', 'máy khuấy', 'cân', 'bay răng', 'bay inox', 'con lăn gai'],
   hanh_dong: ['mài', 'hút bụi', 'trám', 'khuấy', 'cán', 'lăn gai', 'đo độ ẩm'], vat_lieu: ['bột bả epoxy', 'sơn lót primer', 'keo epoxy'] };
 // Hướng dẫn thi công keo chít mạch Kingsmen (keokingsmen.com, chủ gửi 26/09)
@@ -82,15 +83,33 @@ export function taoMau(H) {
       env.DB.prepare(`UPDATE mau_doan SET kiem=1, trang_thai='KIEM' WHERE loai='HINH' AND hieu_luc=1 AND trang_thai='THAY_CHOT' AND kiem=0 AND abs(random()) % 100 < 8`),
       env.DB.prepare(`INSERT OR REPLACE INTO module_config (id, cau_hinh, updated_at, updated_by_name) VALUES ('mau_doan', ?, ?, 'Máy')`).bind(JSON.stringify({ v: 2, luc: nowISO() }), nowISO())]); }
     if (v0 < 3) await napTuPhang(env, null);
+    if (v0 < 4) await donBoNhanChuan(env);
   }
 
   // quy trình chuẩn sàn tự phẳng cho các dòng Terrazy / Finex (hoặc một dòng chỉ định): 8 bước có thứ tự + dấu hiệu; gieo dụng cụ / thao tác / vật liệu
-  async function napTuPhang(env, chiDong) { const dongs = chiDong ? [chiDong] : [...new Set(['Finex', 'Terrazo', 'Keo chít mạch', ...(await env.DB.prepare(`SELECT DISTINCT dong FROM mau_doan WHERE dong IS NOT NULL`).all()).results.map((x) => x.dong), ...(await env.DB.prepare(`SELECT DISTINCT dong FROM san_pham WHERE dong IS NOT NULL`).all()).results.map((x) => x.dong)].filter(chuanCua))]; const st = []; const now = nowISO();
+  async function napTuPhang(env, chiDong) { const dongs = chiDong ? [chiDong] : [...new Set(['Finex', 'Terrazy', 'Keo chít mạch', ...(await env.DB.prepare(`SELECT DISTINCT dong FROM mau_doan WHERE dong IS NOT NULL`).all()).results.map((x) => x.dong), ...(await env.DB.prepare(`SELECT DISTINCT dong FROM san_pham WHERE dong IS NOT NULL`).all()).results.map((x) => x.dong)].filter(chuanCua))]; const st = []; const now = nowISO();
     const up = (truong, ten, dong, mo_ta, thu_tu) => env.DB.prepare(`INSERT INTO bo_nhan (id,truong,ten,dong,trang_thai,nguon,mo_ta,thu_tu,created_at,updated_at) VALUES (?,?,?,?,'DUNG','HE_THONG',?,?,?,?) ON CONFLICT(truong,ten,dong) DO UPDATE SET trang_thai='DUNG', mo_ta=COALESCE(excluded.mo_ta, bo_nhan.mo_ta), thu_tu=COALESCE(excluded.thu_tu, bo_nhan.thu_tu), updated_at=excluded.updated_at`).bind(uid('bn'), truong, ten, dong, mo_ta, thu_tu, now, now);
     const coQTSP = new Set((await env.DB.prepare(`SELECT DISTINCT dong FROM san_pham WHERE COALESCE(quy_trinh,'')<>''`).all()).results.map((x) => x.dong));   /* dòng đã khai quy trình ở Danh mục thì giữ quy trình đó */
     for (const d of dongs) { const c = chuanCua(d); if (!c) continue; if (!coQTSP.has(d)) c.buoc.forEach((b, i) => st.push(up('buoc', b.ten, d, b.mo_ta, i + 1))); for (const v of c.gieo.vat_lieu) st.push(up('vat_lieu', v, d, null, null)); }
     for (const c of BO_CHUAN) for (const t of ['dung_cu', 'hanh_dong']) for (const v of c.gieo[t]) st.push(up(t, v, '', null, null));
     st.push(env.DB.prepare(`INSERT OR REPLACE INTO module_config (id, cau_hinh, updated_at, updated_by_name) VALUES ('mau_doan', ?, ?, 'Máy')`).bind(JSON.stringify({ v: 3, luc: now }), now)); await env.DB.batch(st); return { dongs }; }
+  // lần chuyển 4: dòng Terrazo → Terrazy (chủ 26/09: Terrazy cao cấp, Finex trung cấp, cùng quy trình); gieo tên chuẩn; dọn đề xuất tồn theo luật bộ nhãn chuẩn
+  async function donBoNhanChuan(env) { const now = nowISO(); const MAYCHUAN = { id: '', ho_ten: 'Máy (bộ nhãn chuẩn)', agent: true };
+    for (const bang of ['kho_thanh_pham', 'mau_hoc_ai', 'mau_doan', 'san_pham']) { try { await env.DB.prepare(`UPDATE ${bang} SET dong='Terrazy' WHERE dong='Terrazo'`).run(); } catch (e) {} }
+    await env.DB.prepare(`UPDATE OR IGNORE bo_nhan SET dong='Terrazy' WHERE dong='Terrazo'`).run(); await env.DB.prepare(`DELETE FROM bo_nhan WHERE dong='Terrazo'`).run();
+    { const r = await env.DB.prepare(`SELECT cau_hinh FROM module_config WHERE id='huan_luyen'`).first(); const o = r ? (P(r.cau_hinh) || {}) : null; if (o && Array.isArray(o.anh_xa_dong)) { o.anh_xa_dong = o.anh_xa_dong.map((x) => x && x.dong === 'Terrazo' ? { ...x, dong: 'Terrazy' } : x); await env.DB.prepare(`UPDATE module_config SET cau_hinh=? WHERE id='huan_luyen'`).bind(JSON.stringify(o)).run(); } }
+    const up = (truong, ten, dong) => env.DB.prepare(`INSERT INTO bo_nhan (id,truong,ten,dong,trang_thai,nguon,created_at,updated_at) VALUES (?,?,?,?,'DUNG','HE_THONG',?,?) ON CONFLICT(truong,ten,dong) DO UPDATE SET trang_thai='DUNG', updated_at=excluded.updated_at`).bind(uid('bn'), truong, ten, dong, now, now);
+    const st = []; for (const t of ['vat_lieu', 'dung_cu', 'vi_tri']) for (const [, c] of CHUAN[t]) if (c) st.push(up(t, c, ''));
+    const dongSan = [...new Set(['Finex', 'Terrazy', ...(await env.DB.prepare(`SELECT DISTINCT dong FROM mau_doan WHERE dong IS NOT NULL`).all()).results.map((x) => x.dong)].filter((d) => chuanCua(d) && chuanCua(d).buoc === QT_TU_PHANG))];
+    for (const d of dongSan) BAI_TEST_SAN.forEach((b) => st.push(up('bai_test', b, d))); await env.DB.batch(st);
+    const coTen = new Set((await env.DB.prepare(`SELECT truong, ten FROM bo_nhan WHERE trang_thai='DUNG'`).all()).results.map((x) => x.truong + '|' + cf(x.ten)));
+    const dx = (await env.DB.prepare(`SELECT * FROM bo_nhan WHERE trang_thai='DE_XUAT'`).all()).results; let gop = 0, bo = 0, mau = 0;
+    for (const r of dx) { const q = quyVe(r.truong, r.ten); if (!q) continue;
+      if (q.bo) { mau += await doiGiaTriMau(env, r.truong, r.ten, null); await env.DB.prepare(`UPDATE bo_nhan SET trang_thai='BO', updated_at=? WHERE id=?`).bind(now, r.id).run(); bo++; continue; }
+      if (!coTen.has(r.truong + '|' + cf(q.ten))) continue;   /* tên chuẩn chưa có trong bộ nhãn (vd bước keo ở dòng sàn) → để người duyệt */
+      if (cf(q.ten) !== cf(r.ten)) mau += await doiGiaTriMau(env, r.truong, r.ten, q.ten); await env.DB.prepare(`UPDATE bo_nhan SET trang_thai='GOP', gop_vao=?, updated_at=? WHERE id=?`).bind(q.ten, now, r.id).run(); gop++; }
+    await env.DB.prepare(`INSERT OR REPLACE INTO module_config (id, cau_hinh, updated_at, updated_by_name) VALUES ('mau_doan', ?, ?, 'Máy')`).bind(JSON.stringify({ v: 4, luc: now, don: { gop, bo, mau } }), now).run();
+    await logAudit(env, MAYCHUAN, 'dọn bộ nhãn theo tài liệu chuẩn', 'bo_nhan', '', 'gộp ' + gop + ' · bỏ ' + bo + ' · ' + mau + ' mẫu đổi theo · dòng Terrazo → Terrazy'); return { gop, bo, mau }; }
   // chuẩn hoá bước cũ về quy trình của dòng: Haiku đọc mô tả / dụng cụ / thao tác thầy đã ghi (không đọc lại hình, ~0,001 USD / đoạn); xong dòng nào thì dọn đề xuất bước của dòng đó
   async function chuanHoaBuoc(env, toiDa = 60) { await dam(env); const key = env.ANTHROPIC_API_KEY; if (!key) return { ok: false, loi: 'chưa có ANTHROPIC_API_KEY' }; const ai = (await docCauHinh(env)).ai || {};
     if (so(ai.ngan_sach_thay_usd) > 0) { const da = (await env.DB.prepare(`SELECT COALESCE(SUM(chi_phi_usd),0) usd FROM ai_usage WHERE thang=? AND tinh_nang IN ('hoc_nhan_khung','hoc_doc_loi')`).bind(thangHienTai()).first()) || {}; if (so(da.usd) >= so(ai.ngan_sach_thay_usd)) return { ok: false, loi: 'hết trần thầy' }; }
@@ -122,12 +141,12 @@ export function taoMau(H) {
   function sach(o, bn, dong, deXuat, nguon) { if (!o || typeof o !== 'object') return null; const r = {};
     r.nhom = NHOM_CANH.includes(o.nhom) ? o.nhom : null;
     const moi = (truong, v) => { if (deXuat && nguon) deXuat.push({ truong, ten: v, dong: (truong === 'buoc' || truong === 'bai_test' || truong === 'vat_lieu') ? (dong || '') : '', nguon }); };
-    const qd = (truong, v, ds) => { v = chuoi(v, 80); if (!v || v === '(không)') return null; const khop = ds.find((x) => cf(x) === cf(v)); if (khop) return khop; moi(truong, v); return v; };
+    const qd = (truong, v, ds) => { v = chuoi(v, 80); if (!v || v === '(không)') return null; const khop = ds.find((x) => cf(x) === cf(v)); if (khop) return khop; const q = quyVe(truong, v); if (q && q.bo) return null; if (q) { const k2 = ds.find((x) => cf(x) === cf(q.ten)); if (k2) return k2; } moi(truong, v); return v; };
     r.buoc = r.nhom === 'THI_CONG' ? qd('buoc', o.buoc, (bn.qt[dong] || [])) : null;
     r.bai_test = r.nhom === 'THU_NGHIEM' ? qd('bai_test', o.bai_test, (bn.bt[dong] || [])) : null;
     for (const t of ['hanh_dong', 'vat_lieu', 'dung_cu']) { const ds = bn.dung(t, t === 'vat_lieu' ? dong : null); const vs = (Array.isArray(o[t]) ? o[t] : o[t] ? [o[t]] : []).map((v) => chuoi(v, 60)).filter(Boolean).slice(0, 6);
-      r[t] = [...new Set(vs.map((v) => { const k = ds.find((x) => cf(x) === cf(v)); if (k) return k; moi(t, v); return v; }))]; }
-    { const v = chuoi(o.vi_tri, 60); if (v) { const k = bn.dung('vi_tri').find((x) => cf(x) === cf(v)); if (!k) moi('vi_tri', v); r.vi_tri = k || v; } else r.vi_tri = null; }
+      r[t] = [...new Set(vs.map((v) => { const k = ds.find((x) => cf(x) === cf(v)); if (k) return k; const q = quyVe(t, v); if (q) return q.bo ? null : (ds.find((x) => cf(x) === cf(q.ten)) || q.ten); moi(t, v); return v; }).filter(Boolean))]; }
+    { const v = chuoi(o.vi_tri, 60); if (v) { const q = quyVe('vi_tri', v); const v2 = q ? (q.bo ? null : q.ten) : v; const k = v2 && bn.dung('vi_tri').find((x) => cf(x) === cf(v2)); if (v2 && !k && !q) moi('vi_tri', v2); r.vi_tri = k || v2; } else r.vi_tri = null; }
     for (const t of Object.keys(CO_DINH)) { const v = chuoi(o[t], 40); r[t] = CO_DINH[t].find((x) => cf(x) === cf(v)) || null; }
     { const v = chuoi(o.co_canh, 30); r.co_canh = CO_CANH.includes(v) ? v : (Object.entries(TEN_CO_CANH).find(([, t]) => cf(t) === cf(v)) || [null])[0]; }
     r.tham_my = o.tham_my == null || o.tham_my === '' || Number(o.tham_my) < 0 ? null : Math.max(0, Math.min(10, so(o.tham_my)));
@@ -415,7 +434,7 @@ export function taoMau(H) {
     for (const [t, ds] of Object.entries(CO_DINH)) for (const v of ds) coDinh.push({ id: 'cd:' + t + ':' + v, truong: t, ten: v, trang_thai: 'DUNG', nguon: 'HE_THONG', so_mau: dem[t + '|' + cf(v)] || 0 });
     return { truong: TRUONG, gia_tri: [...coDinh, ...quy, ...rows.filter((r) => r.trang_thai === 'DUNG')], de_xuat: rows.filter((r) => r.trang_thai === 'DE_XUAT').sort((a, b) => b.so_mau - a.so_mau), dongs: bn.dongs }; }
   async function doiGiaTriMau(env, truong, tu, sang) { const rows = (await env.DB.prepare(`SELECT * FROM mau_doan WHERE nhan_thay LIKE ? OR nhan_nguoi LIKE ? OR nhan_mo LIKE ?`).bind('%' + tu + '%', '%' + tu + '%', '%' + tu + '%').all()).results; const st = [];
-    for (const r of rows) { const up = {}; for (const c of ['nhan_mo', 'nhan_thay', 'nhan_nguoi']) { const o = P(r[c]); if (!o || o[truong] == null) continue; const cu = JSON.stringify(o[truong]); if (Array.isArray(o[truong])) o[truong] = [...new Set(o[truong].map((v) => cf(v) === cf(tu) ? sang : v))]; else if (cf(o[truong]) === cf(tu)) o[truong] = sang; if (JSON.stringify(o[truong]) !== cu) up[c] = J(o); }
+    for (const r of rows) { const up = {}; for (const c of ['nhan_mo', 'nhan_thay', 'nhan_nguoi']) { const o = P(r[c]); if (!o || o[truong] == null) continue; const cu = JSON.stringify(o[truong]); if (Array.isArray(o[truong])) o[truong] = [...new Set(o[truong].map((v) => cf(v) === cf(tu) ? sang : v))].filter((v) => v != null); else if (cf(o[truong]) === cf(tu)) o[truong] = sang; if (JSON.stringify(o[truong]) !== cu) up[c] = J(o); }
       if (Object.keys(up).length) st.push(env.DB.prepare(`UPDATE mau_doan SET ${Object.keys(up).map((c) => c + '=?').join(', ')}, version=version+1, updated_at=? WHERE id=?`).bind(...Object.values(up), nowISO(), r.id)); }
     if (st.length) await env.DB.batch(st); return st.length; }
   async function suaBoNhan(env, me, id, hanh, body) { if (!canGat(me)) return json({ error: 'Chỉ Trưởng MKT/Admin' }, 403); await dam(env); const r = await env.DB.prepare(`SELECT * FROM bo_nhan WHERE id=?`).bind(id).first(); if (!r) return json({ error: 'Không có nhãn' }, 404); let n = 0;

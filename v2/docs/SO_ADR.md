@@ -381,6 +381,13 @@ Người duyệt: Thiện · Trạng thái: ĐÃ DUYỆT (2026-09-24, "ok bạn 
 
 ## Changelog
 
+### 2026-09-26 · Bộ nhãn chuẩn theo tài liệu Kingsmen + dòng Terrazy
+- Chủ: "dựa vào tài liệu chuẩn cập nhật nâng cấp bộ nhãn và gán nhãn giúp tôi" · "Finex và Terrazy là 2 dòng trung và cao cấp, giống quy trình, khác phân khúc" · "đều là sàn epoxy tự phẳng hiệu ứng terrazzo".
+- `worker/bo-nhan-chuan.js`: tên chuẩn + luật quy về cho vật liệu (Finex F300 / S100, Kingsmen Terrazy, keo G3000–G7000, primer, hạt trang trí…), dụng cụ, bài test sàn (8 bài: cào xước, chống trơn, chống bám bẩn, chống thấm, va đập…), bước tự đặt tên → bước chuẩn; luật "bỏ" cho rác (nước, bụi mài, "Thi công 2.8 đến 3.5m2"…).
+- Áp khi thầy / người gán (tên khớp luật không thành đề xuất) + lần chuyển 4 dọn đề xuất tồn: gộp về tên chuẩn (mẫu đổi theo), bỏ rác (gỡ khỏi mẫu); tên chưa có luật để người duyệt.
+- Đổi dòng Terrazo → Terrazy ở video, mẫu, bộ nhãn, luật nhận dòng; kiến thức thầy: Terrazy cao cấp / Finex trung cấp, cùng là sàn epoxy tự phẳng hiệu ứng terrazzo, nhận dòng qua bao bì.
+- Sao lưu trước khi chạy: `D:/OS MKT/sao-luu-d1/2026-09-26-truoc-bo-nhan-chuan/`.
+
 ### 2026-09-26 · Quy trình chuẩn theo dòng từ tài liệu Kingsmen
 - Chủ gửi hướng dẫn thi công sàn epoxy hiệu ứng / tự phẳng (áp cho Terrazy và Finex; độ ẩm nền cập nhật ≤ 8%) và keo chít mạch (keokingsmen.com). Nạp thành quy trình chuẩn: sàn tự phẳng 8 bước, keo chít mạch 4 bước, mỗi bước có dấu hiệu nhận biết (`bo_nhan.mo_ta`, `thu_tu`); gieo dụng cụ / thao tác / vật liệu; kiến thức lỗi thường gặp đưa vào lời nhắc thầy để nhận cảnh VAN_DE.
 - Dòng đã khai quy trình ở Danh mục sản phẩm thì giữ quy trình đó (bước chuẩn của hệ thống bị bỏ qua cho dòng này).
