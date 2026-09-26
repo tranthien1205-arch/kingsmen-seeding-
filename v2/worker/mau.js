@@ -4,7 +4,7 @@
 // nhãn người, quyết định chất lượng footage; trạng thái có chỉ mục; version chống đè khi hai máy cùng sửa (409).
 // Dòng thời gian trong video KHÔNG còn giữ nhãn — mọi màn / máy đọc ra từ đây (timelineCua). Bộ nhãn: trường cố định ở hằng số,
 // trường mở rộng + đề xuất ở bảng bo_nhan; bước thi công / bài test vẫn lấy nguồn là quy trình của sản phẩm (một chỗ).
-import { CHUAN, quyVe, BAI_TEST_SAN } from './bo-nhan-chuan.js';
+import { CHUAN, quyVe, BAI_TEST_SAN, BAI_TEST_KEO } from './bo-nhan-chuan.js';
 export const TRUONG = [
   { k: 'nhom', ten: 'Nhóm cảnh', nhom: 'Nội dung', kieu: 'CO_DINH' },
   { k: 'buoc', ten: 'Bước thi công', nhom: 'Nội dung', kieu: 'QUY_TRINH', khi: 'THI_CONG' },
@@ -83,7 +83,8 @@ export function taoMau(H) {
       env.DB.prepare(`UPDATE mau_doan SET kiem=1, trang_thai='KIEM' WHERE loai='HINH' AND hieu_luc=1 AND trang_thai='THAY_CHOT' AND kiem=0 AND abs(random()) % 100 < 8`),
       env.DB.prepare(`INSERT OR REPLACE INTO module_config (id, cau_hinh, updated_at, updated_by_name) VALUES ('mau_doan', ?, ?, 'Máy')`).bind(JSON.stringify({ v: 2, luc: nowISO() }), nowISO())]); }
     if (v0 < 3) await napTuPhang(env, null);
-    if (v0 < 4) await donBoNhanChuan(env);
+    if (v0 < 4) await donBoNhanChuan(env, 4);
+    if (v0 < 5) await donBoNhanChuan(env, 5);   // 26/09 chiều: thêm luật (sáp, vữa, dụng cụ phổ biến, bài test keo / thời gian khô) — dọn lại đề xuất mới
   }
 
   // quy trình chuẩn sàn tự phẳng cho các dòng Terrazy / Finex (hoặc một dòng chỉ định): 8 bước có thứ tự + dấu hiệu; gieo dụng cụ / thao tác / vật liệu
@@ -94,14 +95,16 @@ export function taoMau(H) {
     for (const c of BO_CHUAN) for (const t of ['dung_cu', 'hanh_dong']) for (const v of c.gieo[t]) st.push(up(t, v, '', null, null));
     st.push(env.DB.prepare(`INSERT OR REPLACE INTO module_config (id, cau_hinh, updated_at, updated_by_name) VALUES ('mau_doan', ?, ?, 'Máy')`).bind(JSON.stringify({ v: 3, luc: now }), now)); await env.DB.batch(st); return { dongs }; }
   // lần chuyển 4: dòng Terrazo → Terrazy (chủ 26/09: Terrazy cao cấp, Finex trung cấp, cùng quy trình); gieo tên chuẩn; dọn đề xuất tồn theo luật bộ nhãn chuẩn
-  async function donBoNhanChuan(env) { const now = nowISO(); const MAYCHUAN = { id: '', ho_ten: 'Máy (bộ nhãn chuẩn)', agent: true };
+  async function donBoNhanChuan(env, phien = 4) { const now = nowISO(); const MAYCHUAN = { id: '', ho_ten: 'Máy (bộ nhãn chuẩn)', agent: true };
     for (const bang of ['kho_thanh_pham', 'mau_hoc_ai', 'mau_doan', 'san_pham']) { try { await env.DB.prepare(`UPDATE ${bang} SET dong='Terrazy' WHERE dong='Terrazo'`).run(); } catch (e) {} }
     await env.DB.prepare(`UPDATE OR IGNORE bo_nhan SET dong='Terrazy' WHERE dong='Terrazo'`).run(); await env.DB.prepare(`DELETE FROM bo_nhan WHERE dong='Terrazo'`).run();
     { const r = await env.DB.prepare(`SELECT cau_hinh FROM module_config WHERE id='huan_luyen'`).first(); const o = r ? (P(r.cau_hinh) || {}) : null; if (o && Array.isArray(o.anh_xa_dong)) { o.anh_xa_dong = o.anh_xa_dong.map((x) => x && x.dong === 'Terrazo' ? { ...x, dong: 'Terrazy' } : x); await env.DB.prepare(`UPDATE module_config SET cau_hinh=? WHERE id='huan_luyen'`).bind(JSON.stringify(o)).run(); } }
     const up = (truong, ten, dong) => env.DB.prepare(`INSERT INTO bo_nhan (id,truong,ten,dong,trang_thai,nguon,created_at,updated_at) VALUES (?,?,?,?,'DUNG','HE_THONG',?,?) ON CONFLICT(truong,ten,dong) DO UPDATE SET trang_thai='DUNG', updated_at=excluded.updated_at`).bind(uid('bn'), truong, ten, dong, now, now);
     const st = []; for (const t of ['vat_lieu', 'dung_cu', 'vi_tri']) for (const [, c] of CHUAN[t]) if (c) st.push(up(t, c, ''));
     const dongSan = [...new Set(['Finex', 'Terrazy', ...(await env.DB.prepare(`SELECT DISTINCT dong FROM mau_doan WHERE dong IS NOT NULL`).all()).results.map((x) => x.dong)].filter((d) => chuanCua(d) && chuanCua(d).buoc === QT_TU_PHANG))];
-    for (const d of dongSan) BAI_TEST_SAN.forEach((b) => st.push(up('bai_test', b, d))); await env.DB.batch(st);
+    for (const d of dongSan) BAI_TEST_SAN.forEach((b) => st.push(up('bai_test', b, d)));
+    for (const d of [...new Set(['Keo chít mạch', ...(await env.DB.prepare(`SELECT DISTINCT dong FROM mau_doan WHERE dong IS NOT NULL`).all()).results.map((x) => x.dong)].filter((d) => chuanCua(d) && chuanCua(d).buoc === QT_KEO_RON))]) BAI_TEST_KEO.forEach((b) => st.push(up('bai_test', b, d)));
+    await env.DB.batch(st);
     const coTen = new Set((await env.DB.prepare(`SELECT truong, ten FROM bo_nhan WHERE trang_thai='DUNG'`).all()).results.map((x) => x.truong + '|' + cf(x.ten)));
     const dx = (await env.DB.prepare(`SELECT * FROM bo_nhan WHERE trang_thai='DE_XUAT'`).all()).results; let gop = 0, bo = 0, mau = 0;
     const doi = {}, st2 = [];   /* một lượt: gom mọi đổi tên thành bảng tra, quét mẫu MỘT lần (trước đây mỗi đề xuất quét cả bảng → quá giới hạn CPU của Worker) */
@@ -117,7 +120,7 @@ export function taoMau(H) {
         if (doiO) up[c] = J(o); }
       if (Object.keys(up).length) { ghi.push(env.DB.prepare(`UPDATE mau_doan SET ${Object.keys(up).map((c) => c + '=?').join(', ')}, version=version+1, updated_at=? WHERE id=?`).bind(...Object.values(up), now, m.id)); mau++; } }
     const tatCa = [...ghi, ...st2]; for (let k = 0; k < tatCa.length; k += 80) await env.DB.batch(tatCa.slice(k, k + 80));
-    await env.DB.prepare(`INSERT OR REPLACE INTO module_config (id, cau_hinh, updated_at, updated_by_name) VALUES ('mau_doan', ?, ?, 'Máy')`).bind(JSON.stringify({ v: 4, luc: now, don: { gop, bo, mau } }), now).run();
+    await env.DB.prepare(`INSERT OR REPLACE INTO module_config (id, cau_hinh, updated_at, updated_by_name) VALUES ('mau_doan', ?, ?, 'Máy')`).bind(JSON.stringify({ v: phien, luc: now, don: { gop, bo, mau } }), now).run();
     await logAudit(env, MAYCHUAN, 'dọn bộ nhãn theo tài liệu chuẩn', 'bo_nhan', '', 'gộp ' + gop + ' · bỏ ' + bo + ' · ' + mau + ' mẫu đổi theo · dòng Terrazo → Terrazy'); return { gop, bo, mau }; }
   // chuẩn hoá bước cũ về quy trình của dòng: Haiku đọc mô tả / dụng cụ / thao tác thầy đã ghi (không đọc lại hình, ~0,001 USD / đoạn); xong dòng nào thì dọn đề xuất bước của dòng đó
   async function chuanHoaBuoc(env, toiDa = 60) { await dam(env); const key = env.ANTHROPIC_API_KEY; if (!key) return { ok: false, loi: 'chưa có ANTHROPIC_API_KEY' }; const ai = (await docCauHinh(env)).ai || {};
@@ -150,7 +153,7 @@ export function taoMau(H) {
   function sach(o, bn, dong, deXuat, nguon) { if (!o || typeof o !== 'object') return null; const r = {};
     r.nhom = NHOM_CANH.includes(o.nhom) ? o.nhom : null;
     const moi = (truong, v) => { if (deXuat && nguon) deXuat.push({ truong, ten: v, dong: (truong === 'buoc' || truong === 'bai_test' || truong === 'vat_lieu') ? (dong || '') : '', nguon }); };
-    const qd = (truong, v, ds) => { v = chuoi(v, 80); if (!v || v === '(không)') return null; const khop = ds.find((x) => cf(x) === cf(v)); if (khop) return khop; const q = quyVe(truong, v); if (q && q.bo) return null; if (q) { const k2 = ds.find((x) => cf(x) === cf(q.ten)); if (k2) return k2; } moi(truong, v); return v; };
+    const qd = (truong, v, ds) => { v = chuoi(v, 80); if (!v || v === '(không)') return null; const khop = ds.find((x) => cf(x) === cf(v)); if (khop) return khop; const q = quyVe(truong, v); if (q && q.bo) return null; if (q) { const k2 = ds.find((x) => cf(x) === cf(q.ten)) || (!dong && Object.values(truong === 'buoc' ? bn.qt : bn.bt).flat().find((x) => cf(x) === cf(q.ten))); if (k2) return k2; } moi(truong, v); return v; };
     r.buoc = r.nhom === 'THI_CONG' ? qd('buoc', o.buoc, (bn.qt[dong] || [])) : null;
     r.bai_test = r.nhom === 'THU_NGHIEM' ? qd('bai_test', o.bai_test, (bn.bt[dong] || [])) : null;
     for (const t of ['hanh_dong', 'vat_lieu', 'dung_cu']) { const ds = bn.dung(t, t === 'vat_lieu' ? dong : null); const vs = (Array.isArray(o[t]) ? o[t] : o[t] ? [o[t]] : []).map((v) => chuoi(v, 60)).filter(Boolean).slice(0, 6);

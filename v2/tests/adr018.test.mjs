@@ -162,13 +162,13 @@ test('018f: quy trình chuẩn sàn tự phẳng (Terrazy / Finex) + chuẩn ho�
   assert.match(nhac, /Lăn gai chỉnh bề mặt — nhận biết: con lăn gai/); assert.match(nhac, /trên 8%/);
   // bước cũ đặt tên tự do → Haiku đưa về bước chuẩn; đề xuất bước của dòng được dọn
   await may('/hub/thanh-pham', 'POST', { ten: 't.mp4', nguon_id: 't', nguon: 'TIKTOK', dai: 6, dong: 'Terrazy', shots: [{ t0: 0, t1: 3 }, { t0: 3, t1: 6 }], timeline: [
-    { tu: 0, den: 3, nhom: 'THI_CONG', thay: { nhom: 'THI_CONG', buoc: 'Khuấy hỗn hợp màu', mo_ta: 'khuấy bột trong xô', chac: 0.9 } }, { tu: 3, den: 6, nhom: 'THI_CONG', thay: { nhom: 'THI_CONG', buoc: 'Xử lý bề mặt bằng rulo', mo_ta: 'rulo gai lăn phá bọt', chac: 0.9 } }] });
+    { tu: 0, den: 3, nhom: 'THI_CONG', thay: { nhom: 'THI_CONG', buoc: 'Hoà hỗn hợp màu', mo_ta: 'khuấy bột trong xô', chac: 0.9 } }, { tu: 3, den: 6, nhom: 'THI_CONG', thay: { nhom: 'THI_CONG', buoc: 'Xử lý bề mặt bằng rulo', mo_ta: 'rulo gai lăn phá bọt', chac: 0.9 } }] });
   assert.equal(DB.raw.prepare(`SELECT COUNT(*) n FROM bo_nhan WHERE truong='buoc' AND dong='Terrazy' AND trang_thai='DE_XUAT'`).get().n, 2);
   const goi0 = globalThis.fetch; const DS_GOI = []; globalThis.fetch = async (u, o) => { if (String(u).includes('anthropic') && String(o.body).includes('Quy trình thi công dòng')) { DS_GOI.push('chuan_hoa'); return new Response(JSON.stringify({ content: [{ type: 'text', text: 'Kết quả: [{"i":1,"buoc":"Trộn vật liệu"},{"i":2,"buoc":"lăn gai chỉnh bề mặt"}]' }], usage: { input_tokens: 900, output_tokens: 60 } }), { status: 200 }); } return goi0(u, o); };
   TRA = ['Kết quả: [{"i":1,"buoc":"Trộn vật liệu"},{"i":2,"buoc":"lăn gai chỉnh bề mặt"}]'];
   const cron = async () => { let p; await worker.scheduled({}, env, { waitUntil: (x) => { p = x; } }); await p; }; await cron();
   const b = (i) => JSON.parse(DB.raw.prepare('SELECT nhan_thay FROM mau_doan WHERE id=?').get('H:' + DB.raw.prepare(`SELECT id FROM kho_thanh_pham`).get().id + ':' + i).nhan_thay);
-  globalThis.fetch = goi0; assert.deepEqual(DS_GOI, ['chuan_hoa'], 'một lần gọi Haiku cho cả lô'); assert.equal(b(0).buoc, 'Trộn vật liệu'); assert.equal(b(0).buoc_goc, 'Khuấy hỗn hợp màu', 'giữ tên cũ để đối chiếu'); assert.equal(b(1).buoc, 'Lăn gai chỉnh bề mặt', 'chuẩn hoá hoa / thường');
+  globalThis.fetch = goi0; assert.deepEqual(DS_GOI, ['chuan_hoa'], 'một lần gọi Haiku cho cả lô'); assert.equal(b(0).buoc, 'Trộn vật liệu'); assert.equal(b(0).buoc_goc, 'Hoà hỗn hợp màu', 'giữ tên cũ để đối chiếu'); assert.equal(b(1).buoc, 'Lăn gai chỉnh bề mặt', 'chuẩn hoá hoa / thường');
   await cron(); assert.equal(DB.raw.prepare(`SELECT COUNT(*) n FROM bo_nhan WHERE truong='buoc' AND dong='Terrazy' AND trang_thai='DE_XUAT'`).get().n, 0, 'dòng chuẩn hoá xong → dọn đề xuất bước');
 });
 
@@ -188,5 +188,5 @@ test('018g: dọn bộ nhãn theo tài liệu chuẩn (lần chuyển 4): gộp 
   assert.equal(DB.raw.prepare(`SELECT dong FROM mau_doan WHERE id='H:x:0'`).get().dong, 'Terrazy'); assert.ok(bn.dongs.includes('Terrazy') && !bn.dongs.includes('Terrazo'));
   assert.ok(bn.gia_tri.some((x) => x.truong === 'bai_test' && x.dong === 'Terrazy' && x.ten === 'Cào xước bề mặt'), 'bài test chuẩn của dòng sàn');
   assert.equal(DB.raw.prepare(`SELECT trang_thai FROM bo_nhan WHERE ten='Thi công 2.8 đến 3.5m2'`).get().trang_thai, 'BO');
-  assert.match(DB.raw.prepare(`SELECT detail FROM audit WHERE action='dọn bộ nhãn theo tài liệu chuẩn' ORDER BY at DESC LIMIT 1`).get().detail, /gộp 5 · bỏ 2/);
+  assert.ok(DB.raw.prepare(`SELECT detail FROM audit WHERE action='dọn bộ nhãn theo tài liệu chuẩn'`).all().some((x) => /gộp 5 · bỏ 2/.test(x.detail)), 'nhật ký ghi số gộp / bỏ');
 });

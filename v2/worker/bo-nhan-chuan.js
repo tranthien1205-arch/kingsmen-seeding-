@@ -16,6 +16,9 @@ export const CHUAN = {
     [/\bg ?6000\b/i, 'keo chít mạch Kingsmen G6000'],
     [/\bg ?7000\b/i, 'keo chít mạch Kingsmen G7000'],
     [/silicone/i, 'keo silicone'],
+    [/sáp/i, 'sáp bảo vệ gạch (wax)'],
+    [/vữa xi măng/i, 'vữa xi măng'],
+    [/tương (cà|ớt)|dầu mỡ|nước sốt|nước tương/i, 'chất bẩn để thử (tương cà / dầu mỡ)'],
     [/keo dán gạch/i, 'keo dán gạch'],
     [/keo dán thảm/i, 'keo dán thảm'],
     [/bột bả|bột trét|vữa trám/i, 'bột bả epoxy'],
@@ -47,9 +50,17 @@ export const CHUAN = {
     [/que (khuấy|trộn)/i, 'que khuấy'],
     [/vật nhọn/i, 'vật nhọn (thử cào)'],
     [/khăn/i, 'khăn sạch'],
+    [/búa cao su/i, 'búa cao su'],
+    [/chổi/i, 'chổi quét'],
+    [/cây lau nhà/i, 'cây lau nhà'],
+    [/thước cán/i, 'thước cán vữa'],
+    [/vòi sen/i, 'vòi sen'],
+    [/^kìm$/i, 'kìm'],
   ],
   // bài test sàn: gom theo đúng thứ video muốn chứng minh
   bai_test: [
+    [/tuýp|lượng keo|2 chai|hai chai/i, 'So sánh lượng keo trong tuýp'],
+    [/độ khô|thời gian khô/i, 'Thử thời gian khô'],
     [/cào|xước|chìa kh|nĩa|que gỗ/i, 'Cào xước bề mặt'],
     [/chân (trần|ướt)|trơn|trượt|độ nhám/i, 'Thử chống trơn trượt'],
     [/lau|vết bẩn|tương cà|dầu mỡ|nước sốt/i, 'Lau vết bẩn thử chống bám bẩn'],
@@ -69,7 +80,8 @@ export const CHUAN = {
     [/primer|sơn lót|lót/i, 'Thi công lớp lót (primer)'],
     [/nhám|mài/i, 'Tạo nhám'],
     [/lăn gai|phá bọ[tc]|bọ[tc] khí|lang gạy|đuổi/i, 'Lăn gai chỉnh bề mặt'],
-    [/^(trộn|pha)/i, 'Trộn vật liệu'],
+    [/^lăn d|^lăn .*lần/i, 'Lăn gai chỉnh bề mặt'],
+    [/^(trộn|pha|khuấy)/i, 'Trộn vật liệu'],
     [/đổ|gạt|phủ|san phẳng|cán|làm phẳng/i, 'Thi công lớp phủ (đổ và cán)'],
     [/trộn|pha/i, 'Trộn vật liệu'],
     [/kiểm tra|chuẩn bị|xử lý nền|nền cũ/i, 'Kiểm tra và chuẩn bị nền'],
@@ -78,7 +90,8 @@ export const CHUAN = {
   hanh_dong: [[/^theo tay$/i, null]],
 };
 // bài test chuẩn theo dòng (sàn) — tạo sẵn để thầy chọn
-export const BAI_TEST_SAN = ['Cào xước bề mặt', 'Thử chống trơn trượt', 'Lau vết bẩn thử chống bám bẩn', 'Đổ nước thử chống thấm', 'Thử va đập', 'Gõ kiểm tra độ chắc nền', 'Chà thử độ bền màu', 'Thử đi lại trên sàn'];
+export const BAI_TEST_SAN = ['Cào xước bề mặt', 'Thử chống trơn trượt', 'Lau vết bẩn thử chống bám bẩn', 'Đổ nước thử chống thấm', 'Thử va đập', 'Gõ kiểm tra độ chắc nền', 'Chà thử độ bền màu', 'Thử đi lại trên sàn', 'Thử thời gian khô'];
+export const BAI_TEST_KEO = ['So sánh lượng keo trong tuýp'];
 
 const cf = (s) => String(s || '').trim().toLowerCase();
 // tên → { ten: tên chuẩn } | { bo: true } | null (không có luật)
