@@ -63,7 +63,12 @@ export function taoMau(H) {
   const cf = (s) => String(s || '').trim().toLowerCase();
 
   // ---------- bảng + gieo + chuyển dữ liệu cũ (một lần mỗi D1) ----------
-  async function dam(env) { if (daDung.has(env.DB)) return; daDung.add(env.DB);
+  // chạy bảng + chuyển dữ liệu một lần mỗi isolate; lỗi thì ghi nhật ký 'lỗi chuyển dữ liệu kho mẫu' (trước đây bị nuốt trong cron, 26/09) và không chặn app
+  const dangDam = new WeakMap();
+  async function dam(env) { if (daDung.has(env.DB) || dangDam.has(env.DB)) return;   /* gọi lồng trong lúc đang chuyển (vd upsertHinh) hoặc lượt song song: trả ngay như trước */
+    const p = damThat(env).catch(async (e) => { try { await env.DB.prepare(`INSERT INTO audit (id,at,tac_nhan,by_id,by_name,action,entity,entity_id,detail) VALUES (?,?,?,?,?,?,?,?,?)`).bind(uid('a'), nowISO(), 'AGENT', null, 'Máy', 'lỗi chuyển dữ liệu kho mẫu', 'mau_doan', '', String((e && e.stack) || e).slice(0, 900)).run(); } catch (e2) {} }).finally(() => { daDung.add(env.DB); dangDam.delete(env.DB); });
+    dangDam.set(env.DB, p); return p; }
+  async function damThat(env) {
     await env.DB.batch([
       env.DB.prepare(`CREATE TABLE IF NOT EXISTS mau_doan (id TEXT PRIMARY KEY, loai TEXT, nguon TEXT, doi_tuong_id TEXT, i INTEGER, tu REAL, den REAL, dong TEXT, ten TEXT, link TEXT, media_url TEXT, khung_url TEXT, am_url TEXT, text TEXT, cau_truoc TEXT, cau_sau TEXT, so_do TEXT, nhan_mo TEXT, nhan_thay TEXT, nhan_hinh TEXT, nhan_nguoi TEXT, nguoi_source TEXT, trang_thai TEXT, tt_source TEXT, kiem INTEGER DEFAULT 0, chac REAL, hieu_luc INTEGER DEFAULT 1, version INTEGER DEFAULT 1, nguoi_ten TEXT, nguoi_luc TEXT, nguoi_giay REAL, created_at TEXT, updated_at TEXT)`),
       env.DB.prepare(`CREATE INDEX IF NOT EXISTS ix_md_tt ON mau_doan(loai, hieu_luc, trang_thai)`),
