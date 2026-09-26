@@ -388,6 +388,15 @@ Người duyệt: Thiện · Trạng thái: ĐÃ DUYỆT (2026-09-24, "ok bạn 
 - Việc "lệnh học bị đánh HONG sau 30 phút" đã sửa từ 25/09 (nhịp tim > 15 phút / 12 giờ) — không đổi thêm.
 - Ảnh hưởng dữ liệu: không đổi bảng; lệnh học mới ít link hơn (bỏ trùng). Test: adr011 thêm link trùng (mã cũ hỏng 1/3, mã mới đạt), may-dung-khoi-dong thêm 1 ca.
 
+### 2026-09-26 · Sổ nguồn theo dõi + tự học hằng tuần
+- Chủ: "trạm đang đăng nhập 4 tk tiktok, cần quản lý chúng trên app nguồn học luôn".
+- module_config.nguon_theo_doi {ds:[{key, loai, nap, ten, dong, muc_dich, tu_dong, tk_tram, lan_hoc}]}.
+  - Lần đầu ghi sẵn 4 kênh (tự học TẮT, chủ bật): @vatlieuchuyendung (tiktok_cn), @vatlieumoifinex (tiktok-8jwv803gc), @santerrazotuphang (tiktok-8zw5m72do), @keokingsmen.com (brand).
+  - Kênh VUA KEO XÂY DỰNG (tiktok-49lcbo7ah) chưa biết handle.
+  - Nạp TikTok / Reels / footage qua ô nạp hoặc lệnh thì tự đăng ký (tự học BẬT).
+- Cron tuHocNguon: nguồn bật tự học, học lần cuối quá 7 ngày → học thêm (TikTok 20 video, Reels, footage, Drive); mỗi lượt 1 nguồn.
+- POST /nguon-hoc/theo-doi {key, tu_dong, dong, hoc_ngay, xoa}. Mỗi nguồn trong Nguồn học có công tắc "tự học mỗi tuần" và ngày học cuối.
+
 ### 2026-09-26 · Mọi nguồn học quản lý ở tab Nguồn học
 - Chủ: "tất cả nguồn học cần quản lý ở nguồn học nhé".
 - Thẻ Kalodata trong Nguồn học: ngành đang theo dõi (thêm / bỏ ×), tự quét hằng tuần, top N, dòng, quét ngay, kết quả lần cuối.

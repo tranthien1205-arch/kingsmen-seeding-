@@ -739,6 +739,7 @@ async function hangTaiTikTok(env, {link, toi_da, dong, muc_dich}, me){
   const cfg=await docCauHinh(env); const hang=((cfg.tai_tiktok||{}).hang||[]).filter(x=>x.kenh!==kenh); await env.DB.prepare(`INSERT INTO module_config (id,cau_hinh,updated_at,updated_by_name) VALUES ('tai_tiktok',?,?,?) ON CONFLICT(id) DO UPDATE SET cau_hinh=excluded.cau_hinh, updated_at=excluded.updated_at`).bind(JSON.stringify({hang}), nowISO(), me.ho_ten).run();   // bỏ hàng Trạm cũ của kênh này
   const r=await taoLenhTram(env,'hoc_thanh_pham',{nguon:'TIKTOK', kenh, kenh_tiktok:true, toi_da:Math.max(1,Math.min(60,so(toi_da,30))), dong:chuoi(dong,80)||null, muc_dich:MUC_DICH.includes(chuoi(muc_dich,10))?chuoi(muc_dich,10):null}, me, mayId);
   await logAudit(env,me,'nạp kho thành phẩm TikTok (máy học tự liệt kê)','kho_thanh_pham',kenh,'tối đa '+so(toi_da,30)+(dong?(' · '+dong):''));
+  await dangKyNguon(env,{key:'TIKTOK|'+kenh, loai:'TIKTOK', nap:kenh, ten:kenh, dong:chuoi(dong,80)||null, muc_dich:chuoi(muc_dich,10)||null});
   return {ok:true, lenh_id:r.id, trung:!!r.trung, kenh}; }
 // Reels Facebook: xếp fanpage cho Trạm đọc tab Reels (phiên facebook trên Trạm, chỉ đọc, checkpoint → báo, không vượt) rồi máy học tải từng reel
 async function hangTaiReels(env, {link, toi_da, dong, muc_dich}, me){ let u=String(link||'').trim();
@@ -748,7 +749,23 @@ async function hangTaiReels(env, {link, toi_da, dong, muc_dich}, me){ let u=Stri
   const cfg=await docCauHinh(env); const ds=((cfg.tai_reels||{}).hang||[]).filter(x=>x.trang!==trang); ds.push({trang, url:'https://www.facebook.com/'+trang, toi_da:Math.max(1,Math.min(60,so(toi_da,30))), luc:nowISO(), boi:me.ho_ten, dong:chuoi(dong,80)||null, muc_dich:MUC_DICH.includes(chuoi(muc_dich,10))?chuoi(muc_dich,10):null});
   await env.DB.prepare(`INSERT INTO module_config (id,cau_hinh,updated_at,updated_by_name) VALUES ('tai_reels',?,?,?) ON CONFLICT(id) DO UPDATE SET cau_hinh=excluded.cau_hinh, updated_at=excluded.updated_at`).bind(JSON.stringify({hang:ds.slice(-10)}), nowISO(), me.ho_ten).run();
   const r=await taoLenhTram(env,'chay_agent',{id:'content_os', viec:'tai_reels'}, me, 'tram'); await logAudit(env,me,'nạp kho thành phẩm Reels Facebook','kho_thanh_pham',trang,'tối đa '+ds[ds.length-1].toi_da+(dong?(' · '+dong):''));
+  await dangKyNguon(env,{key:'REELS|fb/'+trang, loai:'REELS', nap:'https://www.facebook.com/'+trang, ten:'facebook.com/'+trang, dong:chuoi(dong,80)||null, muc_dich:chuoi(muc_dich,10)||null});
   return {ok:true, lenh_id:r.id, trung:!!r.trung, trang}; }
+// SỔ NGUỒN THEO DÕI — nguồn học đăng ký để app tự học thêm video mới hằng tuần (kênh TikTok, fanpage Reels, thư mục Drive, kho footage)
+const KENH_TRAM_BIET=[{kenh:'@vatlieuchuyendung', tk_tram:'tiktok_cn · TikTok #1'},{kenh:'@vatlieumoifinex', tk_tram:'tiktok-8jwv803gc · VẬT LIỆU MỚI FINEX', dong:'Finex F300'},{kenh:'@santerrazotuphang', tk_tram:'tiktok-8zw5m72do · Sàn Epoxy Hiệu Ứng'},{kenh:'@keokingsmen.com', tk_tram:null, dong:'Keo chít mạch', muc_dich:'BRAND'}];
+async function docTheoDoi(env){ const r=await env.DB.prepare(`SELECT cau_hinh FROM module_config WHERE id='nguon_theo_doi'`).first(); let o=docJSON(r&&r.cau_hinh,null);
+  if(!o){ o={ds:KENH_TRAM_BIET.map(k=>({key:'TIKTOK|'+k.kenh, loai:'TIKTOK', nap:k.kenh, ten:k.kenh, dong:k.dong||null, muc_dich:k.muc_dich||null, tu_dong:false, tk_tram:k.tk_tram, them_luc:nowISO(), lan_hoc:null}))}; await ghiTheoDoi(env,o); }   // lần đầu: 4 kênh TikTok đã biết (3 kênh Trạm + brand)
+  return o; }
+async function ghiTheoDoi(env,o){ await env.DB.prepare(`INSERT INTO module_config (id,cau_hinh,updated_at,updated_by_name) VALUES ('nguon_theo_doi',?,?,'Nguồn học') ON CONFLICT(id) DO UPDATE SET cau_hinh=excluded.cau_hinh, updated_at=excluded.updated_at`).bind(JSON.stringify(o), nowISO()).run(); }
+async function dangKyNguon(env, {key, loai, nap, ten, dong, muc_dich}){ const o=await docTheoDoi(env); const cu=o.ds.find(x=>x.key===key); if(cu){ cu.lan_hoc=nowISO(); if(dong) cu.dong=dong; if(muc_dich) cu.muc_dich=muc_dich; } else o.ds.push({key, loai, nap, ten:ten||nap, dong:dong||null, muc_dich:muc_dich||null, tu_dong:true, tk_tram:null, them_luc:nowISO(), lan_hoc:nowISO()}); await ghiTheoDoi(env,o); }
+// cron: nguồn bật tự học, học lần cuối quá 7 ngày (hoặc chưa học) → học thêm; mỗi lượt 1 nguồn để máy học không dồn việc
+async function tuHocNguon(env){ const o=await docTheoDoi(env); const han=Date.now()-7*864e5; const x=o.ds.filter(v=>v.tu_dong&&v.nap&&(!v.lan_hoc||Date.parse(v.lan_hoc)<han)).sort((a,b)=>String(a.lan_hoc||'').localeCompare(String(b.lan_hoc||'')))[0]; if(!x) return {so:0};
+  const tn={id:'', ho_ten:'Nguồn học (tự học hằng tuần)', vai_tro:'ADMIN', agent:true}; let r;
+  if(x.loai==='TIKTOK') r=await hangTaiTikTok(env,{link:x.nap, toi_da:20, dong:x.dong, muc_dich:x.muc_dich}, tn);
+  else if(x.loai==='REELS') r=await hangTaiReels(env,{link:x.nap, toi_da:20, dong:x.dong, muc_dich:x.muc_dich}, tn);
+  else if(x.loai==='FOOTAGE'&&x.dong){ const fm=String(x.nap).match(/folders\/([A-Za-z0-9_-]{10,})/); const c=fm&&await chonMayDung(env,{}); r=c?await taoLenhTram(env,'nap_drive',{muc_id:await damKhoFootage(env,x.dong,tn), folder_id:fm[1], toi_da:200, kho_dong:x.dong}, tn, c.may.id):{ok:false, loi:'không có máy'}; }
+  else if(x.loai==='DRIVE'){ const fm=String(x.nap).match(/folders\/([A-Za-z0-9_-]{10,})/); const may=await mayManhNhat(env,'dung_video'); r=fm&&may?await taoLenhTram(env,'hoc_thanh_pham',{nguon:'DRIVE', folder_id:fm[1], duong_dan:null, toi_da:20, dong:x.dong, muc_dich:x.muc_dich}, tn, may):{ok:false, loi:'không có máy'}; }
+  x.lan_hoc=nowISO(); x.lan_cuoi_kq=r&&r.ok!==false?'đã giao '+(r.lenh_id||r.id||''):'lỗi: '+((r&&r.loi)||'?'); await ghiTheoDoi(env,o); await logAudit(env,tn,'tự học thêm nguồn','nguon_theo_doi',x.key,x.lan_cuoi_kq); return {so:1, key:x.key}; }
 async function guiDuyet(env, nd, tacNhan){
   const cho=await env.DB.prepare(`SELECT id FROM duyet WHERE doi_tuong='noi_dung' AND doi_tuong_id=? AND trang_thai='CHO'`).bind(nd.id).first(); if(cho) return {ok:false, loi:'Bài đang chờ duyệt rồi'};
   const claims=await docClaims(env); const cham=chamNoiDungMay(nd, claims); const b5=await mucBuoc(env,'B5'); const id=uid('dy');
@@ -2330,6 +2347,10 @@ async function handleApi(request, env){
     await logAudit(env,me,'chỉnh ghép video','noi_dung',nd.id,canh.length+' cảnh · '+soMau+' mẫu học'); return json({ db: await bootstrap(env,me), ghep_id:gid, so_mau:soMau, lenh_id:lenh&&lenh.id, dung:!!lenh }); }
   // ADR-010d — kho video thành phẩm: nạp từ thư mục Drive hoặc thư mục trên máy dựng; máy con cắt shot, nghe lời, dò clip gốc
   // ADR-011 — Kalodata: Trưởng MKT đặt ngành hàng / top N / tự quét tuần; nút Quét ngay xin Trạm chạy việc kalodata_video
+  if(path==='/nguon-hoc/theo-doi' && method==='POST'){ if(!canGat(me)) return json({error:'Chỉ Trưởng MKT/Admin'},403); const o=await docTheoDoi(env); const key=chuoi(body.key,200); let x=o.ds.find(v=>v.key===key);
+    if(!x){ if(!chuoi(body.nap,300)) return json({error:'Nguồn chưa có link để tự học'},400); x={key, loai:chuoi(body.loai,10)||'TIKTOK', nap:chuoi(body.nap,300), ten:chuoi(body.ten,120)||chuoi(body.nap,120), dong:null, muc_dich:null, tu_dong:false, tk_tram:null, them_luc:nowISO(), lan_hoc:null}; o.ds.push(x); }
+    if(body.xoa){ o.ds=o.ds.filter(v=>v.key!==key); } else { if(body.tu_dong!=null) x.tu_dong=!!body.tu_dong; if(body.dong!==undefined) x.dong=chuoi(body.dong,80)||null; if(body.hoc_ngay) x.lan_hoc=null; }
+    await ghiTheoDoi(env,o); await logAudit(env,me,body.xoa?'bỏ theo dõi nguồn':'sửa nguồn theo dõi','nguon_theo_doi',key,JSON.stringify({tu_dong:x.tu_dong, dong:x.dong})); const q=body.hoc_ngay?await tuHocNguon(env):null; return json({ ok:true, vua_hoc:q }); }
   if(path==='/nguon-hoc/loai' && method==='POST'){ if(!canGat(me)) return json({error:'Chỉ Trưởng MKT/Admin'},403); const ids=(Array.isArray(body.video_ids)?body.video_ids:[]).map(x=>chuoi(x,40)).filter(Boolean).slice(0,300); let n=0;
     for(const id of ids){ const tp=await env.DB.prepare(`SELECT id FROM kho_thanh_pham WHERE id=?`).bind(id).first(); if(!tp) continue; await MAU().xoaTheoDoiTuong(env, tp.id); await env.DB.prepare(`DELETE FROM mau_hoc_ai WHERE doi_tuong='kho_thanh_pham' AND doi_tuong_id=?`).bind(tp.id).run(); await env.DB.prepare(`DELETE FROM kho_thanh_pham WHERE id=?`).bind(tp.id).run(); n++; }
     await logAudit(env,me,'loại cả nguồn khỏi kho thành phẩm','kho_thanh_pham',chuoi(body.ten,120)||'',n+' video'); return json({ ok:true, so:n }); }
@@ -2348,7 +2369,7 @@ async function handleApi(request, env){
     if(body.loai_nap==='FOOTAGE'){ if(!laDrive) return json({error:'Footage gốc hiện nạp từ thư mục Google Drive'},400); const dong=chuoi(body.dong,80); if(!dong||!(await MAU().dsDongChuan(env)).some(x=>x.dong===dong)) return json({error:'Chọn dòng sản phẩm cho footage (kho footage theo dòng)'},400);
       const fm=t.match(/folders\/([A-Za-z0-9_-]{10,})/); const kho=await damKhoFootage(env, dong, me); const c=await chonMayDung(env,{uuTienUserId:me.id}); if(!c) return json({error:'Không có máy dựng nào đang bật để tải footage'},409);
       const toiDa=Math.max(1,Math.min(300,so(body.toi_da,200))); const r=await taoLenhTram(env,'nap_drive',{muc_id:kho, folder_id:fm[1], toi_da:toiDa, kho_dong:dong}, me, c.may.id); if(!r.ok) return json({error:r.loi},409);
-      await logAudit(env,me,'nạp footage gốc vào kho','muc_noi_dung',kho,fm[1]+' · '+dong+' · tối đa '+toiDa+' · máy '+c.may.ten); return json({ ok:true, loai:'FOOTAGE', kho, dong, lenh_id:r.id, trung:!!r.trung, may_ten:c.may.ten, toi_da:toiDa }); }
+      await logAudit(env,me,'nạp footage gốc vào kho','muc_noi_dung',kho,fm[1]+' · '+dong+' · tối đa '+toiDa+' · máy '+c.may.ten); await dangKyNguon(env,{key:'FOOTAGE|'+kho+'|'+fm[1], loai:'FOOTAGE', nap:'https://drive.google.com/drive/folders/'+fm[1], ten:'📦 Kho footage — '+dong, dong}); return json({ ok:true, loai:'FOOTAGE', kho, dong, lenh_id:r.id, trung:!!r.trung, may_ten:c.may.ten, toi_da:toiDa }); }
     if(loai==='KALODATA'){ const cfg=(await docCauHinh(env)).kalodata||{}; const nganh=[...(cfg.nganh||[]).filter(x=>x!==t), t].slice(-8); let r=await goi('/kalodata',{nganh, top_n:cfg.top_n||10, tu_dong:cfg.tu_dong!==false, dong:body.dong||cfg.dong||undefined, muc_dich:body.muc_dich||'BAN_HANG'},'PUT'); if(!r.ok) return r; r=await goi('/kalodata/quet',{}); const j=await r.json().catch(()=>({})); return json({...j, loai, nganh:t}, r.status); }
     const r=await goi('/kho-thanh-pham/nap',{link:t, toi_da:so(body.toi_da,20)||20, nguon:loai==='TIKTOK'?'TIKTOK':undefined, dong:body.dong||undefined, muc_dich:body.muc_dich||undefined}); const j=await r.json().catch(()=>({})); return json({...j, loai}, r.status); }
   // bật kỹ năng: duyệt phiên bản chờ (nếu có) + gạt MỞ; điều kiện điểm lấy từ phiên bản đã duyệt (mo_hinh.diem bị tính lại theo bóng)
@@ -2486,7 +2507,7 @@ async function xoaMoPhong(env, me){
 }
 
 export default {
-  async scheduled(controller, env, ctx){ ctx.waitUntil((async()=>{ const e=await napKhoa(env); await dieuPhoi(e); await tuHoc(e).catch(()=>{}); await thayDocLoi(e, 40).catch(()=>{}); await tuGiaoProxy(e).catch(()=>{}); await MAU().thayDocBu(e, 16).catch(()=>{}); await MAU().chayViecThayChu(e).catch(()=>{}); await chayThayChu(e).catch(()=>{}); await MAU().tuGanDong(e).catch(()=>{}); await MAU().chuanHoaBuoc(e, 60).catch(()=>{}); })().catch(()=>{})); },
+  async scheduled(controller, env, ctx){ ctx.waitUntil((async()=>{ const e=await napKhoa(env); await dieuPhoi(e); await tuHoc(e).catch(()=>{}); await thayDocLoi(e, 40).catch(()=>{}); await tuGiaoProxy(e).catch(()=>{}); await MAU().thayDocBu(e, 16).catch(()=>{}); await MAU().chayViecThayChu(e).catch(()=>{}); await chayThayChu(e).catch(()=>{}); await tuHocNguon(e).catch(()=>{}); await MAU().tuGanDong(e).catch(()=>{}); await MAU().chuanHoaBuoc(e, 60).catch(()=>{}); })().catch(()=>{})); },
   async fetch(request, env, ctx){
     const url=new URL(request.url);
     env=await napKhoa(env);   // khoá dán ở app phủ lên env (secret Cloudflare vẫn ưu tiên)
