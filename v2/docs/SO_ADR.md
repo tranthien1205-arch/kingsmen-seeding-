@@ -381,6 +381,13 @@ Người duyệt: Thiện · Trạng thái: ĐÃ DUYỆT (2026-09-24, "ok bạn 
 
 ## Changelog
 
+### 2026-09-26 · Lọc sâu · dòng một nguồn · đề xuất dễ duyệt
+- Chủ: "kho mẫu và bộ nhãn cần bộ lọc chuyên sâu hơn" · "dòng sản phẩm vẫn chưa có keo chít mạch, mỗi nơi một kiểu" · "Finex có tên F300, Kingsmen có tên Terrazy" · "đề xuất khó hiểu để duyệt".
+- Dòng một nguồn (`dsDongChuan`): ba dòng đăng ký ở bộ nhãn có thương hiệu (Terrazy — Kingsmen cao cấp · Finex F300 — Finex trung cấp · Keo chít mạch — Kingsmen), rồi dòng từ sản phẩm / mẫu; Kho mẫu, Bộ nhãn, Dòng sản phẩm dùng chung. Lần chuyển 6: Finex → Finex F300 ở mọi bảng + luật nhận dòng.
+- Gán dòng cho video (`POST /mau-doan/dat-dong`): từ chi tiết mẫu (dải vàng khi video chưa có dòng) hoặc hàng loạt; mọi đoạn / câu của video đổi theo, bước chuẩn hoá lại theo quy trình dòng.
+- Kho mẫu lọc sâu: nhóm cảnh, bước (kể cả chưa có bước), một trường = giá trị, thiếu trường, nguồn, video, thầy chắc dưới mức, học trò lệch thầy; chip đang lọc bấm để bỏ.
+- Hàng đề xuất: mỗi mục nói thành câu ("Thầy thấy một dụng cụ chưa có trong danh sách…"), ảnh các mẫu đang dùng, gợi ý nhãn có sẵn để gộp (luật chuẩn, hoặc trùng ≥ 2 từ đặc trưng), ba nút Thêm / Gộp / Bỏ; lọc theo trường, dòng, nguồn, tìm, sắp xếp; gộp theo gợi ý hàng loạt. Bảng nhãn: tìm + chỉ nhãn chưa dùng.
+
 ### 2026-09-26 · Bộ nhãn chuẩn theo tài liệu Kingsmen + dòng Terrazy
 - Chủ: "dựa vào tài liệu chuẩn cập nhật nâng cấp bộ nhãn và gán nhãn giúp tôi" · "Finex và Terrazy là 2 dòng trung và cao cấp, giống quy trình, khác phân khúc" · "đều là sàn epoxy tự phẳng hiệu ứng terrazzo".
 - `worker/bo-nhan-chuan.js`: tên chuẩn + luật quy về cho vật liệu (Finex F300 / S100, Kingsmen Terrazy, keo G3000–G7000, primer, hạt trang trí…), dụng cụ, bài test sàn (8 bài: cào xước, chống trơn, chống bám bẩn, chống thấm, va đập…), bước tự đặt tên → bước chuẩn; luật "bỏ" cho rác (nước, bụi mài, "Thi công 2.8 đến 3.5m2"…).

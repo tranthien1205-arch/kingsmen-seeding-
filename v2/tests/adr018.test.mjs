@@ -132,7 +132,7 @@ test('018e: dòng chưa có sản phẩm vẫn duyệt được bước; thêm d
   await may('/hub/thanh-pham', 'POST', { ten: 't.mp4', nguon_id: 't', nguon: 'TIKTOK', dai: 6, dong: 'Terrazo', shots: [{ t0: 0, t1: 3 }, { t0: 3, t1: 6 }], timeline: tl(3) });
   await may('/hub/thanh-pham', 'POST', { ten: 'f.mp4', nguon_id: 'f', nguon: 'TIKTOK', dai: 2, dong: 'Sàn gỗ', mot_canh: true, shots: [{ t0: 0, t1: 2 }], timeline: tl(1) });
   let bn = (await api('/bo-nhan')).j; const dx = bn.de_xuat.filter((x) => x.ten === 'Pha trộn vật liệu');
-  assert.deepEqual(dx.map((x) => x.dong + ':' + x.so_mau).sort(), ['Sàn gỗ:1', 'Terrazo:3'], 'mẫu dùng đếm theo đúng dòng'); assert.deepEqual(bn.dongs, ['Sàn gỗ', 'Terrazo'], 'dòng lấy từ mẫu khi Danh mục trống');
+  assert.deepEqual(dx.map((x) => x.dong + ':' + x.so_mau).sort(), ['Sàn gỗ:1', 'Terrazo:3'], 'mẫu dùng đếm theo đúng dòng'); assert.deepEqual(bn.dongs, ['Terrazy', 'Finex F300', 'Keo chít mạch', 'Sàn gỗ', 'Terrazo'], 'một danh sách dòng: ba dòng đăng ký trước, rồi dòng từ mẫu'); assert.match(bn.dong_ct.find((x) => x.dong === 'Finex F300').mo_ta, /^Finex · /);
   const t = dx.find((x) => x.dong === 'Terrazo'); const r = await api('/bo-nhan/' + t.id + '/duyet', 'POST', {}); assert.equal(r.s, 200, 'không còn lỗi "chưa có sản phẩm"');
   assert.ok(r.j.gia_tri.some((x) => x.truong === 'buoc' && x.ten === 'Pha trộn vật liệu' && x.dong === 'Terrazo' && x.trang_thai === 'DUNG'));
   assert.ok(r.j.de_xuat.some((x) => x.ten === 'Pha trộn vật liệu' && x.dong === 'Sàn gỗ'), 'đề xuất của dòng khác vẫn còn');
@@ -155,7 +155,7 @@ test('018f: quy trình chuẩn sàn tự phẳng (Terrazy / Finex) + chuẩn ho�
   const bn = (await api('/bo-nhan')).j; const qt = bn.gia_tri.filter((x) => x.truong === 'buoc' && x.dong === 'Terrazy').map((x) => x.ten);
   assert.deepEqual(qt, ['Kiểm tra và chuẩn bị nền', 'Tạo nhám', 'Trám và vệ sinh bề mặt', 'Thi công lớp lót (primer)', 'Trộn vật liệu', 'Thi công lớp phủ (đổ và cán)', 'Lăn gai chỉnh bề mặt', 'Bảo vệ chờ khô'], '8 bước đúng thứ tự khi Danh mục chưa khai');
   assert.ok(bn.gia_tri.some((x) => x.truong === 'dung_cu' && x.ten === 'con lăn gai'));
-  assert.deepEqual(bn.gia_tri.filter((x) => x.truong === 'buoc' && x.dong === 'Keo chít mạch').map((x) => x.ten), ['Chuẩn bị và vệ sinh khe ron', 'Bơm keo vào khe gạch', 'Miết ron tạo bề mặt', 'Làm sạch và hoàn thiện'], 'keo chít mạch: 4 bước theo hướng dẫn'); assert.ok(bn.gia_tri.some((x) => x.truong === 'dung_cu' && x.ten === 'bi cầu miết ron')); assert.ok(bn.gia_tri.some((x) => x.truong === 'buoc' && x.dong === 'Finex' && x.ten === 'Tạo nhám'));
+  assert.deepEqual(bn.gia_tri.filter((x) => x.truong === 'buoc' && x.dong === 'Keo chít mạch').map((x) => x.ten), ['Chuẩn bị và vệ sinh khe ron', 'Bơm keo vào khe gạch', 'Miết ron tạo bề mặt', 'Làm sạch và hoàn thiện'], 'keo chít mạch: 4 bước theo hướng dẫn'); assert.ok(bn.gia_tri.some((x) => x.truong === 'dung_cu' && x.ten === 'bi cầu miết ron')); assert.ok(bn.gia_tri.some((x) => x.truong === 'buoc' && x.dong === 'Finex F300' && x.ten === 'Tạo nhám'));
   // thầy thấy dấu hiệu từng bước + kiến thức lỗi (ngưỡng ẩm 8%)
   let nhac = ''; const f0 = globalThis.fetch; globalThis.fetch = async (u, o) => { if (String(u).includes('anthropic')) nhac = JSON.parse(o.body).messages[0].content.slice(-1)[0].text; return f0(u, o); };
   TRA = ['{"nhom":"THI_CONG","buoc":"Lăn gai chỉnh bề mặt","chac":0.9}']; await may('/hub/thay-doc', 'POST', { dong: 'Terrazy', doan: [{ anh: ['/media/media/a.jpg'] }] }); globalThis.fetch = f0;
@@ -189,4 +189,25 @@ test('018g: dọn bộ nhãn theo tài liệu chuẩn (lần chuyển 4): gộp 
   assert.ok(bn.gia_tri.some((x) => x.truong === 'bai_test' && x.dong === 'Terrazy' && x.ten === 'Cào xước bề mặt'), 'bài test chuẩn của dòng sàn');
   assert.equal(DB.raw.prepare(`SELECT trang_thai FROM bo_nhan WHERE ten='Thi công 2.8 đến 3.5m2'`).get().trang_thai, 'BO');
   assert.ok(DB.raw.prepare(`SELECT detail FROM audit WHERE action='dọn bộ nhãn theo tài liệu chuẩn'`).all().some((x) => /gộp 5 · bỏ 2/.test(x.detail)), 'nhật ký ghi số gộp / bỏ');
+});
+
+test('018h: lọc sâu kho mẫu + gán dòng hàng loạt + đề xuất kèm ví dụ và gợi ý gộp', async () => {
+  const DB = taoD1(); env = taoEnv(DB); TOKEN = (await api('/login', 'POST', { email: 'admin@kingsmen.vn', password: 'admin123' })).j.token;
+  const may = hubK(giai((await api('/may-ghep', 'POST', { ten: 'Q2' })).j.ma_ghep).khoa);
+  await may('/hub/thanh-pham', 'POST', { ten: 'k.mp4', nguon_id: 'k', nguon: 'TIKTOK', dai: 6, shots: [{ t0: 0, t1: 3, khung_url: '/media/a.jpg' }, { t0: 3, t1: 6, khung_url: '/media/b.jpg' }], timeline: [
+    { tu: 0, den: 3, nhom: 'THI_CONG', khung_url: '/media/a.jpg', mo: { nhom: 'HOAN_THIEN' }, thay: { nhom: 'THI_CONG', buoc: 'Bơm keo chà ron vào mạch gạch', dung_cu: ['súng bơm keo', 'máy đo màu cầm tay'], chac: 0.9, mo_ta: 'đo màu ron bằng máy' } },
+    { tu: 3, den: 6, nhom: 'HOAN_THIEN', khung_url: '/media/b.jpg', mo: { nhom: 'HOAN_THIEN' }, thay: { nhom: 'HOAN_THIEN', dung_cu: [], chac: 0.9, mo_ta: 'ron trắng đều' } }] });
+  const vid = DB.raw.prepare(`SELECT id FROM kho_thanh_pham`).get().id; const k = (qs) => api('/kho-mau?kn=K1&tt=&' + qs).then((r) => r.j);
+  assert.equal((await k('nhom=THI_CONG')).loc, 1); assert.equal((await k('f=dung_cu&v=' + encodeURIComponent('súng bơm keo'))).loc, 1, 'trường mảng = giá trị');
+  assert.equal((await k('thieu=dung_cu')).loc, 1, 'thiếu dụng cụ'); assert.equal((await k('lech=1')).loc, 1, 'thầy lệch học trò'); assert.equal((await k('video=' + vid)).loc, 2);
+  let kk = await k('dong=' + encodeURIComponent('(chưa có)')); assert.equal(kk.loc, 2); assert.ok(kk.dongs.includes('Keo chít mạch'), 'dòng keo luôn có trong bộ lọc'); assert.ok(kk.videos.some((x) => x.id === vid));
+  // gán dòng cho video của mẫu chọn → cả video đổi dòng
+  const r = await api('/mau-doan/dat-dong', 'POST', { ids: ['H:' + vid + ':0'], dong: 'Keo chít mạch' }); assert.equal(r.j.so_video, 1); assert.ok(r.j.so_mau >= 2);
+  assert.equal((await k('dong=' + encodeURIComponent('Keo chít mạch'))).loc, 2); assert.equal(DB.raw.prepare(`SELECT dong FROM kho_thanh_pham`).get().dong, 'Keo chít mạch');
+  assert.equal((await api('/mau-doan/dat-dong', 'POST', { ids: ['H:' + vid + ':0'], dong: 'Dòng bịa' })).s, 400);
+  // đề xuất có ảnh mẫu + gợi ý gộp
+  const bn = (await api('/bo-nhan')).j; const dx = bn.de_xuat.find((x) => x.ten === 'máy đo màu cầm tay');
+  assert.equal(dx.vi_du[0].khung_url, '/media/a.jpg'); assert.equal(dx.vi_du[0].mo_ta, 'đo màu ron bằng máy'); assert.equal(dx.goi_y, null, 'không có nhãn nào giống');
+  DB.raw.prepare(`INSERT INTO bo_nhan (id,truong,ten,dong,trang_thai,nguon,created_at,updated_at) VALUES ('bn_x','dung_cu','bay miết inox cán gỗ','','DE_XUAT','THAY','','')`).run();
+  assert.deepEqual((await api('/bo-nhan')).j.de_xuat.find((x) => x.id === 'bn_x').goi_y, { ten: 'bi cầu miết ron', ly_do: 'theo bộ nhãn chuẩn' });
 });
