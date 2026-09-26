@@ -388,6 +388,18 @@ Người duyệt: Thiện · Trạng thái: ĐÃ DUYỆT (2026-09-24, "ok bạn 
 - Việc "lệnh học bị đánh HONG sau 30 phút" đã sửa từ 25/09 (nhịp tim > 15 phút / 12 giờ) — không đổi thêm.
 - Ảnh hưởng dữ liệu: không đổi bảng; lệnh học mới ít link hơn (bỏ trùng). Test: adr011 thêm link trùng (mã cũ hỏng 1/3, mã mới đạt), may-dung-khoi-dong thêm 1 ca.
 
+### 2026-09-26 · Thiết kế lại tab Nguồn học
+- Chủ: "thiết kế nâng cấp ui nguồn học cho khoa học và chuyên nghiệp hơn" · dùng điện thoại là chính.
+- Đầu trang: câu tóm tắt (video đã học, clip footage, % nhãn thầy, số nguồn tự học / đang học) + 4 số + dải máy học. Nút "＋ Thêm nguồn" mở ô nạp.
+- Tab theo mục đích: 🎬 Thành phẩm (lọc nền tảng TikTok / Reels / Drive / máy, lọc dòng, xếp: mới học / nhiều video / cần xử lý) · 📦 Footage gốc · 📈 Kalodata · 🕘 Việc học.
+- Mỗi nguồn một thẻ cùng khuôn:
+  - icon, tên, nền tảng / tài khoản Trạm, trạng thái (đang xếp hàng / chờ máy / đang học / tự học mỗi tuần / đã học / đã đăng ký);
+  - dòng, 3 số (video · đoạn · câu lời), thanh nhãn thầy, cảnh báo video chưa có dòng;
+  - nút Học thêm, công tắc tự học tuần, ⋯ (gán dòng cả nguồn, xem video, thư mục, mở nguồn gốc, loại nguồn 2 bước).
+  - Điện thoại 1 cột, PC 2–3 cột.
+- Sửa: hook useState khai sau return sớm (lỗi khi dữ liệu về). Kho footage đang nạp không còn hiện hai thẻ.
+- Kiểm Playwright 390 / 1440: không tràn ngang, không lỗi console.
+
 ### 2026-09-26 · Sổ nguồn theo dõi + tự học hằng tuần
 - Chủ: "trạm đang đăng nhập 4 tk tiktok, cần quản lý chúng trên app nguồn học luôn".
 - module_config.nguon_theo_doi {ds:[{key, loai, nap, ten, dong, muc_dich, tu_dong, tk_tram, lan_hoc}]}.
