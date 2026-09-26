@@ -381,6 +381,12 @@ Người duyệt: Thiện · Trạng thái: ĐÃ DUYỆT (2026-09-24, "ok bạn 
 
 ## Changelog
 
+### 2026-09-26 · Claude duyệt / gán thay chủ · tự gán dòng · tạo tên chuẩn khi gộp
+- Chủ: "xổ chọn không có thì có tạo thêm được không" · "dòng sản phẩm ở bộ nhãn chưa đủ" · "bạn trực tiếp xử lý thay tôi việc gán nhãn và duyệt nhãn".
+- Ô gộp có "＋ tạo tên chuẩn mới": đổi tên đề xuất rồi duyệt, mẫu đổi theo. Ô dòng ở hàng đề xuất dùng danh sách dòng đầy đủ.
+- Cron `tuGanDong`: video đã đăng chưa có dòng → đếm vật liệu thầy / người nhận ra + chữ trong tên / lời thoại (≥ 2 điểm, ≥ 70%) → gán dòng; không rõ thì để người.
+- Hàng `module_config.viec_thay_chu`: Claude soạn quyết định (duyệt / gộp / bỏ / tạo tên, gán dòng, nhãn mẫu); cron chạy qua đúng đường ghi của app, nhật ký "Claude (thay chủ)", kết quả ở `viec_thay_chu_kq`. Nhãn Claude không tính vào độ đúng của thầy (chỉ nhãn người).
+
 ### 2026-09-26 · Lọc sâu · dòng một nguồn · đề xuất dễ duyệt
 - Chủ: "kho mẫu và bộ nhãn cần bộ lọc chuyên sâu hơn" · "dòng sản phẩm vẫn chưa có keo chít mạch, mỗi nơi một kiểu" · "Finex có tên F300, Kingsmen có tên Terrazy" · "đề xuất khó hiểu để duyệt".
 - Dòng một nguồn (`dsDongChuan`): ba dòng đăng ký ở bộ nhãn có thương hiệu (Terrazy — Kingsmen cao cấp · Finex F300 — Finex trung cấp · Keo chít mạch — Kingsmen), rồi dòng từ sản phẩm / mẫu; Kho mẫu, Bộ nhãn, Dòng sản phẩm dùng chung. Lần chuyển 6: Finex → Finex F300 ở mọi bảng + luật nhận dòng.
