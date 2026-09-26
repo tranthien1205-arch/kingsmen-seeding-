@@ -261,3 +261,16 @@ test('018k: nguồn học gom video theo kênh / thư mục Drive; gán dòng c�
   const c = r.nguon.find((x) => x.ten === '@kenh2').video[0].id; assert.ok((await api('/kho-thanh-pham/' + c, 'PATCH', { dong: 'Sàn gỗ' })).s < 300);
   assert.equal(DB.raw.prepare(`SELECT COUNT(*) n FROM mau_doan WHERE doi_tuong_id=? AND dong='Sàn gỗ'`).get(c).n, 2, 'mẫu đổi dòng theo video');
 });
+
+test('kho video: mã video, dòng của mục đoán từ tên, gán dòng / chọn dùng / loại', async () => {
+  const DB = taoD1(); env = taoEnv(DB); TOKEN = (await api('/login', 'POST', { email: 'admin@kingsmen.vn', password: 'admin123' })).j.token;
+  const m = (await api('/muc', 'POST', { tieu_de: 'Keo chít mạch Kingsmen — video 30 giây', dinh_dang: 'VIDEO' })).j;
+  const muc = m.db.muc_noi_dung.find((x) => x.id === m.id); assert.equal(muc.dong, 'Keo chít mạch', 'đoán dòng theo tên mục');
+  const v = await api('/tai-san', 'POST', { media_url: '/media/v1.mp4', loai: 'VIDEO_XUAT', muc_id: m.id }); const t = v.j.db.tai_san.find((x) => x.loai === 'VIDEO_XUAT');
+  assert.match(t.ma_video, /^V\d{6}-[A-Z0-9]{4}$/);
+  await api('/bo-nhan', 'POST', { truong: 'dong', ten: 'Terrazy', mo_ta: 'Kingsmen' });
+  assert.equal((await api('/muc/' + m.id + '/dong', 'POST', { dong: 'Terrazy' })).j.db.muc_noi_dung.find((x) => x.id === m.id).dong, 'Terrazy');
+  assert.equal((await api('/muc/' + m.id + '/dong', 'POST', { dong: 'Dòng bịa' })).s, 400);
+  assert.equal((await api('/tai-san/' + t.id + '/su-dung', 'POST', { su_dung: 'CHON' })).j.db.tai_san.find((x) => x.id === t.id).su_dung, 'CHON');
+  assert.equal((await api('/tai-san/' + t.id + '/su-dung', 'POST', { su_dung: 'BO' })).j.db.tai_san.find((x) => x.id === t.id).su_dung, 'BO');
+});

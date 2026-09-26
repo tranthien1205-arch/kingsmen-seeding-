@@ -586,5 +586,5 @@ export function taoMau(H) {
     if (path === '/nguon-hoc' && method === 'GET') { if (!isStaff(me)) return json({ error: 'Không có quyền' }, 403); return json(await nguonHoc(env)); }
     if (path === '/thay/bu' && method === 'GET') { if (!isStaff(me)) return json({ error: 'Không có quyền' }, 403); return json(await tinhBu(env)); }
     return null; }
-  return { dam, api, tuGanDong, chayViecThayChu, chuanHoaBuoc, napTuPhang, thayDocBu, tinhBu, hubThayDoc, upsertHinh, upsertLoi, capNhatSoDo, xoaTheoDoiTuong, timelineCua, viDu, doChinhXac, dem, phutNguoi, thayDocLoi, hocNguong, boNhan, TRUONG };
+  return { dam, api, dsDongChuan, tuGanDong, chayViecThayChu, chuanHoaBuoc, napTuPhang, thayDocBu, tinhBu, hubThayDoc, upsertHinh, upsertLoi, capNhatSoDo, xoaTheoDoiTuong, timelineCua, viDu, doChinhXac, dem, phutNguoi, thayDocLoi, hocNguong, boNhan, TRUONG };
 }

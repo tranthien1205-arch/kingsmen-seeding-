@@ -388,6 +388,23 @@ Người duyệt: Thiện · Trạng thái: ĐÃ DUYỆT (2026-09-24, "ok bạn 
 - Việc "lệnh học bị đánh HONG sau 30 phút" đã sửa từ 25/09 (nhịp tim > 15 phút / 12 giờ) — không đổi thêm.
 - Ảnh hưởng dữ liệu: không đổi bảng; lệnh học mới ít link hơn (bỏ trùng). Test: adr011 thêm link trùng (mã cũ hỏng 1/3, mã mới đạt), may-dung-khoi-dong thêm 1 ca.
 
+### 2026-09-26 · Kho video: thông tin theo dõi theo dòng chảy nội dung
+- Chủ: "kho video app sx cần gắn các thông tin tracking theo dòng nội dung để quản lý sử dụng".
+- Cột mới:
+  - `tai_san.ma_video`: mã cố định `V<yymmdd>-<4 ký tự>`. Gán khi máy nạp bản nháp hoặc người tải lên VIDEO_XUAT; bản cũ được điền bù.
+  - `tai_san.su_dung`: CHON / BO / null.
+  - `muc_noi_dung.dong`: dòng sản phẩm của mục. Mục chưa có dòng được đoán theo tên / ghi chú (Terrazy / Finex F300 / Keo chít mạch) mỗi lần bootstrap.
+- API:
+  - `POST /muc/:id/dong`: chỉ nhận dòng có trong Bộ nhãn.
+  - `POST /tai-san/:id/su-dung`.
+  - Bootstrap trả thêm `dong_chuan`.
+- Thẻ video hiện:
+  - Mã video: bấm để chép, dán vào caption hoặc `ket_qua.ma_theo_doi`.
+  - Dòng và trạng thái dùng (chờ quyết / chọn dùng / đã đăng / đã loại / bản cũ).
+  - "Thông tin theo dõi": mục (tháng, tuần, ngày đăng dự kiến), giai đoạn, kênh, mục tiêu, kịch bản vN (máy / người soạn), duyệt (ai, lúc, điểm máy), dựng (máy, lúc, gói CapCut), bài đăng (kênh, trạng thái, link), kết quả (xem, tương tác, đơn, doanh thu). Kết quả khớp theo bài đăng dùng video hoặc theo mã video.
+  - Nút ✓ Dùng / ✕ Loại, đổi dòng tại chỗ. Lọc theo trạng thái và theo dòng.
+- Mọi số suy ra từ bảng gốc của dòng chảy; chỉ lưu thêm 3 cột trên. Test 018 kho video; kiểm Playwright 390 / 1440.
+
 ### 2026-09-26 · Kho video thành phẩm (Dòng chảy nội dung)
 - Chủ: "tôi không thấy kho thành phẩm video" · "tôi thường dùng điện thoại" · "cần kho video nhé".
 - `KhoVideoThanhPham` (60-dongchay.jsx), đầu màn Dòng chảy: mọi bản nháp máy dựng (`tai_san` loai VIDEO_XUAT) của mọi thẻ, mới nhất trước.
