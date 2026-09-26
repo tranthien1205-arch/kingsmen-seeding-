@@ -460,6 +460,10 @@ function DoPhuTruc() {
       <div className="flex items-baseline gap-2 mb-1.5"><span className="font-bold text-[14px]">{dong}</span><span className="text-[11px] text-ink-muted">{x.tong} video · đã gán trục {x.da_gan}</span></div>
       {Object.entries(d.truc).map(([k, t]) => <Hang key={k} ten={t.ten} gt={t.gt} dem={x.truc[k] || {}} />)}
       <Hang ten="Góc quay (đoạn)" gt={d.goc_quay} dem={x.goc_doan} />
+      {x.hieu_qua && x.hieu_qua.co_so > 0 && <div className="mt-2 rounded-xl bg-[#EFF4F6] p-2.5 space-y-1.5"><div className="text-[12px] font-bold">Hiệu quả <span className="font-normal text-ink-muted">· {x.hieu_qua.co_so} video có lượt xem · xếp theo lượt xem trung vị</span></div>
+        {Object.entries(d.truc).map(([k, t]) => { const a = (x.hieu_qua.truc[k] || []).filter((r) => r.n >= 1); if (!a.length) return null; const tot = a[0]; return <div key={k} className="text-[12px] flex gap-2 flex-wrap"><span className="w-28 shrink-0 text-ink-muted">{t.ten}</span><span className="flex-1 min-w-0"><b className="text-[#0E7C8C]">{t.gt[tot.gt]}</b> {(tot.xem_tv || 0).toLocaleString('vi-VN')} xem ({tot.n} video){tot.doanh_thu ? ' · ' + tot.doanh_thu.toLocaleString('vi-VN') + ' đ' : ''}{a[1] ? <span className="text-ink-muted"> · kế: {t.gt[a[1].gt]} {(a[1].xem_tv || 0).toLocaleString('vi-VN')}</span> : null}{tot.n < 3 && <span className="text-[#8A6410]"> · ít mẫu, chưa chắc</span>}</span></div>; })}
+        {x.hieu_qua.to_hop.length > 0 && <div className="text-[12px] pt-1 border-t border-[#D9E3E7]"><div className="font-semibold mb-0.5">Tổ hợp cấu trúc × mở đầu tốt nhất</div>{x.hieu_qua.to_hop.map((h, i) => <div key={i}>{i + 1}. {d.truc.cau_truc.gt[h.cau_truc]} + {d.truc.mo_dau.gt[h.mo_dau]} — <b>{(h.xem_tv || 0).toLocaleString('vi-VN')}</b> xem trung vị ({h.n} video)</div>)}</div>}
+      </div>}
       {Object.keys(x.goc_footage).length > 0 && <Hang ten="Góc quay footage" gt={d.goc_quay} dem={x.goc_footage} />}
     </Card>)}</div>
   </div>;

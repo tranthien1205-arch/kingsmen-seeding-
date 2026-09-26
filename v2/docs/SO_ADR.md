@@ -388,6 +388,13 @@ Người duyệt: Thiện · Trạng thái: ĐÃ DUYỆT (2026-09-24, "ok bạn 
 - Việc "lệnh học bị đánh HONG sau 30 phút" đã sửa từ 25/09 (nhịp tim > 15 phút / 12 giờ) — không đổi thêm.
 - Ảnh hưởng dữ liệu: không đổi bảng; lệnh học mới ít link hơn (bỏ trùng). Test: adr011 thêm link trùng (mã cũ hỏng 1/3, mã mới đạt), may-dung-khoi-dong thêm 1 ca.
 
+### 2026-09-26 · ADR-020 đợt 2 — hiệu quả theo trục
+- /do-phu-truc trả thêm hieu_qua theo từng dòng (chỉ video có lượt xem):
+  - Mỗi giá trị trục: số video, lượt xem trung vị, tổng doanh thu; xếp theo lượt xem.
+  - Top 3 tổ hợp cấu trúc × mở đầu có từ 2 video trở lên.
+- Tab Độ phủ trục: khối "Hiệu quả" ở mỗi dòng — giá trị tốt nhất từng trục (kèm giá trị kế, cảnh báo ít mẫu dưới 3) + tổ hợp tốt nhất.
+- Test đợt 2.
+
 ### 2026-09-26 · ADR-020 đợt 1 — trục video
 - Chủ duyệt ADR-020 ("ok"). Cột mới: kho_thanh_pham.truc (JSON 4 trục + nguồn THAY/NGUOI), mau_doan.goc_quay, tai_san.goc_quay / nhom_canh.
 - thayGanTruc (mau.js, cron 8 video / 15 phút):

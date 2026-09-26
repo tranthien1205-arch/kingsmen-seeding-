@@ -118,3 +118,12 @@ test('ADR-020: thầy gán 4 trục + góc quay đoạn; footage lấy góc quay
   const m = (await api('/muc', 'POST', { tieu_de: 'kho', dinh_dang: 'VIDEO' })).j.id; await may('/hub/tai-san', 'POST', { muc_id: m, ten: 'a.mp4', thu_muc: '/6. POV', media_url: '/media/a.mp4', media_type: 'VIDEO', nguon: 'DRIVE' });
   await api('/bootstrap'); assert.equal(DB.raw.prepare(`SELECT goc_quay FROM tai_san WHERE ten='a.mp4'`).get().goc_quay, 'POV');
 });
+test('ADR-020 đợt 2: hiệu quả theo trục — lượt xem trung vị theo giá trị, tổ hợp cấu trúc × mở đầu cần ≥ 2 video', async () => {
+  const DB = taoD1(); env = taoEnv(DB); TOKEN = (await api('/login', 'POST', { email: 'admin@kingsmen.vn', password: 'admin123' })).j.token; await api('/bootstrap');
+  const ins = DB.raw.prepare(`INSERT INTO kho_thanh_pham (id, ten, nguon, nguon_id, dai, so_shot, created_at, dong, luot_xem, truc) VALUES (?,?,?,?,6,2,'2026-09-26','Keo chít mạch',?,?)`);
+  const t = (c, m) => JSON.stringify({ cau_truc: c, mo_dau: m, muc_dich: 'HUONG_DAN', phong_cach: 'NGUOI_NOI' });
+  ins.run('a', 'a', 'TIKTOK', 'a', 1000, t('TRUOC_SAU', 'CAU_HOI')); ins.run('b', 'b', 'TIKTOK', 'b', 3000, t('TRUOC_SAU', 'CAU_HOI')); ins.run('c', 'c', 'TIKTOK', 'c', 500, t('TUNG_BUOC', 'CON_SO'));
+  const x = (await api('/do-phu-truc')).j.dong['Keo chít mạch'];
+  assert.equal(x.hieu_qua.co_so, 3); assert.equal(x.hieu_qua.truc.cau_truc[0].gt, 'TRUOC_SAU'); assert.equal(x.hieu_qua.truc.cau_truc[0].xem_tv, 2000);
+  assert.equal(x.hieu_qua.to_hop.length, 1, 'tổ hợp 1 video bị loại'); assert.equal(x.hieu_qua.to_hop[0].n, 2);
+});

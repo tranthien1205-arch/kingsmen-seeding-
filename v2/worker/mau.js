@@ -206,11 +206,18 @@ export function taoMau(H) {
       await env.DB.batch(st); xong++; }
     return { ok: true, so: xong, loi }; }
   // Độ phủ trục theo dòng: số video mỗi giá trị (≥ ngưỡng = dùng được làm điều kiện), góc quay đoạn thành phẩm + footage kho
-  async function doPhuTruc(env) { await dam(env); const vs = (await env.DB.prepare(`SELECT id, dong, truc FROM kho_thanh_pham`).all()).results; const out = {};
+  async function doPhuTruc(env) { await dam(env); const vs = (await env.DB.prepare(`SELECT id, dong, truc, luot_xem, doanh_thu FROM kho_thanh_pham`).all()).results; const out = {};
     const o = (d) => out[d] = out[d] || { tong: 0, da_gan: 0, truc: Object.fromEntries(Object.keys(TRUC).map((k) => [k, {}])), goc_doan: {}, goc_footage: {} };
     for (const v of vs) { const x = o(v.dong || '(chưa có dòng)'); x.tong++; const t = P(v.truc); if (!t) continue; x.da_gan++; for (const k of Object.keys(TRUC)) if (t[k]) x.truc[k][t[k]] = (x.truc[k][t[k]] || 0) + 1; }
     for (const r of (await env.DB.prepare(`SELECT dong, goc_quay, COUNT(*) n FROM mau_doan WHERE loai='HINH' AND hieu_luc=1 AND goc_quay IS NOT NULL GROUP BY dong, goc_quay`).all()).results) o(r.dong || '(chưa có dòng)').goc_doan[r.goc_quay] = so(r.n);
     for (const r of (await env.DB.prepare(`SELECT mu.dong, t.goc_quay, COUNT(*) n FROM tai_san t JOIN muc_noi_dung mu ON mu.id=t.muc_id WHERE t.loai='FOOTAGE' AND t.goc_quay IS NOT NULL GROUP BY mu.dong, t.goc_quay`).all()).results) o(r.dong || '(chưa có dòng)').goc_footage[r.goc_quay] = so(r.n);
+    // đợt 2: hiệu quả — lượt xem trung vị / doanh thu theo giá trị trục và tổ hợp cấu trúc × mở đầu (tổ hợp cần ≥ 2 video có số)
+    const trungVi = (a) => { const x = a.filter((v) => v != null).sort((p, q) => p - q); if (!x.length) return null; const k = Math.floor(x.length / 2); return x.length % 2 ? x[k] : Math.round((x[k - 1] + x[k]) / 2); };
+    const theoDong = {}; for (const v of vs) { const t = P(v.truc); if (!t || v.luot_xem == null) continue; (theoDong[v.dong || '(chưa có dòng)'] = theoDong[v.dong || '(chưa có dòng)'] || []).push({ t, xem: +v.luot_xem, dt: v.doanh_thu != null ? +v.doanh_thu : null }); }
+    for (const [dong, ds] of Object.entries(theoDong)) { const x = o(dong); x.hieu_qua = { co_so: ds.length, truc: {}, to_hop: [] };
+      for (const k of Object.keys(TRUC)) { const g = {}; for (const r of ds) if (r.t[k]) (g[r.t[k]] = g[r.t[k]] || []).push(r); x.hieu_qua.truc[k] = Object.entries(g).map(([gt, a]) => ({ gt, n: a.length, xem_tv: trungVi(a.map((r) => r.xem)), doanh_thu: a.some((r) => r.dt != null) ? Math.round(a.reduce((s2, r) => s2 + (r.dt || 0), 0)) : null })).sort((p, q) => (q.xem_tv || 0) - (p.xem_tv || 0)); }
+      const th = {}; for (const r of ds) if (r.t.cau_truc && r.t.mo_dau) (th[r.t.cau_truc + '|' + r.t.mo_dau] = th[r.t.cau_truc + '|' + r.t.mo_dau] || []).push(r);
+      x.hieu_qua.to_hop = Object.entries(th).filter(([, a]) => a.length >= 2).map(([k, a]) => ({ cau_truc: k.split('|')[0], mo_dau: k.split('|')[1], n: a.length, xem_tv: trungVi(a.map((r) => r.xem)) })).sort((p, q) => (q.xem_tv || 0) - (p.xem_tv || 0)).slice(0, 3); }
     return { truc: TRUC, goc_quay: GOC_QUAY, nguong: NGUONG_TRUC, dong: out }; }
   async function suaTruc(env, me, id, body) { if (!isStaff(me)) return json({ error: 'Không có quyền' }, 403); const v = await env.DB.prepare(`SELECT id, truc FROM kho_thanh_pham WHERE id=?`).bind(id).first(); if (!v) return json({ error: 'Không có video' }, 404);
     const t = { ...(P(v.truc) || {}), nguon: 'NGUOI', nguoi: me.ho_ten, luc: nowISO() }; for (const k of Object.keys(TRUC)) if (body[k] !== undefined) t[k] = TRUC[k].gt[body[k]] ? body[k] : null;
