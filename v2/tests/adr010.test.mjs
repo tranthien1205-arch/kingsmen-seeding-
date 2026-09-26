@@ -77,18 +77,13 @@ test('010d: kho thành phẩm — Drive/thư mục máy → lệnh hoc_thanh_pha
   assert.equal((await hub('/hub/lenh')).j.lenh.find(x => x.viec === 'huan_luyen').tham_so.mo_hinh_id, 'ghep-thong-ke');
   assert.equal((await api('/bootstrap')).j.db.ai_nao.kho_thanh_pham.filter(t => t.luot_xem == null).length, 9, 'không có lượt xem thì để trống, không ghi 0');
 });
-test('010d TikTok: cần Trạm sống; kênh vào hàng đợi module_config tai_tiktok + lệnh chay_agent tai_tiktok; Trạm hỏi /hub/viec/tai_tiktok; báo đã tải → lệnh hoc_thanh_pham TIKTOK cho máy dựng', async () => {
-  assert.equal((await api('/kho-thanh-pham/nap', 'POST', { link: '@kingsmen', nguon: 'TIKTOK' })).s, 409, 'Trạm im');
-  const khoaTram = giai((await api('/tram/khoa', 'POST')).j.ma_ghep).khoa;
-  const hubT = async (p, method = 'GET', body) => { const r = await worker.fetch(new Request('https://x/api' + p, { method, headers: { 'Content-Type': 'application/json', 'X-Hub-Key': khoaTram }, body: body ? JSON.stringify(body) : undefined }), env, { waitUntil() {} }); return { s: r.status, j: await r.json().catch(() => ({})) }; };
-  await hubT('/hub/trang_thai', 'POST', { may: 'NGOC-HAN', ban: '9.163', tai_khoan: [], nhan_vien: [] });
+test('010d TikTok (26/09: không cần đăng nhập): kênh giao thẳng máy học tự liệt kê (kenh_tiktok) — không cần Trạm; đường Trạm tiktok-da-tai vẫn nhận', async () => {
   assert.equal((await api('/kho-thanh-pham/nap', 'POST', { link: 'rác', nguon: 'TIKTOK' })).s, 400);
-  const r = await api('/kho-thanh-pham/nap', 'POST', { link: 'https://www.tiktok.com/@kingsmen.vn?lang=vi', nguon: 'TIKTOK', toi_da: 15 }); assert.equal(r.s, 200); assert.equal(r.j.kenh, '@kingsmen.vn');
-  const v = (await hubT('/hub/viec/tai_tiktok')).j; assert.equal(v.viec.length, 1); assert.equal(v.viec[0].toi_da, 15); assert.ok(v.viec[0].thu_muc.endsWith('kingsmen.vn')); assert.deepEqual(v.da_co, ['keo-chit-1.mp4']);
-  const lt = (await hubT('/hub/lenh')).j.lenh.find(x => x.viec === 'chay_agent' && x.tham_so.viec === 'tai_tiktok'); assert.ok(lt, 'Trạm nhận lệnh chạy việc tai_tiktok');
-  assert.equal((await api('/bootstrap')).j.db.ai_nao.tai_tiktok_cho.length, 1);
-  const d = await hubT('/hub/tiktok-da-tai', 'POST', { kenh: '@kingsmen.vn', thu_muc: 'D:\\may-dung\\thanh-pham\\tiktok\\kingsmen.vn', so: 9 }); assert.equal(d.s, 200); assert.equal(d.j.giao, true);
-  const l = (await hub('/hub/lenh')).j.lenh.find(x => x.viec === 'hoc_thanh_pham' && x.tham_so.nguon === 'TIKTOK'); assert.ok(l); assert.equal(l.tham_so.kenh, '@kingsmen.vn'); assert.equal(l.tham_so.toi_da, 9);
-  assert.equal((await hubT('/hub/viec/tai_tiktok')).j.viec.length, 0, 'hết hàng đợi');
+  const r = await api('/kho-thanh-pham/nap', 'POST', { link: 'https://www.tiktok.com/@kingsmen.vn?lang=vi', nguon: 'TIKTOK', toi_da: 15 }); assert.equal(r.s, 200, 'không cần Trạm sống'); assert.equal(r.j.kenh, '@kingsmen.vn');
+  const l = (await hub('/hub/lenh')).j.lenh.find(x => x.viec === 'hoc_thanh_pham' && x.tham_so.kenh_tiktok); assert.ok(l, 'máy học nhận lệnh tự liệt kê kênh'); assert.equal(l.tham_so.kenh, '@kingsmen.vn'); assert.equal(l.tham_so.toi_da, 15); assert.equal(l.tham_so.nguon, 'TIKTOK');
+  const khoaTram = giai((await api('/tram/khoa', 'POST')).j.ma_ghep).khoa;
+  const hubT = async (p, method = 'GET', body) => { const x = await worker.fetch(new Request('https://x/api' + p, { method, headers: { 'Content-Type': 'application/json', 'X-Hub-Key': khoaTram }, body: body ? JSON.stringify(body) : undefined }), env, { waitUntil() {} }); return { s: x.status, j: await x.json().catch(() => ({})) }; };
+  await hubT('/hub/trang_thai', 'POST', { may: 'NGOC-HAN', ban: '9.163', tai_khoan: [], nhan_vien: [] });
+  const d = await hubT('/hub/tiktok-da-tai', 'POST', { kenh: '@kingsmen.vn', thu_muc: 'D:\may-dung\thanh-pham\tiktok\kingsmen.vn', so: 9 }); assert.equal(d.s, 200); assert.equal(d.j.giao, true, 'đường Trạm cũ vẫn nhận');
   for (const s of ['phan-tich', 'hoc-thanh-pham', 'nap-drive']) assert.equal((await hub('/hub/script/' + s)).s, 200, 'script ' + s + ' được phát');
 });

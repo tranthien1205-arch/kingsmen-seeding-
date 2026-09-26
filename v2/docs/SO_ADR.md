@@ -388,6 +388,15 @@ Người duyệt: Thiện · Trạng thái: ĐÃ DUYỆT (2026-09-24, "ok bạn 
 - Việc "lệnh học bị đánh HONG sau 30 phút" đã sửa từ 25/09 (nhịp tim > 15 phút / 12 giờ) — không đổi thêm.
 - Ảnh hưởng dữ liệu: không đổi bảng; lệnh học mới ít link hơn (bỏ trùng). Test: adr011 thêm link trùng (mã cũ hỏng 1/3, mã mới đạt), may-dung-khoi-dong thêm 1 ca.
 
+### 2026-09-26 · TikTok không cần đăng nhập
+- Chủ: "có phương án nào không cần đăng nhập tiktok hoặc reel … nhiều ứng dụng tải bình thường".
+- Đo trên máy Ngoc-Han: yt-dlp --impersonate chrome (curl_cffi) liệt kê @keokingsmen.com không đăng nhập (40 video: id, lượt xem, độ dài, ngày, tiêu đề).
+  - Reels fanpage Facebook thì không liệt kê được khi không đăng nhập (yt-dlp: Unsupported URL). Reels vẫn qua Trạm (phiên facebook, vai kiểm); tải từng reel không cần đăng nhập.
+- hangTaiTikTok giao thẳng hoc_thanh_pham {kenh_tiktok:true} cho máy học mạnh nhất, không qua Trạm.
+- Máy học tự liệt kê kênh, lấy toi_da video xem nhiều nhất chưa học, rồi chạy như danh sách link. Liệt kê lỗi thì tự pip install -U --user yt-dlp curl_cffi một lần.
+- Đường Trạm /hub/tiktok-da-tai giữ làm dự phòng (kênh riêng tư).
+- Test 010d viết lại theo đường mới.
+
 ### 2026-09-26 · Reels Facebook vào kho thành phẩm
 - Chủ: fanpage facebook.com/KeoKingsmen (link chia sẻ), Reels "khác" TikTok.
 - Luồng:

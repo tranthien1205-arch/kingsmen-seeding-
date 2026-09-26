@@ -53,6 +53,17 @@ export default async function hoc({ app, goiApp, lenh, dir, log, script }) {
   let video = [], goc = [], thuMuc = "", meta = {};
   // 25/09: chế độ chỉ tạo bản xem 360p cho video đã học (không nghe / nhìn / thầy lại) — tìm file đã tải trên ổ trước, không có mới tải
   const timFile = (ten, th = join(dir, "thanh-pham"), sau = 0) => { if (!existsSync(th) || sau > 3) return null; for (const n of readdirSync(th)) { const p = join(th, n); let st; try { st = statSync(p); } catch { continue; } if (st.isFile() && n === ten && st.size > 50000) return p; if (st.isDirectory()) { const x = timFile(ten, p, sau + 1); if (x) return x; } } return null; };
+  // (26/09) KÊNH TIKTOK KHÔNG CẦN ĐĂNG NHẬP: yt-dlp --impersonate chrome liệt kê video của kênh (id, lượt xem, tiêu đề, ngày, độ dài);
+  // thiếu curl_cffi / yt-dlp cũ thì tự cài một lần (pip, người dùng hiện tại). Chọn toi_da video xem nhiều nhất chưa học → chạy như danh sách link.
+  if (ts.kenh_tiktok && !(Array.isArray(ts.links) && ts.links.length)) {
+    const kenh = "@" + String(ts.kenh || "").replace(/^@/, ""); const lietKe = () => spawnSync("python", ["-m", "yt_dlp", "--impersonate", "chrome", "--flat-playlist", "-J", "--playlist-end", String(Math.min(200, toiDa * 4)), "https://www.tiktok.com/" + kenh], { encoding: "utf8", timeout: 300000, windowsHide: true, maxBuffer: 64 * 1024 * 1024, env: { ...process.env, PYTHONIOENCODING: "utf-8" } });
+    let p = lietKe(); if (p.status !== 0) { log("  liệt kê kênh lỗi — cài / cập nhật yt-dlp + curl_cffi rồi thử lại:", String(p.stderr || p.error || "").slice(-160)); spawnSync("python", ["-m", "pip", "install", "-q", "-U", "--user", "yt-dlp", "curl_cffi"], { encoding: "utf8", timeout: 600000, windowsHide: true }); p = lietKe(); }
+    if (p.status !== 0) return { ok: false, msg: "không liệt kê được kênh " + kenh + " (không đăng nhập): " + String(p.stderr || p.error || "").trim().split("\n").pop().slice(0, 200) };
+    let j = null; try { j = JSON.parse(p.stdout); } catch {} const ds = ((j && j.entries) || []).filter((e) => e && e.id && !daCo.has(e.id + ".mp4")).sort((a, b) => (+b.view_count || 0) - (+a.view_count || 0)).slice(0, toiDa);
+    log("  kênh", kenh, "liệt kê", ((j && j.entries) || []).length, "video · chưa học", ds.length, "· lấy", ds.length, "xem nhiều nhất" + (ds[0] ? " (" + ds[0].view_count + " → " + ds[ds.length - 1].view_count + " lượt xem)" : ""));
+    if (!ds.length) return { ok: true, msg: "kênh " + kenh + ": không còn video mới để học" };
+    ts.links = ds.map((e) => ({ link: "https://www.tiktok.com/" + kenh + "/video/" + e.id, meta: { kenh, luot_xem: e.view_count != null ? +e.view_count : null, luot_thich: e.like_count != null ? +e.like_count : null, ngay_dang: e.timestamp ? new Date(e.timestamp * 1000).toISOString().slice(0, 10) : null, dai: e.duration || null, mo_ta: e.title || e.description || null } }));
+  }
   if (Array.isArray(ts.ds_proxy)) { thuMuc = "bản xem"; const TAI = join(dir, "thanh-pham", "proxy-tai"); mkdirSync(TAI, { recursive: true });
     for (const x of ts.ds_proxy) { const idTT = (String(x.link || "").match(/\/(?:video|reel|reels)\/(\d+)/) || [])[1]; const them = { nguon_id: x.nguon_id, app_id: x.id, can_proxy: x.can_proxy !== false, doan: Array.isArray(x.doan) ? x.doan : [] };
       if (String(x.nguon).toUpperCase() === "FOOTAGE" && x.media_url) video.push({ id: x.id, ten: x.ten || x.id, url: x.media_url, ...them });   // footage đã ở kho app: tải về cắt ảnh đoạn
