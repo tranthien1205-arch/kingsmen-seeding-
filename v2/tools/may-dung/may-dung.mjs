@@ -7,11 +7,11 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync, appendFileSync, sta
 import { join, dirname } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { createHash } from "node:crypto";
-import { spawnSync } from "node:child_process";
+import { spawnSync, spawn } from "node:child_process";
 import os from "node:os";
 
 export const DIR = dirname(fileURLToPath(import.meta.url));
-const BAN = "1.6";
+const BAN = "1.7";
 // việc app giao → script phát từ app (ADR-008/009): máy chỉ chạy script đúng hash app xác nhận
 const VIEC_SCRIPT = { dung_video: "dung-video", mo_hinh_bong: "mo-hinh", mo_hinh_chay: "mo-hinh", huan_luyen: "huan-luyen", loc_footage: "loc-footage", nap_drive: "nap-drive", phan_tich_footage: "phan-tich", hoc_thanh_pham: "hoc-thanh-pham" };   // nap_drive: nạp footage từ thư mục Drive (24/09) · phan_tich_footage / hoc_thanh_pham: ADR-010
 const coTransformers = existsSync(join(DIR, "node_modules", "@huggingface", "transformers"));
@@ -122,6 +122,16 @@ function giuKhoa() {
   for (const s of ["SIGINT", "SIGTERM", "SIGBREAK"]) process.on(s, () => process.exit(0));
 }
 if (!args.includes("--mot-lan")) giuKhoa();
+// (1.7) GIỮ MÁY THỨC khi máy con đang chạy (sự cố 26/09: Máy VP Q2 ngủ đông lúc rảnh → không nhận lệnh). Một PowerShell ẩn gọi
+// SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED) rồi ngồi chờ; máy con tắt thì nó tự thoát (kiểm tiến trình cha mỗi 30 giây)
+// và Windows về lại chế độ ngủ bình thường. Chỉ chặn ngủ khi rảnh — không đổi cài đặt nguồn, màn hình vẫn tắt được. Tắt: --cho-ngu.
+function giuThuc() {
+  if (process.platform !== "win32" || args.includes("--cho-ngu")) return;
+  const ps = "$s='[DllImport(\"kernel32.dll\")] public static extern uint SetThreadExecutionState(uint f);'; $k=Add-Type -MemberDefinition $s -Name T -Namespace G -PassThru; " +
+    "while (Get-Process -Id " + process.pid + " -ErrorAction SilentlyContinue) { [void]$k::SetThreadExecutionState([uint32]'0x80000001'); Start-Sleep -Seconds 30 }";
+  try { const c = spawn("powershell.exe", ["-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-Command", ps], { stdio: "ignore", windowsHide: true }); c.on("error", (e) => log("giữ máy thức lỗi:", e.message)); c.unref(); log("Giữ máy thức khi máy con chạy (không ngủ đông lúc rảnh)"); } catch (e) { log("giữ máy thức lỗi:", e.message); }
+}
+if (!args.includes("--mot-lan")) giuThuc();
 // app chưa lên (dev server khởi động lại, mất mạng) → chờ 30 giây rồi thử lại, không thoát
 let ping = await goiApp("/hub/ping"); while (!ping.ok) { log("Chưa nối được app (" + (ping.status || "mạng") + "): " + ((ping.d && ping.d.error) || "") + " — thử lại sau 30 giây"); await new Promise((x) => setTimeout(x, 30000)); ping = await goiApp("/hub/ping"); }
 log("Máy dựng '" + APP.may_ten + "' (" + os.hostname() + ") đã nối " + APP.url + " · app v" + ping.d.ban + " · ffmpeg " + (ffmpegOk ? "có" : "KHÔNG") + " · AI nhìn " + (coTransformers ? "có" : "chưa (npm install)") + (gpu ? " · GPU " + gpu : ""));

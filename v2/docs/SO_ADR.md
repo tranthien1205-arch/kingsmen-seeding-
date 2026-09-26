@@ -381,6 +381,11 @@ Người duyệt: Thiện · Trạng thái: ĐÃ DUYỆT (2026-09-24, "ok bạn 
 
 ## Changelog
 
+### 2026-09-26 · Máy con 1.7 giữ máy thức
+- Chủ: "máy q2 vẫn bị ngủ đông". Máy con chạy thì một PowerShell ẩn gọi `SetThreadExecutionState(ES_CONTINUOUS|ES_SYSTEM_REQUIRED)` mỗi 30 giây và tự thoát khi tiến trình máy con mất → máy không ngủ / ngủ đông lúc rảnh, màn hình vẫn tắt; không đổi cài đặt nguồn. Tắt bằng `--cho-ngu`.
+- Cũng 26/09: `cai-chay-nen.ps1` bản đầu mất dấu gạch ngược (`C:may-dung`) → sửa, tự dò thư mục máy con (`MAY_CON_DIR`, C:/D:, thư mục người dùng, Desktop, Downloads).
+- Kiểm thật trên máy Ngoc-Han: lệnh trả về khác 0 (thành công); giết máy con → PowerShell giữ thức thoát trong 30 giây.
+
 ### 2026-09-26 · Máy con chạy nền khi bật máy, không cần đăng nhập (máy con 1.6)
 - Chủ: "cần cơ chế vẫn dạy khi ko đăng nhập được không khi máy khởi động lại" → "đồng ý chạy nền".
 - `cai-chay-nen.ps1` (PowerShell Run as administrator, một lần): tải bản mới máy con + `CHAY-NEN.bat`, ghi PATH vào `chay-nen-path.cmd`, tạo tác vụ `Kingsmen may con - chay nen khi bat may` lúc khởi động (trễ 1 phút), kiểu **S4U** dưới chính tài khoản đó — không lưu mật khẩu; không giới hạn thời gian, tự chạy lại khi hỏng (99 lần, cách 1 phút).

@@ -92,3 +92,9 @@ test('1.6 chạy nền khi bật máy (26/09): khoá một máy con, CHAY-NEN l�
   assert.ok(!/-Password|Get-Credential|ConvertTo-SecureString/i.test(CAI), 'không hỏi / lưu mật khẩu');
   const KDL = fs.readFileSync(new URL('../tools/may-dung/cai-khoi-dong-lai.ps1', import.meta.url), 'utf8'); assert.match(KDL, /chay nen khi bat may/);
 });
+
+test('1.7 giữ máy thức khi máy con chạy (26/09: Q2 ngủ đông lúc rảnh) — SetThreadExecutionState, tự thoát theo tiến trình cha', () => {
+  assert.match(MAY, /const BAN = "1\.[7-9]"/);
+  assert.match(MAY, /SetThreadExecutionState/); assert.match(MAY, /0x80000001/); assert.match(MAY, /Get-Process -Id " \+ process\.pid/);
+  assert.match(MAY, /--cho-ngu/); assert.ok(!/powercfg/i.test(MAY), 'không đổi cài đặt nguồn của máy');
+});
