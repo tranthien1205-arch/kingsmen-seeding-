@@ -274,3 +274,12 @@ test('kho video: mã video, dòng của mục đoán từ tên, gán dòng / ch�
   assert.equal((await api('/tai-san/' + t.id + '/su-dung', 'POST', { su_dung: 'CHON' })).j.db.tai_san.find((x) => x.id === t.id).su_dung, 'CHON');
   assert.equal((await api('/tai-san/' + t.id + '/su-dung', 'POST', { su_dung: 'BO' })).j.db.tai_san.find((x) => x.id === t.id).su_dung, 'BO');
 });
+
+test('tự gán dòng không gán lại video đã đúng dòng ở lượt sau (26/09: thiếu cột dong → gán lại 64 video mỗi 15 phút)', async () => {
+  const DB = taoD1(); env = taoEnv(DB); TOKEN = (await api('/login', 'POST', { email: 'admin@kingsmen.vn', password: 'admin123' })).j.token;
+  const may = hubK(giai((await api('/may-ghep', 'POST', { ten: 'Q2' })).j.ma_ghep).khoa);
+  await may('/hub/thanh-pham', 'POST', { ten: 'f.mp4', nguon_id: 'f', nguon: 'TIKTOK', dai: 6, shots: [{ t0: 0, t1: 3 }, { t0: 3, t1: 6 }], timeline: [0, 1].map((i) => ({ tu: i * 3, den: i * 3 + 3, nhom: 'THI_CONG', thay: { nhom: 'THI_CONG', vat_lieu: ['Finex F300'], chac: 0.9 } })) });
+  let p; await worker.scheduled({}, env, { waitUntil: (x) => { p = x; } }); await p; const n1 = DB.raw.prepare(`SELECT COUNT(*) n FROM audit WHERE action LIKE 'tự gán dòng%'`).get().n;
+  await worker.scheduled({}, env, { waitUntil: (x) => { p = x; } }); await p; const n2 = DB.raw.prepare(`SELECT COUNT(*) n FROM audit WHERE action LIKE 'tự gán dòng%'`).get().n;
+  assert.equal(DB.raw.prepare(`SELECT dong FROM kho_thanh_pham WHERE nguon_id='f'`).get().dong, 'Finex F300'); assert.equal(n2, n1, 'lượt sau không gán lại');
+});
