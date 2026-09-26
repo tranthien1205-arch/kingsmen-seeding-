@@ -87,6 +87,7 @@ test('1.6 chạy nền khi bật máy (26/09): khoá một máy con, CHAY-NEN l�
   assert.ok(!/^\s*timeout\b/im.test(NEN), 'phiên nền không có bàn phím — không dùng timeout');
   assert.ok(NEN.includes("System32\\find.exe"), "find của Windows, không phải find của Git");
   const CAI = fs.readFileSync(new URL('../tools/may-dung/cai-chay-nen.ps1', import.meta.url), 'utf8');
+  assert.ok(CAI.includes(String.fromCharCode(67,58,92)+"may-dung") && !/C:may|DIRmay/.test(CAI), "đường dẫn giữ dấu gạch ngược (lỗi 26/09: C:may-dung)"); assert.match(CAI, /MAY_CON_DIR/);
   assert.match(CAI, /-LogonType S4U/); assert.match(CAI, /-AtStartup/); assert.match(CAI, /IsInRole/);
   assert.ok(!/-Password|Get-Credential|ConvertTo-SecureString/i.test(CAI), 'không hỏi / lưu mật khẩu');
   const KDL = fs.readFileSync(new URL('../tools/may-dung/cai-khoi-dong-lai.ps1', import.meta.url), 'utf8'); assert.match(KDL, /chay nen khi bat may/);
