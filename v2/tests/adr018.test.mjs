@@ -195,7 +195,7 @@ test('018h: lọc sâu kho mẫu + gán dòng hàng loạt + đề xuất kèm v
   const DB = taoD1(); env = taoEnv(DB); TOKEN = (await api('/login', 'POST', { email: 'admin@kingsmen.vn', password: 'admin123' })).j.token;
   const may = hubK(giai((await api('/may-ghep', 'POST', { ten: 'Q2' })).j.ma_ghep).khoa);
   await may('/hub/thanh-pham', 'POST', { ten: 'k.mp4', nguon_id: 'k', nguon: 'TIKTOK', dai: 6, shots: [{ t0: 0, t1: 3, khung_url: '/media/a.jpg' }, { t0: 3, t1: 6, khung_url: '/media/b.jpg' }], timeline: [
-    { tu: 0, den: 3, nhom: 'THI_CONG', khung_url: '/media/a.jpg', mo: { nhom: 'HOAN_THIEN' }, thay: { nhom: 'THI_CONG', buoc: 'Bơm keo chà ron vào mạch gạch', dung_cu: ['súng bơm keo', 'máy đo màu cầm tay'], chac: 0.9, mo_ta: 'đo màu ron bằng máy' } },
+    { tu: 0, den: 3, nhom: 'THI_CONG', khung_url: '/media/a.jpg', mo: { nhom: 'HOAN_THIEN' }, thay: { nhom: 'THI_CONG', buoc: 'Bơm keo chà ron vào mạch gạch', dung_cu: ['súng bơm keo', 'thước laser đo góc'], chac: 0.9, mo_ta: 'đo góc bằng thước laser' } },
     { tu: 3, den: 6, nhom: 'HOAN_THIEN', khung_url: '/media/b.jpg', mo: { nhom: 'HOAN_THIEN' }, thay: { nhom: 'HOAN_THIEN', dung_cu: [], chac: 0.9, mo_ta: 'ron trắng đều' } }] });
   const vid = DB.raw.prepare(`SELECT id FROM kho_thanh_pham`).get().id; const k = (qs) => api('/kho-mau?kn=K1&tt=&' + qs).then((r) => r.j);
   assert.equal((await k('nhom=THI_CONG')).loc, 1); assert.equal((await k('f=dung_cu&v=' + encodeURIComponent('súng bơm keo'))).loc, 1, 'trường mảng = giá trị');
@@ -206,8 +206,8 @@ test('018h: lọc sâu kho mẫu + gán dòng hàng loạt + đề xuất kèm v
   assert.equal((await k('dong=' + encodeURIComponent('Keo chít mạch'))).loc, 2); assert.equal(DB.raw.prepare(`SELECT dong FROM kho_thanh_pham`).get().dong, 'Keo chít mạch');
   assert.equal((await api('/mau-doan/dat-dong', 'POST', { ids: ['H:' + vid + ':0'], dong: 'Dòng bịa' })).s, 400);
   // đề xuất có ảnh mẫu + gợi ý gộp
-  const bn = (await api('/bo-nhan')).j; const dx = bn.de_xuat.find((x) => x.ten === 'máy đo màu cầm tay');
-  assert.equal(dx.vi_du[0].khung_url, '/media/a.jpg'); assert.equal(dx.vi_du[0].mo_ta, 'đo màu ron bằng máy'); assert.equal(dx.goi_y, null, 'không có nhãn nào giống');
+  const bn = (await api('/bo-nhan')).j; const dx = bn.de_xuat.find((x) => x.ten === 'thước laser đo góc');
+  assert.equal(dx.vi_du[0].khung_url, '/media/a.jpg'); assert.equal(dx.vi_du[0].mo_ta, 'đo góc bằng thước laser'); assert.equal(dx.goi_y, null, 'không có nhãn nào giống');
   DB.raw.prepare(`INSERT INTO bo_nhan (id,truong,ten,dong,trang_thai,nguon,created_at,updated_at) VALUES ('bn_x','dung_cu','bay miết inox cán gỗ','','DE_XUAT','THAY','','')`).run();
   assert.deepEqual((await api('/bo-nhan')).j.de_xuat.find((x) => x.id === 'bn_x').goi_y, { ten: 'bi cầu miết ron', ly_do: 'theo bộ nhãn chuẩn' });
 });
@@ -215,7 +215,7 @@ test('018h: lọc sâu kho mẫu + gán dòng hàng loạt + đề xuất kèm v
 test('018i: tự gán dòng theo vật liệu thầy thấy + hàng việc thay chủ (duyệt / gộp / tạo tên / dòng / nhãn), nhãn Claude không tính độ đúng', async () => {
   const DB = taoD1(); env = taoEnv(DB); TOKEN = (await api('/login', 'POST', { email: 'admin@kingsmen.vn', password: 'admin123' })).j.token;
   const may = hubK(giai((await api('/may-ghep', 'POST', { ten: 'Q2' })).j.ma_ghep).khoa);
-  const tp = async (id, vl, ten) => may('/hub/thanh-pham', 'POST', { ten: ten || id + '.mp4', nguon_id: id, nguon: 'TIKTOK', dai: 6, shots: [{ t0: 0, t1: 3 }, { t0: 3, t1: 6 }], timeline: [0, 1].map((i) => ({ tu: i * 3, den: i * 3 + 3, nhom: 'THI_CONG', thay: { nhom: 'THI_CONG', vat_lieu: vl, dung_cu: ['máy đo màu cầm tay'], chac: 0.9 } })) });
+  const tp = async (id, vl, ten) => may('/hub/thanh-pham', 'POST', { ten: ten || id + '.mp4', nguon_id: id, nguon: 'TIKTOK', dai: 6, shots: [{ t0: 0, t1: 3 }, { t0: 3, t1: 6 }], timeline: [0, 1].map((i) => ({ tu: i * 3, den: i * 3 + 3, nhom: 'THI_CONG', thay: { nhom: 'THI_CONG', vat_lieu: vl, dung_cu: ['thước laser đo góc'], chac: 0.9 } })) });
   await tp('a', ['sơn epoxy tự phẳng FINEX F300']); await tp('b', ['keo chà ron polyurea Kingsmen G6000']); await tp('c', ['nền gạch cũ']); await tp('d', [], 'Sàn Terrazy cao cấp.mp4');
   const cron = async () => { let p; await worker.scheduled({}, env, { waitUntil: (x) => { p = x; } }); await p; }; await cron();
   const dong = (n) => DB.raw.prepare(`SELECT dong FROM kho_thanh_pham WHERE nguon_id=?`).get(n).dong;
