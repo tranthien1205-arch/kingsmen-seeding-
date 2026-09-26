@@ -211,3 +211,25 @@ test('018h: lọc sâu kho mẫu + gán dòng hàng loạt + đề xuất kèm v
   DB.raw.prepare(`INSERT INTO bo_nhan (id,truong,ten,dong,trang_thai,nguon,created_at,updated_at) VALUES ('bn_x','dung_cu','bay miết inox cán gỗ','','DE_XUAT','THAY','','')`).run();
   assert.deepEqual((await api('/bo-nhan')).j.de_xuat.find((x) => x.id === 'bn_x').goi_y, { ten: 'bi cầu miết ron', ly_do: 'theo bộ nhãn chuẩn' });
 });
+
+test('018i: tự gán dòng theo vật liệu thầy thấy + hàng việc thay chủ (duyệt / gộp / tạo tên / dòng / nhãn), nhãn Claude không tính độ đúng', async () => {
+  const DB = taoD1(); env = taoEnv(DB); TOKEN = (await api('/login', 'POST', { email: 'admin@kingsmen.vn', password: 'admin123' })).j.token;
+  const may = hubK(giai((await api('/may-ghep', 'POST', { ten: 'Q2' })).j.ma_ghep).khoa);
+  const tp = async (id, vl, ten) => may('/hub/thanh-pham', 'POST', { ten: ten || id + '.mp4', nguon_id: id, nguon: 'TIKTOK', dai: 6, shots: [{ t0: 0, t1: 3 }, { t0: 3, t1: 6 }], timeline: [0, 1].map((i) => ({ tu: i * 3, den: i * 3 + 3, nhom: 'THI_CONG', thay: { nhom: 'THI_CONG', vat_lieu: vl, dung_cu: ['máy đo màu cầm tay'], chac: 0.9 } })) });
+  await tp('a', ['sơn epoxy tự phẳng FINEX F300']); await tp('b', ['keo chà ron polyurea Kingsmen G6000']); await tp('c', ['nền gạch cũ']); await tp('d', [], 'Sàn Terrazy cao cấp.mp4');
+  const cron = async () => { let p; await worker.scheduled({}, env, { waitUntil: (x) => { p = x; } }); await p; }; await cron();
+  const dong = (n) => DB.raw.prepare(`SELECT dong FROM kho_thanh_pham WHERE nguon_id=?`).get(n).dong;
+  assert.equal(dong('a'), 'Finex F300'); assert.equal(dong('b'), 'Keo chít mạch'); assert.equal(dong('c'), null, 'không rõ thì để người gán'); assert.equal(dong('d'), 'Terrazy', 'tên video có Terrazy');
+  // Claude soạn việc thay chủ → cron chạy qua đường ghi của app
+  const dx = DB.raw.prepare(`SELECT id, ten FROM bo_nhan WHERE trang_thai='DE_XUAT' AND truong='dung_cu'`).get(); const idC = DB.raw.prepare(`SELECT id FROM kho_thanh_pham WHERE nguon_id='c'`).get().id;
+  DB.raw.prepare(`INSERT OR REPLACE INTO module_config (id, cau_hinh, updated_at) VALUES ('viec_thay_chu', ?, '')`).run(JSON.stringify({ viec: [
+    { loai: 'bo_nhan', id: dx.id, hanh: 'doi_ten_duyet', ten: 'máy đo màu ron' }, { loai: 'dong', doi_tuong_id: idC, dong: 'Terrazy' },
+    { loai: 'nhan', mau_id: 'H:' + idC + ':0', nhan: { nhom: 'THI_CONG', buoc: 'Tạo nhám', dung_cu: ['máy mài sàn'] } }] }));
+  await cron();
+  assert.ok(DB.raw.prepare(`SELECT 1 x FROM bo_nhan WHERE truong='dung_cu' AND ten='máy đo màu ron' AND trang_thai='DUNG'`).get(), 'tạo tên chuẩn mới rồi duyệt');
+  assert.deepEqual(JSON.parse(DB.raw.prepare(`SELECT nhan_thay FROM mau_doan WHERE id=?`).get('H:' + idC + ':1').nhan_thay).dung_cu, ['máy đo màu ron'], 'mẫu đổi theo tên mới');
+  assert.equal(dong('c'), 'Terrazy'); const m0 = DB.raw.prepare(`SELECT trang_thai, nguoi_ten FROM mau_doan WHERE id=?`).get('H:' + idC + ':0'); assert.equal(m0.trang_thai, 'VANG'); assert.equal(m0.nguoi_ten, 'Claude (thay chủ)');
+  assert.equal(JSON.parse(DB.raw.prepare(`SELECT cau_hinh FROM module_config WHERE id='viec_thay_chu'`).get().cau_hinh).viec.length, 0, 'làm xong thì xoá khỏi hàng');
+  assert.ok(JSON.parse(DB.raw.prepare(`SELECT cau_hinh FROM module_config WHERE id='viec_thay_chu_kq'`).get().cau_hinh).lan[0].kq.length >= 4);
+  assert.equal((await api('/do-chinh-xac')).j.so_nhan, 0, 'nhãn Claude không tính vào độ đúng của thầy');
+});
