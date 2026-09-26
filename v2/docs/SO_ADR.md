@@ -394,6 +394,14 @@ Người duyệt: Thiện · Trạng thái: LÀM theo yêu cầu trực tiếp 2
 
 ## Changelog
 
+### 2026-09-27 · Nạp Drive đi sâu 5 tầng, chống trùng theo mã file — kho footage Terrazy từng nạp 0 file
+- **Đo:** job `tl_01b58296` (footage Terrazy) báo "không còn file mới (đã nạp 0)". Đọc thật thư mục công khai bằng đúng `docThuMuc`: clip nằm ở tầng 3–4 (SOURCE › CẢI TẠO TOLET › … › 3. TRỘN KEO › clip). Riêng POV nhà phố có 198 clip, POV văn phòng 89, POV chung cư 53. Máy nạp chỉ xuống 2 tầng.
+- **Sửa `nap-drive`:** tối đa 5 tầng / 150 thư mục. Chống trùng theo mã file Drive (thêm cột `tai_san.drive_id`); bản ghi cũ vẫn chống trùng theo tên. Hai file cùng tên ở hai thư mục khác nhau không còn bị bỏ nhầm.
+- **Xếp lại việc:** đã xếp lại 2 lệnh `nap_footage` (Terrazy, keo) qua `scripts/thay-chu.mjs`. Test 021g.
+- **Cũng trong đợt này:**
+  - Gỡ nguồn học nhầm "1. SOURCE - GÓC CẬN & TRUNG" (Drive 1pGyyxpN72, 20 video footage bị học như thành phẩm) bằng nút "Loại nguồn khỏi kho học" ở Nguồn học. Kho thành phẩm còn 89 video.
+  - `deploy.mjs` gọi làm nóng `/api/ban` sau deploy.
+
 ### 2026-09-27 · ADR-021b — G1 chốt từ Hồ sơ định vị (chủ chọn "Chốt từ Hồ sơ")
 - **Lý do:** chủ hỏi "tab này có cần thiết kế nâng cấp ko" khi xem tab "Tóm tắt & chốt (G1)". Ba ô chữ dài (định vị / tông giọng / đối tượng) trùng Hồ sơ định vị, nên hai nguồn dễ lệch. Ô nhỏ, chữ bị cắt, trên điện thoại không đọc được.
 - **Bản chốt G1** gồm nguyên hồ sơ (lõi + ý đồ), tỷ trọng pillar và định hướng giai đoạn:
