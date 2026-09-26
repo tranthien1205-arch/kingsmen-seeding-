@@ -394,6 +394,35 @@ Người duyệt: Thiện · Trạng thái: LÀM theo yêu cầu trực tiếp 2
 
 ## Changelog
 
+### 2026-09-27 · ADR-021b — G1 chốt từ Hồ sơ định vị (chủ chọn "Chốt từ Hồ sơ")
+- **Lý do:** chủ hỏi "tab này có cần thiết kế nâng cấp ko" khi xem tab "Tóm tắt & chốt (G1)". Ba ô chữ dài (định vị / tông giọng / đối tượng) trùng Hồ sơ định vị, nên hai nguồn dễ lệch. Ô nhỏ, chữ bị cắt, trên điện thoại không đọc được.
+- **Bản chốt G1** gồm nguyên hồ sơ (lõi + ý đồ), tỷ trọng pillar và định hướng giai đoạn:
+  - Cột mới: `chien_luoc.dinh_huong`, `chot_ma`; `chien_luoc_phien_ban.ho_so`, `dinh_huong`, `ma`.
+  - Mã băm (`maBanChot`) cho cờ `chien_luoc.da_doi` trong bootstrap: hồ sơ, pillar hoặc định hướng đổi sau khi chốt thì cờ bật.
+- **API:**
+  - `GET /chien-luoc/so-sanh`: tóm tắt bản sẽ chốt và danh sách thay đổi so với bản đang chạy (+ / − / ~ theo dòng, trụ, ý đồ bật / tắt, pillar %, định hướng; không báo thừa).
+  - `GET /chien-luoc/phien-ban/:pb`: xem lại một bản cũ.
+  - `PUT /chien-luoc {dinh_huong}`: lưu định hướng, trợ lý dùng ngay, không cần chốt.
+  - Chốt cần hồ sơ có ít nhất một câu định vị.
+- **Một nguồn:** mọi prompt đọc hồ sơ và định hướng, không đọc ba ô chữ cũ. Dữ liệu cũ vẫn giữ trong DB và trong các bản chốt cũ.
+  - `promptNoiDung` thêm "ĐỊNH HƯỚNG GIAI ĐOẠN" và "ĐỊNH HƯỚNG THÁNG" (lấy từ kế hoạch tháng của mục). Tông giọng lấy từ hồ sơ. Đối tượng lấy theo dòng; bài chưa rõ dòng thì lấy đối tượng của mọi dòng trong hồ sơ.
+  - Chấm ý tưởng, seeding và đề xuất thông điệp cũng lấy tông giọng / đối tượng từ hồ sơ.
+- **Giao diện:**
+  - Tab đổi tên "Chốt chiến lược (G1)", có dấu • khi đã đổi.
+  - Nội dung tab: ô "Định hướng giai đoạn này"; "Sẽ chốt · bản N" (câu định vị từng dòng, số ý đồ, pillar); "Đã đổi từ bản N"; nút chốt hai bước (không dùng `confirm`).
+  - Cột phải: pillar kèm số ý đồ và số mục tháng này; lịch sử chốt mở ra xem từng bản.
+  - Thẻ G1 ở trang chính: "Bản N · hồ sơ đã đổi, chưa chốt lại".
+- **Test:** 021f (bản chụp, so sánh đúng 4 thay đổi, cờ đã đổi, prompt không đọc chữ cũ); sửa test G1 của adr002 theo nghĩa mới. Tổng 152/152. Đã kiểm thật trên máy chủ thử ở 375 px và 1440 px: lưu định hướng, chốt hai bước, sửa pillar và thêm ý đồ thì báo đúng hai thay đổi.
+
+### 2026-09-26 · Khởi tạo schema một lần mỗi phiên bản mã (API prod ~22 s → ~0,4 s)
+- **Đo thật 16:21Z:** `/api/ban` mất 22–25 s trên cả hai tên miền, trang tĩnh chỉ 0,19 s. `ensureSchema` chạy khoảng 105 câu tạo bảng / thêm cột và seed ở mọi request, mỗi câu một lượt tới D1.
+- **Sửa:** mã băm schema lưu ở `module_config.schema_ban`; mỗi isolate nhớ theo `env.DB`. Sau deploy, lần gọi đầu 23 s (chạy một lần), các lần sau 0,34–0,52 s.
+- **Hai lỗi thứ tự lộ ra** (trước đây chỉ thành công nhờ request sau chạy lại):
+  - ALTER `buoc_thuc_hien` (ADR-006) nằm trước câu tạo bảng.
+  - ALTER `mau_doan.goc_quay` nằm ở `index.js` trong khi bảng tạo ở `mau.js`.
+
+  Cả hai đã chuyển về đúng chỗ. Test 021e.
+
 ### 2026-09-26 · ADR-021 — Hồ sơ định vị, ý đồ triển khai, trợ lý viết theo dòng
 - **Bản gốc hồ sơ:** `worker/ho-so-dinh-vi.js` gồm thương hiệu mẹ và định vị 3 dòng: keo 5 trụ Message House, Terrazy 3 dòng con, Finex "cần bổ sung". Kèm 18 ý đồ và 4 claim đề xuất.
 - **API mới:**

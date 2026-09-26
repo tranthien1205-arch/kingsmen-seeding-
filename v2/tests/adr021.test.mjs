@@ -138,3 +138,31 @@ test('021e: khởi tạo schema chạy MỘT LẦN mỗi phiên bản mã — re
   DB.raw.prepare(`UPDATE module_config SET cau_hinh='{"ban":"cu"}' WHERE id='schema_ban'`).run(); const DB3 = { ...DB2 }; env = taoEnv(DB3);
   assert.equal((await api('/ho-so-dinh-vi')).s, 200); assert.ok(ddl > 50, 'phiên bản đổi → chạy lại'); assert.doesNotMatch(DB.raw.prepare(`SELECT cau_hinh FROM module_config WHERE id='schema_ban'`).get().cau_hinh, /"cu"/);
 });
+
+test('021f: G1 chốt từ Hồ sơ — bản chụp hồ sơ + pillar + định hướng; so sánh chỉ ra đã đổi gì; cờ đã đổi sau khi chốt; prompt đọc định hướng, không đọc khối chữ cũ', async () => {
+  const DB = await batDau();
+  let s = (await api('/chien-luoc/so-sanh')).j; assert.equal(s.phien_ban, 0); assert.equal(s.co_ban_cu, false); assert.equal(s.tom_tat.dong[0].cau_dinh_vi, 'Keo chít mạch chuyên dụng cho từng khu vực'); assert.equal(s.tom_tat.pillars.length, 5);
+  assert.ok(s.tom_tat.pillars.find((p) => p.ten === 'Chuẩn thi công & chứng minh').so_y_do >= 3);
+  await api('/chien-luoc', 'PUT', { dinh_huong: 'Quý 4: đẩy Terrazy Wall + tuyển đội Kingpro' });
+  let r = await api('/chien-luoc/chot', 'POST', { ghi_chu: 'bản đầu từ hồ sơ' }); assert.equal(r.s, 200); assert.equal(r.j.db.chien_luoc.phien_ban, 1); assert.equal(r.j.db.chien_luoc.da_doi, false);
+  assert.ok(!('ho_so' in r.j.db.chien_luoc_phien_ban[0]), 'bootstrap không mang bản chụp nặng');
+  const chup = DB.raw.prepare(`SELECT ho_so, dinh_huong, ma FROM chien_luoc_phien_ban WHERE phien_ban=1`).get(); assert.equal(JSON.parse(chup.ho_so).dong.length, 3); assert.match(chup.dinh_huong, /Terrazy Wall/);
+  s = (await api('/chien-luoc/so-sanh')).j; assert.equal(s.da_doi, false); assert.deepEqual(s.thay_doi, []);
+  // sửa hồ sơ + pillar + định hướng → so sánh chỉ đúng chỗ đổi; bootstrap báo đã đổi
+  await api('/ho-so-dinh-vi/y-do', 'POST', { ten: 'Mùa mưa – ron không thấm', dong: 'Keo chít mạch', pillar: 'Bền lâu, ít rủi ro hậu mãi', thong_diep: 'Mùa mưa lộ ron kém' });
+  const k = (await api('/ho-so-dinh-vi')).j.ho_so.y_do.find((y) => y.id === 'tz_mono_co_gian'); await api('/ho-so-dinh-vi/y-do', 'POST', { ...k, active: false });
+  const pid = DB.raw.prepare(`SELECT id FROM pillars WHERE ten='Chuẩn thi công & chứng minh'`).get().id; await api('/danh-muc/pillars/' + pid, 'PATCH', { ty_trong: 30 });
+  r = await api('/chien-luoc', 'PUT', { dinh_huong: 'Quý 4: Terrazy Wall, Kingpro, keo mùa mưa' }); assert.equal(r.j.db.chien_luoc.da_doi, true);
+  s = (await api('/chien-luoc/so-sanh')).j; const td = s.thay_doi.map((x) => x.loai + ' ' + x.noi_dung);
+  assert.ok(td.includes('+ Ý đồ "Mùa mưa – ron không thấm"')); assert.ok(td.includes('- Tắt ý đồ "Terrazzo biết co giãn"')); assert.ok(td.includes('~ Pillar "Chuẩn thi công & chứng minh" 20% → 30%')); assert.ok(td.includes('~ Định hướng giai đoạn'));
+  assert.equal(td.length, 4, 'không báo thừa: ' + td.join(' | '));
+  // chốt bản 2; xem lại bản 1
+  r = await api('/chien-luoc/chot', 'POST', {}); assert.equal(r.j.db.chien_luoc.phien_ban, 2); assert.equal(r.j.db.chien_luoc.da_doi, false);
+  const v1 = (await api('/chien-luoc/phien-ban/1')).j; assert.equal(v1.co_ho_so, true); assert.equal(v1.tom_tat.y_do_bat, 18); assert.equal(v1.ghi_chu, 'bản đầu từ hồ sơ');
+  // prompt: định hướng giai đoạn + tháng, tông giọng hồ sơ, không còn khối chữ cũ
+  DB.raw.prepare(`UPDATE chien_luoc SET dinh_vi='KHOI_CHU_CU', tong_giong='TONG_CU', doi_tuong='DOI_TUONG_CU' WHERE id=1`).run();
+  const th = DB.raw.prepare(`SELECT strftime('%Y-%m','now') t`).get().t; await api('/ke-hoach/' + th, 'PUT', { chi_tieu: { tong_bai: 1, theo_pillar: {}, theo_dinh_dang: {}, theo_kenh: {}, theo_muc_tieu: {}, ket_qua: {} }, dinh_huong: 'Tháng này đẩy chuẩn thi công' });
+  const m = (await api('/muc', 'POST', { tieu_de: 'Chào tháng mới', dinh_dang: 'ANH' })).j.id; await api('/noi-dung/ai-viet', 'POST', { muc_id: m });
+  const u = GUI.at(-1).messages[0].content; assert.match(u, /ĐỊNH HƯỚNG GIAI ĐOẠN \(ưu tiên khi chọn góc\): Quý 4: Terrazy Wall, Kingpro, keo mùa mưa/); assert.match(u, /ĐỊNH HƯỚNG THÁNG: Tháng này đẩy chuẩn thi công/);
+  assert.ok(!/KHOI_CHU_CU|TONG_CU|DOI_TUONG_CU/.test(u), 'không đọc ba ô chữ cũ'); assert.match(u, /ĐỐI TƯỢNG: Keo chít mạch: Chủ nhà xây \/ sửa/);
+});

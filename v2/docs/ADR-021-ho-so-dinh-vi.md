@@ -58,3 +58,15 @@
 
 - Chấm ý tưởng (B1) chưa trả thẳng ý đồ. Khi ý tưởng thành mục, máy gắn ý đồ theo luật ở mục 2.
 - Finex F300 chưa có hồ sơ, nên không bịa ý đồ. Dòng này hiện "Cần bổ sung".
+
+## ADR-021b — G1 chốt từ Hồ sơ (27/09/2026, chủ chọn "Chốt từ Hồ sơ")
+
+- Bản chốt G1 gồm nguyên Hồ sơ định vị (lõi + ý đồ), tỷ trọng pillar và định hướng giai đoạn. Mỗi bản lưu thành một phiên bản, xem lại được.
+- Ba ô chữ cũ (định vị, tông giọng, đối tượng) bỏ khỏi giao diện và không còn đi vào prompt. Chỉ còn một nguồn là hồ sơ, cộng thêm định hướng.
+- Tab G1 gồm:
+  - định hướng giai đoạn: lưu là dùng ngay;
+  - "Sẽ chốt";
+  - "Đã đổi từ bản N" (máy chủ so từng phần);
+  - nút chốt hai bước;
+  - lịch sử chốt.
+- Máy chủ gắn cờ `da_doi` theo mã băm. Thẻ G1 ở trang chính báo "hồ sơ đã đổi, chưa chốt lại".

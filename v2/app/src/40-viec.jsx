@@ -7,9 +7,9 @@ function ViecCuaToi({go}){
   const cl=db.chien_luoc||{};
   // 4 cổng — đợt 1 mới có G1 (chiến lược); G2–G4 mở ở đợt 2–4
   const thangNay=db.hang_so.thang_nay; const khNay=(db.ke_hoach_thang||[]).find(k=>k.thang===thangNay); const ytMoi=(db.y_tuong||[]).filter(y=>y.trang_thai==='MOI').length;
-  const daSuaCL=cl.updated_at&&cl.chot_at&&cl.updated_at>cl.chot_at;
+  const daSuaCL=!!cl.da_doi;   /* ADR-021b: bản chốt G1 = hồ sơ định vị + pillar + định hướng; đổi sau khi chốt thì máy chủ báo */
   const cong=[
-    { ma:'G1', ten:'Chốt định vị & chiến lược', tt: cl.phien_ban>0?('Phiên bản '+cl.phien_ban+(daSuaCL?' · đã sửa, chưa chốt lại':'')):(cl.dinh_vi?'Đã soạn, chưa chốt':'Chưa soạn'), page:'chienluoc', ok:cl.phien_ban>0&&!daSuaCL },
+    { ma:'G1', ten:'Chốt định vị & chiến lược', tt: cl.phien_ban>0?('Bản '+cl.phien_ban+(daSuaCL?' · hồ sơ đã đổi, chưa chốt lại':'')):'Hồ sơ định vị sẵn sàng, chưa chốt', page:'chienluoc', ok:cl.phien_ban>0&&!daSuaCL },
     { ma:'G2', ten:'Chốt kế hoạch tháng', tt: khNay?(khNay.trang_thai==='CHOT'?('Tháng '+thangNay+' đã chốt'):('Tháng '+thangNay+' — '+(khNay.nguon==='DE_XUAT'?'máy đề xuất':'đang soạn')+', CHỜ CHỐT')):('Tháng '+thangNay+' chưa lập'+(ytMoi?(' · '+ytMoi+' ý tưởng chờ chấm'):'')), page:'chienluoc', ok:khNay?khNay.trang_thai==='CHOT':false },
     { ma:'G3', ten:'Duyệt nội dung trước đăng', tt:(()=>{ const cho=(db.duyet||[]).filter(d=>d.trang_thai==='CHO'); const qua=cho.filter(d=>Date.now()-Date.parse(d.created_at)>24*36e5).length; const toi=cho.filter(d=>laGat(me)&&d.nguoi_gui_id!==me.id).length; return cho.length?(cho.length+' bài chờ duyệt'+(toi?(' · '+toi+' tới lượt bạn'):'')+(qua?(' · '+qua+' quá 24h'):'')):'Không có bài chờ'; })(), page:'dongchay', ok:(db.duyet||[]).filter(d=>d.trang_thai==='CHO').length===0 },
     { ma:'G4', ten:'Duyệt đề xuất cải tiến', tt:(()=>{ const n=(db.de_xuat||[]).filter(d=>d.trang_thai==='CHO').length; const bc=(db.bao_cao||[]).filter(b=>b.trang_thai==='NHAP').length; return (n?(n+' đề xuất chờ duyệt'):'Không có đề xuất chờ')+(bc?(' · '+bc+' báo cáo chờ gửi'):''); })(), page:'ketqua', ok:(db.de_xuat||[]).filter(d=>d.trang_thai==='CHO').length===0 },

@@ -7,12 +7,12 @@ function ChienLuocKeHoach(){
   const [tab,setTab]=useState('hoso');
   const chiXem=!laStaff(me);
   const ytMoi=(db.y_tuong||[]).filter(y=>y.trang_thai==='MOI').length;
-  const tabs=[{key:'hoso',label:'🧭 Hồ sơ định vị'},{key:'chienluoc',label:'Tóm tắt & chốt (G1)'},{key:'thongdiep',label:'Thông điệp seeding',count:((db.seeding||{}).thong_diep||[]).filter(t=>t.active).length||null},{key:'kehoach',label:'Kế hoạch tháng'},{key:'tuan',label:'Tuần & mục'},{key:'ytuong',label:'Ý tưởng & trend',count:ytMoi||null},{key:'pillars',label:'Pillar'},{key:'frameworks',label:'Framework'},{key:'san_pham',label:'Sản phẩm'},{key:'claim_cam',label:'Claim cấm'},{key:'kenh',label:'Kênh'}];
+  const tabs=[{key:'hoso',label:'🧭 Hồ sơ định vị'},{key:'chienluoc',label:'Chốt chiến lược (G1)'+(((db.chien_luoc||{}).da_doi)?' •':'')},{key:'thongdiep',label:'Thông điệp seeding',count:((db.seeding||{}).thong_diep||[]).filter(t=>t.active).length||null},{key:'kehoach',label:'Kế hoạch tháng'},{key:'tuan',label:'Tuần & mục'},{key:'ytuong',label:'Ý tưởng & trend',count:ytMoi||null},{key:'pillars',label:'Pillar'},{key:'frameworks',label:'Framework'},{key:'san_pham',label:'Sản phẩm'},{key:'claim_cam',label:'Claim cấm'},{key:'kenh',label:'Kênh'}];
   return <div className="space-y-4">
     <PageHeader title="🎯 Chiến lược & Kế hoạch" sub="Hồ sơ định vị là la bàn cho mọi gốc content · G1 chốt chiến lược · G2 chốt kế hoạch tháng. Danh mục gốc ở đây là dữ kiện thật duy nhất máy được dùng."/>
     <Tabs size="sm" active={tab} onChange={setTab} tabs={tabs}/>
     {tab==='hoso' && <HoSoDinhVi chiXem={chiXem}/>}
-    {tab==='chienluoc' && <ChienLuocForm chiXem={chiXem}/>}
+    {tab==='chienluoc' && <ChotChienLuoc chiXem={chiXem} onSuaHoSo={()=>setTab('hoso')}/>}
     {tab==='thongdiep' && <ThongDiepSeeding chiXem={chiXem}/>}
     {tab==='kehoach' && <KeHoachThang chiXem={chiXem}/>}
     {tab==='tuan' && <TuanVaMuc chiXem={chiXem}/>}
@@ -20,31 +20,64 @@ function ChienLuocKeHoach(){
     {['pillars','frameworks','san_pham','claim_cam','kenh'].includes(tab) && <DanhMuc bang={tab} chiXem={chiXem}/>}
   </div>;
 }
-function ChienLuocForm({chiXem}){
+// ----- G1: chốt chiến lược từ Hồ sơ định vị (ADR-021b, chủ chọn 27/09 "Chốt từ Hồ sơ") — định hướng giai đoạn · sẽ chốt gì · đã đổi gì · lịch sử -----
+function ChotChienLuoc({chiXem, onSuaHoSo}){
   const { db, me, goi, notify } = useApp(); const cl=db.chien_luoc||{};
-  const [f,setF]=useState({dinh_vi:cl.dinh_vi||'', tong_giong:cl.tong_giong||'', doi_tuong:cl.doi_tuong||''});
-  useEffect(()=>{ setF({dinh_vi:cl.dinh_vi||'', tong_giong:cl.tong_giong||'', doi_tuong:cl.doi_tuong||''}); },[cl.updated_at]);
-  const [busy,setBusy]=useState(false); const [ghiChu,setGhiChu]=useState('');
-  const luu=async()=>{ setBusy(true); const r=await goi('/chien-luoc',{method:'PUT',body:f}); setBusy(false); if(r.ok) notify('Đã lưu chiến lược'); else notify(r.msg,'err'); };
-  const chot=async()=>{ if(!confirm('Chốt chiến lược thành phiên bản '+((cl.phien_ban||0)+1)+'? Máy sẽ dùng bản này để đề xuất kế hoạch.')) return; setBusy(true); const r=await goi('/chien-luoc/chot',{method:'POST',body:{ghi_chu:ghiChu}}); setBusy(false); if(r.ok){ notify('Đã chốt chiến lược (G1)'); setGhiChu(''); } else notify(r.msg,'err'); };
+  const [ss,setSs]=useState(null); const [loi,setLoi]=useState(null); const [busy,setBusy]=useState(false); const [ghiChu,setGhiChu]=useState(''); const [xacNhan,setXacNhan]=useState(false);
+  const [dh,setDh]=useState(cl.dinh_huong||''); const [xemPB,setXemPB]=useState(null);
+  useEffect(()=>{ setDh(cl.dinh_huong||''); },[cl.dinh_huong]);
+  const tai=async()=>{ const r=await goi('/chien-luoc/so-sanh'); if(r.ok){ setSs(r); setLoi(null); } else setLoi(r.msg); };
+  useEffect(()=>{ tai(); },[cl.phien_ban, cl.da_doi, cl.dinh_huong, (db.y_do||[]).length, (db.pillars||[]).map(p=>p.ty_trong+':'+p.active).join()]);
+  const luuDH=async()=>{ setBusy(true); const r=await goi('/chien-luoc',{method:'PUT',body:{dinh_huong:dh}}); setBusy(false); if(r.ok) notify('Đã lưu định hướng — trợ lý viết bài dùng ngay'); else notify(r.msg,'err'); };
+  const chot=async()=>{ if(!xacNhan){ setXacNhan(true); return; } setXacNhan(false); setBusy(true); const r=await goi('/chien-luoc/chot',{method:'POST',body:{ghi_chu:ghiChu}}); setBusy(false); if(r.ok){ notify('Đã chốt chiến lược bản '+r.db.chien_luoc.phien_ban+' (G1)'); setGhiChu(''); tai(); } else notify(r.msg,'err'); };
+  const moPB=async pb=>{ if(xemPB&&xemPB.phien_ban===pb){ setXemPB(null); return; } const r=await goi('/chien-luoc/phien-ban/'+pb); if(r.ok) setXemPB(r); else notify(r.msg,'err'); };
   const duocChot=laGat(me)||me.vai_tro==='GIAM_DOC';
-  const daSua=cl.updated_at && cl.chot_at && cl.updated_at>cl.chot_at;
   const tongPillar=(db.pillars||[]).filter(p=>p.active).reduce((s,p)=>s+Number(p.ty_trong||0),0);
-  return <div className="grid lg:grid-cols-[2fr_1fr] gap-3">
-    <Card>
-      <div className="flex items-center justify-between mb-3 gap-2 flex-wrap"><SectionTitle>Định vị & chiến lược</SectionTitle><Pill cls={cl.phien_ban>0&&!daSua?'bg-emerald-100 text-emerald-800':'bg-amber-100 text-amber-800'}>{cl.phien_ban>0?('phiên bản '+cl.phien_ban+' · '+cl.chot_boi+' · '+fmtDate(cl.chot_at)+(daSua?' · đã sửa sau khi chốt':'')):'chưa chốt (G1)'}</Pill></div>
-      <Callout tone="info" className="mb-3">Trợ lý viết bài dùng <b>🧭 Hồ sơ định vị</b> theo từng dòng (lõi, ý đồ triển khai, xu hướng). Các ô dưới là tóm tắt chung — dùng khi bài chưa rõ dòng, và là bản được chốt ở G1.</Callout>
-      <Field label="Định vị thương hiệu (tóm tắt chung)" hint="Kingsmen là gì, khác gì, hứa gì — máy dùng khi bài chưa rõ dòng sản phẩm."><Textarea rows="4" value={f.dinh_vi} onChange={e=>setF({...f,dinh_vi:e.target.value})} disabled={chiXem}/></Field>
-      <Field label="Tông giọng"><Textarea rows="2" value={f.tong_giong} onChange={e=>setF({...f,tong_giong:e.target.value})} disabled={chiXem} placeholder="VD: chuyên gia, chắc chắn, không hô hào…"/></Field>
-      <Field label="Đối tượng"><Textarea rows="2" value={f.doi_tuong} onChange={e=>setF({...f,doi_tuong:e.target.value})} disabled={chiXem} placeholder="VD: nhà thầu, thợ ốp lát, chủ nhà đang hoàn thiện…"/></Field>
-      <div className="flex gap-2 flex-wrap items-end">{!chiXem && <Btn variant="ghost" onClick={luu} disabled={busy}>💾 Lưu nháp</Btn>}
-        {duocChot && <><Input className="!w-56" placeholder="ghi chú phiên bản (tuỳ chọn)" value={ghiChu} onChange={e=>setGhiChu(e.target.value)}/><Btn variant="brand" onClick={chot} disabled={busy||!cl.dinh_vi}>✅ Chốt chiến lược (G1)</Btn></>}</div>
-    </Card>
-    <div className="space-y-3">
+  if(loi) return <Callout tone="danger">Không tải được bản chốt: {loi} · <LinkBtn onClick={tai}>Thử lại</LinkBtn></Callout>;
+  const tt=ss&&ss.tom_tat; const pbMoi=(cl.phien_ban||0)+1; const doiDH=(dh||'')!==(cl.dinh_huong||''); const daDoi=!!(ss&&ss.da_doi);
+  const LOAI={ '+':['+','bg-emerald-100 text-emerald-800'], '-':['−','bg-rose-100 text-rose-800'], '~':['~','bg-amber-100 text-amber-900'] };
+  return <div className="grid lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)] gap-3 items-start">
+    <div className="space-y-3 min-w-0">
+      <Card pad="p-0" className="overflow-hidden">
+        <div className="px-4 py-3 border-b border-line flex items-start justify-between gap-2 flex-wrap">
+          <div className="min-w-0"><div className="font-display font-bold text-ink text-[16px]">Chốt chiến lược (G1)</div><div className="text-[11.5px] text-ink-muted leading-snug mt-0.5">Bản chốt = nguyên Hồ sơ định vị + tỷ trọng pillar + định hướng giai đoạn — lưu thành phiên bản, xem lại được</div></div>
+          <Pill cls={cl.phien_ban>0&&!daDoi?'bg-emerald-100 text-emerald-800':'bg-amber-100 text-amber-800'}>{cl.phien_ban>0?('bản '+cl.phien_ban+' · '+(cl.chot_boi||'')+' · '+fmtDate(cl.chot_at)+(daDoi?' · đã đổi, chưa chốt lại':'')):'chưa chốt'}</Pill></div>
+        <div className="p-4">
+          <Field label="Định hướng giai đoạn này" hint="Một hai câu: đang ưu tiên dòng / chiến dịch / thông điệp nào. Trợ lý viết bài ưu tiên hướng này khi chọn góc — lưu là dùng ngay, không cần chốt." className="!mb-0"><Textarea rows="2" value={dh} onChange={e=>setDh(e.target.value)} disabled={chiXem} maxLength={600} placeholder="VD: Quý 4 đẩy Terrazy Wall (pilot) + tuyển đội Kingpro; keo nhấn mùa mưa – ron không thấm"/></Field>
+          {!chiXem&&doiDH&&<div className="flex justify-end mt-2"><Btn variant="ghost" className="!py-1.5 !text-xs" onClick={luuDH} disabled={busy}>💾 Lưu định hướng</Btn></div>}
+        </div>
+      </Card>
+      <Card pad="p-4">
+        <div className="flex items-center justify-between gap-2 flex-wrap mb-2.5"><SectionTitle>Sẽ chốt · bản {pbMoi}</SectionTitle>{onSuaHoSo&&<LinkBtn onClick={onSuaHoSo}>Sửa nội dung ở 🧭 Hồ sơ định vị →</LinkBtn>}</div>
+        {!tt?<div className="h-24 rounded-xl bg-slate-100 animate-pulse"/>:<div className="space-y-2.5">
+          {tt.tagline&&<div className="text-[13px] text-ink font-semibold">{tt.tagline}</div>}
+          <div className="divide-y divide-line rounded-xl border border-line">{tt.dong.map(d=><div key={d.dong} className="px-3 py-2 flex items-start gap-3"><span className="shrink-0 w-[92px] text-[12px] font-bold text-ink leading-snug">{d.dong}</span><div className="min-w-0 flex-1 text-[12.5px] leading-snug">{d.cau_dinh_vi?<span className="text-ink">“{d.cau_dinh_vi}”</span>:<span className="text-amber-800">chưa có câu định vị</span>}{d.trang_thai&&<div className="text-[11px] text-ink-muted mt-0.5">{d.trang_thai}</div>}</div><span className="text-[11px] text-ink-muted whitespace-nowrap">{tt.y_do_theo_dong[d.dong]||0} ý đồ</span></div>)}</div>
+          <div className="text-[12.5px] text-ink"><b>{tt.y_do_bat}</b> ý đồ đang bật{tt.y_do_theo_dong['Mọi dòng']?(' (gồm '+tt.y_do_theo_dong['Mọi dòng']+' ý đồ chung)'):''} · pillar {tt.pillars.map(p=>p.ty_trong).join(' / ')}%</div>
+          {tt.dinh_huong&&<div className="text-[12.5px] text-ink-soft leading-snug"><b className="text-ink">Định hướng: </b>{tt.dinh_huong}</div>}
+        </div>}
+      </Card>
+      <Card pad="p-4">
+        <SectionTitle className="mb-2">{cl.phien_ban>0?('Đã đổi từ bản '+cl.phien_ban):'Lần chốt đầu'}</SectionTitle>
+        {!ss?<div className="h-12 rounded-xl bg-slate-100 animate-pulse"/>
+          :cl.phien_ban>0&&!ss.co_ban_cu?<div className="text-[12.5px] text-ink-muted leading-snug">Bản {cl.phien_ban} chốt trước khi có Hồ sơ định vị (chỉ lưu khối chữ cũ) — lần chốt này là bản đầu từ hồ sơ.</div>
+          :(ss.thay_doi||[]).length?<ul className="space-y-1">{ss.thay_doi.map((x,i)=>{ const [k,c]=LOAI[x.loai]||LOAI['~']; return <li key={i} className="flex items-start gap-2 text-[12.5px]"><span className={"shrink-0 w-5 h-5 rounded-md grid place-items-center font-bold "+c}>{k}</span><span className="text-ink leading-snug pt-px">{x.noi_dung}</span></li>; })}</ul>
+          :<div className="text-[12.5px] text-ink-muted">{cl.phien_ban>0?'Chưa có thay đổi so với bản đang chạy.':'Chưa chốt lần nào — bấm chốt để lưu bản 1 từ hồ sơ hiện tại.'}</div>}
+        {duocChot&&!chiXem?<div className="mt-3 pt-3 border-t border-line flex flex-wrap gap-2 items-center">
+          <Input className="!w-full sm:!w-64 !py-2" placeholder="ghi chú phiên bản (tuỳ chọn)" value={ghiChu} onChange={e=>setGhiChu(e.target.value)}/>
+          <Btn variant={xacNhan?'ok':'brand'} onClick={chot} disabled={busy||!tt}>{xacNhan?('Bấm lần nữa: chốt bản '+pbMoi):('✅ Chốt bản '+pbMoi)}</Btn>
+          {xacNhan&&<LinkBtn tone="back" onClick={()=>setXacNhan(false)}>Huỷ</LinkBtn>}
+          {cl.phien_ban>0&&ss&&!daDoi&&!xacNhan&&<span className="text-[11.5px] text-ink-muted">Bản đang chạy đã khớp hồ sơ — chỉ chốt khi muốn đánh dấu mốc mới.</span>}
+        </div>:<div className="mt-2 text-[11.5px] text-ink-muted">Giám đốc, Trưởng MKT hoặc Admin chốt G1.</div>}
+      </Card>
+    </div>
+    <div className="space-y-3 min-w-0">
       <Card pad="p-3"><SectionTitle className="mb-2">Trụ cột nội dung</SectionTitle>
-        {(db.pillars||[]).filter(p=>p.active).map(p=><div key={p.id} className="mb-2"><div className="flex justify-between text-xs"><span className="text-ink font-semibold">{p.ten} <Pill cls={MUC_TIEU_CLS[p.muc_tieu]||''}>{MUC_TIEU_LABEL[p.muc_tieu]||'Brand'}</Pill></span><span className="text-ink-muted">{p.ty_trong}%</span></div><Thanh pct={p.ty_trong}/></div>)}
-        <div className={"text-[11px] mt-2 "+(tongPillar===100?'text-emerald-700':'text-amber-700')}>Tổng {tongPillar}% {tongPillar!==100 && '— nên bằng 100%'}</div></Card>
-      {(db.chien_luoc_phien_ban||[]).length>0 && <Card pad="p-3"><SectionTitle className="mb-1">Lịch sử chốt</SectionTitle>{(db.chien_luoc_phien_ban||[]).map(v=><div key={v.id} className="text-[11px] text-ink-muted py-1 border-t border-line">v{v.phien_ban} · {v.chot_boi} · {fmtDate(v.chot_at)}{v.ghi_chu?(' · '+v.ghi_chu):''} · {(v.pillars||[]).map(p=>p.ten+' '+p.ty_trong+'%').join(', ')}</div>)}</Card>}
+        {(db.pillars||[]).filter(p=>p.active).map(p=>{ const x=((tt&&tt.pillars)||[]).find(y=>y.ten===p.ten); const coMuc=(db.muc_noi_dung||[]).filter(m=>m.thang===db.hang_so.thang_nay&&m.pillar_id===p.id).length;
+          return <div key={p.id} className="mb-2.5"><div className="flex justify-between items-center gap-2 text-xs"><span className="text-ink font-semibold min-w-0">{p.ten} <Pill cls={MUC_TIEU_CLS[p.muc_tieu]||''}>{MUC_TIEU_LABEL[p.muc_tieu]||'Brand'}</Pill></span><span className="text-ink-muted whitespace-nowrap">{p.ty_trong}%</span></div><Thanh pct={p.ty_trong}/><div className="text-[11px] text-ink-muted mt-0.5">{x?x.so_y_do:0} ý đồ · {coMuc} mục tháng này</div></div>; })}
+        <div className={"text-[11px] mt-2 "+(tongPillar===100?'text-emerald-700':'text-amber-700')}>Tổng {tongPillar}%{tongPillar!==100?' — nên bằng 100%':''} · sửa tỷ trọng ở tab Pillar</div></Card>
+      {(db.chien_luoc_phien_ban||[]).length>0&&<Card pad="p-3"><SectionTitle className="mb-1">Lịch sử chốt</SectionTitle>{(db.chien_luoc_phien_ban||[]).map(v=><div key={v.id} className="py-1.5 border-t border-line">
+        <button type="button" onClick={()=>moPB(v.phien_ban)} aria-expanded={!!(xemPB&&xemPB.phien_ban===v.phien_ban)} className="w-full text-left text-[12px] text-ink hover:text-brand-dark"><b>Bản {v.phien_ban}</b> · {v.chot_boi} · {fmtDate(v.chot_at)}{v.ghi_chu?(' · '+v.ghi_chu):''}</button>
+        {xemPB&&xemPB.phien_ban===v.phien_ban&&<div className="mt-1.5 rounded-lg bg-slate-50 border border-line p-2 text-[11.5px] text-ink-soft space-y-0.5 leading-snug">{xemPB.tom_tat?<>{xemPB.tom_tat.dong.map(d=><div key={d.dong}><b className="text-ink">{d.dong}:</b> {d.cau_dinh_vi||'—'}</div>)}<div>{xemPB.tom_tat.y_do_bat} ý đồ · pillar {xemPB.tom_tat.pillars.map(p=>p.ten+' '+p.ty_trong+'%').join(', ')}</div>{xemPB.tom_tat.dinh_huong&&<div><b className="text-ink">Định hướng:</b> {xemPB.tom_tat.dinh_huong}</div>}</>:<div>Bản chốt trước khi có hồ sơ — chỉ lưu khối chữ cũ.</div>}</div>}</div>)}</Card>}
     </div>
   </div>;
 }

@@ -24,9 +24,8 @@ test('chuẩn bị: admin, người dùng, danh mục', async () => {
   const r2 = await api('/danh-muc/kenh', 'POST', { ten: 'Fanpage', loai: 'FANPAGE' }); k1 = r2.j.id; await api('/danh-muc/kenh', 'POST', { ten: 'TikTok', loai: 'TIKTOK' });
   assert.equal(r2.j.db.pillars.find(p => p.id === p2).muc_tieu, 'BAN_HANG');
 });
-test('G1: chốt chiến lược = snapshot phiên bản; Marketing không chốt; GĐ chốt được', async () => {
-  assert.equal((await api('/chien-luoc/chot', 'POST', {})).status, 400, 'chưa có định vị');
-  await api('/chien-luoc', 'PUT', { dinh_vi: 'Keo ron polyurea', tong_giong: 'chắc chắn', doi_tuong: 'thợ' }, tMkt);
+test('G1: chốt chiến lược = snapshot phiên bản (từ 27/09: bản chụp Hồ sơ định vị + pillar + định hướng); Marketing không chốt; GĐ chốt được', async () => {
+  await api('/chien-luoc', 'PUT', { dinh_huong: 'Quý 4: đẩy Terrazy Wall + tuyển đội Kingpro' }, tMkt);
   assert.equal((await api('/chien-luoc/chot', 'POST', {}, tMkt)).status, 403);
   let r = await api('/chien-luoc/chot', 'POST', { ghi_chu: 'bản đầu' }, tGD); assert.equal(r.status, 200);
   assert.equal(r.j.db.chien_luoc.phien_ban, 1); assert.equal(r.j.db.chien_luoc_phien_ban[0].pillars.length, 2); assert.equal(r.j.db.chien_luoc_phien_ban[0].chot_boi, 'Sếp');
