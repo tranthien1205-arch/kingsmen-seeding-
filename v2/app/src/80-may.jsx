@@ -6,7 +6,7 @@ function May(){
   return <div className="space-y-4">
     <PageHeader title="🤖 Máy" sub={'Giai đoạn 1: người làm, máy học. '+(db.san_sang.ai?'● Bộ não Anthropic sẵn sàng':'○ Chưa cắm ANTHROPIC_API_KEY (secret Worker)')+' · '+(db.san_sang.youtube?'● YouTube':'○ YouTube key')+' · '+(db.san_sang.n8n?'● n8n':'○ n8n')}/>
     <Tabs size="sm" active={tab} onChange={setTab} tabs={tabs}/>
-    {tab==='buoc' && <BangBuoc/>}
+    {tab==='buoc' && <><CheDoThayChu/><BangBuoc/></>}
     {tab==='ai' && <BoNaoAI/>}
     {tab==='tram' && <TramTab/>}
     {tab==='nhatky' && <NhatKyMay/>}
@@ -26,6 +26,21 @@ function MoPhongTab(){
     <div className="flex gap-2">{!db.mo_phong ? <Btn variant="brand" onClick={nap} disabled={busy}>{busy?'Đang nạp…':'Nạp dữ liệu mô phỏng'}</Btn> : <Btn variant="danger" onClick={xoa} disabled={busy}>Xoá dữ liệu mô phỏng</Btn>}</div>
     {db.mo_phong && <div className={CALLOUT.warn+' mt-3'}>Đang ở chế độ mô phỏng. Các thao tác trong màn mô phỏng chỉ báo "sẽ làm ở đợt N", không ghi gì.</div>}</Card>;
 }
+// ADR-019 — CHẾ ĐỘ AI THAY CHỦ: chủ bật một lần; AI tự duyệt bài đạt ngưỡng và vận hành qua hàng lệnh chính thức, mọi việc ghi nhật ký
+function CheDoThayChu(){ const { goi, notify, me } = useApp(); const [d,setD]=useState(null); const [busy,setBusy]=useState(false); const duoc=me&&['ADMIN','TRUONG_MKT'].includes(me.vai_tro);
+  const tai=async()=>{ const r=await goi('/thay-chu'); if(r.ok) setD(r); }; useEffect(()=>{ if(duoc) tai(); },[]); if(!duoc||!d) return null; const c=d.cau_hinh;
+  const doi=async(o)=>{ setBusy(true); const r=await goi('/thay-chu',{method:'PATCH',body:o}); setBusy(false); if(r.ok){ notify(r.cau_hinh.bat?('Đã bật AI thay chủ'+(r.vua_chay&&r.vua_chay.so?(' · vừa xử lý '+r.vua_chay.so+' việc'):'')):'Đã tắt AI thay chủ'); tai(); } else notify(r.msg,'err'); };
+  return <Card pad="p-4" className="mb-3 flex flex-col gap-3">
+    <div className="flex items-start gap-3 flex-wrap"><div className="flex-1 min-w-[240px]"><div className="font-bold text-[15px]">🤖 Chế độ AI thay chủ {c.bat?<Pill cls="bg-emerald-100 text-emerald-800">đang bật</Pill>:<Pill cls="bg-slate-100 text-ink-muted">đang tắt</Pill>}</div>
+      <div className="text-xs text-ink-muted mt-1 max-w-[70ch]">Bật thì AI vận hành thay anh: bài máy chấm từ <b>{c.diem_toi_thieu}</b>/100 trở lên, không lỗi cứng, được tự duyệt và đi thẳng sang Sản xuất; AI chạy các trợ lý, giao dựng video, gửi duyệt, trả lại bài qua hàng lệnh chính thức. Không bao giờ đổi quyền, khoá API, xoá dữ liệu hay đăng bài ra ngoài. Mọi việc ghi nhật ký bên dưới; anh trả lại bài bất cứ lúc nào.</div></div>
+      <button disabled={busy} onClick={()=>doi({bat:!c.bat})} className={'rounded-xl px-4 py-2 font-bold text-sm border '+(c.bat?'bg-white border-line':'bg-[#0E7C8C] border-[#0E7C8C] text-white')}>{c.bat?'Tắt':'Bật AI thay chủ'}</button></div>
+    <div className="flex gap-4 flex-wrap text-xs items-center"><label className="flex items-center gap-1.5"><input type="checkbox" checked={!!c.g3_tu_duyet} disabled={busy} onChange={(e)=>doi({g3_tu_duyet:e.target.checked})}/> Tự duyệt nội dung (G3)</label>
+      <label className="flex items-center gap-1.5">từ <select className="border border-line rounded-lg px-1.5 py-0.5 bg-white" value={c.diem_toi_thieu} disabled={busy} onChange={(e)=>doi({diem_toi_thieu:+e.target.value})}>{[70,75,80,85,90,95,100].map(x=><option key={x} value={x}>{x}</option>)}</select> điểm</label>
+      <label className="flex items-center gap-1.5"><input type="checkbox" checked={!!c.lenh} disabled={busy} onChange={(e)=>doi({lenh:e.target.checked})}/> Nhận lệnh vận hành ({d.loai_lenh.join(', ')})</label>
+      <span className="text-ink-muted">lệnh đang chờ: {d.lenh_cho} · bài chờ duyệt: {d.cho_duyet.length}</span></div>
+    {d.cho_duyet.length>0 && <div className="text-xs flex flex-col gap-0.5">{d.cho_duyet.slice(0,6).map(x=><div key={x.id} className="flex gap-2"><span className="tabular-nums w-14 text-ink-muted">{x.diem}/100</span><span className="flex-1 min-w-0 truncate">{x.tieu_de||x.id}</span><span className="text-ink-muted">{x.diem>=c.diem_toi_thieu?(c.bat?'sẽ tự duyệt':'đạt ngưỡng'):'dưới ngưỡng — người duyệt'}</span></div>)}</div>}
+    <details className="text-xs"><summary className="cursor-pointer font-semibold">Nhật ký AI thay chủ ({d.nhat_ky.length})</summary><div className="mt-1.5 flex flex-col gap-0.5 max-h-60 overflow-auto">{d.nhat_ky.map((x,i)=><div key={i} className="flex gap-2"><span className="text-ink-muted whitespace-nowrap">{fmtDate(x.at)}</span><span className="font-semibold whitespace-nowrap">{x.action}</span><span className="flex-1 min-w-0 truncate text-ink-muted">{x.detail}</span></div>)}{!d.nhat_ky.length&&<span className="text-ink-muted">Chưa có việc nào.</span>}</div></details>
+  </Card>; }
 function BangBuoc(){
   const { db, me, goi, notify } = useApp(); const cfg=(db.module_config||{}).may||{}; const duoc=laGat(me);
   const nguong=Number(cfg.nguong_san_sang)||80, minMau=Number(cfg.min_mau)||30;

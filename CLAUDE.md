@@ -16,6 +16,12 @@ Worker cách nhau 1 phút, bản sau đè bản trước. Vì vậy:
 - `git add` đúng file, không `git add -A`.
 - Commit rồi push trước khi deploy — deploy chỉ nhận code đã có trên `origin/main`.
 
+## Vận hành thay chủ (ADR-019)
+- Muốn app làm việc gì thay chủ (chạy trợ lý, giao dựng, gửi duyệt, trả lại bài), dùng `cd v2 && node scripts/thay-chu.mjs <lệnh>`. Chạy `node scripts/thay-chu.mjs xem` để xem trạng thái.
+- Không tự viết SQL hay JS trong trình duyệt để đổi dữ liệu app.
+- **Không có lệnh duyệt.** Bài đạt ngưỡng do luật "Chế độ AI thay chủ" tự duyệt, và chỉ khi chủ đã bật luật đó ở Máy › Bước: người hay AI. AI không bật / tắt luật, không bấm Duyệt thay người.
+- Nhãn kho mẫu vẫn đi hàng `viec_thay_chu` (mau.js `chayViecThayChu`).
+
 ## Máy con (`v2/tools/may-dung`)
 - Script phát cho máy con lấy từ `dist/tools/may-dung` sau build. Sửa `tools/may-dung/*` rồi build; không sửa file máy con tại chỗ trên máy
   (sửa tại chỗ sẽ mất ở lần cập nhật sau và máy khác không có).

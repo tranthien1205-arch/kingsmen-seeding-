@@ -689,6 +689,39 @@ async function taoNoiDung(env, b, tacNhan){
   await logAudit(env, tacNhan, 'tạo nội dung', 'noi_dung', id, nd.tieu_de||nd.hook); return {ok:true, id};
 }
 // Gửi duyệt (G3): tạo dòng duyệt, máy chấm sẵn (B5); B5 ở mức AI → tự TRẢ LẠI bài trượt luật cứng (không bao giờ tự duyệt)
+// Quyết G3 (DUYET / TRA_LAI) — một đường cho người bấm và AI thay chủ. tuDong = AI thay chủ: không ghi mẫu học B5 (máy tự đồng ý với chính nó không phải tín hiệu người).
+async function quyetG3(env, d, q, lyDo, me, tuDong){
+  const nd=await env.DB.prepare(`SELECT * FROM noi_dung WHERE id=?`).bind(d.doi_tuong_id).first();
+  await env.DB.prepare(`UPDATE duyet SET trang_thai=?, quyet_boi=?, quyet_at=?, ly_do_nguoi=? WHERE id=? AND trang_thai='CHO'`).bind(q, me.ho_ten, nowISO(), chuoi(lyDo,500), d.id).run();
+  if(nd){ await env.DB.prepare(`UPDATE noi_dung SET trang_thai=?, updated_at=? WHERE id=?`).bind(q, nowISO(), nd.id).run(); await datGiaiDoan(env, nd.muc_id, q==='DUYET'?'SAN_XUAT':'SOAN', (tuDong?'AI thay chủ · ':'')+(q==='DUYET'?'duyệt G3':'trả lại: '+chuoi(lyDo,100)), me);
+    if(!tuDong){ const cham=docJSON(d.cham_may,{}); const nguong=so(((await docCauHinh(env)).noi_dung||{}).diem_tham_dinh,70); const may=(so(cham.diem)>=nguong&&!(cham.loi_cung||[]).length)?'DUYET':'TRA_LAI';
+      await ghiMauHoc(env,'B5',{doi_tuong_id:nd.id, dau_vao:{dinh_dang:nd.dinh_dang}, dau_ra_may:{quyet:may, diem:cham.diem, ly_do:cham.ly_do}, dau_ra_nguoi:{quyet:q, ly_do:chuoi(lyDo,200)}, giong:may===q?1:0}); } }
+  await logAudit(env,me,(tuDong?'AI thay chủ · ':'')+(q==='DUYET'?'duyệt nội dung (G3)':'trả lại nội dung'),'noi_dung',d.doi_tuong_id,chuoi(lyDo,200)); }
+// ===== ADR-019 CHẾ ĐỘ AI THAY CHỦ (26/09, chủ: "cần xây dựng chế độ ai thay chủ vận hành nâng cấp app" · "cần 1 cơ chế chính thống để tránh bị lỗi và mất thời gian")
+// Chủ bật ở Máy › Bước: người hay AI. Khi bật: (1) bài G3 máy chấm ≥ ngưỡng (mặc định 90, không dưới 70), không lỗi cứng, máy nói nên duyệt → tự duyệt, sang Sản xuất;
+// người xem lại và trả lại bất cứ lúc nào. (2) Hàng lệnh module_config.lenh_thay_chu cho AI vận hành (chạy agent, giao dựng, gửi duyệt, trả lại) — cron 15' chạy qua đúng
+// đường của app, nhật ký tên 'AI thay chủ'. Không bao giờ: đổi quyền / người dùng / khoá API, xoá dữ liệu, đăng bài ra ngoài.
+const THAY_CHU_MAC_DINH={ bat:false, g3_tu_duyet:true, diem_toi_thieu:90, lenh:true };
+const AI_THAY_CHU={ id:'', ho_ten:'AI thay chủ', vai_tro:'ADMIN', agent:true };
+async function cfgThayChu(env){ return { ...THAY_CHU_MAC_DINH, ...((await docCauHinh(env)).thay_chu||{}) }; }
+async function tuDuyetThayChu(env, d, c){ c=c||await cfgThayChu(env); if(!c.bat||!c.g3_tu_duyet||!d||d.trang_thai!=='CHO'||d.cong!=='G3'||d.doi_tuong!=='noi_dung') return false;
+  const cham=docJSON(d.cham_may,{}); const min=Math.max(70,so(c.diem_toi_thieu,90)); if(so(cham.diem)<min||(cham.loi_cung||[]).length||cham.nen_duyet===false) return false;
+  await quyetG3(env, d, 'DUYET', 'Tự duyệt theo chế độ AI thay chủ: máy chấm '+so(cham.diem)+'/100 ≥ '+min+', không lỗi cứng. Người xem lại và trả lại được bất cứ lúc nào.', AI_THAY_CHU, true); return true; }
+const LOAI_LENH_THAY_CHU=['chay_agent','dung','gui_duyet','tra_lai'];
+async function chayThayChu(env){ const c=await cfgThayChu(env); if(!c.bat) return {bo_qua:'chế độ AI thay chủ đang tắt'}; const kq=[];
+  for(const d of (await env.DB.prepare(`SELECT * FROM duyet WHERE trang_thai='CHO' AND cong='G3' AND doi_tuong='noi_dung' ORDER BY created_at LIMIT 20`).all()).results) if(await tuDuyetThayChu(env,d,c)) kq.push([d.doi_tuong_id,'tự duyệt']);
+  const r=await env.DB.prepare(`SELECT cau_hinh FROM module_config WHERE id='lenh_thay_chu'`).first(); const ds=c.lenh?((docJSON(r&&r.cau_hinh,{})||{}).lenh||[]):[];
+  for(const v of ds.slice(0,20)){ try{
+    if(!LOAI_LENH_THAY_CHU.includes(v.loai)){ kq.push([v.loai,'bỏ: loại lệnh không cho phép']); continue; }
+    if(v.loai==='chay_agent'){ const a=chuoi(v.agent,40); if(!AGENTS.some(x=>x.ma===a)){ kq.push([a,'bỏ: không có agent']); continue; } const x=await dieuPhoi(env,{thu:true, chi:a}); kq.push([a,'chạy · '+((x&&x[0]&&x[0].tom_tat)||JSON.stringify(x).slice(0,160))]); }
+    else if(v.loai==='dung'){ const nd=await env.DB.prepare(`SELECT * FROM noi_dung WHERE id=?`).bind(chuoi(v.noi_dung_id,40)).first(); if(!nd||nd.trang_thai!=='DUYET'||nd.dinh_dang!=='VIDEO'){ kq.push([v.noi_dung_id,'bỏ: cần bài VIDEO đã duyệt']); continue; } const g=await giaoDung(env, nd, {tacNhan:AI_THAY_CHU}); kq.push([nd.id,'giao dựng · '+(g.ok?((g.trung?'đã có lệnh ':'')+g.id+' · '+g.may_ten):g.loi)]); }
+    else if(v.loai==='gui_duyet'){ const nd=await env.DB.prepare(`SELECT * FROM noi_dung WHERE id=?`).bind(chuoi(v.noi_dung_id,40)).first(); if(!nd||!['NHAP','TRA_LAI'].includes(nd.trang_thai)){ kq.push([v.noi_dung_id,'bỏ: bài không ở nháp / trả lại']); continue; } const g=await guiDuyet(env, nd, AI_THAY_CHU); kq.push([nd.id,'gửi duyệt · '+(g.ok?(g.tu_duyet?'tự duyệt':g.tu_tra_lai?'máy trả lại':'chờ duyệt'):g.loi)]); }
+    else if(v.loai==='tra_lai'){ const d=await env.DB.prepare(`SELECT * FROM duyet WHERE id=?`).bind(chuoi(v.duyet_id,40)).first(); const ly=chuoi(v.ly_do,300); if(!d||d.trang_thai!=='CHO'||!ly){ kq.push([v.duyet_id,'bỏ: cần bài đang chờ + lý do']); continue; } await quyetG3(env, d, 'TRA_LAI', ly, AI_THAY_CHU, true); kq.push([d.doi_tuong_id,'trả lại']); }
+  }catch(e){ kq.push([v.loai,'lỗi '+String(e.message||e).slice(0,100)]); } }
+  if(ds.length){ const now=nowISO(); const cu=await env.DB.prepare(`SELECT cau_hinh FROM module_config WHERE id='lenh_thay_chu_kq'`).first(); const lan=((docJSON(cu&&cu.cau_hinh,{})||{}).lan||[]); lan.unshift({luc:now, kq:kq.slice(0,60)});
+    await env.DB.batch([env.DB.prepare(`INSERT OR REPLACE INTO module_config (id,cau_hinh,updated_at,updated_by_name) VALUES ('lenh_thay_chu',?,?,'AI thay chủ')`).bind(JSON.stringify({lenh:ds.slice(20)}), now), env.DB.prepare(`INSERT OR REPLACE INTO module_config (id,cau_hinh,updated_at,updated_by_name) VALUES ('lenh_thay_chu_kq',?,?,'AI thay chủ')`).bind(JSON.stringify({lan:lan.slice(0,30)}), now)]); }
+  else if(kq.length){ const now=nowISO(); const cu=await env.DB.prepare(`SELECT cau_hinh FROM module_config WHERE id='lenh_thay_chu_kq'`).first(); const lan=((docJSON(cu&&cu.cau_hinh,{})||{}).lan||[]); lan.unshift({luc:now, kq}); await env.DB.prepare(`INSERT OR REPLACE INTO module_config (id,cau_hinh,updated_at,updated_by_name) VALUES ('lenh_thay_chu_kq',?,?,'AI thay chủ')`).bind(JSON.stringify({lan:lan.slice(0,30)}), now).run(); }
+  return {so:kq.length, kq}; }
 async function guiDuyet(env, nd, tacNhan){
   const cho=await env.DB.prepare(`SELECT id FROM duyet WHERE doi_tuong='noi_dung' AND doi_tuong_id=? AND trang_thai='CHO'`).bind(nd.id).first(); if(cho) return {ok:false, loi:'Bài đang chờ duyệt rồi'};
   const claims=await docClaims(env); const cham=chamNoiDungMay(nd, claims); const b5=await mucBuoc(env,'B5'); const id=uid('dy');
@@ -698,6 +731,7 @@ async function guiDuyet(env, nd, tacNhan){
   await env.DB.prepare(`UPDATE noi_dung SET trang_thai=?, updated_at=? WHERE id=?`).bind(tuTra?'TRA_LAI':'CHO_DUYET', nowISO(), nd.id).run();
   await datGiaiDoan(env, nd.muc_id, tuTra?'SOAN':'CHO_DUYET', tuTra?'máy trả lại':'gửi duyệt', tacNhan);
   await logAudit(env, tacNhan, tuTra?'máy trả lại bài (B5)':'gửi duyệt (G3)', 'noi_dung', nd.id, 'máy chấm '+cham.diem+'/100'+(cham.loi_cung.length?(' · '+cham.loi_cung.join('; ')):''));
+  if(!tuTra){ const dd=await env.DB.prepare(`SELECT * FROM duyet WHERE id=?`).bind(id).first(); if(await tuDuyetThayChu(env, dd)) return {ok:true, id, cham, tu_tra_lai:false, tu_duyet:true}; }
   return {ok:true, id, cham, tu_tra_lai:tuTra};
 }
 // Bản nháp bóng (chế độ học B4): máy viết ngầm cùng đầu vào bài người gửi duyệt, so giống, ghi mẫu — không hiện cho người
@@ -1922,6 +1956,15 @@ async function handleApi(request, env){
     const lich=(await env.DB.prepare(`SELECT at,by_name,detail FROM audit WHERE entity='buoc_thuc_hien' AND entity_id=? ORDER BY at DESC LIMIT 20`).bind(m[1]).all()).results;
     return json({ mau, lich_su:lich }); }
   // --- máy: chạy thử, cấu hình ---
+  if(path==='/thay-chu' && method==='GET'){ if(!canGat(me)) return json({error:'Chỉ Admin hoặc Trưởng MKT'},403); const c=await cfgThayChu(env);
+    const r=await env.DB.prepare(`SELECT cau_hinh FROM module_config WHERE id='lenh_thay_chu'`).first(); const k=await env.DB.prepare(`SELECT cau_hinh FROM module_config WHERE id='lenh_thay_chu_kq'`).first();
+    const nk=(await env.DB.prepare(`SELECT at, by_name, action, entity_id, detail FROM audit WHERE by_name IN ('AI thay chủ','Claude (thay chủ)') ORDER BY at DESC LIMIT 30`).all()).results;
+    const cho=(await env.DB.prepare(`SELECT d.id, d.cham_may, d.created_at, n.tieu_de FROM duyet d LEFT JOIN noi_dung n ON n.id=d.doi_tuong_id WHERE d.trang_thai='CHO' AND d.cong='G3' ORDER BY d.created_at`).all()).results.map(x=>({id:x.id, tieu_de:x.tieu_de, diem:so(docJSON(x.cham_may,{}).diem), luc:x.created_at}));
+    return json({ cau_hinh:c, lenh_cho:((docJSON(r&&r.cau_hinh,{})||{}).lenh||[]).length, ket_qua:((docJSON(k&&k.cau_hinh,{})||{}).lan||[]).slice(0,10), nhat_ky:nk, cho_duyet:cho, loai_lenh:LOAI_LENH_THAY_CHU }); }
+  if(path==='/thay-chu' && method==='PATCH'){ if(!canGat(me)||me.agent) return json({error:'Chỉ Admin hoặc Trưởng MKT (người) bật / tắt chế độ AI thay chủ'},403); const c=await cfgThayChu(env);
+    const moi={ bat:body.bat!=null?!!body.bat:c.bat, g3_tu_duyet:body.g3_tu_duyet!=null?!!body.g3_tu_duyet:c.g3_tu_duyet, diem_toi_thieu:body.diem_toi_thieu!=null?Math.max(70,Math.min(100,Math.round(so(body.diem_toi_thieu)))):c.diem_toi_thieu, lenh:body.lenh!=null?!!body.lenh:c.lenh };
+    await env.DB.prepare(`INSERT INTO module_config (id,cau_hinh,updated_at,updated_by_name) VALUES ('thay_chu',?,?,?) ON CONFLICT(id) DO UPDATE SET cau_hinh=excluded.cau_hinh, updated_at=excluded.updated_at, updated_by_name=excluded.updated_by_name`).bind(JSON.stringify(moi), nowISO(), me.ho_ten).run();
+    await logAudit(env, me, moi.bat?'bật chế độ AI thay chủ':'tắt chế độ AI thay chủ', 'module_config', 'thay_chu', JSON.stringify(moi)); const q=moi.bat?await chayThayChu(env):null; return json({ ok:true, cau_hinh:moi, vua_chay:q }); }
   if(path==='/may/chay-thu' && method==='POST'){
     if(!canGat(me)) return json({error:'Chỉ Admin hoặc Trưởng MKT'},403);
     const kq=await dieuPhoi(env,{thu:true, chi:body.agent||null});
@@ -2082,13 +2125,7 @@ async function handleApi(request, env){
     const d=await env.DB.prepare(`SELECT * FROM duyet WHERE id=?`).bind(m[1]).first(); if(!d) return json({error:'Không tìm thấy'},404); if(d.trang_thai!=='CHO') return json({error:'Đã quyết rồi'},409);
     const cfgD=(await docCauHinh(env)).duyet||{}; if(cfgD.chan_tu_duyet!==false && d.nguoi_gui_id===me.id) return json({error:'Người gửi không tự duyệt bài mình (luật L5)'},403);
     const q=body.quyet==='DUYET'?'DUYET':body.quyet==='TRA_LAI'?'TRA_LAI':null; if(!q) return json({error:'quyet phải là DUYET hoặc TRA_LAI'},400); if(q==='TRA_LAI'&&!chuoi(body.ly_do)) return json({error:'Trả lại phải ghi lý do (máy học từ đây)'},400);
-    const nd=await env.DB.prepare(`SELECT * FROM noi_dung WHERE id=?`).bind(d.doi_tuong_id).first();
-    await env.DB.prepare(`UPDATE duyet SET trang_thai=?, quyet_boi=?, quyet_at=?, ly_do_nguoi=? WHERE id=?`).bind(q, me.ho_ten, nowISO(), chuoi(body.ly_do,500), d.id).run();
-    if(nd){ await env.DB.prepare(`UPDATE noi_dung SET trang_thai=?, updated_at=? WHERE id=?`).bind(q, nowISO(), nd.id).run(); await datGiaiDoan(env, nd.muc_id, q==='DUYET'?'SAN_XUAT':'SOAN', q==='DUYET'?'duyệt G3':'trả lại: '+chuoi(body.ly_do,100), me);
-      // mẫu học B5: máy "nghĩ" nên duyệt hay không (điểm ≥ ngưỡng & không lỗi cứng) so với người
-      const cham=docJSON(d.cham_may,{}); const nguong=so(((await docCauHinh(env)).noi_dung||{}).diem_tham_dinh,70); const may=(so(cham.diem)>=nguong&&!(cham.loi_cung||[]).length)?'DUYET':'TRA_LAI';
-      await ghiMauHoc(env,'B5',{doi_tuong_id:nd.id, dau_vao:{dinh_dang:nd.dinh_dang}, dau_ra_may:{quyet:may, diem:cham.diem, ly_do:cham.ly_do}, dau_ra_nguoi:{quyet:q, ly_do:chuoi(body.ly_do,200)}, giong:may===q?1:0}); }
-    await logAudit(env,me,q==='DUYET'?'duyệt nội dung (G3)':'trả lại nội dung','noi_dung',d.doi_tuong_id,chuoi(body.ly_do,200)); return json({ db: await bootstrap(env,me) }); }
+    await quyetG3(env, d, q, body.ly_do, me, false); return json({ db: await bootstrap(env,me) }); }
   // Tài sản media
   if((path==='/tai-san'||path==='/footage') && method==='POST'){ if(!isStaff(me)) return json({error:'Không có quyền'},403); const media_url=chuoi(body.media_url,500); if(!media_url) return json({error:'Cần file hoặc link media'},400); if(/drive\.google\.com\/drive\/(u\/\d+\/)?folders\//.test(media_url)) return json({error:'Đây là link THƯ MỤC Drive, không phải một file — dùng nút 📥 Nạp từ Drive để máy tải các clip trong thư mục'},400);
     const mt=String(body.media_type||'').toUpperCase(); const loai=['FOOTAGE','ANH','VIDEO_XUAT','GOI_DUNG','NHAC','KHAC'].includes(String(body.loai||'').toUpperCase())?String(body.loai).toUpperCase():(mt==='IMAGE'?'ANH':mt==='AUDIO'?'NHAC':mt==='FILE'?'KHAC':'FOOTAGE'); const id=uid('ts');
@@ -2411,7 +2448,7 @@ async function xoaMoPhong(env, me){
 }
 
 export default {
-  async scheduled(controller, env, ctx){ ctx.waitUntil((async()=>{ const e=await napKhoa(env); await dieuPhoi(e); await tuHoc(e).catch(()=>{}); await thayDocLoi(e, 40).catch(()=>{}); await tuGiaoProxy(e).catch(()=>{}); await MAU().thayDocBu(e, 16).catch(()=>{}); await MAU().chayViecThayChu(e).catch(()=>{}); await MAU().tuGanDong(e).catch(()=>{}); await MAU().chuanHoaBuoc(e, 60).catch(()=>{}); })().catch(()=>{})); },
+  async scheduled(controller, env, ctx){ ctx.waitUntil((async()=>{ const e=await napKhoa(env); await dieuPhoi(e); await tuHoc(e).catch(()=>{}); await thayDocLoi(e, 40).catch(()=>{}); await tuGiaoProxy(e).catch(()=>{}); await MAU().thayDocBu(e, 16).catch(()=>{}); await MAU().chayViecThayChu(e).catch(()=>{}); await chayThayChu(e).catch(()=>{}); await MAU().tuGanDong(e).catch(()=>{}); await MAU().chuanHoaBuoc(e, 60).catch(()=>{}); })().catch(()=>{})); },
   async fetch(request, env, ctx){
     const url=new URL(request.url);
     env=await napKhoa(env);   // khoá dán ở app phủ lên env (secret Cloudflare vẫn ưu tiên)

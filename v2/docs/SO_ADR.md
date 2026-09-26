@@ -388,6 +388,19 @@ Người duyệt: Thiện · Trạng thái: ĐÃ DUYỆT (2026-09-24, "ok bạn 
 - Việc "lệnh học bị đánh HONG sau 30 phút" đã sửa từ 25/09 (nhịp tim > 15 phút / 12 giờ) — không đổi thêm.
 - Ảnh hưởng dữ liệu: không đổi bảng; lệnh học mới ít link hơn (bỏ trùng). Test: adr011 thêm link trùng (mã cũ hỏng 1/3, mã mới đạt), may-dung-khoi-dong thêm 1 ca.
 
+### 2026-09-26 · ADR-019 Chế độ AI thay chủ
+- Chủ: "cần xây dựng chế độ ai thay chủ vận hành nâng cấp app" · "cần 1 cơ chế chính thống để tránh bị lỗi và mất thời gian" · "để không đụng code cục bộ mỗi lần thế này". Chủ chọn phương án: AI được làm khi chủ đổi quyền phiên, chủ tự bật chế độ trong app.
+- `module_config.thay_chu` {bat, g3_tu_duyet, diem_toi_thieu (≥ 70, mặc định 90), lenh}. Chỉ người Admin / Trưởng MKT bật / tắt (`PATCH /thay-chu`, agent bị chặn). `GET /thay-chu`: cấu hình, bài chờ, nhật ký, kết quả lệnh.
+- Tự duyệt G3: bài máy chấm ≥ ngưỡng, không lỗi cứng, `nen_duyet` khác false → `quyetG3(..., 'AI thay chủ', tuDong)` → Sản xuất. Chạy ngay khi gửi duyệt (`guiDuyet`), lúc bật chế độ, và mỗi cron cho bài đang chờ. Không ghi mẫu học B5. Người trả lại được bất cứ lúc nào.
+- `quyetG3` là một đường chung cho người bấm và AI (endpoint `/duyet/:id/quyet` gọi lại nó).
+- Hàng lệnh `module_config.lenh_thay_chu` (≤ 20 lệnh / lượt cron):
+  - Loại cho phép: chay_agent / dung / gui_duyet / tra_lai. Loại khác bị bỏ và ghi lý do.
+  - Kết quả ở `lenh_thay_chu_kq`; nhật ký ghi tên "AI thay chủ".
+  - Không có lệnh duyệt, đổi quyền, khoá, xoá, đăng.
+- Công cụ `v2/scripts/thay-chu.mjs` cho phiên Claude xếp lệnh / xem kết quả (wrangler D1). Luật ghi ở CLAUDE.md.
+- Giao diện: thẻ "🤖 Chế độ AI thay chủ" đầu tab Máy › Bước: người hay AI. Trên thẻ có nút bật / tắt, tick tự duyệt G3, ngưỡng điểm, tick nhận lệnh, bài chờ duyệt (sẽ tự duyệt / dưới ngưỡng) và nhật ký.
+- Test 019a / 019b.
+
 ### 2026-09-26 · Kho video: thông tin theo dõi theo dòng chảy nội dung
 - Chủ: "kho video app sx cần gắn các thông tin tracking theo dòng nội dung để quản lý sử dụng".
 - Cột mới:
