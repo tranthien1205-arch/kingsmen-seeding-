@@ -104,10 +104,19 @@ export function taoMau(H) {
     for (const d of dongSan) BAI_TEST_SAN.forEach((b) => st.push(up('bai_test', b, d))); await env.DB.batch(st);
     const coTen = new Set((await env.DB.prepare(`SELECT truong, ten FROM bo_nhan WHERE trang_thai='DUNG'`).all()).results.map((x) => x.truong + '|' + cf(x.ten)));
     const dx = (await env.DB.prepare(`SELECT * FROM bo_nhan WHERE trang_thai='DE_XUAT'`).all()).results; let gop = 0, bo = 0, mau = 0;
+    const doi = {}, st2 = [];   /* một lượt: gom mọi đổi tên thành bảng tra, quét mẫu MỘT lần (trước đây mỗi đề xuất quét cả bảng → quá giới hạn CPU của Worker) */
     for (const r of dx) { const q = quyVe(r.truong, r.ten); if (!q) continue;
-      if (q.bo) { mau += await doiGiaTriMau(env, r.truong, r.ten, null); await env.DB.prepare(`UPDATE bo_nhan SET trang_thai='BO', updated_at=? WHERE id=?`).bind(now, r.id).run(); bo++; continue; }
+      if (q.bo) { doi[r.truong + '|' + cf(r.ten)] = null; st2.push(env.DB.prepare(`UPDATE bo_nhan SET trang_thai='BO', updated_at=? WHERE id=?`).bind(now, r.id)); bo++; continue; }
       if (!coTen.has(r.truong + '|' + cf(q.ten))) continue;   /* tên chuẩn chưa có trong bộ nhãn (vd bước keo ở dòng sàn) → để người duyệt */
-      if (cf(q.ten) !== cf(r.ten)) mau += await doiGiaTriMau(env, r.truong, r.ten, q.ten); await env.DB.prepare(`UPDATE bo_nhan SET trang_thai='GOP', gop_vao=?, updated_at=? WHERE id=?`).bind(q.ten, now, r.id).run(); gop++; }
+      doi[r.truong + '|' + cf(r.ten)] = q.ten; st2.push(env.DB.prepare(`UPDATE bo_nhan SET trang_thai='GOP', gop_vao=?, updated_at=? WHERE id=?`).bind(q.ten, now, r.id)); gop++; }
+    const truongDoi = [...new Set(Object.keys(doi).map((k) => k.split('|')[0]))]; const ghi = [];
+    if (truongDoi.length) for (const m of (await env.DB.prepare(`SELECT id, nhan_mo, nhan_thay, nhan_nguoi FROM mau_doan`).all()).results) { const up = {};
+      for (const c of ['nhan_mo', 'nhan_thay', 'nhan_nguoi']) { const o = P(m[c]); if (!o) continue; let doiO = false;
+        for (const t of truongDoi) { const v = o[t]; if (v == null) continue; const tra = (x) => { const k = t + '|' + cf(x); return k in doi ? doi[k] : x; };
+          if (Array.isArray(v)) { const n2 = [...new Set(v.map(tra))].filter((x) => x != null); if (JSON.stringify(n2) !== JSON.stringify(v)) { o[t] = n2; doiO = true; } } else { const n2 = tra(v); if (n2 !== v) { o[t] = n2; doiO = true; } } }
+        if (doiO) up[c] = J(o); }
+      if (Object.keys(up).length) { ghi.push(env.DB.prepare(`UPDATE mau_doan SET ${Object.keys(up).map((c) => c + '=?').join(', ')}, version=version+1, updated_at=? WHERE id=?`).bind(...Object.values(up), now, m.id)); mau++; } }
+    const tatCa = [...ghi, ...st2]; for (let k = 0; k < tatCa.length; k += 80) await env.DB.batch(tatCa.slice(k, k + 80));
     await env.DB.prepare(`INSERT OR REPLACE INTO module_config (id, cau_hinh, updated_at, updated_by_name) VALUES ('mau_doan', ?, ?, 'Máy')`).bind(JSON.stringify({ v: 4, luc: now, don: { gop, bo, mau } }), now).run();
     await logAudit(env, MAYCHUAN, 'dọn bộ nhãn theo tài liệu chuẩn', 'bo_nhan', '', 'gộp ' + gop + ' · bỏ ' + bo + ' · ' + mau + ' mẫu đổi theo · dòng Terrazo → Terrazy'); return { gop, bo, mau }; }
   // chuẩn hoá bước cũ về quy trình của dòng: Haiku đọc mô tả / dụng cụ / thao tác thầy đã ghi (không đọc lại hình, ~0,001 USD / đoạn); xong dòng nào thì dọn đề xuất bước của dòng đó
