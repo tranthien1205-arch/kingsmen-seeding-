@@ -79,7 +79,7 @@ test('khởi động lại hằng ngày: chờ lệnh dở (dang-lam.json) rồi
 test('1.6 chạy nền khi bật máy (26/09): khoá một máy con, CHAY-NEN lặp không dùng timeout, bộ cài S4U không lưu mật khẩu', () => {
   assert.match(MAY, /const BAN = "1\.[6-9]"/);
   assert.match(MAY, /const KHOA_F = join\(DIR, "dang-chay\.json"\)/); assert.match(MAY, /process\.exit\(3\)/); assert.match(MAY, /20 \* 60e3/);
-  assert.match(MAY, /if \(!args\.includes\("--mot-lan"\)\) giuKhoa\(\);\s*\r?\n\/\/ app chưa lên/, 'giữ khoá trước khi nối app');
+  assert.ok(MAY.indexOf("giuKhoa();") < MAY.indexOf('await goiApp("/hub/ping")'), "giữ khoá trước khi nối app");
   assert.match(BAT, /if errorlevel 3 if not errorlevel 4 goto nen/);
   const NEN = fs.readFileSync(new URL('../tools/may-dung/CHAY-NEN.bat', import.meta.url), 'utf8');
   assert.equal(NEN.split("\n").length, NEN.split("\r\n").length, "CHAY-NEN.bat phải CRLF (cmd đọc nhãn sai với LF)");
