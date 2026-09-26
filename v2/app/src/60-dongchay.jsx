@@ -19,17 +19,18 @@ function KhoVideoThanhPham({ onMo }){
     const tong=kq.reduce((a,k)=>({xem:a.xem+(k.luot_xem||0), tt:a.tt+(k.tuong_tac||0), don:a.don+(k.so_don||0), dt:a.dt+(k.doanh_thu||0)}),{xem:0,tt:0,don:0,dt:0});
     const tt=bd.some(b=>b.trang_thai==='DA_DANG')?'dang':t.su_dung==='BO'?'bo':t.su_dung==='CHON'?'chon':moiNhat?'cho':'cu';
     return { t, nd, muc, goi:goiD, dy, bd, kq, tong, tt, dong:(muc&&muc.dong)||null }; }).sort((a,b)=>String(b.t.created_at).localeCompare(String(a.t.created_at)));
+  useEffect(()=>{ if(loc&&!ds.some(x=>x.tt===loc)) setLoc(''); },[loc, ds.map(x=>x.tt).join()]);   /* khôi phục video cuối của lọc “Đã loại” → về danh sách chính, không để màn trống */
   if(!ds.length) return null;
   const dongs=[...new Set([...(db.dong_chuan||[]), ...ds.map(x=>x.dong).filter(Boolean)])];
-  const loc2=ds.filter(x=>(!loc||x.tt===loc)&&(!locDong||(locDong==='-'?!x.dong:x.dong===locDong))); const hien=het?loc2:loc2.slice(0,8); const dem=k=>ds.filter(x=>x.tt===k).length;
+  const loc2=ds.filter(x=>(loc?x.tt===loc:x.tt!=='bo')&&(!locDong||(locDong==='-'?!x.dong:x.dong===locDong))); const hien=het?loc2:loc2.slice(0,12); const dem=k=>ds.filter(x=>x.tt===k).length;
   const dat=async(duong,body,tb)=>{ setBusy(true); const r=await goi(duong,{method:'POST',body}); setBusy(false); if(r.ok) notify(tb); else notify(r.msg,'err'); };
   const chep=(ma)=>{ try{ navigator.clipboard.writeText(ma).then(()=>notify('Đã chép mã '+ma),()=>notify('Mã video: '+ma)); }catch(e){ notify('Mã video: '+ma); } };
   const Dong=({k,v})=>v?<div className="flex gap-2"><span className="text-ink-muted w-[74px] shrink-0">{k}</span><span className="min-w-0 flex-1 break-words">{v}</span></div>:null;
   return <Card pad="p-3" className="space-y-2">
-    <div className="flex items-center gap-2 flex-wrap"><SectionTitle className="!mb-0">🎬 Kho video thành phẩm ({ds.length})</SectionTitle><span className="text-[11px] text-ink-muted">bản nháp máy dựng, mới nhất trước · mỗi video kèm mã theo dõi và đường đi trong dòng chảy</span></div>
-    <div className="flex gap-1.5 flex-wrap text-xs">{[['','Tất cả',ds.length],['cho','Chờ quyết',dem('cho')],['chon','Chọn dùng',dem('chon')],['dang','Đã đăng',dem('dang')],['bo','Đã loại',dem('bo')],['cu','Bản cũ',dem('cu')]].filter(x=>x[2]||!x[0]).map(([k,t,n])=><button key={k} onClick={()=>setLoc(k)} className={'rounded-full border px-2.5 py-1 '+(loc===k?'border-ink font-bold bg-white':'border-line bg-white')}>{t} · {n}</button>)}
+    <div className="text-[12px] text-ink-muted">Bản nháp máy dựng, mới nhất trước. <b className="text-ink">Chờ quyết</b> = bản mới nhất của bài, chưa chọn dùng hay loại. Loại thì video ẩn khỏi danh sách (xem lại và khôi phục ở lọc “Đã loại”).</div>
+    <div className="flex gap-1.5 flex-wrap text-xs">{[['','Đang dùng được',ds.length-dem('bo')],['cho','Chờ quyết',dem('cho')],['chon','Chọn dùng',dem('chon')],['dang','Đã đăng',dem('dang')],['cu','Bản cũ',dem('cu')],['bo','Đã loại',dem('bo')]].filter(x=>x[2]||!x[0]).map(([k,t,n])=><button key={k} onClick={()=>setLoc(k)} className={'rounded-full border px-2.5 py-1 '+(loc===k?'border-ink font-bold bg-white':'border-line bg-white')}>{t} · {n}</button>)}
       <select className="border border-line rounded-full px-2 py-1 bg-white" value={locDong} onChange={e=>setLocDong(e.target.value)}><option value="">mọi dòng</option>{dongs.map(d=><option key={d} value={d}>{d} · {ds.filter(x=>x.dong===d).length}</option>)}<option value="-">chưa có dòng · {ds.filter(x=>!x.dong).length}</option></select></div>
-    <div className="flex gap-3 overflow-x-auto snap-x pb-1 sm:grid sm:grid-cols-3 lg:grid-cols-4 sm:overflow-visible">{hien.map(x=>{ const {t,nd,muc,goi:gd,dy,bd,tong,tt}=x; const moTT=mo===t.id; return <div key={t.id} className="rounded-xl border border-line overflow-hidden bg-white min-w-0 w-[64vw] max-w-[260px] shrink-0 snap-start sm:w-auto sm:max-w-none flex flex-col">
+    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2.5">{hien.map(x=>{ const {t,nd,muc,goi:gd,dy,bd,tong,tt}=x; const moTT=mo===t.id; return <div key={t.id} className={"rounded-xl border overflow-hidden bg-white min-w-0 flex flex-col "+(tt==='bo'?'border-line opacity-60':tt==='cho'?'border-[#E3B23C]':'border-line')}>
       <video src={t.media_url+"#t=0.1"} controls playsInline preload="metadata" className="w-full bg-black aspect-[9/16] object-contain"/>
       <div className="p-2.5 space-y-1.5 text-xs flex-1 flex flex-col">
         <div className="flex items-center gap-1.5 flex-wrap"><button onClick={()=>t.ma_video&&chep(t.ma_video)} title="Chép mã để dán vào caption / mã theo dõi kết quả" className="font-mono text-[11px] font-bold rounded-md bg-[#E0F2F4] text-[#0E7C8C] px-1.5 py-0.5">{t.ma_video||'—'} ⧉</button><Pill cls={SU_DUNG[tt][1]} className="!text-[11px]">{SU_DUNG[tt][0]}</Pill>{x.dong?<Pill cls="bg-[#F6EDD6] text-[#8A6410]" className="!text-[11px]">{x.dong}</Pill>:<Pill cls="bg-[#FFF9E8] text-[#8A6410]" className="!text-[11px]">chưa có dòng</Pill>}</div>
@@ -51,14 +52,14 @@ function KhoVideoThanhPham({ onMo }){
           {sua&&muc&&<div className="flex gap-2 items-center pt-1"><span className="text-ink-muted w-[74px] shrink-0">Đổi dòng</span><select disabled={busy} className="border border-line rounded-lg px-1.5 py-1 bg-white min-w-0 flex-1" value={muc.dong||''} onChange={e=>dat('/muc/'+muc.id+'/dong',{dong:e.target.value||null},'Đã gán dòng cho mục — mọi video của mục đổi theo')}><option value="">chưa có dòng</option>{dongs.map(d=><option key={d} value={d}>{d}</option>)}</select></div>}
         </div>}
         <div className="flex gap-1.5 flex-wrap pt-1 mt-auto">{sua&&tt!=='dang'&&<button disabled={busy} onClick={()=>dat('/tai-san/'+t.id+'/su-dung',{su_dung:t.su_dung==='CHON'?null:'CHON'},t.su_dung==='CHON'?'Bỏ chọn':'Đã chọn dùng video '+(t.ma_video||''))} className={'rounded-lg border px-2.5 py-1.5 font-semibold '+(t.su_dung==='CHON'?'bg-emerald-600 border-emerald-600 text-white':'border-line')}>✓ Dùng</button>}
-          {sua&&tt!=='dang'&&<button disabled={busy} onClick={()=>dat('/tai-san/'+t.id+'/su-dung',{su_dung:t.su_dung==='BO'?null:'BO'},t.su_dung==='BO'?'Đã bỏ đánh dấu loại':'Đã loại video '+(t.ma_video||''))} className={'rounded-lg border px-2.5 py-1.5 '+(t.su_dung==='BO'?'bg-slate-600 border-slate-600 text-white':'border-line')}>✕ Loại</button>}
+          {sua&&tt!=='dang'&&<button disabled={busy} onClick={()=>dat('/tai-san/'+t.id+'/su-dung',{su_dung:t.su_dung==='BO'?null:'BO'},t.su_dung==='BO'?'Đã khôi phục video '+(t.ma_video||''):'Đã loại video '+(t.ma_video||'')+' — xem lại ở lọc “Đã loại”')} className={'rounded-lg border px-2.5 py-1.5 '+(t.su_dung==='BO'?'border-[#0E7C8C] text-[#0E7C8C] font-semibold':'border-line')}>{t.su_dung==='BO'?'↺ Khôi phục':'✕ Loại'}</button>}
           {gd&&<a className="rounded-lg border border-line px-2.5 py-1.5 font-semibold" href={gd.media_url} target="_blank" rel="noreferrer">📦 CapCut</a>}<a className="rounded-lg border border-line px-2.5 py-1.5" href={t.media_url} target="_blank" rel="noreferrer">⤓ Tải</a>{muc&&<button onClick={()=>onMo(muc)} className="rounded-lg border border-line px-2.5 py-1.5">Mở thẻ</button>}</div></div>
     </div>; })}</div>
-    {loc2.length>8&&<button onClick={()=>setHet(!het)} className="w-full rounded-lg border border-line py-2 text-xs font-semibold bg-white">{het?'Thu gọn':'Xem tất cả '+loc2.length+' video'}</button>}
+    {loc2.length>12&&<button onClick={()=>setHet(!het)} className="w-full rounded-lg border border-line py-2 text-xs font-semibold bg-white">{het?'Thu gọn':'Xem tất cả '+loc2.length+' video'}</button>}
   </Card>; }
 function DongChayNoiDung(){
   const { db, me } = useApp(); const buoc=db.buoc||[]; const chiXem=!laStaff(me);
-  const [thang,setThang]=useState(db.hang_so.thang_nay); const [mo,setMo]=useState(null); const [locGd,setLocGd]=useState('');
+  const [thang,setThang]=useState(db.hang_so.thang_nay); const [mo,setMo]=useState(null); const [locGd,setLocGd]=useState(''); const [tabDc,setTabDc]=useState('luong');
   const muc=(db.muc_noi_dung||[]).filter(m=>m.thang===thang); const ndCua=m=>(db.noi_dung||[]).filter(n=>n.muc_id===m.id).sort((a,b)=>a.updated_at<b.updated_at?1:-1)[0];
   const pTen=id=>((db.pillars||[]).find(p=>p.id===id)||{}).ten||'—'; const kTen=id=>((db.kenh||[]).find(k=>k.id===id)||{}).ten||'—';
   const cua=ma=>buoc.find(b=>b.ma===ma)||{}; const cotBuoc={Y_TUONG:['B1','B3'],SOAN:['B4'],CHO_DUYET:['B5'],SAN_XUAT:['B6','B7','B8'],DA_DANG:['B9'],DA_DO:['B10']};
@@ -66,22 +67,44 @@ function DongChayNoiDung(){
   const choToi=cho.filter(d=>laGat(me)&&!(chanTuDuyet&&d.nguoi_gui_id===me.id));
   const moNd=id=>{ const nd=(db.noi_dung||[]).find(n=>n.id===id); const m=nd&&(db.muc_noi_dung||[]).find(x=>x.id===nd.muc_id); if(m) setMo({muc:m, tab:'duyet'}); };
   useEffect(()=>{ if(mo){ const m=(db.muc_noi_dung||[]).find(x=>x.id===mo.muc.id); if(m&&m!==mo.muc) setMo(o=>({...o, muc:m})); } },[db]);
+  // việc tiếp theo của từng thẻ (đọc từ trạng thái thật) — thẻ nói nó đang chờ ai, không bắt người đoán
+  const baiDangCua=m=>(db.bai_dang||[]).filter(b=>b.muc_id===m.id);
+  const viecTiep=m=>{ const nd=ndCua(m); const ct=(nd&&nd.chi_tiet)||{}; const gd=m.giai_doan;
+    if(gd==='Y_TUONG') return m.dinh_dang?['chờ máy soạn (B4)','text-ink-muted']:['cần chọn định dạng','text-[#8A6410]'];
+    if(gd==='SOAN') return nd&&nd.trang_thai==='TRA_LAI'?['sửa theo góp ý rồi gửi lại','text-rose-700']:['soạn xong thì gửi duyệt','text-ink-muted'];
+    if(gd==='CHO_DUYET') return ['chờ duyệt G3','text-[#8A6410]'];
+    if(gd==='SAN_XUAT'){ if(m.dinh_dang==='VIDEO'&&!ct.video_url) return ['chờ máy dựng video','text-sky-800']; if(ct.video_url&&!baiDangCua(m).length) return ['xem video · lên lịch đăng','text-[#0E7C8C]']; return ['đang sản xuất','text-ink-muted']; }
+    if(gd==='DA_DANG') return ['chờ đo kết quả','text-ink-muted']; return ['xong','text-emerald-700']; };
+  const tsVideo=(db.tai_san||[]).filter(t=>t.loai==='VIDEO_XUAT'); const ndTheoId=Object.fromEntries((db.noi_dung||[]).map(n=>[n.id,n]));
+  const videoChoQuyet=tsVideo.filter(t=>!t.su_dung&&t.noi_dung_id&&ndTheoId[t.noi_dung_id]&&((ndTheoId[t.noi_dung_id].chi_tiet||{}).video_url===t.media_url)&&!(db.bai_dang||[]).some(b=>b.media_url===t.media_url)).length;
+  const choDang=(db.muc_noi_dung||[]).filter(m=>m.giai_doan==='SAN_XUAT'&&((ndCua(m)||{}).chi_tiet||{}).video_url&&!baiDangCua(m).length).length;
+  const tatCaGd=(db.muc_noi_dung||[]).filter(m=>m.thang===thang&&GIAI_DOAN.some(([g])=>g===m.giai_doan));
   return <div className="space-y-4">
     <PageHeader title="🔁 Dòng chảy nội dung" sub="Một thẻ đi hết 6 giai đoạn. Máy đẩy thẻ theo sự kiện; người chỉ vào ở cổng G3 và các việc được giao." right={<div className="flex items-center gap-2"><Input type="month" className="!w-40 !py-1.5" value={thang} onChange={e=>setThang(e.target.value)}/>{!chiXem&&<Btn variant="brand" onClick={()=>window.__go('chienluoc')}>＋ Mục mới ở Kế hoạch</Btn>}</div>}/>
-    {cho.length>0 && <Card pad="p-3"><div className="flex items-center justify-between"><SectionTitle>🛂 Hàng đợi duyệt — cổng G3 ({cho.length}{laGat(me)?(' · '+choToi.length+' tới lượt bạn'):''})</SectionTitle><span className="text-[11px] text-ink-muted">máy chấm sẵn, xếp bài điểm cao trước — máy không bao giờ tự duyệt</span></div>
+    <Card pad="p-3" className="space-y-3">
+      <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5">{GIAI_DOAN.map(([gd,ten],i)=>{ const n=tatCaGd.filter(m=>m.giai_doan===gd).length; const nong=(gd==='CHO_DUYET'&&n>0)||(gd==='SAN_XUAT'&&n>2); return <button key={gd} onClick={()=>{ setTabDc('luong'); setLocGd(locGd===gd?'':gd); }} className={'relative rounded-xl border px-2 py-2 text-left transition '+(locGd===gd?'border-ink bg-ink text-white':nong?'border-[#E3B23C] bg-[#FFF9E8]':'border-line bg-white hover:border-ink')}>
+        <div className={'text-[11px] font-semibold '+(locGd===gd?'text-white/80':'text-ink-muted')}>{i+1}. {ten}</div><div className="text-[20px] font-bold tabular-nums leading-tight">{n}</div>{i<5&&<span className="hidden sm:block absolute -right-[9px] top-1/2 -translate-y-1/2 text-ink-muted text-[11px] z-10">›</span>}</button>; })}</div>
+      {(choToi.length>0||videoChoQuyet>0||choDang>0)&&<div className="flex gap-2 flex-wrap text-[12px]"><b className="text-ink self-center">Cần làm:</b>
+        {choToi.length>0&&<button onClick={()=>setTabDc('duyet')} className="rounded-lg bg-[#FFF9E8] border border-[#E3B23C] px-2.5 py-1 font-semibold text-[#8A6410]">🛂 {choToi.length} bài chờ bạn duyệt</button>}
+        {videoChoQuyet>0&&<button onClick={()=>setTabDc('video')} className="rounded-lg bg-[#E0F2F4] border border-[#0E7C8C]/40 px-2.5 py-1 font-semibold text-[#0E7C8C]">🎬 {videoChoQuyet} video chờ xem & quyết</button>}
+        {choDang>0&&<button onClick={()=>{ setTabDc('luong'); setLocGd('SAN_XUAT'); }} className="rounded-lg bg-white border border-line px-2.5 py-1 font-semibold">🚀 {choDang} bài có video, chưa lên lịch đăng</button>}</div>}
+    </Card>
+    <div className="flex gap-1.5 overflow-x-auto">{[['luong','🔁 Luồng nội dung',tatCaGd.length],['video','🎬 Kho video',tsVideo.filter(t=>t.su_dung!=='BO').length],['duyet','🛂 Duyệt G3',cho.length]].map(([k,t,n])=><button key={k} onClick={()=>setTabDc(k)} className={'shrink-0 rounded-full px-3.5 py-1.5 text-[13px] border '+(tabDc===k?'bg-ink text-white border-ink font-semibold':'bg-white border-line')}>{t}<span className={'ml-1.5 text-[11px] '+(tabDc===k?'text-white/80':'text-ink-muted')}>{n}</span></button>)}</div>
+    {tabDc==='duyet' && cho.length>0 && <Card pad="p-3"><div className="flex items-center justify-between"><SectionTitle>🛂 Hàng đợi duyệt — cổng G3 ({cho.length}{laGat(me)?(' · '+choToi.length+' tới lượt bạn'):''})</SectionTitle><span className="text-[11px] text-ink-muted">máy chấm sẵn, xếp bài điểm cao trước — máy không bao giờ tự duyệt</span></div>
       {[...cho].sort((a,b)=>(b.cham_may.diem||0)-(a.cham_may.diem||0)).map(d=>{ const nd=(db.noi_dung||[]).find(n=>n.id===d.doi_tuong_id)||{}; const cm=d.cham_may||{}; return <div key={d.id} className="flex items-center gap-3 py-1.5 border-t border-line text-xs cursor-pointer hover:bg-slate-50" onClick={()=>moNd(d.doi_tuong_id)}>
         <span className={"font-display font-extrabold w-8 text-center "+((cm.diem||0)>=70?'text-emerald-600':(cm.diem||0)>=40?'text-amber-600':'text-rose-500')}>{cm.diem??'—'}</span>
         <div className="min-w-0 flex-1"><div className="font-semibold text-ink">{DINH_DANG_ICON[nd.dinh_dang]?DINH_DANG_ICON[nd.dinh_dang].split(' ')[0]:''} {nd.tieu_de||nd.hook}</div><div className="text-[11px] text-ink-muted">gửi bởi {d.nguoi_gui_ten} · {fmtDate(d.created_at)}{(cm.loi_cung||[]).length?(' · ⚠ '+cm.loi_cung.join('; ')):''}{(cm.ly_do||[]).length?(' · '+cm.ly_do.join('; ')):''}</div></div>
         {d.nguoi_gui_id===me.id&&chanTuDuyet&&<Pill>bài của bạn</Pill>}</div>; })}</Card>}
-    <KhoVideoThanhPham onMo={(m)=>setMo({muc:m, tab:'sanxuat'})}/>
-    <div className="flex gap-2 overflow-x-auto pb-2 snap-x">{GIAI_DOAN.map(([gd,ten])=>{ const ds=muc.filter(m=>m.giai_doan===gd); return <div key={gd} className="bg-slate-50 rounded-xl p-2 w-[72vw] max-w-[236px] sm:w-auto sm:flex-1 sm:min-w-[150px] shrink-0 snap-start">
+    {tabDc==='duyet' && cho.length===0 && <Card pad="p-4"><Empty>Không có bài nào chờ duyệt.</Empty></Card>}
+    {tabDc==='video' && <KhoVideoThanhPham onMo={(m)=>setMo({muc:m, tab:'sanxuat'})}/>}
+    {tabDc==='luong' && <div className="flex gap-2 overflow-x-auto pb-2 snap-x">{GIAI_DOAN.filter(([gd])=>!locGd||gd===locGd).map(([gd,ten])=>{ const ds=muc.filter(m=>m.giai_doan===gd); return <div key={gd} className="bg-slate-50 rounded-xl p-2 w-[72vw] max-w-[236px] sm:w-auto sm:flex-1 sm:min-w-[150px] shrink-0 snap-start">
       <div className="text-[11px] font-bold text-ink-muted mb-1 flex justify-between"><span>{ten}</span><span>{ds.length}</span></div>
       <div className="flex flex-wrap gap-1 mb-2">{cotBuoc[gd].map(ma=>{ const x=cua(ma); return <Pill key={ma} cls={MUC_CLS[x.nguoi_thuc_hien]||''} className="!text-[10.5px]" >{ma} {MUC_LABEL[x.nguoi_thuc_hien]||''}</Pill>; })}</div>
       <div className="space-y-1.5">{ds.map(m=>{ const nd=ndCua(m); return <div key={m.id} onClick={()=>setMo({muc:m, tab:gd==='CHO_DUYET'?'duyet':gd==='SAN_XUAT'?'sanxuat':gd==='DA_DANG'?'dang':'noidung'})} className="bg-white rounded-lg border border-line p-2 cursor-pointer hover:border-brand">
-        <div className="text-[11px] font-semibold text-ink">{(DINH_DANG_ICON[m.dinh_dang]||'📄').split(' ')[0]} {m.tieu_de}</div>
-        <div className="text-[11px] text-ink-muted mt-0.5">{pTen(m.pillar_id)} · {kTen(m.kenh_id)} · <Pill cls={MUC_TIEU_CLS[m.muc_tieu]}>{MUC_TIEU_LABEL[m.muc_tieu]}</Pill></div>
+        <div className="text-[12px] font-semibold text-ink leading-snug">{(DINH_DANG_ICON[m.dinh_dang]||'📄').split(' ')[0]} {m.tieu_de}</div>{(()=>{ const [v,c]=viecTiep(m); return <div className={'text-[11px] font-semibold mt-1 '+c}>→ {v}</div>; })()}{m.dong&&<div className="mt-0.5"><span className="rounded-md px-1.5 py-0.5 text-[10.5px] font-semibold bg-[#F6EDD6] text-[#8A6410]">{m.dong}</span></div>}
+        <div className="text-[11px] text-ink-muted mt-0.5 flex gap-1 flex-wrap items-center">{[m.pillar_id&&pTen(m.pillar_id), m.kenh_id&&kTen(m.kenh_id)].filter(x=>x&&x!=='—').map(x=><span key={x}>{x} ·</span>)}<Pill cls={MUC_TIEU_CLS[m.muc_tieu]}>{MUC_TIEU_LABEL[m.muc_tieu]}</Pill></div>
         <div className="text-[11px] mt-0.5 flex gap-1 flex-wrap">{m.tao_boi==='AGENT'&&<span title="mục do máy tạo">🤖</span>}{nd&&<Pill cls={(ND_TT[nd.trang_thai]||[])[1]}>{(ND_TT[nd.trang_thai]||[])[0]} v{nd.phien_ban}{nd.tao_boi==='AGENT'?' 🤖':''}</Pill>}{m.ngay_dang?<span className="text-slate-500">{m.ngay_dang}</span>:<span className="text-slate-500">tuần {m.tuan||'?'}</span>}</div></div>; })}
-      {ds.length===0&&<div className="text-[11px] text-slate-500">0 thẻ</div>}</div></div>; })}</div>
+      {ds.length===0&&<div className="text-[11px] text-slate-500">0 thẻ</div>}</div></div>; })}</div>}
     {mo && <TheMucModal muc={mo.muc} tab0={mo.tab} onClose={()=>setMo(null)}/>}
   </div>;
 }

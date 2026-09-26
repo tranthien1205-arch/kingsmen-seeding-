@@ -388,6 +388,22 @@ Người duyệt: Thiện · Trạng thái: ĐÃ DUYỆT (2026-09-24, "ok bạn 
 - Việc "lệnh học bị đánh HONG sau 30 phút" đã sửa từ 25/09 (nhịp tim > 15 phút / 12 giờ) — không đổi thêm.
 - Ảnh hưởng dữ liệu: không đổi bảng; lệnh học mới ít link hơn (bỏ trùng). Test: adr011 thêm link trùng (mã cũ hỏng 1/3, mã mới đạt), may-dung-khoi-dong thêm 1 ca.
 
+### 2026-09-26 · Dòng chảy nội dung thiết kế lại + tương phản toàn app + Nguồn học dạng bảng
+- Chủ: "ui dòng chảy nội dung đang không ổn, video thì không bấm bỏ được, cần thiết kế ui thông minh, logic và có tầm nhìn hơn" · "tất cả thiết kế ui cần tăng sự tương phản" · "nguồn học thêm dạng bảng … mặc định".
+- **Dòng chảy nội dung:**
+  - Đầu màn là 6 ô giai đoạn đánh số, kèm số thẻ; ô nghẽn tô vàng; bấm ô thì lọc kanban.
+  - Dải "Cần làm": bài chờ bạn duyệt, video chờ xem và quyết, bài có video chưa lên lịch đăng.
+  - Ba tab: 🔁 Luồng nội dung (mặc định) · 🎬 Kho video · 🛂 Duyệt G3.
+  - Thẻ kanban ghi "→ việc tiếp theo" (chờ máy soạn / sửa theo góp ý / chờ duyệt / chờ máy dựng / xem video · lên lịch đăng / chờ đo), có dòng sản phẩm, ẩn trụ cột / kênh trống.
+- **Kho video:**
+  - Lưới 2–5 cột. Bản chờ quyết viền vàng.
+  - "✕ Loại" ẩn video khỏi danh sách; lọc "Đã loại" có nút ↺ Khôi phục. Khôi phục video cuối của lọc thì tự về danh sách chính.
+- **Tương phản toàn app:**
+  - Token: ink #072632, ink-muted #3e5661, line #cad6db, nền #eef2f4, bóng thẻ đậm hơn.
+  - Viền / nền nhạt tự đặt ở từng màn đậm thêm một bậc; chữ 9–10px lên 10,5–11px; text-slate-300/400 thành slate-500.
+- **Nguồn học:** dạng bảng mặc định trên PC (≥ 900px), thẻ trên điện thoại, nút ▦ / ▢ nhớ lựa chọn. Cột thao tác ghim phải.
+- Kiểm Playwright 390 / 1440: bấm Loại / Khôi phục thật, không tràn ngang.
+
 ### 2026-09-26 · Thiết kế lại tab Nguồn học
 - Chủ: "thiết kế nâng cấp ui nguồn học cho khoa học và chuyên nghiệp hơn" · dùng điện thoại là chính.
 - Đầu trang: câu tóm tắt (video đã học, clip footage, % nhãn thầy, số nguồn tự học / đang học) + 4 số + dải máy học. Nút "＋ Thêm nguồn" mở ô nạp.
