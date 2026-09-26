@@ -32,7 +32,8 @@ function ViecCuaToi({go}){
       : <div className="space-y-2">{cv.map(v=><Card key={v.id} pad="p-3"><div className="flex items-start gap-3">
           <div className="min-w-0 flex-1"><div className="text-sm font-semibold text-ink">{v.tieu_de}</div>
             <div className="text-[11px] text-ink-muted mt-0.5">{v.loai} · giao cho {v.giao_cho_vai_tro?ROLE_LABEL[v.giao_cho_vai_tro]:'cá nhân'} · bởi {v.tao_boi}{v.han?(' · hạn '+v.han):''}{v.han&&v.han<hn&&<span className="text-rose-600 font-semibold"> · quá hạn</span>}</div>
-            {v.ly_do && <div className="text-[11px] text-ink-soft mt-1">{v.ly_do}</div>}</div>
+            {v.ly_do && <div className="text-[11px] text-ink-soft mt-1">{v.ly_do}</div>}
+            {v.loai==='DUYET_VIDEO_NHAP' && (()=>{ const nd=(db.noi_dung||[]).find(n=>n.id===v.doi_tuong_id); return nd&&(nd.chi_tiet||{}).video_url?<div className="mt-2"><DanhGiaVideo nd={nd}/></div>:<div className="text-[11px] text-ink-muted mt-1">Bài chưa có bản nháp (máy đang dựng hoặc đã loại để dựng lại).</div>; })()}</div>
           <div className="flex gap-1 shrink-0"><Btn variant="ok" className="!py-1.5 !px-2.5 text-xs" onClick={()=>xong(v.id,'xong')}>Xong</Btn><Btn variant="ghost" className="!py-1.5 !px-2.5 text-xs" onClick={()=>xong(v.id,'bo')}>Bỏ</Btn></div>
         </div></Card>)}</div>}
     </div>

@@ -88,3 +88,17 @@ test('Reels Facebook: Trạm gửi danh sách reel → máy học nhận lệnh 
   const ts = JSON.parse(DB.raw.prepare(`SELECT tham_so FROM tram_lenh WHERE id=?`).get(r.lenh_id).tham_so); assert.equal(ts.nguon, 'REELS'); assert.equal(ts.kenh, 'fb/KeoKingsmen'); assert.equal(ts.links[0].meta.luot_xem, 1200);
   assert.equal((await may('/hub/reels-da-tai', 'POST', { trang: 'KeoKingsmen', links: [], loi: 'checkpoint' })).j.giao, false);
 });
+test('đánh giá video nháp: không đạt + lý do → loại, đóng việc duyệt video, giao máy dựng lại; đạt → chọn dùng', async () => {
+  const DB = taoD1(); env = taoEnv(DB); TOKEN = (await api('/login', 'POST', { email: 'admin@kingsmen.vn', password: 'admin123' })).j.token;
+  const may = hubK(giai((await api('/may-ghep', 'POST', { ten: 'Q2' })).j.ma_ghep).khoa); await may('/hub/trang_thai', 'POST', { may: 'Q2', kha_nang: ['dung_video'] });
+  const m = (await api('/muc', 'POST', { tieu_de: 'Keo video', dinh_dang: 'VIDEO' })).j.id;
+  const nd = (await api('/noi-dung', 'POST', { muc_id: m, dinh_dang: 'VIDEO', hook: 'h', cta: 'c', sections: [{ text: 't', hinh: 'x' }] })).j.db.noi_dung.find((x) => x.muc_id === m).id;
+  await api('/thay-chu', 'PATCH', { bat: true }); await api('/noi-dung/' + nd + '/gui-duyet', 'POST', {});
+  await may('/hub/nap', 'POST', { bang: 'content_os.video', dong: [{ noi_dung_id: nd, media_url: '/media/nhap.mp4', may: 'Q2' }] });
+  const t = DB.raw.prepare(`SELECT id FROM tai_san WHERE loai='VIDEO_XUAT' AND noi_dung_id=?`).get(nd); assert.ok(t, 'có bản nháp');
+  assert.ok(DB.raw.prepare(`SELECT id FROM cong_viec WHERE loai='DUYET_VIDEO_NHAP' AND doi_tuong_id=? AND trang_thai='MO'`).get(nd), 'có việc duyệt video');
+  const r = await api('/tai-san/' + t.id + '/su-dung', 'POST', { su_dung: 'BO', ly_do: 'sai cảnh', dung_lai: true });
+  assert.equal(r.s, 200); assert.equal(DB.raw.prepare(`SELECT su_dung FROM tai_san WHERE id=?`).get(t.id).su_dung, 'BO');
+  assert.equal(DB.raw.prepare(`SELECT trang_thai FROM cong_viec WHERE loai='DUYET_VIDEO_NHAP' AND doi_tuong_id=?`).get(nd).trang_thai, 'XONG', 'việc tự đóng');
+  assert.ok(r.j.dung_lai && r.j.dung_lai.ok, 'giao dựng lại'); const ct = JSON.parse(DB.raw.prepare(`SELECT chi_tiet FROM noi_dung WHERE id=?`).get(nd).chi_tiet); assert.equal(ct.video_url, undefined); assert.equal(ct.video_bi_loai[0].ly_do, 'sai cảnh');
+});

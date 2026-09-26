@@ -388,6 +388,14 @@ Người duyệt: Thiện · Trạng thái: ĐÃ DUYỆT (2026-09-24, "ok bạn 
 - Việc "lệnh học bị đánh HONG sau 30 phút" đã sửa từ 25/09 (nhịp tim > 15 phút / 12 giờ) — không đổi thêm.
 - Ảnh hưởng dữ liệu: không đổi bảng; lệnh học mới ít link hơn (bỏ trùng). Test: adr011 thêm link trùng (mã cũ hỏng 1/3, mã mới đạt), may-dung-khoi-dong thêm 1 ca.
 
+### 2026-09-26 · Đánh giá video nháp: Đạt / Không đạt
+- Chủ: "video ko đạt bấm loại không được". Nút Loại ở Kho video vẫn chạy (đã kiểm trên app thật); chỗ thiếu là việc "Xem & duyệt video nháp" và popup thẻ › Sản xuất.
+- DanhGiaVideo (60-dongchay.jsx) dùng ở Việc của tôi và tab Sản xuất: xem video tại chỗ; ✓ Đạt (su_dung CHON); ✕ Không đạt chọn lý do (sai cảnh / thiếu hình / giọng / nhịp / chữ / khác) + ghi chú + "giao máy dựng lại ngay"; ↺ Đánh giá lại.
+- POST /tai-san/:id/su-dung nhận ly_do, dung_lai:
+  - Đánh giá xong thì đóng việc DUYET_VIDEO_NHAP của bài.
+  - Không đạt + dựng lại: chuyển video_url vào chi_tiet.video_bi_loai (kèm lý do), rồi giaoDung.
+- Test đánh giá video (adr019); kiểm Playwright 390.
+
 ### 2026-09-26 · Dòng chảy nội dung thiết kế lại + tương phản toàn app + Nguồn học dạng bảng
 - Chủ: "ui dòng chảy nội dung đang không ổn, video thì không bấm bỏ được, cần thiết kế ui thông minh, logic và có tầm nhìn hơn" · "tất cả thiết kế ui cần tăng sự tương phản" · "nguồn học thêm dạng bảng … mặc định".
 - **Dòng chảy nội dung:**
