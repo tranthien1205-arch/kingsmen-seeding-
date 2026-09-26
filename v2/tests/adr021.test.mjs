@@ -125,3 +125,16 @@ test('021d: sửa thông số 26/09 chạy một lần qua cron — điền sả
   assert.equal(DB.raw.prepare(`SELECT thong_so FROM san_pham WHERE ma='G7000'`).get().thong_so, '[]', 'chỉ chạy một lần — người cố ý xoá thì giữ');
   assert.match(DB.raw.prepare(`SELECT cau_hinh FROM module_config WHERE id='sua_du_lieu'`).get().cau_hinh, /"so":2/);
 });
+
+test('021e: khởi tạo schema chạy MỘT LẦN mỗi phiên bản mã — request sau không chạy lại câu tạo bảng / thêm cột (26/09: ~105 câu mỗi request làm API prod ~22 s)', async () => {
+  const DB = taoD1(); env = taoEnv(DB); const goc = DB.prepare.bind(DB); let ddl = 0; DB.prepare = (sql) => { if (/^\s*(CREATE|ALTER)\b/i.test(sql)) ddl++; return goc(sql); };
+  TOKEN = (await api('/login', 'POST', { email: 'admin@kingsmen.vn', password: 'admin123' })).j.token; assert.ok(ddl > 50, 'lần đầu: tạo đủ bảng');
+  assert.match(DB.raw.prepare(`SELECT cau_hinh FROM module_config WHERE id='schema_ban'`).get().cau_hinh, /"ban":"/);
+  ddl = 0; for (let i = 0; i < 3; i++) assert.equal((await api('/ho-so-dinh-vi')).s, 200); assert.equal(ddl, 0, 'request sau: không câu DDL nào');
+  // isolate mới (env.DB là đối tượng khác, cùng dữ liệu): chỉ đọc dấu phiên bản, không chạy lại
+  const DB2 = { ...DB, prepare: (sql) => { if (/^\s*(CREATE|ALTER)\b/i.test(sql)) ddl++; return goc(sql); }, batch: DB.batch && DB.batch.bind(DB), raw: DB.raw }; env = taoEnv(DB2);
+  assert.equal((await api('/ho-so-dinh-vi')).s, 200); assert.equal(ddl, 0, 'isolate mới thấy dấu đúng phiên bản → bỏ qua');
+  // dấu sai phiên bản (mã schema đổi) → chạy lại một lần rồi ghi dấu mới
+  DB.raw.prepare(`UPDATE module_config SET cau_hinh='{"ban":"cu"}' WHERE id='schema_ban'`).run(); const DB3 = { ...DB2 }; env = taoEnv(DB3);
+  assert.equal((await api('/ho-so-dinh-vi')).s, 200); assert.ok(ddl > 50, 'phiên bản đổi → chạy lại'); assert.doesNotMatch(DB.raw.prepare(`SELECT cau_hinh FROM module_config WHERE id='schema_ban'`).get().cau_hinh, /"cu"/);
+});

@@ -79,6 +79,7 @@ export function taoMau(H) {
       env.DB.prepare(`CREATE UNIQUE INDEX IF NOT EXISTS ux_bn ON bo_nhan(truong, ten, dong)`),
     ]);
     for (const c of ['anh_thu', 'thay_thu', 'buoc_thu']) { try { await env.DB.prepare(`ALTER TABLE mau_doan ADD COLUMN ${c} INTEGER DEFAULT 0`).run(); } catch (e) {} }
+    try { await env.DB.prepare(`ALTER TABLE mau_doan ADD COLUMN goc_quay TEXT`).run(); } catch (e) {}   /* ADR-020: góc quay từng đoạn — thêm ở đây (nơi tạo bảng), ensureSchema chỉ chạy một lần mỗi phiên bản */
     for (const c of ['mo_ta TEXT', 'thu_tu INTEGER']) { try { await env.DB.prepare(`ALTER TABLE bo_nhan ADD COLUMN ${c}`).run(); } catch (e) {} }   // số lần đã thử cắt ảnh bù / thầy đọc bù
     if (!(await env.DB.prepare(`SELECT 1 x FROM bo_nhan LIMIT 1`).first())) { const st = [];
       for (const [t, ds] of Object.entries(GIEO)) for (const v of ds) st.push(env.DB.prepare(`INSERT OR IGNORE INTO bo_nhan (id,truong,ten,dong,trang_thai,nguon,created_at,updated_at) VALUES (?,?,?,'',?,?,?,?)`).bind(uid('bn'), t, v, 'DUNG', 'HE_THONG', nowISO(), nowISO()));
