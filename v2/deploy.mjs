@@ -64,6 +64,8 @@ try {
     const sau = (() => { const r = wr(["deployments", "list", "--json"]); try { return JSON.parse(r.out.slice(r.out.indexOf("["))).sort((a, x) => String(x.created_on).localeCompare(String(a.created_on)))[0]; } catch { return null; } })();
     sql(`INSERT INTO module_config (id,cau_hinh,updated_at,updated_by_name) VALUES ('deploy_so','${esc(JSON.stringify({ commit: head, may: MAY, luc: bayGio(), deploy_id: sau ? sau.id : null }))}','${bayGio()}','${esc(MAY)}') ON CONFLICT(id) DO UPDATE SET cau_hinh=excluded.cau_hinh, updated_at=excluded.updated_at, updated_by_name=excluded.updated_by_name;`);
     bao("ĐÃ DEPLOY " + head.slice(0, 7) + " từ " + MAY + (sau ? " · deployment " + sau.id : ""));
+    // làm nóng (27/09): request đầu sau deploy chạy khởi tạo schema một lần (~20 s khi mã schema đổi) — gọi trước để người dùng không gặp
+    try { const t0 = Date.now(); const r = await fetch("https://kingsmen-content-os.tranthien1205.workers.dev/api/ban", { signal: AbortSignal.timeout(90000) }); bao("làm nóng " + r.status + " · " + ((Date.now() - t0) / 1000).toFixed(1) + " s"); } catch (e) { bao("làm nóng lỗi (không sao, request đầu của người dùng sẽ chậm): " + e.message); }
   }
 } catch (e) { dung(e.message); }
 finally {
