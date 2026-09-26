@@ -127,3 +127,14 @@ test('ADR-020 đợt 2: hiệu quả theo trục — lượt xem trung vị theo
   assert.equal(x.hieu_qua.co_so, 3); assert.equal(x.hieu_qua.truc.cau_truc[0].gt, 'TRUOC_SAU'); assert.equal(x.hieu_qua.truc.cau_truc[0].xem_tv, 2000);
   assert.equal(x.hieu_qua.to_hop.length, 1, 'tổ hợp 1 video bị loại'); assert.equal(x.hieu_qua.to_hop[0].n, 2);
 });
+test('ADR-020 đợt 3: mục chọn tổ hợp trục; đề xuất theo hiệu quả (thiếu số → 409); bản A/B đổi mở đầu', async () => {
+  const DB = taoD1(); env = taoEnv(DB); TOKEN = (await api('/login', 'POST', { email: 'admin@kingsmen.vn', password: 'admin123' })).j.token;
+  const m = (await api('/muc', 'POST', { tieu_de: 'Keo chít mạch — video', dinh_dang: 'VIDEO' })).j.id;
+  assert.equal((await api('/muc/' + m + '/truc', 'POST', { de_xuat: true })).s, 409, 'chưa có số hiệu quả');
+  const r = (await api('/muc/' + m + '/truc', 'POST', { cau_truc: 'TRUOC_SAU', mo_dau: 'CAU_HOI', phong_cach: 'LA' })).j; assert.equal(r.truc.cau_truc, 'TRUOC_SAU'); assert.equal(r.truc.phong_cach, null);
+  const ins = DB.raw.prepare(`INSERT INTO kho_thanh_pham (id, ten, nguon, nguon_id, dai, so_shot, created_at, dong, luot_xem, truc) VALUES (?,?,?,?,6,2,'2026-09-26','Keo chít mạch',?,?)`);
+  const t = JSON.stringify({ cau_truc: 'THU_NGHIEM', mo_dau: 'HANH_DONG_MANH', muc_dich: 'CHUNG_MINH', phong_cach: 'AM_THANH_THAT' }); ins.run('a', 'a', 'TIKTOK', 'a', 9000, t); ins.run('b', 'b', 'TIKTOK', 'b', 7000, t);
+  const dx = (await api('/muc/' + m + '/truc', 'POST', { de_xuat: true })).j.truc; assert.equal(dx.cau_truc, 'THU_NGHIEM'); assert.equal(dx.mo_dau, 'HANH_DONG_MANH'); assert.equal(dx.nguon, 'DE_XUAT');
+  const ab = (await api('/muc/' + m + '/ab', 'POST', { doi: 'mo_dau', gia_tri: 'CON_SO' })).j; const b = ab.db.muc_noi_dung.find((x) => x.id === ab.id);
+  assert.equal(JSON.parse(b.truc).mo_dau, 'CON_SO'); assert.equal(JSON.parse(b.truc).cau_truc, 'THU_NGHIEM'); assert.equal(b.giai_doan, 'Y_TUONG'); assert.match(b.tieu_de, /\[B · con số\]$/);
+});

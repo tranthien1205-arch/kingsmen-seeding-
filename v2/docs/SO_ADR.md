@@ -388,6 +388,14 @@ Người duyệt: Thiện · Trạng thái: ĐÃ DUYỆT (2026-09-24, "ok bạn 
 - Việc "lệnh học bị đánh HONG sau 30 phút" đã sửa từ 25/09 (nhịp tim > 15 phút / 12 giờ) — không đổi thêm.
 - Ảnh hưởng dữ liệu: không đổi bảng; lệnh học mới ít link hơn (bỏ trùng). Test: adr011 thêm link trùng (mã cũ hỏng 1/3, mã mới đạt), may-dung-khoi-dong thêm 1 ca.
 
+### 2026-09-26 · ADR-020 đợt 3 — làm video theo tổ hợp trục
+- Đo thật đợt 1 (15:19Z): thầy gán 8 video / 28 đoạn góc quay, tổng 0,02 USD (≈ 0,0025 USD / video).
+- muc_noi_dung.truc. POST /muc/:id/truc: chọn tay; hoặc {de_xuat:true} lấy giá trị tốt nhất từng trục (từ 2 video) + tổ hợp cấu trúc × mở đầu tốt nhất của dòng (409 khi chưa có số).
+- POST /muc/:id/ab {doi: mo_dau|cau_truc, gia_tri?}: nhân bản mục ở Ý tưởng, đổi một trục, tiêu đề thêm "[B · …]"; dùng chung kho footage của dòng.
+- angleFootage thêm "TỔ HỢP BẮT BUỘC" (VIET_THEO_TRUC cho từng giá trị) + 2 ví dụ cùng cấu trúc cùng dòng bán tốt. Áp cho cả B4 tự soạn lẫn AI viết.
+- Popup thẻ › Nội dung (mục VIDEO) có khối 🎯 Tổ hợp video: 4 ô chọn, ✨ Đề xuất theo hiệu quả, ＋ Bản A/B đổi mở đầu / đổi cấu trúc.
+- Test đợt 3; kiểm Playwright 390.
+
 ### 2026-09-26 · ADR-020 đợt 2 — hiệu quả theo trục
 - /do-phu-truc trả thêm hieu_qua theo từng dòng (chỉ video có lượt xem):
   - Mỗi giá trị trục: số video, lượt xem trung vị, tổng doanh thu; xếp theo lượt xem.

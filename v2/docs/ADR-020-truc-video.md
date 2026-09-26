@@ -1,6 +1,6 @@
 # ADR-020 — Trục phân nhóm video (mục đích · cấu trúc · kiểu mở đầu · phong cách · góc quay)
 
-**Trạng thái:** ĐÃ DUYỆT 26/09/2026 (chủ: "ok") · đợt 1 đã làm
+**Trạng thái:** ĐÃ DUYỆT 26/09/2026 (chủ: "ok") · đợt 1–3 đã làm
 **Chủ hỏi:** "trong huấn luyện mô hình có cần phân nhóm nhỏ hơn các loại video theo mục đích sử dụng, theo cấu trúc, theo phong cách, theo góc quay… một cách hợp lý không. Khi đó đầu ra sẽ tuỳ chọn linh hoạt và đa dạng" → "làm đi nhé".
 
 ## Quyết định
