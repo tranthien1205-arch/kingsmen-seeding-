@@ -166,3 +166,18 @@ test('021f: G1 chốt từ Hồ sơ — bản chụp hồ sơ + pillar + định
   const u = GUI.at(-1).messages[0].content; assert.match(u, /ĐỊNH HƯỚNG GIAI ĐOẠN \(ưu tiên khi chọn góc\): Quý 4: Terrazy Wall, Kingpro, keo mùa mưa/); assert.match(u, /ĐỊNH HƯỚNG THÁNG: Tháng này đẩy chuẩn thi công/);
   assert.ok(!/KHOI_CHU_CU|TONG_CU|DOI_TUONG_CU/.test(u), 'không đọc ba ô chữ cũ'); assert.match(u, /ĐỐI TƯỢNG: Keo chít mạch: Chủ nhà xây \/ sửa/);
 });
+
+test('021g: nạp Drive — đi sâu 5 tầng (footage Terrazy SOURCE › CẢI TẠO › … › BƯỚC › clip); chống trùng theo mã file Drive, không theo tên (tên trùng giữa các thư mục)', async () => {
+  const DB = await batDau();
+  const hubK = (k) => async (p, method = 'GET', body) => { const r = await worker.fetch(new Request('https://x/api' + p, { method, headers: { 'Content-Type': 'application/json', 'X-Hub-Key': k }, body: body ? JSON.stringify(body) : undefined }), env, { waitUntil() {} }); return { s: r.status, j: await r.json() }; };
+  const giai = (ma) => JSON.parse(Buffer.from(ma.slice(5).replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8'));
+  const may = hubK(giai((await api('/may-ghep', 'POST', { ten: 'Q2' })).j.ma_ghep).khoa); await may('/hub/trang_thai', 'POST', { may: 'Q2', kha_nang: ['dung_video'] });
+  const kho = (await api('/muc', 'POST', { tieu_de: 'Kho thử', dinh_dang: 'VIDEO' })).j.id;
+  const gui = (drive_id, thu_muc) => may('/hub/tai-san', 'POST', { muc_id: kho, ten: 'Bản sao của Cận cảnh đổ keo.MP4', thu_muc, media_url: '/media/x-' + drive_id + '.mp4', media_type: 'VIDEO', nguon: 'DRIVE', drive_id, giay: 8 });
+  const a = await gui('idA', '/1. SOURCE/CẢI TẠO TOLET/4. ĐỔ KEO'); assert.equal(a.s, 200); assert.ok(a.j.id);
+  const b = await gui('idB', '/1. SOURCE/CẢI TẠO NHÀ VỆ SINH/NHÀ VỆ SINH 1/4. ĐỔ KEO'); assert.ok(b.j.id && !b.j.trung, 'cùng tên, khác file Drive → vẫn nhận');
+  assert.equal((await gui('idA', '/1. SOURCE/CẢI TẠO TOLET/4. ĐỔ KEO')).j.trung, true, 'cùng file Drive → trùng');
+  const d = (await may('/hub/viec/nap_drive?muc_id=' + kho)).j; assert.deepEqual(d.da_co_id.sort(), ['idA', 'idB']); assert.deepEqual(d.da_co, []);
+  const src = (await import('node:fs')).readFileSync(new URL('../tools/may-dung/nap-drive.mjs', import.meta.url), 'utf8');
+  assert.match(src, /soTM < 150/); assert.match(src, /length < 5\) hang\.push/); assert.match(src, /!daCoId\.has\(f\.id\)/);
+});
