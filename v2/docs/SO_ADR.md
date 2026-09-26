@@ -388,6 +388,11 @@ Người duyệt: Thiện · Trạng thái: ĐÃ DUYỆT (2026-09-24, "ok bạn 
 - Việc "lệnh học bị đánh HONG sau 30 phút" đã sửa từ 25/09 (nhịp tim > 15 phút / 12 giờ) — không đổi thêm.
 - Ảnh hưởng dữ liệu: không đổi bảng; lệnh học mới ít link hơn (bỏ trùng). Test: adr011 thêm link trùng (mã cũ hỏng 1/3, mã mới đạt), may-dung-khoi-dong thêm 1 ca.
 
+### 2026-09-26 · Lệnh AI thay chủ hoc_tiktok
+- Chủ gửi kênh brand @keokingsmen.com. Nút của người và lệnh AI dùng chung một hàm hangTaiTikTok (xếp kênh cho Trạm tải qua phiên đăng nhập, rồi máy học).
+- Lệnh hoc_tiktok {kenh, dong, muc_dich, toi_da ≤ 60}: Trạm im hoặc dòng lạ thì bỏ và ghi lý do.
+- Công cụ: scripts/thay-chu.mjs hoc_tiktok <@kênh|link> ["Dòng"] [BRAND|BAN_HANG].
+
 ### 2026-09-26 · Kho footage theo dòng + nguồn đang học hiện ngay
 - Chủ gửi 2 thư mục Drive footage gốc: "1. KEO CHÍT MẠCH CHUYÊN DỤNG" (chia theo cảnh: vấn đề, quay sản phẩm, thi công, hoàn thiện, test, POV, CTA, outro…) và "TERRAZY x ĐẠI LÝ 2026" (góc cận & trung, góc POV). Chủ cũng báo: "tôi thêm link nguồn học nhưng ko lưu được" / "không thấy trong danh sách nguồn học".
   - Thật ra link đã lưu (lệnh hoc_thanh_pham tl_42eef273). Nhưng ô nạp coi mọi link là video thành phẩm, và nguồn chỉ hiện khi đã học xong video đầu.

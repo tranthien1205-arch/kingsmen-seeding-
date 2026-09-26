@@ -70,3 +70,11 @@ test('kho footage theo dòng: nạp Drive loại footage → kho của dòng + l
   const v = (await may('/hub/viec/dung_video?noi_dung_id=' + nd)).j; const ts = (v.viec || v.ds || v)[0] || v; const clip = JSON.stringify(v);
   assert.match(clip, /van-de-1\.mp4/, 'dựng thấy clip trong kho footage cùng dòng');
 });
+test('lệnh hoc_tiktok: Trạm im thì bỏ và ghi lý do; dòng lạ thì bỏ', async () => {
+  const DB = taoD1(); env = taoEnv(DB); TOKEN = (await api('/login', 'POST', { email: 'admin@kingsmen.vn', password: 'admin123' })).j.token;
+  await api('/thay-chu', 'PATCH', { bat: true });
+  DB.raw.prepare(`INSERT OR REPLACE INTO module_config (id, cau_hinh, updated_at) VALUES ('lenh_thay_chu', ?, '2026-09-26')`).run(JSON.stringify({ lenh: [{ loai: 'hoc_tiktok', kenh: 'https://www.tiktok.com/@keokingsmen.com?_r=1', muc_dich: 'BRAND' }, { loai: 'hoc_tiktok', kenh: '@abc', dong: 'Dòng bịa' }] }));
+  let p; await worker.scheduled({}, env, { waitUntil: (x) => { p = x; } }); await p;
+  const kq = JSON.parse(DB.raw.prepare(`SELECT cau_hinh FROM module_config WHERE id='lenh_thay_chu_kq'`).get().cau_hinh).lan[0].kq.map((x) => x.join(': ')).join(' | ');
+  assert.match(kq, /keokingsmen\.com.*bỏ: Trạm văn phòng đang im/); assert.match(kq, /@abc: bỏ: dòng không có trong Bộ nhãn/);
+});
