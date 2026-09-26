@@ -388,6 +388,14 @@ Người duyệt: Thiện · Trạng thái: ĐÃ DUYỆT (2026-09-24, "ok bạn 
 - Việc "lệnh học bị đánh HONG sau 30 phút" đã sửa từ 25/09 (nhịp tim > 15 phút / 12 giờ) — không đổi thêm.
 - Ảnh hưởng dữ liệu: không đổi bảng; lệnh học mới ít link hơn (bỏ trùng). Test: adr011 thêm link trùng (mã cũ hỏng 1/3, mã mới đạt), may-dung-khoi-dong thêm 1 ca.
 
+### 2026-09-26 · Kho video thành phẩm (Dòng chảy nội dung)
+- Chủ: "tôi không thấy kho thành phẩm video" · "tôi thường dùng điện thoại" · "cần kho video nhé".
+- `KhoVideoThanhPham` (60-dongchay.jsx), đầu màn Dòng chảy: mọi bản nháp máy dựng (`tai_san` loai VIDEO_XUAT) của mọi thẻ, mới nhất trước.
+  - Lọc: bản mới nhất của thẻ / đã đăng / bản cũ.
+  - Video phát tại chỗ (`playsInline`, `#t=0.1` để hiện khung đầu trên iPhone), kèm gói CapCut cùng bài, tải video, mở thẻ gốc ở tab Sản xuất.
+  - Điện thoại: dải trượt ngang, thẻ rộng 64vw. PC: lưới 3–4 cột. Hiện 8 video, có nút "Xem tất cả".
+- Kiểm Playwright 390 / 1440: không tràn ngang, "Mở thẻ" mở đúng popup.
+
 ### 2026-09-26 · Máy con 1.8: nhịp tim ở luồng riêng + tự cập nhật
 - Nhịp tim (`/hub/trang_thai` 2 phút) và làm mới khoá `dang-chay.json` (1 phút) chạy ở `worker_threads`. Lệnh học gọi ffmpeg bằng `spawnSync` (tới 15 phút) không còn làm app tưởng máy tắt. Luồng chính báo "đang làm" bằng `postMessage`.
 - Tự cập nhật: lúc khởi động (nếu không có lệnh dở) và mỗi 3 giờ khi rảnh, máy con tải `/tools/may-dung/may-dung.mjs` từ app. Bản mới hơn (so số, không hạ bản) → `node --check` → giữ bản cũ ở `may-dung.mjs.cu` → thoát 0, rồi CHAY-NEN.bat / BAT-DAU.bat chạy lại bằng bản mới. Tắt bằng `--khong-cap-nhat`. Từ 1.8 về sau không cần chạy lại bộ cài trên máy con.

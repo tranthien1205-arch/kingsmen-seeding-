@@ -4,6 +4,29 @@ const ND_TT = { NHAP:['Nháp','bg-slate-100 text-ink'], CHO_DUYET:['Chờ duyệ
 const BD_TT = { CHUAN_BI:['Chuẩn bị','bg-slate-100 text-ink'], DA_LEN_LICH:['Đã lên lịch','bg-sky-100 text-sky-800'], DANG_GUI:['Đang gửi (n8n/Trạm)','bg-amber-100 text-amber-800'], DA_DANG:['Đã đăng','bg-emerald-100 text-emerald-800'], LOI:['Lỗi','bg-rose-100 text-rose-700'] };
 const CT_KEYS = { POST:[['hashtag','Hashtag']], ANH:[['chu_phu','Chữ phụ'],['caption','Caption đăng kèm'],['hashtag','Hashtag'],['brief','Brief cho designer']], CAROUSEL:[['caption','Caption đăng kèm'],['hashtag','Hashtag']], VIDEO:[] };
 function banDangFE(nd){ const secs=nd.sections||[]; const ct=nd.chi_tiet||{}; const than=secs.map(x=>x.text); const dd=nd.dinh_dang||'VIDEO'; let p; if(dd==='POST') p=[nd.hook,...than,nd.cta,ct.hashtag]; else if(dd==='ANH') p=[ct.caption||[nd.hook,ct.chu_phu].filter(Boolean).join('\n'),nd.cta,ct.hashtag]; else if(dd==='CAROUSEL') p=[ct.caption||[nd.hook,...than].filter(Boolean).join('\n'),nd.cta,ct.hashtag]; else p=[nd.hook,...than,nd.cta]; return p.filter(Boolean).join('\n\n'); }
+// Kho video thành phẩm (26/09, chủ: "tôi không thấy kho thành phẩm video" · "tôi thường dùng điện thoại"): bản nháp máy dựng của mọi thẻ,
+// mới nhất trước; điện thoại 1 cột, PC 3 cột; video phát tại chỗ (playsInline), gói CapCut cùng bài, bấm tên mở thẻ gốc ở tab Sản xuất.
+function KhoVideoThanhPham({ onMo }){
+  const { db } = useApp(); const [het,setHet]=useState(false); const [loc,setLoc]=useState('');
+  const ts=db.tai_san||[]; const ndCua=id=>(db.noi_dung||[]).find(n=>n.id===id); const mucCua=id=>(db.muc_noi_dung||[]).find(m=>m.id===id);
+  const ds=ts.filter(t=>t.loai==='VIDEO_XUAT').map(t=>{ const nd=t.noi_dung_id?ndCua(t.noi_dung_id):null; const muc=mucCua(t.muc_id||(nd&&nd.muc_id)); const goi=ts.filter(g=>g.loai==='GOI_DUNG'&&((t.noi_dung_id&&g.noi_dung_id===t.noi_dung_id)||(!t.noi_dung_id&&g.muc_id===t.muc_id))).sort((a,b)=>Math.abs(Date.parse(a.created_at)-Date.parse(t.created_at))-Math.abs(Date.parse(b.created_at)-Date.parse(t.created_at)))[0];
+    const moiNhat=nd&&((nd.chi_tiet||{}).video_url===t.media_url); return { t, nd, muc, goi, moiNhat, tt: muc&&['DA_DANG','DA_DO'].includes(muc.giai_doan)?'dang':moiNhat?'moi':'cu' }; })
+    .sort((a,b)=>String(b.t.created_at).localeCompare(String(a.t.created_at)));
+  if(!ds.length) return null;
+  const loc2=ds.filter(x=>!loc||x.tt===loc); const hien=het?loc2:loc2.slice(0,8); const dem=k=>ds.filter(x=>x.tt===k).length;
+  const TT={ moi:['bản mới nhất của thẻ','bg-emerald-100 text-emerald-800'], cu:['bản cũ','bg-slate-100 text-ink-muted'], dang:['thẻ đã đăng','bg-sky-100 text-sky-800'] };
+  return <Card pad="p-3" className="space-y-2">
+    <div className="flex items-center gap-2 flex-wrap"><SectionTitle className="!mb-0">🎬 Kho video thành phẩm ({ds.length})</SectionTitle><span className="text-[11px] text-ink-muted">bản nháp máy dựng, mới nhất trước</span></div>
+    <div className="flex gap-1.5 flex-wrap text-xs">{[['','Tất cả',ds.length],['moi','Mới nhất mỗi thẻ',dem('moi')],['dang','Đã đăng',dem('dang')],['cu','Bản cũ',dem('cu')]].filter(x=>x[2]||!x[0]).map(([k,t,n])=><button key={k} onClick={()=>setLoc(k)} className={'rounded-full border px-2.5 py-1 '+(loc===k?'border-ink font-bold bg-white':'border-line bg-white')}>{t} · {n}</button>)}</div>
+    <div className="flex gap-3 overflow-x-auto snap-x pb-1 sm:grid sm:grid-cols-3 lg:grid-cols-4 sm:overflow-visible">{hien.map(({t,nd,muc,goi,tt})=><div key={t.id} className="rounded-xl border border-line overflow-hidden bg-white min-w-0 w-[64vw] max-w-[260px] shrink-0 snap-start sm:w-auto sm:max-w-none">
+      <video src={t.media_url+"#t=0.1"} controls playsInline preload="metadata" className="w-full bg-black aspect-[9/16] object-contain"/>
+      <div className="p-2.5 space-y-1 text-xs"><button onClick={()=>muc&&onMo(muc)} className="font-semibold text-[13px] text-left text-ink hover:underline leading-snug">{(nd&&(nd.tieu_de||nd.hook))||(muc&&muc.tieu_de)||t.ten}</button>
+        <div className="flex gap-1.5 flex-wrap items-center"><Pill cls={TT[tt][1]} className="!text-[10px]">{TT[tt][0]}</Pill><span className="text-ink-muted">{fmtDate(t.created_at)} · {t.created_by_name||'máy'}</span></div>
+        {nd&&(nd.chi_tiet||{}).thieu_hinh&&<div className="text-amber-700">⚠ Thiếu hình: {(nd.chi_tiet||{}).thieu_hinh}</div>}
+        <div className="flex gap-2 flex-wrap pt-1">{goi&&<a className="rounded-lg border border-line px-2.5 py-1.5 font-semibold" href={goi.media_url} target="_blank" rel="noreferrer">📦 Gói CapCut</a>}<a className="rounded-lg border border-line px-2.5 py-1.5" href={t.media_url} target="_blank" rel="noreferrer">⤓ Tải video</a>{muc&&<button onClick={()=>onMo(muc)} className="rounded-lg border border-line px-2.5 py-1.5">Mở thẻ</button>}</div></div>
+    </div>)}</div>
+    {loc2.length>8&&<button onClick={()=>setHet(!het)} className="w-full rounded-lg border border-line py-2 text-xs font-semibold bg-white">{het?'Thu gọn':'Xem tất cả '+loc2.length+' video'}</button>}
+  </Card>; }
 function DongChayNoiDung(){
   const { db, me } = useApp(); const buoc=db.buoc||[]; const chiXem=!laStaff(me);
   const [thang,setThang]=useState(db.hang_so.thang_nay); const [mo,setMo]=useState(null); const [locGd,setLocGd]=useState('');
@@ -21,6 +44,7 @@ function DongChayNoiDung(){
         <span className={"font-display font-extrabold w-8 text-center "+((cm.diem||0)>=70?'text-emerald-600':(cm.diem||0)>=40?'text-amber-600':'text-rose-500')}>{cm.diem??'—'}</span>
         <div className="min-w-0 flex-1"><div className="font-semibold text-ink">{DINH_DANG_ICON[nd.dinh_dang]?DINH_DANG_ICON[nd.dinh_dang].split(' ')[0]:''} {nd.tieu_de||nd.hook}</div><div className="text-[10px] text-ink-muted">gửi bởi {d.nguoi_gui_ten} · {fmtDate(d.created_at)}{(cm.loi_cung||[]).length?(' · ⚠ '+cm.loi_cung.join('; ')):''}{(cm.ly_do||[]).length?(' · '+cm.ly_do.join('; ')):''}</div></div>
         {d.nguoi_gui_id===me.id&&chanTuDuyet&&<Pill>bài của bạn</Pill>}</div>; })}</Card>}
+    <KhoVideoThanhPham onMo={(m)=>setMo({muc:m, tab:'sanxuat'})}/>
     <div className="flex gap-2 overflow-x-auto pb-2 snap-x">{GIAI_DOAN.map(([gd,ten])=>{ const ds=muc.filter(m=>m.giai_doan===gd); return <div key={gd} className="bg-slate-50 rounded-xl p-2 w-[72vw] max-w-[236px] sm:w-auto sm:flex-1 sm:min-w-[150px] shrink-0 snap-start">
       <div className="text-[11px] font-bold text-ink-muted mb-1 flex justify-between"><span>{ten}</span><span>{ds.length}</span></div>
       <div className="flex flex-wrap gap-1 mb-2">{cotBuoc[gd].map(ma=>{ const x=cua(ma); return <Pill key={ma} cls={MUC_CLS[x.nguoi_thuc_hien]||''} className="!text-[9px]" >{ma} {MUC_LABEL[x.nguoi_thuc_hien]||''}</Pill>; })}</div>
