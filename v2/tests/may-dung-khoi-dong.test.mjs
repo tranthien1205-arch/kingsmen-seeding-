@@ -75,3 +75,18 @@ test('khởi động lại hằng ngày: chờ lệnh dở (dang-lam.json) rồi
   assert.match(CAI, /-LogonType Interactive/); assert.ok(!/S4U/.test(CAI.split(/\r?\n/).filter((d) => !/^\s*#/.test(d)).join('\n')), 'không dùng S4U');
   assert.match(CAI, /AutoAdminLogon/);
 });
+
+test('1.6 chạy nền khi bật máy (26/09): khoá một máy con, CHAY-NEN lặp không dùng timeout, bộ cài S4U không lưu mật khẩu', () => {
+  assert.match(MAY, /const BAN = "1\.[6-9]"/);
+  assert.match(MAY, /const KHOA_F = join\(DIR, "dang-chay\.json"\)/); assert.match(MAY, /process\.exit\(3\)/); assert.match(MAY, /20 \* 60e3/);
+  assert.match(MAY, /if \(!args\.includes\("--mot-lan"\)\) giuKhoa\(\);\s*\r?\n\/\/ app chưa lên/, 'giữ khoá trước khi nối app');
+  assert.match(BAT, /if errorlevel 3 if not errorlevel 4 goto nen/);
+  const NEN = fs.readFileSync(new URL('../tools/may-dung/CHAY-NEN.bat', import.meta.url), 'utf8');
+  assert.match(NEN, /node may-dung\.mjs --nen/); assert.match(NEN, /if errorlevel 3 if not errorlevel 4 goto cho/);
+  assert.ok(!/^\s*timeout\b/im.test(NEN), 'phiên nền không có bàn phím — không dùng timeout');
+  assert.ok(NEN.includes("System32\\find.exe"), "find của Windows, không phải find của Git");
+  const CAI = fs.readFileSync(new URL('../tools/may-dung/cai-chay-nen.ps1', import.meta.url), 'utf8');
+  assert.match(CAI, /-LogonType S4U/); assert.match(CAI, /-AtStartup/); assert.match(CAI, /IsInRole/);
+  assert.ok(!/-Password|Get-Credential|ConvertTo-SecureString/i.test(CAI), 'không hỏi / lưu mật khẩu');
+  const KDL = fs.readFileSync(new URL('../tools/may-dung/cai-khoi-dong-lai.ps1', import.meta.url), 'utf8'); assert.match(KDL, /chay nen khi bat may/);
+});

@@ -11,7 +11,7 @@ import { spawnSync } from "node:child_process";
 import os from "node:os";
 
 export const DIR = dirname(fileURLToPath(import.meta.url));
-const BAN = "1.5";
+const BAN = "1.6";
 // việc app giao → script phát từ app (ADR-008/009): máy chỉ chạy script đúng hash app xác nhận
 const VIEC_SCRIPT = { dung_video: "dung-video", mo_hinh_bong: "mo-hinh", mo_hinh_chay: "mo-hinh", huan_luyen: "huan-luyen", loc_footage: "loc-footage", nap_drive: "nap-drive", phan_tich_footage: "phan-tich", hoc_thanh_pham: "hoc-thanh-pham" };   // nap_drive: nạp footage từ thư mục Drive (24/09) · phan_tich_footage / hoc_thanh_pham: ADR-010
 const coTransformers = existsSync(join(DIR, "node_modules", "@huggingface", "transformers"));
@@ -103,6 +103,25 @@ if (args[0] === "xuat-tap-mau" || args[0] === "phien-ban") {
   const kq = await mod.default({ app: APP, goiApp, lenh: { viec: "danh_gia", tham_so: args[0] === "xuat-tap-mau" ? { xuat: true, tinh_nang: args[1] || "soan_nhap_agent" } : { model_id: args[1], tinh_nang: args[2] || "soan_nhap_agent" } }, dir: join(DIR, "out"), log, may: os.hostname() });
   log(kq.ok ? "✓" : "✗", kq.msg); process.exit(kq.ok ? 0 : 1);
 }
+// (1.6) MỘT máy con mỗi máy: tác vụ chạy nền khi bật máy (CHAY-NEN.bat, không cần đăng nhập) và cửa sổ BAT-DAU có thể cùng bật.
+// Khoá dang-chay.json {pid, luc} làm mới mỗi phút; bản sau thấy bản trước còn sống thì thoát mã 3 (CHAY-NEN chờ rồi thử lại → cửa sổ
+// đóng là bản nền tự nhận). Khoá cũ quá 20 phút mà tiến trình node vẫn còn = máy con treo → dừng nó rồi nhận thay.
+const KHOA_F = join(DIR, "dang-chay.json");
+function giuKhoa() {
+  let d = null; try { d = JSON.parse(readFileSync(KHOA_F, "utf8")); } catch {}
+  if (d && d.pid && d.pid !== process.pid) {
+    let song = true; try { process.kill(d.pid, 0); } catch (e) { song = e.code === "EPERM"; }
+    const laNode = song && /node.exe/i.test(String(spawnSync("tasklist", ["/FI", "PID eq " + d.pid, "/FO", "CSV", "/NH"], { encoding: "utf8", windowsHide: true }).stdout || ""));
+    const cu = Date.now() - Date.parse(d.luc || 0) > 20 * 60e3;
+    if (laNode && !cu) { log("Máy con đã chạy ở tiến trình " + d.pid + (d.nen ? " (chạy nền khi bật máy)" : "") + " — bản này thoát."); process.exit(3); }
+    if (laNode && cu) { loi("Máy con tiến trình " + d.pid + " không làm mới khoá từ " + d.luc + " (treo) — dừng nó và nhận thay"); spawnSync("taskkill", ["/PID", String(d.pid), "/T", "/F"], { windowsHide: true }); }
+  }
+  const ghi = () => { try { writeFileSync(KHOA_F, JSON.stringify({ pid: process.pid, luc: new Date().toISOString(), nen: args.includes("--nen"), may: os.hostname() })); } catch {} };
+  ghi(); setInterval(ghi, 60000).unref();
+  process.on("exit", () => { try { const k = JSON.parse(readFileSync(KHOA_F, "utf8")); if (k.pid === process.pid) rmSync(KHOA_F, { force: true }); } catch {} });
+  for (const s of ["SIGINT", "SIGTERM", "SIGBREAK"]) process.on(s, () => process.exit(0));
+}
+if (!args.includes("--mot-lan")) giuKhoa();
 // app chưa lên (dev server khởi động lại, mất mạng) → chờ 30 giây rồi thử lại, không thoát
 let ping = await goiApp("/hub/ping"); while (!ping.ok) { log("Chưa nối được app (" + (ping.status || "mạng") + "): " + ((ping.d && ping.d.error) || "") + " — thử lại sau 30 giây"); await new Promise((x) => setTimeout(x, 30000)); ping = await goiApp("/hub/ping"); }
 log("Máy dựng '" + APP.may_ten + "' (" + os.hostname() + ") đã nối " + APP.url + " · app v" + ping.d.ban + " · ffmpeg " + (ffmpegOk ? "có" : "KHÔNG") + " · AI nhìn " + (coTransformers ? "có" : "chưa (npm install)") + (gpu ? " · GPU " + gpu : ""));

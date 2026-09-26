@@ -9,7 +9,7 @@ $APP = 'https://content.masfico.vn'
 $DIR = 'C:\may-dung'
 Write-Host "== Kingsmen Content OS - cai may hoc vao $DIR" -ForegroundColor Cyan
 New-Item -ItemType Directory -Force $DIR | Out-Null
-foreach ($f in 'may-dung.mjs','BAT-DAU.bat','package.json','README.md') {
+foreach ($f in 'may-dung.mjs','BAT-DAU.bat','CHAY-NEN.bat','package.json','README.md') {
   try { Invoke-WebRequest -UseBasicParsing "$APP/tools/may-dung/$f" -OutFile (Join-Path $DIR $f); Write-Host "  tai $f" } catch { Write-Host "  X khong tai duoc $f - $($_.Exception.Message)" -ForegroundColor Red }
 }
 function CoLenh($t) { return [bool](Get-Command $t -ErrorAction SilentlyContinue) }

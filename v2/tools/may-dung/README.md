@@ -22,6 +22,7 @@ Máy con rút gọn: nhận lệnh **dựng video nháp** từ app cho tài kho�
 - Kết quả xem ở thẻ › Sản xuất; việc "Xem & duyệt video nháp" xuất hiện ở Việc của tôi.
 - Tắt/khởi động lại giữa chừng: máy con (bản 1.4+) nhớ lệnh đang làm ở `dang-lam.json`, lần chạy sau tự làm tiếp (script bỏ phần đã xong), tối đa 3 lần.
 - Khởi động lại hằng ngày (máy chạy lâu cho ổn định): `irm https://content.masfico.vn/tools/may-dung/cai-khoi-dong-lai.ps1 | iex` → tác vụ 4:00 sáng chờ máy con làm xong (tối đa 3 giờ) rồi khởi động lại. Cần bật **tự đăng nhập Windows** (Autologon của Microsoft) — không thì máy nằm ở màn hình khoá và máy con không chạy.
+- **Chạy khi bật máy, không cần đăng nhập** (26/09, máy con 1.6): PowerShell *Run as administrator* → `irm https://content.masfico.vn/tools/may-dung/cai-chay-nen.ps1 | iex`. Tạo tác vụ Windows kiểu S4U dưới chính tài khoản này (không lưu mật khẩu) chạy `CHAY-NEN.bat` lúc khởi động. Mỗi máy chỉ một máy con chạy (khoá `dang-chay.json`): cửa sổ BAT-DAU đang mở thì bản nền chờ, đóng cửa sổ là bản nền nhận việc; máy con treo quá 20 phút thì bản sau dừng nó và nhận thay. Giới hạn: không vào được ổ mạng (\máy-khác…) — thư mục nạp để trên ổ của chính máy.
 - Nhật ký: mọi dòng hiện trên cửa sổ đen cũng được ghi vào `may-dung.log` cạnh máy con (quá 5 MB thì bản cũ sang `may-dung.log.1`). Máy dừng vì lỗi bất ngờ thì dòng `[LỖI]` cuối file cho biết lý do.
 
 ## Gỡ

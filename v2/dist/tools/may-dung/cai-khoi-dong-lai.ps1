@@ -23,9 +23,11 @@ $t = Get-ScheduledTask -TaskName $TEN -ErrorAction SilentlyContinue
 if ($t) { Write-Host "  da tao tac vu: $TEN - lan chay toi: $((Get-ScheduledTaskInfo -TaskName $TEN).NextRunTime)" -ForegroundColor Green } else { Write-Host "  X khong tao duoc tac vu" -ForegroundColor Red }
 
 $wl = Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon' -ErrorAction SilentlyContinue
-if ($wl.AutoAdminLogon -eq '1') { Write-Host "  Windows tu dang nhap: CO ($($wl.DefaultUserName))" -ForegroundColor Green }
+if (Get-ScheduledTask -TaskName 'Kingsmen may con - chay nen khi bat may' -ErrorAction SilentlyContinue) { Write-Host "  May con chay nen khi bat may: CO (khong can tu dang nhap)" -ForegroundColor Green }
+elseif ($wl.AutoAdminLogon -eq '1') { Write-Host "  Windows tu dang nhap: CO ($($wl.DefaultUserName))" -ForegroundColor Green }
 else {
   Write-Host "  ! Windows CHUA tu dang nhap sau khi khoi dong lai. Khong co buoc nay, may nam o man hinh khoa va may con khong chay." -ForegroundColor Yellow
-  Write-Host "    Tu bat (can mat khau, nguoi dung tu nhap): tai Autologon cua Microsoft https://learn.microsoft.com/sysinternals/downloads/autologon"
+  Write-Host "    Cach de nhat (khong can mat khau): PowerShell Run as administrator > irm https://content.masfico.vn/tools/may-dung/cai-chay-nen.ps1 | iex"
+  Write-Host "    Hoac tu dang nhap (can mat khau, nguoi dung tu nhap): tai Autologon cua Microsoft https://learn.microsoft.com/sysinternals/downloads/autologon"
   Write-Host "    -> mo Autologon64.exe -> nhap mat khau -> Enable. (Tai khoan Microsoft: truoc do tat 'Chi cho dang nhap Windows Hello' trong Cai dat > Tai khoan > Tuy chon dang nhap.)"
 }

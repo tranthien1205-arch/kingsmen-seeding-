@@ -381,6 +381,15 @@ Người duyệt: Thiện · Trạng thái: ĐÃ DUYỆT (2026-09-24, "ok bạn 
 
 ## Changelog
 
+### 2026-09-26 · Máy con chạy nền khi bật máy, không cần đăng nhập (máy con 1.6)
+- Chủ: "cần cơ chế vẫn dạy khi ko đăng nhập được không khi máy khởi động lại" → "đồng ý chạy nền".
+- `cai-chay-nen.ps1` (PowerShell Run as administrator, một lần): tải bản mới máy con + `CHAY-NEN.bat`, ghi PATH vào `chay-nen-path.cmd`, tạo tác vụ `Kingsmen may con - chay nen khi bat may` lúc khởi động (trễ 1 phút), kiểu **S4U** dưới chính tài khoản đó — không lưu mật khẩu; không giới hạn thời gian, tự chạy lại khi hỏng (99 lần, cách 1 phút).
+  S4U được ở máy con (khác Trạm, xem ghi chú phiên 0) vì máy con không mở trình duyệt. Giới hạn: không vào ổ mạng.
+- `CHAY-NEN.bat`: bật `ollama serve` nếu chưa chạy, lặp `node may-dung.mjs --nen`; chờ bằng PING (phiên nền không có bàn phím, `timeout` lỗi); lệnh hệ thống gọi đủ đường dẫn System32.
+- `may-dung.mjs` 1.6: khoá `dang-chay.json` {pid, luc} làm mới mỗi phút — bản thứ hai thoát mã 3 (cửa sổ BAT-DAU tự đóng; bản nền chờ 1 phút rồi thử lại, nên đóng cửa sổ là bản nền nhận việc). Khoá cũ > 20 phút mà tiến trình vẫn là node = treo → taskkill rồi nhận thay.
+- `cai-khoi-dong-lai.ps1` coi tác vụ nền là đủ (không cần tự đăng nhập); `cai-may-hoc.ps1` tải thêm CHAY-NEN.bat.
+- Kiểm thật trên máy Ngoc-Han (thư mục thử, app dev 5181): bản 2 thoát mã 3; khoá giả treo → bản mới dừng bản cũ và nhận thay; giết node → CHAY-NEN bật lại sau ~30 giây. Chưa chạy bộ cài S4U trên máy nào (cần quyền admin tại Q2).
+
 ### 2026-09-26 · Nguồn học (Bộ não AI › 📥 Nguồn học) · dòng một nguồn ở danh sách video cũ · ffmpeg máy con có hạn giờ
 - Chủ: "nguồn dữ liệu học đang quản lý ở đâu" · "cần có ui quản lý nguồn dữ liệu học".
 - `GET /nguon-hoc` (mau.js `nguonHoc`): gom `kho_thanh_pham` theo nguồn — TikTok theo kênh, Drive theo thư mục gốc + thư mục con cấp 1, Kalodata theo ngành, máy dựng theo thư mục; footage (`tai_san`) theo mục. Mỗi nguồn: số video, phân bố dòng (kể cả chưa có), đoạn hình / % có ảnh / % nhãn thầy / nhãn người, câu thoại / % nghe sai, % bản xem, lần học cuối, danh sách video, chuỗi `nap` để học thêm. Kèm 30 lệnh học gần nhất và nhịp tim các máy (sống nếu < 6 phút).
