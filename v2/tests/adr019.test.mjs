@@ -52,3 +52,21 @@ test('019b: hàng lệnh AI thay chủ chỉ nhận loại cho phép; giao dựn
   await worker.scheduled({}, env, { waitUntil: (x) => { p = x; } }); await p;
   assert.equal(JSON.parse(DB.raw.prepare(`SELECT cau_hinh FROM module_config WHERE id='lenh_thay_chu'`).get().cau_hinh).lenh.length, 1, 'tắt thì lệnh nằm yên');
 });
+test('kho footage theo dòng: nạp Drive loại footage → kho của dòng + lệnh nap_drive; nguồn học hiện "đang học"; dựng lấy clip từ kho cùng dòng', async () => {
+  const DB = taoD1(); env = taoEnv(DB); TOKEN = (await api('/login', 'POST', { email: 'admin@kingsmen.vn', password: 'admin123' })).j.token;
+  const may = hubK(giai((await api('/may-ghep', 'POST', { ten: 'Q2' })).j.ma_ghep).khoa); await may('/hub/trang_thai', 'POST', { may: 'Q2', kha_nang: ['dung_video'] });
+  await api('/bo-nhan', 'POST', { truong: 'dong', ten: 'Keo chít mạch', mo_ta: 'Kingsmen' });
+  const link = 'https://drive.google.com/drive/folders/1wvkEsb_hZdQVyKh0AD0WuzM6lqGTeCU7';
+  assert.equal((await api('/lop-hoc/nap', 'POST', { nap: link, loai_nap: 'FOOTAGE' })).s, 400, 'footage phải chọn dòng');
+  const r = (await api('/lop-hoc/nap', 'POST', { nap: link, loai_nap: 'FOOTAGE', dong: 'Keo chít mạch' })).j; assert.equal(r.loai, 'FOOTAGE'); assert.equal(r.kho, 'kho_ft_keo_chit_mach'); assert.equal(r.toi_da, 200);
+  const l = DB.raw.prepare(`SELECT tham_so FROM tram_lenh WHERE id=?`).get(r.lenh_id); assert.deepEqual(JSON.parse(l.tham_so), { muc_id: 'kho_ft_keo_chit_mach', folder_id: '1wvkEsb_hZdQVyKh0AD0WuzM6lqGTeCU7', toi_da: 200, kho_dong: 'Keo chít mạch' });
+  const kho = DB.raw.prepare(`SELECT giai_doan, dong, dinh_dang FROM muc_noi_dung WHERE id='kho_ft_keo_chit_mach'`).get(); assert.equal(kho.giai_doan, 'KHO'); assert.equal(kho.dong, 'Keo chít mạch'); assert.equal(kho.dinh_dang, null);
+  const nh = (await api('/nguon-hoc')).j.nguon.find((g) => g.dang_hoc); assert.ok(nh && /Kho footage — Keo chít mạch/.test(nh.ten), 'nguồn đang học hiện ngay');
+  // máy nạp một clip vào kho → bài VIDEO cùng dòng thấy clip khi dựng
+  await may('/hub/tai-san', 'POST', { muc_id: 'kho_ft_keo_chit_mach', ten: 'van-de-1.mp4', thu_muc: '/1. SOURCE VẤN ĐỀ', media_url: '/media/van-de-1.mp4', media_type: 'VIDEO', nguon: 'DRIVE' });
+  const m = (await api('/muc', 'POST', { tieu_de: 'Keo chít mạch — video thử', dinh_dang: 'VIDEO' })).j.id;
+  const nd = (await api('/noi-dung', 'POST', { muc_id: m, dinh_dang: 'VIDEO', hook: 'Mạch gạch ố?', cta: 'Nhắn tư vấn', sections: [{ text: 'Vấn đề', hinh: 'ron ố' }] })).j.db.noi_dung.find((x) => x.muc_id === m).id;
+  await api('/thay-chu', 'PATCH', { bat: true }); await api('/noi-dung/' + nd + '/gui-duyet', 'POST', {});
+  const v = (await may('/hub/viec/dung_video?noi_dung_id=' + nd)).j; const ts = (v.viec || v.ds || v)[0] || v; const clip = JSON.stringify(v);
+  assert.match(clip, /van-de-1\.mp4/, 'dựng thấy clip trong kho footage cùng dòng');
+});

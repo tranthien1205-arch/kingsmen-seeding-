@@ -24,13 +24,13 @@ export function raiDeu(ds, n) { if (ds.length <= n) return ds.slice(); const out
 
 export default async function nap({ app, goiApp, lenh, dir, log, script }) {
   const PT = script ? await script("phan-tich").catch(() => null) : null;   // ADR-010b: phân tích theo đoạn + 3 khung
-  const ts = lenh.tham_so || {}; const mucId = String(ts.muc_id || ""), folderId = String(ts.folder_id || ""); const toiDa = Math.max(1, Math.min(40, Number(ts.toi_da) || 8));
+  const ts = lenh.tham_so || {}; const mucId = String(ts.muc_id || ""), folderId = String(ts.folder_id || ""); const toiDa = Math.max(1, Math.min(300, Number(ts.toi_da) || 8));   // 26/09: kho footage theo dòng nạp cả thư mục (≤ 300)
   if (!mucId || !folderId) return { ok: false, msg: "lệnh thiếu muc_id / folder_id" };
   const daCo = new Set(((await goiApp("/hub/viec/nap_drive?muc_id=" + encodeURIComponent(mucId))).d || {}).da_co || []);
   // thư mục có thư mục con (vd link gốc "Keo chít mạch" chỉ chứa QUAY SẢN PHẨM, POV…): đi xuống tối đa 2 tầng, tối đa 30 thư mục
   const tatCa = []; const hang = [{ id: folderId, duong: "" }]; let soTM = 0;
   while (hang.length && soTM < 30) { const tm = hang.shift(); soTM++; let ds = []; try { ds = await docThuMuc(tm.id); } catch (e) { if (tm.id === folderId) throw e; log("  bỏ thư mục", tm.duong, String(e.message || e).slice(0, 60)); continue; }
-    for (const f of ds) { if (f.la_thu_muc) { if (tm.duong.split("/").filter(Boolean).length < 2) hang.push({ id: f.id, duong: tm.duong + "/" + f.ten }); } else if (LA_VIDEO.test(f.ten) || LA_ANH.test(f.ten)) tatCa.push({ ...f, thu_muc: tm.duong }); } }
+    for (const f of ds) { if (f.la_thu_muc) { if (/kịch bản|kich ban|kho hàng|kho hang|script/i.test(f.ten)) { log("  bỏ thư mục", f.ten, "(không phải footage)"); continue; } if (tm.duong.split("/").filter(Boolean).length < 2) hang.push({ id: f.id, duong: tm.duong + "/" + f.ten }); } else if (LA_VIDEO.test(f.ten) || LA_ANH.test(f.ten)) tatCa.push({ ...f, thu_muc: tm.duong }); } }
   tatCa.sort((a, b) => (a.thu_muc + "/" + a.ten).localeCompare(b.thu_muc + "/" + b.ten)); if (soTM > 1) log("  đã đọc", soTM, "thư mục");
   const con = tatCa.filter((f) => !daCo.has(f.ten)); const chon = raiDeu(con, toiDa);
   log("  thư mục có", tatCa.length, "file hình/clip · đã nạp", tatCa.length - con.length, "· nạp", chon.length);

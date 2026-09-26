@@ -388,6 +388,20 @@ Người duyệt: Thiện · Trạng thái: ĐÃ DUYỆT (2026-09-24, "ok bạn 
 - Việc "lệnh học bị đánh HONG sau 30 phút" đã sửa từ 25/09 (nhịp tim > 15 phút / 12 giờ) — không đổi thêm.
 - Ảnh hưởng dữ liệu: không đổi bảng; lệnh học mới ít link hơn (bỏ trùng). Test: adr011 thêm link trùng (mã cũ hỏng 1/3, mã mới đạt), may-dung-khoi-dong thêm 1 ca.
 
+### 2026-09-26 · Kho footage theo dòng + nguồn đang học hiện ngay
+- Chủ gửi 2 thư mục Drive footage gốc: "1. KEO CHÍT MẠCH CHUYÊN DỤNG" (chia theo cảnh: vấn đề, quay sản phẩm, thi công, hoàn thiện, test, POV, CTA, outro…) và "TERRAZY x ĐẠI LÝ 2026" (góc cận & trung, góc POV). Chủ cũng báo: "tôi thêm link nguồn học nhưng ko lưu được" / "không thấy trong danh sách nguồn học".
+  - Thật ra link đã lưu (lệnh hoc_thanh_pham tl_42eef273). Nhưng ô nạp coi mọi link là video thành phẩm, và nguồn chỉ hiện khi đã học xong video đầu.
+- **Kho footage theo dòng:**
+  - Mỗi dòng một mục đặc biệt `kho_ft_<dòng>` (giai_doan KHO, không định dạng, không lên kanban).
+  - Ô nạp: thư mục Drive chọn "📦 Footage gốc — vào kho để dựng" + dòng (bắt buộc) → lệnh nap_drive vào kho, tối đa 200 (máy con nâng trần 40 → 300).
+  - Bỏ thư mục con "kịch bản" / "kho hàng". Tên thư mục con (cảnh / góc quay) nằm trong mô tả clip.
+- **Dùng kho khi làm video:**
+  - `angleFootage` (viết kịch bản) lấy tối đa 40 clip: của mục trước, rồi kho cùng dòng.
+  - `/hub/viec/dung_video` (dựng) trả footage của mục + kho cùng dòng (≤ 200).
+- **Hàng lệnh AI thay chủ** thêm `nap_footage {link, dong}`; `scripts/thay-chu.mjs nap_footage <link> "Dòng"`.
+- **Nguồn học** hiện lệnh nạp / học đang chờ hoặc đang chạy ngay lúc thêm ("⏳ chờ máy nhận / máy đang học"). Footage kho hiện với tên "📦 Kho footage — <dòng>".
+- Test kho footage (adr019).
+
 ### 2026-09-26 · ADR-019 Chế độ AI thay chủ
 - Chủ: "cần xây dựng chế độ ai thay chủ vận hành nâng cấp app" · "cần 1 cơ chế chính thống để tránh bị lỗi và mất thời gian" · "để không đụng code cục bộ mỗi lần thế này". Chủ chọn phương án: AI được làm khi chủ đổi quyền phiên, chủ tự bật chế độ trong app.
 - `module_config.thay_chu` {bat, g3_tu_duyet, diem_toi_thieu (≥ 70, mặc định 90), lenh}. Chỉ người Admin / Trưởng MKT bật / tắt (`PATCH /thay-chu`, agent bị chặn). `GET /thay-chu`: cấu hình, bài chờ, nhật ký, kết quả lệnh.
