@@ -23,7 +23,7 @@ export function phanTich(file, khungDir) {
   }
   if (cur) doan.push(cur);
   const ra = doan.map((x, i) => ({ t: x.t, net: +gioiHan(1 - (x.blur ?? 5) / 10).toFixed(3), dong: +gioiHan(i === 0 ? 0 : (x.sc ?? 0) / 20).toFixed(3), sang: +gioiHan((x.y ?? 128) / 255).toFixed(3) }));
-  const khung = [0.15, 0.5, 0.85].map((r, i) => { const o = join(khungDir, "k" + i + ".jpg"); spawnSync("ffmpeg", ["-hide_banner", "-loglevel", "error", "-y", "-ss", (dai * r).toFixed(2), "-i", file, "-frames:v", "1", "-vf", "scale=512:-2", o], { encoding: "utf8" }); return existsSync(o) ? o : null; }).filter(Boolean);
+  const khung = [0.15, 0.5, 0.85].map((r, i) => { const o = join(khungDir, "k" + i + ".jpg"); spawnSync("ffmpeg", ["-hide_banner", "-loglevel", "error", "-y", "-ss", (dai * r).toFixed(2), "-i", file, "-frames:v", "1", "-vf", "scale=512:-2", o], { encoding: "utf8", timeout: 300000, windowsHide: true }); return existsSync(o) ? o : null; }).filter(Boolean);
   return { dai: +dai.toFixed(2), doan: ra, khung };
 }
 

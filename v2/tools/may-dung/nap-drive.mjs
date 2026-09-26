@@ -49,10 +49,10 @@ export default async function nap({ app, goiApp, lenh, dir, log, script }) {
         const p = spawnSync("ffmpeg", ["-hide_banner", "-loglevel", "error", "-y", "-i", goc, "-t", "20", "-map", "0:v:0", "-map", "0:a?", "-vf", vf, "-r", "30", "-c:v", "libx264", "-crf", "23", "-preset", "veryfast", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", ra], { encoding: "utf8", timeout: 600000 });
         if (p.status !== 0) throw new Error("ffmpeg nén: " + String(p.stderr || "").slice(0, 120));
         const d = thoiLuong(ra); if (PT) { try { f.pt = PT.phanTich(ra, join(TH, "pt_" + f.id.slice(-10))); } catch (e) { log("  bỏ phân tích", String(e.message || e).slice(0, 60)); } }
-        if (!f.pt) spawnSync("ffmpeg", ["-hide_banner", "-loglevel", "error", "-y", "-ss", (d / 2).toFixed(2), "-i", ra, "-frames:v", "1", "-vf", "scale=512:-2", khung], { encoding: "utf8" });
+        if (!f.pt) spawnSync("ffmpeg", ["-hide_banner", "-loglevel", "error", "-y", "-ss", (d / 2).toFixed(2), "-i", ra, "-frames:v", "1", "-vf", "scale=512:-2", khung], { encoding: "utf8", timeout: 300000, windowsHide: true });
       } else {
-        const p = spawnSync("ffmpeg", ["-hide_banner", "-loglevel", "error", "-y", "-i", goc, "-vf", "scale=1080:-2", ra], { encoding: "utf8" }); if (p.status !== 0) throw new Error("ffmpeg ảnh lỗi");
-        spawnSync("ffmpeg", ["-hide_banner", "-loglevel", "error", "-y", "-i", goc, "-vf", "scale=512:-2", khung], { encoding: "utf8" });
+        const p = spawnSync("ffmpeg", ["-hide_banner", "-loglevel", "error", "-y", "-i", goc, "-vf", "scale=1080:-2", ra], { encoding: "utf8", timeout: 300000, windowsHide: true }); if (p.status !== 0) throw new Error("ffmpeg ảnh lỗi");
+        spawnSync("ffmpeg", ["-hide_banner", "-loglevel", "error", "-y", "-i", goc, "-vf", "scale=512:-2", khung], { encoding: "utf8", timeout: 300000, windowsHide: true });
       }
       const mediaUrl = await up(ra, la ? "video/mp4" : "image/jpeg"); const khungUrls = []; if (f.pt) { for (const k of f.pt.khung) khungUrls.push(await up(k, "image/jpeg")); } else if (existsSync(khung)) khungUrls.push(await up(khung, "image/jpeg"));
       let x; for (let k = 0; k < 3; k++) { x = await goiApp("/hub/tai-san", { method: "POST", body: JSON.stringify({ muc_id: mucId, ten: f.ten, thu_muc: f.thu_muc || "", media_url: mediaUrl, media_type: la ? "VIDEO" : "IMAGE", khung_urls: khungUrls, phan_tich: f.pt ? { dai: f.pt.dai, doan: f.pt.doan } : null, nguon: "DRIVE", drive_id: f.id, giay: la ? +thoiLuong(ra).toFixed(1) : null }) }); if (x.ok || (x.status && x.status < 500)) break; await new Promise((q) => setTimeout(q, 4000 * (k + 1))); }

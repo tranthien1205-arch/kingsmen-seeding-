@@ -244,3 +244,20 @@ test('018j: dòng gán sai (luật TERRAZ khớp kênh sàn terrazzo bán Finex 
   assert.equal(DB.raw.prepare(`SELECT dong FROM kho_thanh_pham WHERE nguon_id='u'`).get().dong, 'Terrazy', 'có bằng chứng Terrazy → giữ');
   assert.equal(DB.raw.prepare(`SELECT dong FROM mau_doan WHERE id=?`).get('H:' + DB.raw.prepare(`SELECT id FROM kho_thanh_pham WHERE nguon_id='t'`).get().id + ':0').dong, 'Finex F300');
 });
+
+test('018k: nguồn học gom video theo kênh / thư mục Drive; gán dòng cả nguồn; sửa dòng ở danh sách video cũ kéo theo kho mẫu', async () => {
+  const DB = taoD1(); env = taoEnv(DB); TOKEN = (await api('/login', 'POST', { email: 'admin@kingsmen.vn', password: 'admin123' })).j.token;
+  const may = hubK(giai((await api('/may-ghep', 'POST', { ten: 'Q2' })).j.ma_ghep).khoa);
+  const tl = [0, 1].map((i) => ({ tu: i * 3, den: i * 3 + 3, nhom: 'THI_CONG', thay: { nhom: 'THI_CONG', chac: 0.9 } }));
+  for (const [id, kenh] of [['a', '@kenh1'], ['b', '@kenh1'], ['c', '@kenh2']]) await may('/hub/thanh-pham', 'POST', { ten: id + '.mp4', nguon_id: id, nguon: 'TIKTOK', kenh, dai: 6, shots: [{ t0: 0, t1: 3 }, { t0: 3, t1: 6 }], timeline: tl });
+  await may('/hub/thanh-pham', 'POST', { ten: 'd.mp4', nguon_id: 'd', nguon: 'DRIVE', thu_muc: 'drive:FOLDER1/2. CREATIVE ADS/x', dai: 6, shots: [{ t0: 0, t1: 3 }, { t0: 3, t1: 6 }], timeline: tl });
+  const r = (await api('/nguon-hoc')).j; const k1 = r.nguon.find((g) => g.ten === '@kenh1');
+  assert.equal(k1.so_video, 2); assert.equal(k1.hinh, 4); assert.equal(k1.thay, 4); assert.equal(k1.nap, '@kenh1'); assert.equal(k1.dong['(chưa có)'], 2);
+  const dr = r.nguon.find((g) => g.loai === 'DRIVE'); assert.equal(dr.ten, '2. CREATIVE ADS'); assert.equal(dr.nap, 'https://drive.google.com/drive/folders/FOLDER1');
+  assert.equal(r.may[0].ten, 'Q2'); assert.equal(r.may[0].song, false, 'chưa có nhịp tim'); await may('/hub/trang_thai', 'POST', { may: 'Q2' }); assert.ok((await api('/nguon-hoc')).j.may[0].song);
+  await api('/bo-nhan', 'POST', { truong: 'dong', ten: 'Sàn gỗ', mo_ta: 'X' });
+  const g = await api('/mau-doan/dat-dong', 'POST', { doi_tuong_ids: k1.video.map((v) => v.id), dong: 'Sàn gỗ' }); assert.equal(g.j.so_video, 2); assert.equal(g.j.so_mau, 4);
+  assert.equal((await api('/nguon-hoc')).j.nguon.find((x) => x.ten === '@kenh1').dong['Sàn gỗ'], 2);
+  const c = r.nguon.find((x) => x.ten === '@kenh2').video[0].id; assert.ok((await api('/kho-thanh-pham/' + c, 'PATCH', { dong: 'Sàn gỗ' })).s < 300);
+  assert.equal(DB.raw.prepare(`SELECT COUNT(*) n FROM mau_doan WHERE doi_tuong_id=? AND dong='Sàn gỗ'`).get(c).n, 2, 'mẫu đổi dòng theo video');
+});

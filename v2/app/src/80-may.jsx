@@ -102,8 +102,8 @@ function BoNaoAI(){
   const { db, goi } = useApp(); const [tab,setTab]=useState(()=>{ const t=window.__tabNao||'kho'; delete window.__tabNao; return ({ban:'tong',daymay:'kho'})[t]||t; }); const a=db.ai_nao||{};
   const [dem,setDem]=useState(null); const taiDem=async()=>{ const r=await goi('/hop-viec/dem'); if(r.ok) setDem(r); }; useEffect(()=>{ taiDem(); },[tab]);
   return <div className="space-y-3">
-    <Tabs size="sm" active={tab} onChange={setTab} tabs={[{key:'tong',label:'🎯 Tổng quan'},{key:'kho',label:'📚 Kho mẫu',count:dem?((dem.k1+dem.k4)||null):null},{key:'bonhan',label:'🏷️ Bộ nhãn',count:dem&&dem.de_xuat?dem.de_xuat:null},{key:'mohinh',label:'🧠 Mô hình',count:(a.dinh_tuyen||[]).filter(d=>d.de_nghi).length||null},{key:'chiphi',label:'💰 Chi phí & khoá',count:(db.khoa_api||[]).filter(t=>!t.co).length||null}]}/>
-    {tab==='tong'&&<TongQuan18 a={a} setTab={setTab}/>}{tab==='kho'&&<KhoMau18 onDoi={taiDem}/>}{tab==='bonhan'&&<BoNhan18/>}{tab==='mohinh'&&<MoHinhNao a={a} setTab={setTab}/>}{tab==='chiphi'&&<ChiPhiNao a={a}/>}
+    <Tabs size="sm" active={tab} onChange={setTab} tabs={[{key:'tong',label:'🎯 Tổng quan'},{key:'kho',label:'📚 Kho mẫu',count:dem?((dem.k1+dem.k4)||null):null},{key:'bonhan',label:'🏷️ Bộ nhãn',count:dem&&dem.de_xuat?dem.de_xuat:null},{key:'nguon',label:'📥 Nguồn học'},{key:'mohinh',label:'🧠 Mô hình',count:(a.dinh_tuyen||[]).filter(d=>d.de_nghi).length||null},{key:'chiphi',label:'💰 Chi phí & khoá',count:(db.khoa_api||[]).filter(t=>!t.co).length||null}]}/>
+    {tab==='tong'&&<TongQuan18 a={a} setTab={setTab}/>}{tab==='kho'&&<KhoMau18 onDoi={taiDem}/>}{tab==='bonhan'&&<BoNhan18/>}{tab==='nguon'&&<NguonHoc a={a}/>}{tab==='mohinh'&&<MoHinhNao a={a} setTab={setTab}/>}{tab==='chiphi'&&<ChiPhiNao a={a}/>}
   </div>;
 }
 // Khoá API dán ngay trên app (chủ 24/09) — Admin; thử với nhà cung cấp trước khi lưu; không bao giờ hiện lại giá trị

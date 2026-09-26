@@ -381,6 +381,14 @@ Người duyệt: Thiện · Trạng thái: ĐÃ DUYỆT (2026-09-24, "ok bạn 
 
 ## Changelog
 
+### 2026-09-26 · Nguồn học (Bộ não AI › 📥 Nguồn học) · dòng một nguồn ở danh sách video cũ · ffmpeg máy con có hạn giờ
+- Chủ: "nguồn dữ liệu học đang quản lý ở đâu" · "cần có ui quản lý nguồn dữ liệu học".
+- `GET /nguon-hoc` (mau.js `nguonHoc`): gom `kho_thanh_pham` theo nguồn — TikTok theo kênh, Drive theo thư mục gốc + thư mục con cấp 1, Kalodata theo ngành, máy dựng theo thư mục; footage (`tai_san`) theo mục. Mỗi nguồn: số video, phân bố dòng (kể cả chưa có), đoạn hình / % có ảnh / % nhãn thầy / nhãn người, câu thoại / % nghe sai, % bản xem, lần học cuối, danh sách video, chuỗi `nap` để học thêm. Kèm 30 lệnh học gần nhất và nhịp tim các máy (sống nếu < 6 phút).
+- Giao diện `NguonHoc` (86-nhanmau.jsx): 5 số tổng, dải trạng thái máy học (đỏ khi không máy nào sống), ô nạp nguồn (chuyển từ tab Mô hình sang), bảng nguồn lọc theo loại (PC bảng, điện thoại thẻ), mỗi nguồn: ＋ Học thêm video mới (`/lop-hoc/nap`), gán dòng cả nguồn (`/mau-doan/dat-dong` với `doi_tuong_ids`), xem video.
+- Sửa: `PATCH /kho-thanh-pham/:id` đổi dòng giờ đổi cả `mau_doan.dong` (trước chỉ đổi video, mẫu giữ dòng cũ).
+- Máy con: mọi lệnh ffmpeg trong hoc-thanh-pham / nap-drive / phan-tich có `timeout` (sự cố 26/09: Máy VP Q2 im từ 07:01 khi đang học — `spawnSync` không hạn giờ chặn cả nhịp tim lẫn nhận lệnh).
+- Test 018k. Kiểm Playwright 1440 / 390: không tràn ngang, gán dòng cả nguồn cập nhật ngay.
+
 ### 2026-09-26 · Claude duyệt / gán thay chủ · tự gán dòng · tạo tên chuẩn khi gộp
 - Chủ: "xổ chọn không có thì có tạo thêm được không" · "dòng sản phẩm ở bộ nhãn chưa đủ" · "bạn trực tiếp xử lý thay tôi việc gán nhãn và duyệt nhãn".
 - Ô gộp có "＋ tạo tên chuẩn mới": đổi tên đề xuất rồi duyệt, mẫu đổi theo. Ô dòng ở hàng đề xuất dùng danh sách dòng đầy đủ.
