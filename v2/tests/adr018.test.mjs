@@ -233,3 +233,14 @@ test('018i: tự gán dòng theo vật liệu thầy thấy + hàng việc thay 
   assert.ok(JSON.parse(DB.raw.prepare(`SELECT cau_hinh FROM module_config WHERE id='viec_thay_chu_kq'`).get().cau_hinh).lan[0].kq.length >= 4);
   assert.equal((await api('/do-chinh-xac')).j.so_nhan, 0, 'nhãn Claude không tính vào độ đúng của thầy');
 });
+
+test('018j: dòng gán sai (luật TERRAZ khớp kênh sàn terrazzo bán Finex F300) được máy sửa theo bằng chứng', async () => {
+  const DB = taoD1(); env = taoEnv(DB); TOKEN = (await api('/login', 'POST', { email: 'admin@kingsmen.vn', password: 'admin123' })).j.token;
+  const may = hubK(giai((await api('/may-ghep', 'POST', { ten: 'Q2' })).j.ma_ghep).khoa);
+  await may('/hub/thanh-pham', 'POST', { ten: 't.mp4', nguon_id: 't', nguon: 'TIKTOK', dai: 9, dong: 'Terrazy', shots: [{ t0: 0, t1: 3 }, { t0: 3, t1: 6 }, { t0: 6, t1: 9 }], timeline: [0, 1, 2].map((i) => ({ tu: i * 3, den: i * 3 + 3, nhom: 'THI_CONG', thay: { nhom: 'THI_CONG', vat_lieu: ['Finex F300'], chac: 0.9 } })) });
+  await may('/hub/thanh-pham', 'POST', { ten: 'u.mp4', nguon_id: 'u', nguon: 'TIKTOK', dai: 6, dong: 'Terrazy', shots: [{ t0: 0, t1: 3 }, { t0: 3, t1: 6 }], timeline: [0, 1].map((i) => ({ tu: i * 3, den: i * 3 + 3, nhom: 'THI_CONG', thay: { nhom: 'THI_CONG', vat_lieu: ['Finex F300', 'Kingsmen Terrazy'], chac: 0.9 } })) });
+  let p; await worker.scheduled({}, env, { waitUntil: (x) => { p = x; } }); await p;
+  assert.equal(DB.raw.prepare(`SELECT dong FROM kho_thanh_pham WHERE nguon_id='t'`).get().dong, 'Finex F300', 'Terrazy không có bằng chứng, Finex F300 có 3 → sửa');
+  assert.equal(DB.raw.prepare(`SELECT dong FROM kho_thanh_pham WHERE nguon_id='u'`).get().dong, 'Terrazy', 'có bằng chứng Terrazy → giữ');
+  assert.equal(DB.raw.prepare(`SELECT dong FROM mau_doan WHERE id=?`).get('H:' + DB.raw.prepare(`SELECT id FROM kho_thanh_pham WHERE nguon_id='t'`).get().id + ':0').dong, 'Finex F300');
+});

@@ -28,7 +28,7 @@ test('017d: kho mẫu + dòng sản phẩm', async () => {
   const r = await api('/dong-san-pham/doi-ten', 'POST', { tu: 'Terrazo', sang: 'Terrazy' }); assert.equal(r.s, 200);
   assert.equal(DB.raw.prepare(`SELECT dong FROM san_pham`).get().dong, 'Terrazy'); assert.equal(DB.raw.prepare(`SELECT dong FROM kho_thanh_pham`).get().dong, 'Terrazy');
   assert.equal(DB.raw.prepare(`SELECT COUNT(*) n FROM mau_hoc_ai WHERE dong='Terrazo'`).get().n, 0); assert.equal(DB.raw.prepare(`SELECT COUNT(*) n FROM mau_doan WHERE dong='Terrazy'`).get().n, 4, 'kho mẫu đổi dòng theo');
-  assert.ok(r.j.anh_xa_dong.some((x) => x.chua === 'TERRAZ' && x.dong === 'Terrazy'), 'luật trỏ dòng mới');
+  assert.ok(r.j.anh_xa_dong.some((x) => x.chua === 'TERRAZY' && x.dong === 'Terrazy'), 'luật trỏ dòng mới');
   // máy học đọc luật; sửa luật từ app
   assert.equal((await api('/cau-hinh/huan_luyen', 'PUT', { cau_hinh: { anh_xa_dong: [{ chua: 'SAN TERRAZ', dong: 'Terrazy' }] } })).s, 200);
   assert.deepEqual((await may('/hub/cau-hinh-hoc')).j.anh_xa_dong, [{ chua: 'SAN TERRAZ', dong: 'Terrazy' }]);
