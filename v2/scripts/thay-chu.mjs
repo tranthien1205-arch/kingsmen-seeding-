@@ -6,9 +6,9 @@
 //   node scripts/thay-chu.mjs dung nd_xxx                             giao dựng video cho bài VIDEO đã duyệt
 //   node scripts/thay-chu.mjs gui_duyet nd_xxx                        gửi duyệt bài nháp / bị trả lại
 //   node scripts/thay-chu.mjs tra_lai dy_xxx "lý do"                  trả lại bài đang chờ duyệt (bắt buộc lý do)
-import { spawnSync } from "node:child_process"; import { writeFileSync, rmSync } from "node:fs"; import { join } from "node:path"; import { tmpdir } from "node:os";
+import { spawnSync } from "node:child_process"; import { writeFileSync, rmSync } from "node:fs"; import { join } from "node:path"; import { tmpdir } from "node:os"; import { fileURLToPath } from "node:url";
 const DB = "kingsmen-content-os-db"; const LOAI = ["chay_agent", "dung", "gui_duyet", "tra_lai"];
-const d1 = (sql) => { const f = join(tmpdir(), "thay-chu-" + process.pid + ".sql"); writeFileSync(f, sql); const r = spawnSync("npx", ["wrangler", "d1", "execute", DB, "--remote", "--json", "--file", f], { encoding: "utf8", shell: true, cwd: new URL("..", import.meta.url).pathname.replace(/^\/([A-Z]:)/, "$1") }); rmSync(f, { force: true });
+const d1 = (sql) => { const f = join(tmpdir(), "thay-chu-" + process.pid + ".sql"); writeFileSync(f, sql); const r = spawnSync("npx", ["wrangler", "d1", "execute", DB, "--remote", "--json", "--file", f], { encoding: "utf8", shell: true, cwd: fileURLToPath(new URL("..", import.meta.url)) }); rmSync(f, { force: true });
   const s = String(r.stdout || ""); const i = s.indexOf("["); if (i < 0) throw new Error("D1 lỗi: " + (r.stderr || s).slice(0, 400)); return JSON.parse(s.slice(i)); };
 const doc = (id) => { const x = d1(`SELECT cau_hinh FROM module_config WHERE id='${id}'`)[0].results[0]; try { return x ? JSON.parse(x.cau_hinh) : null; } catch { return null; } };
 const sqlChuoi = (s) => "'" + String(s).replace(/'/g, "''") + "'";
