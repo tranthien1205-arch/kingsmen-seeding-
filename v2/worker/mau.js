@@ -85,7 +85,8 @@ export function taoMau(H) {
     if (v0 < 3) await napTuPhang(env, null);
     if (v0 < 4) await donBoNhanChuan(env, 4);
     if (v0 < 5) await donBoNhanChuan(env, 5);
-    if (v0 < 6) await chuyen6(env);   // 26/09 chiều: thêm luật (sáp, vữa, dụng cụ phổ biến, bài test keo / thời gian khô) — dọn lại đề xuất mới
+    if (v0 < 6) await chuyen6(env);
+    if (v0 < 7) await donBoNhanChuan(env, 7);   /* 26/09 tối: luật từ đợt Claude duyệt thay chủ (bước keo từ lời thoại, vệ sinh nền, bài test keo, máy đo màu ColorMatch) */   // 26/09 chiều: thêm luật (sáp, vữa, dụng cụ phổ biến, bài test keo / thời gian khô) — dọn lại đề xuất mới
   }
 
   // quy trình chuẩn sàn tự phẳng cho các dòng Terrazy / Finex (hoặc một dòng chỉ định): 8 bước có thứ tự + dấu hiệu; gieo dụng cụ / thao tác / vật liệu
@@ -101,7 +102,7 @@ export function taoMau(H) {
     await env.DB.prepare(`UPDATE OR IGNORE bo_nhan SET dong='Terrazy' WHERE dong='Terrazo'`).run(); await env.DB.prepare(`DELETE FROM bo_nhan WHERE dong='Terrazo'`).run();
     { const r = await env.DB.prepare(`SELECT cau_hinh FROM module_config WHERE id='huan_luyen'`).first(); const o = r ? (P(r.cau_hinh) || {}) : null; if (o && Array.isArray(o.anh_xa_dong)) { o.anh_xa_dong = o.anh_xa_dong.map((x) => x && x.dong === 'Terrazo' ? { ...x, dong: 'Terrazy' } : x); await env.DB.prepare(`UPDATE module_config SET cau_hinh=? WHERE id='huan_luyen'`).bind(JSON.stringify(o)).run(); } }
     const up = (truong, ten, dong) => env.DB.prepare(`INSERT INTO bo_nhan (id,truong,ten,dong,trang_thai,nguon,created_at,updated_at) VALUES (?,?,?,?,'DUNG','HE_THONG',?,?) ON CONFLICT(truong,ten,dong) DO UPDATE SET trang_thai='DUNG', updated_at=excluded.updated_at`).bind(uid('bn'), truong, ten, dong, now, now);
-    const st = []; for (const t of ['vat_lieu', 'dung_cu', 'vi_tri']) for (const [, c] of CHUAN[t]) if (c) st.push(up(t, c, ''));
+    const st = []; for (const t of ['vat_lieu', 'dung_cu', 'vi_tri', 'hanh_dong']) for (const [, c] of CHUAN[t]) if (c) st.push(up(t, c, ''));
     const dongSan = [...new Set(['Finex F300', 'Terrazy', ...(await env.DB.prepare(`SELECT DISTINCT dong FROM mau_doan WHERE dong IS NOT NULL`).all()).results.map((x) => x.dong)].filter((d) => chuanCua(d) && chuanCua(d).buoc === QT_TU_PHANG))];
     for (const d of dongSan) BAI_TEST_SAN.forEach((b) => st.push(up('bai_test', b, d)));
     for (const d of [...new Set(['Keo chít mạch', ...(await env.DB.prepare(`SELECT DISTINCT dong FROM mau_doan WHERE dong IS NOT NULL`).all()).results.map((x) => x.dong)].filter((d) => chuanCua(d) && chuanCua(d).buoc === QT_KEO_RON))]) BAI_TEST_KEO.forEach((b) => st.push(up('bai_test', b, d)));
