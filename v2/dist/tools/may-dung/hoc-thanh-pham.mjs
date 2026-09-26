@@ -68,7 +68,8 @@ export default async function hoc({ app, goiApp, lenh, dir, log, script }) {
     // 24/09 tối (chủ: "tải về máy Q2 luôn để huấn luyện"): máy học tự tải thẳng từ TikTok về ổ của nó, giữ lại để học lại lần sau
     const slug = String(ts.kenh || nguon).replace(/^kalodata:/, "").replace(/^@/, "").replace(/[^a-z0-9_.-]/gi, "_").slice(0, 60) || "khac";
     thuMuc = join(dir, "thanh-pham", nguon.toLowerCase(), slug); mkdirSync(thuMuc, { recursive: true });
-    for (const x of ts.links) { const id = (String(x.link).match(/\/video\/(\d+)/) || [])[1]; if (!id) continue; const ten = id + ".mp4"; video.push({ id: ten, ten, link: x.link, play: (x.meta && x.meta.play) || null, f: join(thuMuc, ten) }); meta[ten] = { ...(x.meta || {}), link: x.link }; }
+    const daThay = new Set();   // 26/09: lệnh cũ có một video lặp 2–4 lần (30 link / 10 video) → mỗi lần lặp tốn ~6 phút đọc hình mà 0 mẫu mới
+    for (const x of ts.links) { const id = (String(x.link).match(/\/video\/(\d+)/) || [])[1]; if (!id || daThay.has(id)) continue; daThay.add(id); const ten = id + ".mp4"; video.push({ id: ten, ten, link: x.link, play: (x.meta && x.meta.play) || null, f: join(thuMuc, ten) }); meta[ten] = { ...(x.meta || {}), link: x.link }; }
     try { writeFileSync(join(thuMuc, "_meta.json"), JSON.stringify(meta, null, 1)); } catch {}
   } else if (Array.isArray(ts.video) && ts.video.length) {
     // 24/09 (gom về một máy): Trạm tải xong đẩy video lên kho app → máy học lấy về từ app, không cần chung ổ với Trạm
@@ -123,7 +124,8 @@ export default async function hoc({ app, goiApp, lenh, dir, log, script }) {
         const anh = []; for (const d of (v.doan || []).slice(0, 120)) { const giua = (Number(d.tu) + Number(d.den)) / 2; const t0 = Math.max(0, Math.max(Number(d.tu), giua - 0.5)); const o = join(TH, "bu_" + xong + "_" + d.i + ".jpg");
           spawnSync("ffmpeg", ["-hide_banner", "-loglevel", "error", "-y", "-ss", t0.toFixed(2), "-i", f, "-vf", "fps=2,scale=448:-2,tile=3x1", "-frames:v", "1", "-q:v", "4", o], { encoding: "utf8", timeout: 60000, windowsHide: true });
           if (existsSync(o)) { try { anh.push({ i: d.i, url: await up(o, "image/jpeg") }); } catch {} rmSync(o, { force: true }); } }
-        if (anh.length) { const r = await goiApp("/hub/mau-doan/anh", { method: "POST", body: JSON.stringify({ doi_tuong_id: v.app_id, anh }) }); ghi += ((r.d && r.d.so) || 0) + " ảnh đoạn"; }
+        if (anh.length) { const r = await goiApp("/hub/mau-doan/anh", { method: "POST", body: JSON.stringify({ doi_tuong_id: v.app_id, anh }) });   // 26/09: trước đây lỗi HTTP cũng in "0 ảnh đoạn" → không phân biệt được app trả 0 với app lỗi
+          ghi += r.ok ? ((r.d && r.d.so) || 0) + "/" + anh.length + " ảnh đoạn" + ((r.d && r.d.so) ? "" : " (app không ghi: đoạn đã có ảnh hoặc không khớp mã)") : "ảnh đoạn LỖI app HTTP " + r.status + (r.d && r.d.error ? " " + String(r.d.error).slice(0, 80) : "") + " (" + anh.length + " ảnh đã tải lên)"; }
         xong++; log("  ✓", v.ten, "·", ghi || "không có gì phải làm"); if (v.url) rmSync(f, { force: true }); continue; }
       let proxyUrl = null; try { proxyUrl = await taoProxy(f, v.ten); } catch (e) { log("  bản xem lỗi:", String(e.message || e).slice(0, 80)); }
       bam("tai"); let shots = catShot(f, dai); bam("cat"); let motCanh = false;

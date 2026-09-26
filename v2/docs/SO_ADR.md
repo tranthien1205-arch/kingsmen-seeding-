@@ -381,6 +381,13 @@ Người duyệt: Thiện · Trạng thái: ĐÃ DUYỆT (2026-09-24, "ok bạn 
 
 ## Changelog
 
+### 2026-09-26 · Link học trùng, mã lỗi ảnh đoạn, khởi động lại hằng ngày chạy khi chưa đăng nhập
+- Đo trên Q2: lệnh `hoc_thanh_pham` TikTok/Kalodata mang 30 link cho 10 video (mỗi video lặp 2–4 lần); mỗi lần lặp máy đọc hình lại ~6 phút mà 0 mẫu mới. App lọc một link mỗi mã video (`motVideoMotLink`) ở `/hub/tiktok-da-tai` và `/hub/kalodata`, giữ link đầu; `hoc-thanh-pham.mjs` lọc thêm một lớp cho lệnh cũ còn trong hàng đợi.
+- "0 ảnh đoạn" (51 dòng log Q2 06:00–13:50): ffmpeg cắt ảnh dải chạy đúng (thử tay: mã 0, ảnh 3 khung 448 px), ảnh tải lên được, nhưng script in "0" cả khi `/hub/mau-doan/anh` lỗi HTTP. Nay in `n/N ảnh đoạn`, hoặc `ảnh đoạn LỖI app HTTP <mã>` kèm lỗi — lần sau phân biệt được app trả 0 với app lỗi.
+- `cai-khoi-dong-lai.ps1`: chạy bằng admin → tác vụ 04:00 kiểu S4U (chạy cả khi máy nằm ở màn hình khoá, đi cùng máy con chạy nền); không admin → Interactive + nhắc. Bản trước chỉ Interactive nên sau lần khởi động lại đầu không bao giờ chạy nữa. Q2 đã đổi tay sang S4U.
+- Việc "lệnh học bị đánh HONG sau 30 phút" đã sửa từ 25/09 (nhịp tim > 15 phút / 12 giờ) — không đổi thêm.
+- Ảnh hưởng dữ liệu: không đổi bảng; lệnh học mới ít link hơn (bỏ trùng). Test: adr011 thêm link trùng (mã cũ hỏng 1/3, mã mới đạt), may-dung-khoi-dong thêm 1 ca.
+
 ### 2026-09-26 · Máy con 1.8: nhịp tim ở luồng riêng + tự cập nhật
 - Nhịp tim (`/hub/trang_thai` 2 phút) và làm mới khoá `dang-chay.json` (1 phút) chạy ở `worker_threads`. Lệnh học gọi ffmpeg bằng `spawnSync` (tới 15 phút) không còn làm app tưởng máy tắt. Luồng chính báo "đang làm" bằng `postMessage`.
 - Tự cập nhật: lúc khởi động (nếu không có lệnh dở) và mỗi 3 giờ khi rảnh, máy con tải `/tools/may-dung/may-dung.mjs` từ app. Bản mới hơn (so số, không hạ bản) → `node --check` → giữ bản cũ ở `may-dung.mjs.cu` → thoát 0, rồi CHAY-NEN.bat / BAT-DAU.bat chạy lại bằng bản mới. Tắt bằng `--khong-cap-nhat`. Từ 1.8 về sau không cần chạy lại bộ cài trên máy con.

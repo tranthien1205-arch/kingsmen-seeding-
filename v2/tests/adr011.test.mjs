@@ -26,7 +26,7 @@ test('cấu hình Kalodata (Trưởng MKT/Admin): ngành hàng, top N; quét c�
 });
 test('Trạm trả bảng video Kalodata → app giao THẲNG máy học lệnh hoc_thanh_pham mang link + doanh thu (không qua Trạm tải); link rác bị bỏ; quét xong hết hạn', async () => {
   const hubT = hubK(KHOA_TRAM);
-  const r = await hubT('/hub/kalodata', 'POST', { nganh: 'Keo', video: [{ link: LINK(1), tieu_de: 'Keo chít mạch chống mốc', kenh: '@shopkeo', doanh_thu: 1250.5, luot_ban: 300, luot_xem: 45000, san_pham: 'Keo chít mạch Kingsmen 2 thành phần' }, { link: 'https://kalodata.com/x', doanh_thu: 1 }, { link: LINK(2), kenh: '@shopkeo', doanh_thu: 400 }] });
+  const r = await hubT('/hub/kalodata', 'POST', { nganh: 'Keo', video: [{ link: LINK(1), tieu_de: 'Keo chít mạch chống mốc', kenh: '@shopkeo', doanh_thu: 1250.5, luot_ban: 300, luot_xem: 45000, san_pham: 'Keo chít mạch Kingsmen 2 thành phần' }, { link: 'https://kalodata.com/x', doanh_thu: 1 }, { link: LINK(2), kenh: '@shopkeo', doanh_thu: 400 }, { link: LINK(1), doanh_thu: 1 /* 26/09: trùng video → bỏ, giữ bản đầu */ }] });
   assert.equal(r.s, 200); assert.equal(r.j.so, 2); assert.equal(r.j.kenh, 'kalodata:keo'); assert.equal(r.j.giao, true);
   const l = (await hubK(KHOA)('/hub/lenh')).j.lenh.find(x => x.viec === 'hoc_thanh_pham'); assert.ok(l, 'máy học nhận lệnh'); assert.equal(l.tham_so.nguon, 'KALODATA'); assert.deepEqual(l.tham_so.links.map(x => x.link), [LINK(1), LINK(2)]); assert.equal(l.tham_so.links[0].meta.doanh_thu, 1250.5);
   assert.equal((await hubT('/hub/viec/tai_tiktok')).j.viec.length, 0, 'không còn xếp hàng cho Trạm tải');
@@ -34,7 +34,7 @@ test('Trạm trả bảng video Kalodata → app giao THẲNG máy học lệnh 
   const kd = (await api('/bootstrap')).j.db.ai_nao.kalodata; assert.equal(kd.ket_qua_cuoi.so, 2); assert.ok(kd.lan_cuoi);
   assert.equal((await api('/kalodata/quet', 'POST')).s, 200); assert.ok((await hubT('/hub/viec/kalodata')).j.viec, 'chủ bấm quét ngay → đến hạn');
   // kênh TikTok: Trạm chỉ gửi danh sách link → máy học tự tải
-  const d = await hubT('/hub/tiktok-da-tai', 'POST', { kenh: '@kingsmen.vn', nguon: 'TIKTOK', links: [{ link: LINK(3), meta: { luot_xem: 9000 } }, { link: 'rác' }] }); assert.equal(d.j.giao, true);
+  const d = await hubT('/hub/tiktok-da-tai', 'POST', { kenh: '@kingsmen.vn', nguon: 'TIKTOK', links: [{ link: LINK(3), meta: { luot_xem: 9000 } }, { link: 'rác' }, { link: LINK(3) + '?is_from_webapp=1', meta: { luot_xem: 1 } } /* 26/09: cùng mã video → bỏ */] }); assert.equal(d.j.giao, true);
   const l2 = (await hubK(KHOA)('/hub/lenh')).j.lenh.filter(x => x.viec === 'hoc_thanh_pham').find(x => x.tham_so.nguon === 'TIKTOK'); assert.equal(l2.tham_so.links.length, 1); assert.equal(l2.tham_so.links[0].meta.luot_xem, 9000);
 });
 test('kho thành phẩm KALODATA: doanh thu + lời thoại → kịch bản bán tốt vào lời dặn AI viết VIDEO và tập mẫu ngôn ngữ; mẫu học mang doanh_thu', async () => {

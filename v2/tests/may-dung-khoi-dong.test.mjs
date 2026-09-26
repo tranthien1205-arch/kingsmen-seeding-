@@ -68,12 +68,14 @@ test('may-dung.mjs 1.4: nhớ lệnh đang làm (dang-lam.json), khởi động 
   assert.match(MAY, /ts\.length > 300 \? ts\.slice\(0, 300\)/);
 });
 
-test('khởi động lại hằng ngày: chờ lệnh dở (dang-lam.json) rồi shutdown /r; bộ cài tạo tác vụ Interactive (không S4U) và nhắc bật tự đăng nhập', () => {
+test('khởi động lại hằng ngày: chờ lệnh dở (dang-lam.json) rồi shutdown /r; bộ cài có admin → S4U (chạy cả khi chưa đăng nhập), không admin → Interactive + nhắc', () => {
   const KD = fs.readFileSync(new URL('../tools/may-dung/khoi-dong-lai.ps1', import.meta.url), 'utf8');
   assert.match(KD, /Test-Path \$DANG/); assert.match(KD, /shutdown\.exe \/r/);
   const CAI = fs.readFileSync(new URL('../tools/may-dung/cai-khoi-dong-lai.ps1', import.meta.url), 'utf8');
-  assert.match(CAI, /-LogonType Interactive/); assert.ok(!/S4U/.test(CAI.split(/\r?\n/).filter((d) => !/^\s*#/.test(d)).join('\n')), 'không dùng S4U');
-  assert.match(CAI, /AutoAdminLogon/);
+  assert.match(CAI, /IsInRole\(\[Security\.Principal\.WindowsBuiltInRole\]::Administrator\)/);
+  assert.match(CAI, /\$kieu = if \(\$laAdmin\) \{ 'S4U' \} else \{ 'Interactive' \}/);
+  assert.match(CAI, /-LogonType \$kieu/);
+  assert.match(CAI, /Run as administrator/);
 });
 
 test('1.6 chạy nền khi bật máy (26/09): khoá một máy con, CHAY-NEN lặp không dùng timeout, bộ cài S4U không lưu mật khẩu', () => {
@@ -109,4 +111,11 @@ test('1.8 nhịp tim ở luồng riêng (spawnSync không chặn) + tự cập n
   assert.match(MAY, /!existsSync\(DANG_LAM_F\)\) await tuCapNhat\(\)/, 'không cập nhật khi còn lệnh dở');
   const m = MAY.match(/const soBan = [^\n]+\n(const moiHon = [^\n]+)/); assert.ok(m); const moiHon = new Function('soBan', m[1].replace('const moiHon = ', 'return ') + ';')((b) => String(b || '0').split('.').map((x) => parseInt(x, 10) || 0));
   assert.equal(moiHon('1.8', '1.7'), true); assert.equal(moiHon('1.10', '1.9'), true); assert.equal(moiHon('1.7', '1.8'), false); assert.equal(moiHon('1.8', '1.8'), false);
+});
+
+test('hoc-thanh-pham (26/09): bỏ link TikTok trùng mã video; gửi ảnh đoạn lỗi thì ghi mã HTTP thay vì "0 ảnh đoạn"', () => {
+  const HOC = fs.readFileSync(new URL('../tools/may-dung/hoc-thanh-pham.mjs', import.meta.url), 'utf8');
+  assert.match(HOC, /if \(!id \|\| daThay\.has\(id\)\) continue; daThay\.add\(id\);/);
+  assert.match(HOC, /ghi \+= r\.ok \?/);
+  assert.match(HOC, /"ảnh đoạn LỖI app HTTP " \+ r\.status/);
 });

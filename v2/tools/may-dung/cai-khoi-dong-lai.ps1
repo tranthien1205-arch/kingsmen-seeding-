@@ -1,13 +1,16 @@
-# CÀI KHỞI ĐỘNG LẠI HẰNG NGÀY cho máy con Kingsmen Content OS (không cần quyền admin):
+# CÀI KHỞI ĐỘNG LẠI HẰNG NGÀY cho máy con Kingsmen Content OS — mở PowerShell bằng "Run as administrator" rồi chạy:
 #   irm https://content.masfico.vn/tools/may-dung/cai-khoi-dong-lai.ps1 | iex
-# Đổi giờ: $env:GIO_KHOI_DONG_LAI = '03:30' trước khi chạy (mặc định 04:00). Gỡ: Unregister-ScheduledTask 'Kingsmen may con - khoi dong lai hang ngay'
-# Làm gì: tải khoi-dong-lai.ps1 vào C:\may-dung, tạo tác vụ Task Scheduler chạy mỗi ngày dưới tài khoản đang đăng nhập (Interactive,
-#         không S4U — theo luật máy con), kiểm tra Windows có tự đăng nhập sau khởi động lại chưa (thiếu thì máy nằm ở màn hình khoá,
-#         lối tắt Startup của máy con và Ollama không chạy — sự cố 25/09: Windows Update khởi động lại 02:30, máy nghỉ tới 06:15).
+# Đổi giờ: $env:GIO_KHOI_DONG_LAI = '03:30' trước khi chạy (mặc định 04:00). Thư mục máy con khác C:\may-dung: $env:MAY_CON_DIR.
+# Gỡ: Unregister-ScheduledTask 'Kingsmen may con - khoi dong lai hang ngay'
+# Làm gì: tải khoi-dong-lai.ps1 vào thư mục máy con, tạo tác vụ Task Scheduler chạy mỗi ngày dưới chính tài khoản này.
+#   Có quyền admin → kiểu S4U (chạy cả khi chưa ai đăng nhập, không lưu mật khẩu) — đi cùng máy con chạy nền (cai-chay-nen.ps1):
+#   sau lần khởi động lại đầu, máy nằm ở màn hình khoá nên tác vụ kiểu Interactive (bản trước 26/09) không bao giờ chạy lại.
+#   Không có quyền admin → vẫn tạo kiểu Interactive (chỉ chạy khi có người đăng nhập) và nhắc chạy lại bằng admin.
 # Dòng lệnh viết không dấu (irm giải mã ISO-8859-1, chạy từ đĩa giải mã cp1252).
 $ErrorActionPreference = 'Continue'
 $APP = 'https://content.masfico.vn'
-$DIR = 'C:\may-dung'
+$DIR = if ($env:MAY_CON_DIR) { $env:MAY_CON_DIR } else { 'C:\may-dung' }
+$laAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 $TEN = 'Kingsmen may con - khoi dong lai hang ngay'
 $GIO = if ($env:GIO_KHOI_DONG_LAI) { $env:GIO_KHOI_DONG_LAI } else { '04:00' }
 Write-Host "== Kingsmen Content OS - khoi dong lai hang ngay luc $GIO" -ForegroundColor Cyan
@@ -16,11 +19,13 @@ try { Invoke-WebRequest -UseBasicParsing "$APP/tools/may-dung/khoi-dong-lai.ps1"
 
 $act = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument ('-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "' + (Join-Path $DIR 'khoi-dong-lai.ps1') + '"') -WorkingDirectory $DIR
 $trg = New-ScheduledTaskTrigger -Daily -At $GIO
-$pri = New-ScheduledTaskPrincipal -UserId ([Security.Principal.WindowsIdentity]::GetCurrent().Name) -LogonType Interactive -RunLevel Limited
+$kieu = if ($laAdmin) { 'S4U' } else { 'Interactive' }
+$pri = New-ScheduledTaskPrincipal -UserId ([Security.Principal.WindowsIdentity]::GetCurrent().Name) -LogonType $kieu -RunLevel Limited
 $set = New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Hours 4) -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -MultipleInstances IgnoreNew
 Register-ScheduledTask -TaskName $TEN -Action $act -Trigger $trg -Principal $pri -Settings $set -Description 'Cho may con lam xong lenh dang do (toi da 3 gio) roi khoi dong lai; may con tu lam tiep lenh dang do sau khi len.' -Force | Out-Null
 $t = Get-ScheduledTask -TaskName $TEN -ErrorAction SilentlyContinue
-if ($t) { Write-Host "  da tao tac vu: $TEN - lan chay toi: $((Get-ScheduledTaskInfo -TaskName $TEN).NextRunTime)" -ForegroundColor Green } else { Write-Host "  X khong tao duoc tac vu" -ForegroundColor Red }
+if ($t) { Write-Host "  da tao tac vu ($($t.Principal.LogonType)): $TEN - lan chay toi: $((Get-ScheduledTaskInfo -TaskName $TEN).NextRunTime)" -ForegroundColor Green } else { Write-Host "  X khong tao duoc tac vu" -ForegroundColor Red }
+if (-not $laAdmin) { Write-Host "  ! Khong co quyen admin: tac vu chi chay khi co nguoi dang nhap. Mo PowerShell bang 'Run as administrator' roi chay lai lenh nay de tac vu chay ca khi may nam o man hinh khoa." -ForegroundColor Yellow }
 
 $wl = Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon' -ErrorAction SilentlyContinue
 if (Get-ScheduledTask -TaskName 'Kingsmen may con - chay nen khi bat may' -ErrorAction SilentlyContinue) { Write-Host "  May con chay nen khi bat may: CO (khong can tu dang nhap)" -ForegroundColor Green }
