@@ -136,7 +136,7 @@ function DongChayNoiDung(){
       <div className="text-[11px] font-bold text-ink-muted mb-1 flex justify-between"><span>{ten}</span><span>{ds.length}</span></div>
       <div className="flex flex-wrap gap-1 mb-2">{cotBuoc[gd].map(ma=>{ const x=cua(ma); return <Pill key={ma} cls={MUC_CLS[x.nguoi_thuc_hien]||''} className="!text-[10.5px]" >{ma} {MUC_LABEL[x.nguoi_thuc_hien]||''}</Pill>; })}</div>
       <div className="space-y-1.5">{ds.map(m=>{ const nd=ndCua(m); return <div key={m.id} onClick={()=>setMo({muc:m, tab:gd==='CHO_DUYET'?'duyet':gd==='SAN_XUAT'?'sanxuat':gd==='DA_DANG'?'dang':'noidung'})} className="bg-white rounded-lg border border-line p-2 cursor-pointer hover:border-brand">
-        <div className="text-[12px] font-semibold text-ink leading-snug">{(DINH_DANG_ICON[m.dinh_dang]||'📄').split(' ')[0]} {m.tieu_de}</div>{(()=>{ const [v,c]=viecTiep(m); return <div className={'text-[11px] font-semibold mt-1 '+c}>→ {v}</div>; })()}{m.dong&&<div className="mt-0.5"><span className="rounded-md px-1.5 py-0.5 text-[10.5px] font-semibold bg-[#F6EDD6] text-[#8A6410]">{m.dong}</span></div>}
+        <div className="text-[12px] font-semibold text-ink leading-snug">{(DINH_DANG_ICON[m.dinh_dang]||'📄').split(' ')[0]} {m.tieu_de}</div>{(()=>{ const [v,c]=viecTiep(m); return <div className={'text-[11px] font-semibold mt-1 '+c}>→ {v}</div>; })()}{(m.dong||m.y_do)&&<div className="mt-0.5 flex flex-wrap gap-1 items-center">{m.dong&&<span className="rounded-md px-1.5 py-0.5 text-[10.5px] font-semibold bg-[#F6EDD6] text-[#8A6410]">{m.dong}</span>}{m.y_do&&<YDoChip id={m.y_do} boi={m.y_do_boi}/>}</div>}
         <div className="text-[11px] text-ink-muted mt-0.5 flex gap-1 flex-wrap items-center">{[m.pillar_id&&pTen(m.pillar_id), m.kenh_id&&kTen(m.kenh_id)].filter(x=>x&&x!=='—').map(x=><span key={x}>{x} ·</span>)}<Pill cls={MUC_TIEU_CLS[m.muc_tieu]}>{MUC_TIEU_LABEL[m.muc_tieu]}</Pill></div>
         <div className="text-[11px] mt-0.5 flex gap-1 flex-wrap">{m.tao_boi==='AGENT'&&<span title="mục do máy tạo">🤖</span>}{nd&&<Pill cls={(ND_TT[nd.trang_thai]||[])[1]}>{(ND_TT[nd.trang_thai]||[])[0]} v{nd.phien_ban}{nd.tao_boi==='AGENT'?' 🤖':''}</Pill>}{m.ngay_dang?<span className="text-slate-500">{m.ngay_dang}</span>:<span className="text-slate-500">tuần {m.tuan||'?'}</span>}</div></div>; })}
       {ds.length===0&&<div className="text-[11px] text-slate-500">0 thẻ</div>}</div></div>; })}</div>}
@@ -144,8 +144,8 @@ function DongChayNoiDung(){
   </div>;
 }
 // ----- Popup thẻ: 4 tab theo việc -----
-function TheMucModal({muc, tab0, onClose}){
-  const { db, me, goi, notify } = useApp(); const [tab,setTab]=useState(tab0||'noidung'); const chiXem=!laStaff(me);
+function TheMucModal({muc:muc0, tab0, onClose}){
+  const { db, me, goi, notify } = useApp(); const muc=(db.muc_noi_dung||[]).find(x=>x.id===muc0.id)||muc0; const [tab,setTab]=useState(tab0||'noidung'); const chiXem=!laStaff(me);
   const nds=(db.noi_dung||[]).filter(n=>n.muc_id===muc.id).sort((a,b)=>a.updated_at<b.updated_at?1:-1); const nd=nds[0]||null;
   const duyetCho=nd&&(db.duyet||[]).find(d=>d.doi_tuong_id===nd.id&&d.trang_thai==='CHO'); const duyetGan=nd&&(db.duyet||[]).filter(d=>d.doi_tuong_id===nd.id).sort((a,b)=>a.created_at<b.created_at?1:-1)[0];
   const taiSan=(db.tai_san||[]).filter(t=>t.muc_id===muc.id||(nd&&t.noi_dung_id===nd.id)); const baiDang=(db.bai_dang||[]).filter(b=>b.muc_id===muc.id);
@@ -156,6 +156,7 @@ function TheMucModal({muc, tab0, onClose}){
     <div className="text-[11px] text-ink-muted mb-2 flex flex-wrap gap-x-3 gap-y-1 items-center"><span>{pTen(muc.pillar_id)}</span><Pill cls={MUC_TIEU_CLS[muc.muc_tieu]}>{MUC_TIEU_LABEL[muc.muc_tieu]}</Pill><span>giai đoạn <b>{(GIAI_DOAN.find(g=>g[0]===muc.giai_doan)||[])[1]}</b></span>{muc.tao_boi==='AGENT'&&<span>🤖 máy tạo</span>}{muc.ghi_chu&&<span className="text-ink-soft">· {muc.ghi_chu}</span>}
       {!chiXem&&<select className="ml-auto text-[11px] border border-line rounded px-1 py-0.5" value="" onChange={e=>e.target.value&&doiGd(e.target.value)}><option value="">đổi giai đoạn tay…</option>{GIAI_DOAN.map(([g,t])=><option key={g} value={g}>{t}</option>)}</select>}</div>
     <Tabs size="sm" active={tab} onChange={setTab} tabs={tabs} className="mb-3"/>
+    {tab==='noidung' && <YDoMuc muc={muc} chiXem={chiXem}/>}
     {tab==='noidung' && muc.dinh_dang==='VIDEO' && <TrucMuc muc={muc} chiXem={chiXem}/>}
     {tab==='noidung' && <SoanNoiDung muc={muc} nd={nd} chiXem={chiXem||(nd&&nd.trang_thai==='CHO_DUYET')} onSent={()=>setTab('duyet')}/>}
     {tab==='duyet' && <DuyetTab muc={muc} nd={nd} duyetCho={duyetCho} duyetGan={duyetGan}/>}

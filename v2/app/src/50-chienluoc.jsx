@@ -4,13 +4,14 @@ const MUC_TIEU_CLS = { BRAND:'bg-sky-100 text-sky-800', BAN_HANG:'bg-orange-100 
 const DINH_DANG_ICON = { VIDEO:'🎬 Video ngắn', POST:'📝 Bài post', ANH:'🖼️ Ảnh / banner', CAROUSEL:'🎠 Carousel' };
 function ChienLuocKeHoach(){
   const { me, db } = useApp();
-  const [tab,setTab]=useState('chienluoc');
+  const [tab,setTab]=useState('hoso');
   const chiXem=!laStaff(me);
   const ytMoi=(db.y_tuong||[]).filter(y=>y.trang_thai==='MOI').length;
-  const tabs=[{key:'chienluoc',label:'Định vị & chiến lược'},{key:'thongdiep',label:'Thông điệp seeding',count:((db.seeding||{}).thong_diep||[]).filter(t=>t.active).length||null},{key:'kehoach',label:'Kế hoạch tháng'},{key:'tuan',label:'Tuần & mục'},{key:'ytuong',label:'Ý tưởng & trend',count:ytMoi||null},{key:'pillars',label:'Pillar'},{key:'frameworks',label:'Framework'},{key:'san_pham',label:'Sản phẩm'},{key:'claim_cam',label:'Claim cấm'},{key:'kenh',label:'Kênh'}];
+  const tabs=[{key:'hoso',label:'🧭 Hồ sơ định vị'},{key:'chienluoc',label:'Tóm tắt & chốt (G1)'},{key:'thongdiep',label:'Thông điệp seeding',count:((db.seeding||{}).thong_diep||[]).filter(t=>t.active).length||null},{key:'kehoach',label:'Kế hoạch tháng'},{key:'tuan',label:'Tuần & mục'},{key:'ytuong',label:'Ý tưởng & trend',count:ytMoi||null},{key:'pillars',label:'Pillar'},{key:'frameworks',label:'Framework'},{key:'san_pham',label:'Sản phẩm'},{key:'claim_cam',label:'Claim cấm'},{key:'kenh',label:'Kênh'}];
   return <div className="space-y-4">
-    <PageHeader title="🎯 Chiến lược & Kế hoạch" sub="Cổng G1 (chốt chiến lược) và G2 (chốt kế hoạch tháng). Danh mục gốc ở đây là dữ kiện thật duy nhất máy được dùng."/>
+    <PageHeader title="🎯 Chiến lược & Kế hoạch" sub="Hồ sơ định vị là la bàn cho mọi gốc content · G1 chốt chiến lược · G2 chốt kế hoạch tháng. Danh mục gốc ở đây là dữ kiện thật duy nhất máy được dùng."/>
     <Tabs size="sm" active={tab} onChange={setTab} tabs={tabs}/>
+    {tab==='hoso' && <HoSoDinhVi chiXem={chiXem}/>}
     {tab==='chienluoc' && <ChienLuocForm chiXem={chiXem}/>}
     {tab==='thongdiep' && <ThongDiepSeeding chiXem={chiXem}/>}
     {tab==='kehoach' && <KeHoachThang chiXem={chiXem}/>}
@@ -32,7 +33,8 @@ function ChienLuocForm({chiXem}){
   return <div className="grid lg:grid-cols-[2fr_1fr] gap-3">
     <Card>
       <div className="flex items-center justify-between mb-3 gap-2 flex-wrap"><SectionTitle>Định vị & chiến lược</SectionTitle><Pill cls={cl.phien_ban>0&&!daSua?'bg-emerald-100 text-emerald-800':'bg-amber-100 text-amber-800'}>{cl.phien_ban>0?('phiên bản '+cl.phien_ban+' · '+cl.chot_boi+' · '+fmtDate(cl.chot_at)+(daSua?' · đã sửa sau khi chốt':'')):'chưa chốt (G1)'}</Pill></div>
-      <Field label="Định vị thương hiệu" hint="Kingsmen là gì, khác gì, hứa gì. Máy dùng nguyên văn để giữ nhất quán."><Textarea rows="4" value={f.dinh_vi} onChange={e=>setF({...f,dinh_vi:e.target.value})} disabled={chiXem}/></Field>
+      <Callout tone="info" className="mb-3">Trợ lý viết bài dùng <b>🧭 Hồ sơ định vị</b> theo từng dòng (lõi, ý đồ triển khai, xu hướng). Các ô dưới là tóm tắt chung — dùng khi bài chưa rõ dòng, và là bản được chốt ở G1.</Callout>
+      <Field label="Định vị thương hiệu (tóm tắt chung)" hint="Kingsmen là gì, khác gì, hứa gì — máy dùng khi bài chưa rõ dòng sản phẩm."><Textarea rows="4" value={f.dinh_vi} onChange={e=>setF({...f,dinh_vi:e.target.value})} disabled={chiXem}/></Field>
       <Field label="Tông giọng"><Textarea rows="2" value={f.tong_giong} onChange={e=>setF({...f,tong_giong:e.target.value})} disabled={chiXem} placeholder="VD: chuyên gia, chắc chắn, không hô hào…"/></Field>
       <Field label="Đối tượng"><Textarea rows="2" value={f.doi_tuong} onChange={e=>setF({...f,doi_tuong:e.target.value})} disabled={chiXem} placeholder="VD: nhà thầu, thợ ốp lát, chủ nhà đang hoàn thiện…"/></Field>
       <div className="flex gap-2 flex-wrap items-end">{!chiXem && <Btn variant="ghost" onClick={luu} disabled={busy}>💾 Lưu nháp</Btn>}
@@ -101,6 +103,7 @@ function TuanVaMuc({chiXem}){
   const pTen=id=>((db.pillars||[]).find(p=>p.id===id)||{}).ten||'—'; const kTen=id=>((db.kenh||[]).find(k=>k.id===id)||{}).ten||'—';
   const The=({m})=><div className="bg-white rounded-lg border border-line p-2"><div className="flex items-start gap-1"><div className="text-[11px] font-semibold text-ink min-w-0 flex-1 cursor-pointer hover:text-brand" onClick={()=>!chiXem&&setEdit(m)}>{DINH_DANG_ICON[m.dinh_dang]?DINH_DANG_ICON[m.dinh_dang].split(' ')[0]:'📄'} {m.tieu_de}</div>{m.tao_boi==='AGENT'&&<span title="máy tạo">🤖</span>}</div>
     <div className="text-[11px] text-ink-muted mt-0.5">{pTen(m.pillar_id)} · {kTen(m.kenh_id)} · <Pill cls={MUC_TIEU_CLS[m.muc_tieu]}>{MUC_TIEU_LABEL[m.muc_tieu]}</Pill> · {m.giai_doan}</div>
+    {m.y_do?<div className="mt-1"><YDoChip id={m.y_do} boi={m.y_do_boi}/></div>:<div className="mt-1 text-[10.5px] text-amber-700">🧭 chưa có ý đồ</div>}
     {!chiXem && <select value={String(tuanCua(m)||'')} onChange={e=>doiTuan(m,Number(e.target.value))} className="mt-1 text-[11px] border border-line rounded px-1 py-0.5 bg-white w-full"><option value="">— tuần —</option>{Array.from({length:soTuan},(_,i)=>i+1).map(x=><option key={x} value={x}>Tuần {x}</option>)}</select>}</div>;
   const chuaTuan=muc.filter(m=>!tuanCua(m));
   return <div className="space-y-3">
@@ -117,22 +120,31 @@ function TuanVaMuc({chiXem}){
 }
 function tuanCuaNgayFE(ymd){ if(!/^\d{4}-\d{2}-\d{2}$/.test(ymd||'')) return null; const d=new Date(ymd+'T00:00:00Z'); const lech=(new Date(Date.UTC(d.getUTCFullYear(),d.getUTCMonth(),1)).getUTCDay()+6)%7; return Math.min(6, Math.floor((d.getUTCDate()-1+lech)/7)+1); }
 function MucForm({init,onClose}){
-  const { db, goi, notify } = useApp(); const [f,setF]=useState({thang:init.thang||db.hang_so.thang_nay, tuan:init.tuan==null?'':init.tuan, ngay_dang:init.ngay_dang||'', tieu_de:init.tieu_de||'', muc_tieu:init.muc_tieu||'BRAND', pillar_id:init.pillar_id||'', framework_id:init.framework_id||'', san_pham_id:init.san_pham_id||'', kenh_id:init.kenh_id||'', dinh_dang:init.dinh_dang||'', ghi_chu:init.ghi_chu||''}); const [busy,setBusy]=useState(false);
+  const { db, goi, notify } = useApp(); const [f,setF]=useState({thang:init.thang||db.hang_so.thang_nay, tuan:init.tuan==null?'':init.tuan, ngay_dang:init.ngay_dang||'', tieu_de:init.tieu_de||'', muc_tieu:init.muc_tieu||'BRAND', pillar_id:init.pillar_id||'', framework_id:init.framework_id||'', san_pham_id:init.san_pham_id||'', kenh_id:init.kenh_id||'', dinh_dang:init.dinh_dang||'', ghi_chu:init.ghi_chu||'', y_do:init.y_do||'', dong:init.dong||''}); const [busy,setBusy]=useState(false);
   const set=(k,v)=>setF(o=>({...o,[k]:v}));
-  useEffect(()=>{ if(f.pillar_id){ const p=(db.pillars||[]).find(x=>x.id===f.pillar_id); if(p&&p.muc_tieu&&!init.id) set('muc_tieu',p.muc_tieu); } },[f.pillar_id]);
-  const luu=async()=>{ setBusy(true); const body={...f, tuan:f.tuan===''?'':Number(f.tuan)}; const r=await goi(init.id?('/muc/'+init.id):'/muc',{method:init.id?'PATCH':'POST',body}); setBusy(false); if(r.ok){ notify('Đã lưu'); onClose(); } else notify(r.msg,'err'); };
+  useEffect(()=>{ if(f.pillar_id&&!f.y_do){ const p=(db.pillars||[]).find(x=>x.id===f.pillar_id); if(p&&p.muc_tieu&&!init.id) set('muc_tieu',p.muc_tieu); } },[f.pillar_id]);
+  // ADR-021: ý đồ triển khai — chọn ý đồ thì mục mới nhận dòng, pillar, mục tiêu, định dạng gợi ý (người đổi tự do); để trống thì máy gắn khi đủ tín hiệu
+  const yds=(db.y_do||[]).filter(y=>!f.dong||!y.dong||y.dong===f.dong); const yd=(db.y_do||[]).find(y=>y.id===f.y_do)||null; const nhomYD={}; yds.forEach(y=>{ (nhomYD[y.dong||'Mọi dòng']=nhomYD[y.dong||'Mọi dòng']||[]).push(y); });
+  const chonYD=id=>{ const y=(db.y_do||[]).find(x=>x.id===id); setF(o=>({...o, y_do:id, dong:y&&y.dong?y.dong:o.dong, ...(y&&!init.id?{ pillar_id:o.pillar_id||pillarTheoTen(db,y.pillar), muc_tieu:y.muc_tieu||o.muc_tieu, dinh_dang:o.dinh_dang||((y.dinh_dang||[])[0]||'') }:{}) })); };
+  const luu=async()=>{ setBusy(true); const body={...f, tuan:f.tuan===''?'':Number(f.tuan), y_do:f.y_do||null, dong:f.dong||null}; let r=await goi(init.id?('/muc/'+init.id):'/muc',{method:init.id?'PATCH':'POST',body});
+    if(r.ok&&init.id&&(f.dong||'')!==(init.dong||'')) r=await goi('/muc/'+init.id+'/dong',{method:'POST',body:{dong:f.dong||null}});
+    if(r.ok&&init.id&&(f.y_do||'')!==(init.y_do||'')) r=await goi('/muc/'+init.id+'/y-do',{method:'POST',body:{y_do:f.y_do||null}});
+    setBusy(false); if(r.ok){ notify('Đã lưu'); onClose(); } else notify(r.msg,'err'); };
   const xoa=async()=>{ if(!confirm('Xoá mục này?')) return; const r=await goi('/muc/'+init.id,{method:'DELETE'}); if(r.ok){ notify('Đã xoá'); onClose(); } else notify(r.msg,'err'); };
   const Sel=({k,l,ds,ten})=><Field label={l}><Select value={f[k]} onChange={e=>set(k,e.target.value)}><option value="">— chọn —</option>{ds.map(x=><option key={x.id||x} value={x.id||x}>{ten?ten(x):x.ten}</option>)}</Select></Field>;
   return <Modal open onClose={onClose} title={init.id?'Sửa mục nội dung':'Thêm mục nội dung'} wide>
     {init.tao_boi==='AGENT' && <div className={CALLOUT.info+' mb-3'}>🤖 Mục do máy tạo vì thiếu so với kế hoạch. Bạn sửa gì, máy học nấy (bước B3).{init.ghi_chu?(' '+init.ghi_chu):''}</div>}
     <div className="grid sm:grid-cols-2 gap-x-3">
       <Field label="Tiêu đề" required className="sm:col-span-2"><Input value={f.tieu_de} onChange={e=>set('tieu_de',e.target.value)}/></Field>
+      <Field label="🧭 Ý đồ triển khai" className="sm:col-span-2" hint={yd?'':'Để trống: máy tự gắn khi đủ tín hiệu (dòng, pillar, tiêu đề) — người chọn thì chắc hơn'}><Select value={f.y_do} onChange={e=>chonYD(e.target.value)}><option value="">— máy chọn nếu đủ tín hiệu —</option>{Object.entries(nhomYD).map(([dg,ds])=><optgroup key={dg} label={dg}>{ds.map(y=><option key={y.id} value={y.id}>{y.ten}</option>)}</optgroup>)}</Select></Field>
+      {yd&&<div className="sm:col-span-2 -mt-1 mb-3 rounded-xl bg-brand-bg/70 border border-brand/25 p-2.5 text-[12px]"><div className="text-ink leading-snug"><b>Thông điệp lõi:</b> {yd.thong_diep}</div>{(yd.goi_y||[]).length>0&&<div className="flex flex-wrap gap-1 mt-1.5">{yd.goi_y.map(g=><button type="button" key={g} onClick={()=>set('tieu_de',g)} className="rounded-lg bg-white border border-line px-2 py-0.5 text-left hover:border-brand">💡 {g}</button>)}</div>}<div className="text-[11px] text-ink-muted mt-1.5">Giữ thông điệp lõi — góc kể, câu mở, trend là tự do.</div></div>}
+      <Field label="Dòng sản phẩm"><Select value={f.dong} onChange={e=>{ const v=e.target.value; setF(o=>({...o, dong:v, y_do:(yd&&yd.dong&&v&&yd.dong!==v)?'':o.y_do})); }}><option value="">— chưa rõ —</option>{(db.dong_chuan||[]).map(x=><option key={x} value={x}>{x}</option>)}</Select></Field>
       <Sel k="pillar_id" l="Pillar" ds={(db.pillars||[]).filter(p=>p.active)}/>
       <Field label="Mục tiêu"><Select value={f.muc_tieu} onChange={e=>set('muc_tieu',e.target.value)}><option value="BRAND">Brand (đo tiếp cận, xem, chia sẻ)</option><option value="BAN_HANG">Bán hàng (đo đơn, doanh thu)</option></Select></Field>
       <Field label="Định dạng"><Select value={f.dinh_dang} onChange={e=>set('dinh_dang',e.target.value)}><option value="">— chưa quy định —</option>{db.hang_so.dinh_dang.map(d=><option key={d} value={d}>{DINH_DANG_ICON[d]}</option>)}</Select></Field>
       <Sel k="kenh_id" l="Kênh" ds={(db.kenh||[]).filter(k=>k.active)}/>
       <Sel k="framework_id" l="Framework" ds={(db.frameworks||[]).filter(x=>x.active)}/>
-      <Sel k="san_pham_id" l="Sản phẩm" ds={(db.san_pham||[]).filter(x=>x.active)} ten={s=>(s.ma?s.ma+' · ':'')+s.ten}/>
+      <Sel k="san_pham_id" l="Sản phẩm" ds={(db.san_pham||[]).filter(x=>x.active&&(!f.dong||!x.dong||x.dong===f.dong))} ten={s=>(s.ma?s.ma+' · ':'')+s.ten}/>
       <Field label="Tháng"><Input type="month" value={f.thang} onChange={e=>set('thang',e.target.value)}/></Field>
       <Field label="Ngày đăng dự kiến" hint={f.ngay_dang?('→ tuần '+(tuanCuaNgayFE(f.ngay_dang)||'?')):''}><Input type="date" value={f.ngay_dang} onChange={e=>set('ngay_dang',e.target.value)}/></Field>
       <Field label="Tuần (đặt tay)" hint="để trống = theo ngày đăng"><Select value={String(f.tuan)} onChange={e=>set('tuan',e.target.value)}><option value="">— theo ngày đăng —</option>{[1,2,3,4,5,6].map(t=><option key={t} value={t}>Tuần {t}</option>)}</Select></Field>

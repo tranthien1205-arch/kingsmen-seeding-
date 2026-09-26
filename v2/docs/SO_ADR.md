@@ -379,7 +379,50 @@ Quyết định: (1) Sáu làn K1 nhận diện · K2 source · K3 thẩm mỹ �
 Người duyệt: Thiện · Trạng thái: ĐÃ DUYỆT (2026-09-24, "ok bạn quyết đi") · ĐÃ LÀM đợt A
 ```
 
+```
+ADR-021 · 2026-09-26 · HỒ SƠ ĐỊNH VỊ — lõi · ý đồ triển khai · xu hướng & cái mới; gốc content mang ý đồ; trợ lý viết theo dòng
+Bối cảnh : Chủ gửi 5 tài liệu định vị, yêu cầu "nạp vào với ui chuẩn đẹp… gốc content phải có ý đồ triển khai các chiến lược lõi"
+            và "cốt lõi và định hướng chứ không cứng nhắc… linh hoạt cho đội ngũ sáng tạo". Trợ lý viết đang cứng vai "keo ron gạch";
+            định vị là một khối chữ trộn 3 dòng; thông số 11 SKU bị lưu '[]' do lỗi nhập 26/09.
+Quyết định: (1) Ba lớp: LÕI (module_config.ho_so_dinh_vi, gốc ở worker/ho-so-dinh-vi.js, Trưởng MKT/Admin sửa, có phien) ·
+            Ý ĐỒ triển khai (18 ý đồ, gợi ý hướng đi, cách kể tự do) · XU HƯỚNG (bảng xu_huong, cả đội thêm, tự hết hạn).
+            (2) muc_noi_dung.y_do/y_do_boi: người chọn; máy gắn khi đủ tín hiệu (≥ 4 điểm, cùng dòng); B3 gắn ý đồ cùng pillar,
+            tiêu đề = đề bài gợi ý. (3) Prompt viết theo dòng + ý đồ + xu hướng; 5 prompt khác đọc tóm tắt thương hiệu mẹ.
+            (4) thongSoMang nhận chuỗi; cron sửa thông số một lần; claim đề xuất người bấm thêm. (5) Tab 🧭 Hồ sơ định vị.
+Người duyệt: Thiện · Trạng thái: LÀM theo yêu cầu trực tiếp 26/09 (chế độ AI thay chủ đang bật) · chi tiết docs/ADR-021-ho-so-dinh-vi.md
+```
+
 ## Changelog
+
+### 2026-09-26 · ADR-021 — Hồ sơ định vị, ý đồ triển khai, trợ lý viết theo dòng
+- **Bản gốc hồ sơ:** `worker/ho-so-dinh-vi.js` gồm thương hiệu mẹ và định vị 3 dòng: keo 5 trụ Message House, Terrazy 3 dòng con, Finex "cần bổ sung". Kèm 18 ý đồ và 4 claim đề xuất.
+- **API mới:**
+  - `GET /ho-so-dinh-vi`: hồ sơ, độ phủ ý đồ tháng này, số mục chưa có ý đồ, claim còn thiếu.
+  - `PUT /ho-so-dinh-vi`: sửa cả hồ sơ, kiểm `phien`, trả 409 khi người khác vừa sửa.
+  - `POST /ho-so-dinh-vi/y-do`: thêm / sửa / tắt ý đồ.
+  - `POST /ho-so-dinh-vi/nap-lai`: nạp lại, giữ ý đồ tự thêm và ý đồ đã tắt.
+  - `POST /ho-so-dinh-vi/claim`: thêm cụm đề xuất, không trùng.
+  - `POST|DELETE /xu-huong`.
+  - `POST /muc/:id/y-do`: chặn ý đồ khác dòng.
+- **Mục nội dung:**
+  - `POST /muc` nhận `dong` và `y_do`; không chọn ý đồ thì máy gắn ngay nếu đủ tín hiệu.
+  - Ý tưởng duyệt thành mục cũng được máy gắn.
+  - Cron 15' chạy `tuGanYDo` (40 mục / lượt).
+- **B3 (`taoMucConThieu`):** mỗi mục một ý đồ cùng pillar, rải đều. Tiêu đề là đề bài gợi ý của ý đồ; trùng thì thêm "· tuần N".
+- **`promptNoiDung`:**
+  - Vai theo dòng; khối "ĐỊNH VỊ (lõi)" của đúng dòng; "Ý ĐỒ TRIỂN KHAI" (gợi ý cách kể, không bắt buộc).
+  - Sản phẩm trong dòng kèm bảo hành khi bài chưa gắn sản phẩm; thông số chung hệ keo (TDS); "XU HƯỚNG & CÁI MỚI".
+  - Nguyên tắc 7 "la bàn, không phải khuôn". Thông số đọc được cả mảng lẫn chuỗi cũ.
+  - Chấm ý tưởng, seeding, đọc bình luận, báo cáo và đề xuất thông điệp bỏ vai "keo ron gạch", dùng tóm tắt thương hiệu mẹ.
+- **Sửa dữ liệu:**
+  - `lamSachDanhMuc`: thông số dạng chuỗi "a: b · c: d" lưu thành mảng.
+  - `suaThongSo2609`: chạy trong cron, một lần, điền 11 SKU còn `[]`, không đè thông số đã có, không đưa giá vào.
+- **Giao diện:**
+  - Tab đầu "🧭 Hồ sơ định vị" (52-hoso.jsx); tab cũ đổi tên "Tóm tắt & chốt (G1)" kèm chú thích.
+  - Form mục có ô ý đồ: gợi ý thông điệp và đề bài chạm là thành tiêu đề; thêm ô dòng; sản phẩm lọc theo dòng.
+  - Popup mục có khối 🧭 Ý đồ triển khai. Popup giờ đọc bản mới nhất trong db; trước đây đổi trục hay ý đồ xong ô chọn vẫn hiện giá trị cũ.
+  - Chip 🧭 trên thẻ Tuần & mục và thẻ dòng chảy.
+- **Test:** `adr021` có 4 ca, tổng 150/150. Đã kiểm thật trên máy chủ thử (danh mục định vị thật, D1 trong bộ nhớ) ở 375 px và 1440 px, không tràn ngang. Đã tạo mục từ ý đồ, thêm xu hướng, sửa ý đồ và đổi ý đồ trong popup.
 
 ### 2026-09-26 · Link học trùng, mã lỗi ảnh đoạn, khởi động lại hằng ngày chạy khi chưa đăng nhập
 - Đo trên Q2: lệnh `hoc_thanh_pham` TikTok/Kalodata mang 30 link cho 10 video (mỗi video lặp 2–4 lần); mỗi lần lặp máy đọc hình lại ~6 phút mà 0 mẫu mới. App lọc một link mỗi mã video (`motVideoMotLink`) ở `/hub/tiktok-da-tai` và `/hub/kalodata`, giữ link đầu; `hoc-thanh-pham.mjs` lọc thêm một lớp cho lệnh cũ còn trong hàng đợi.
