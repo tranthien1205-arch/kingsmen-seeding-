@@ -30,6 +30,6 @@ function PhienBanDs({ a }) {
 // ADR-018: tab Mô hình gom phần vận hành (bàn huấn luyện, tiến trình, nạp dữ liệu, video đã học) + danh mục mô hình / định tuyến
 function MoHinhNao({ a, setTab }) {
   const { db, me } = useApp(); const duoc = laGat(me); const dongs = a.dong_san_pham || [];
-  return <div className="space-y-3"><BanHuanLuyen a={a} setTab={setTab} /><KyNang a={a} duoc={duoc} db={db} /><PhienBanDs a={a} /><TienTrinh a={a} db={db} /><KhoMau a={a} duoc={duoc} dongs={dongs} /><NhatKyHoc a={a} /><HuanLuyenAI a={a} phan="mo_hinh" /><MoHinhAI a={a} /><DinhTuyenAI a={a} /></div>;
+  return <div className="space-y-3"><BanHuanLuyen a={a} setTab={setTab} /><KyNang a={a} duoc={duoc} db={db} /><PhienBanDs a={a} /><TienTrinh a={a} db={db} /><NhatKyHoc a={a} /><HuanLuyenAI a={a} phan="mo_hinh" /><MoHinhAI a={a} /><DinhTuyenAI a={a} /></div>;
 }
 function ChiPhiNao({ a }) { return <div className="space-y-3"><ChiPhiMoHinh a={a} /><KhoaAPI /></div>; }

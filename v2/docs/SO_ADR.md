@@ -388,6 +388,14 @@ Người duyệt: Thiện · Trạng thái: ĐÃ DUYỆT (2026-09-24, "ok bạn 
 - Việc "lệnh học bị đánh HONG sau 30 phút" đã sửa từ 25/09 (nhịp tim > 15 phút / 12 giờ) — không đổi thêm.
 - Ảnh hưởng dữ liệu: không đổi bảng; lệnh học mới ít link hơn (bỏ trùng). Test: adr011 thêm link trùng (mã cũ hỏng 1/3, mã mới đạt), may-dung-khoi-dong thêm 1 ca.
 
+### 2026-09-26 · Mọi nguồn học quản lý ở tab Nguồn học
+- Chủ: "tất cả nguồn học cần quản lý ở nguồn học nhé".
+- Thẻ Kalodata trong Nguồn học: ngành đang theo dõi (thêm / bỏ ×), tự quét hằng tuần, top N, dòng, quét ngay, kết quả lần cuối.
+- Kho footage: nút "＋ Nạp thêm footage mới" dùng lại đúng thư mục Drive đã nạp (lấy từ lệnh nap_drive), đúng dòng của kho.
+- Mỗi nguồn thành phẩm có nút "Loại nguồn" (bấm 2 lần): POST /nguon-hoc/loai xoá video + mẫu của nguồn.
+- Nguồn đang xếp hàng chờ Trạm và lệnh AI thay chủ chưa chạy cũng hiện.
+- Tab Mô hình bỏ danh sách "Video thành phẩm đã học" (trùng với Nguồn học).
+
 ### 2026-09-26 · TikTok không cần đăng nhập
 - Chủ: "có phương án nào không cần đăng nhập tiktok hoặc reel … nhiều ứng dụng tải bình thường".
 - Đo trên máy Ngoc-Han: yt-dlp --impersonate chrome (curl_cffi) liệt kê @keokingsmen.com không đăng nhập (40 video: id, lượt xem, độ dài, ngày, tiêu đề).
